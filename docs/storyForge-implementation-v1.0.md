@@ -1,28 +1,8 @@
-# StoryForge 3.1 — Creative Narrative Operating System
+# StoryForge 1.0 — Creative Narrative Operating System
 ## 完整工程化设计文档
 
-> v3.1 变更摘要（相对于 v3.0）：
-> - 补全所有审查发现的未定义函数（`_genre_distance`、`_ref_key_to_registry`、`_find_matching_log`、Fact Guard 检查方法、Style Engine 禁忌匹配、`_match_forbidden`）
-> - 修正 `_calc_contradiction_depth` 噪声正则
-> - 修正 ReaderOS `moral_ambiguity` 校准系数
-> - 修正 ContextCache `char_states` 为 per-scene 缓存
-> - 新增 Fact Guard log 格式校验
-> - 新增 Reviewer 状态漂移检测
-> - Character State Machine 增加 `accumulated_evidence` 和 `relationship_transformation` 触发类型
-> - 上调 Narrative Guard Token 估算至 9K
->
-> v3.0 变更摘要（相对于 v2.0）：
-> - **P0**：`<log>` 标签机制替代隐含变化 LLM 盲猜；Fact Guard 熔断器；所有未定义函数已补全
-> - **P1**：ReaderOS 完全去 LLM 化（公式计算）；模型分层策略 & Token 预算；Context 缓存复用
-> - **P2**：跨 Registry 强制外键；Genre Fusion Engine 完整设计；Style Engine 重新集成；断点续写粒度定义；L0 更新机制定义
-
----
 
 ## 核心理念
-
-**v1.0 解决了：如何管理小说**
-**v2.0 解决了：如何创造爆款小说**
-**v3.0 解决了：如何在工程上可靠地、经济地创造爆款小说**
 
 三条独立能力链，对应三个核心目标：
 

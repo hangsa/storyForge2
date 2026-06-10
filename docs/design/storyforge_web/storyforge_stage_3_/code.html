@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StoryForge - 情节规划 (Stage 3)</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Hanken+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-fixed-dim": "#d0bcff",
+                        "secondary-fixed": "#e9ddff",
+                        "outline-variant": "#3b494b",
+                        "surface": "#0b1326",
+                        "on-secondary": "#3c0091",
+                        "primary-fixed-dim": "#00dbe9",
+                        "inverse-surface": "#dae2fd",
+                        "system-log": "#64748B",
+                        "surface-tint": "#00dbe9",
+                        "surface-container-high": "#222a3d",
+                        "secondary": "#d0bcff",
+                        "primary-fixed": "#7df4ff",
+                        "on-tertiary": "#003824",
+                        "primary": "#dbfcff",
+                        "outline": "#849495",
+                        "surface-container-low": "#131b2e",
+                        "on-error-container": "#ffdad6",
+                        "on-surface": "#dae2fd",
+                        "on-tertiary-fixed": "#002113",
+                        "on-surface-variant": "#b9cacb",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "error": "#ffb4ab",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "on-secondary-container": "#c4abff",
+                        "background": "#0b1326",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "saturation-high": "#EF4444",
+                        "error-container": "#93000a",
+                        "surface-bright": "#31394d",
+                        "on-error": "#690005",
+                        "surface-container-lowest": "#060e20",
+                        "on-primary": "#00363a",
+                        "warning-p1": "#F59E0B",
+                        "surface-variant": "#2d3449",
+                        "novelty-high": "#3B82F6",
+                        "tertiary-container": "#65f2b5",
+                        "surface-dim": "#0b1326",
+                        "tertiary": "#d8ffe7",
+                        "on-primary-fixed": "#002022",
+                        "surface-container-highest": "#2d3449",
+                        "canvas-bg": "#020617",
+                        "error-p0": "#DC2626",
+                        "inverse-on-surface": "#283044",
+                        "surface-panel": "#1E293B",
+                        "on-tertiary-container": "#006d4a",
+                        "on-primary-fixed-variant": "#004f54",
+                        "on-secondary-fixed": "#23005c",
+                        "surface-container": "#171f33",
+                        "on-background": "#dae2fd",
+                        "on-primary-container": "#006970",
+                        "inverse-primary": "#006970",
+                        "primary-container": "#00f0ff",
+                        "secondary-container": "#571bc1",
+                        "tertiary-fixed": "#6ffbbe"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "unit": "4px",
+                        "canvas-padding": "64px",
+                        "container-margin": "24px",
+                        "panel-gap": "1px"
+                    },
+                    "fontFamily": {
+                        "body-ui": ["Inter"],
+                        "body-narrative": ["Inter"],
+                        "label-mono": ["JetBrains Mono"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "code-sm": ["JetBrains Mono"],
+                        "display-lg": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-ui": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-narrative": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "label-mono": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "code-sm": ["11px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #020617;
+            color: #dae2fd;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3b494b; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #849495; }
+        
+        .tension-line {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 3s linear forwards;
+        }
+        @keyframes dash { to { stroke-dashoffset: 0; } }
+        
+        .scan-line {
+            background: linear-gradient(to bottom, transparent, rgba(0, 219, 233, 0.1) 50%, transparent);
+            background-size: 100% 4px;
+            animation: scan 2s linear infinite;
+        }
+        @keyframes scan { from { background-position: 0 0; } to { background-position: 0 100%; } }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(59, 73, 75, 0.5);
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-full select-none overflow-hidden bg-canvas-bg">
+<!-- TOP HEADER: Spans full width -->
+<header class="h-16 flex items-center justify-between px-gutter bg-surface-container-low border-b border-outline-variant z-50 shrink-0">
+<div class="flex items-center gap-8">
+<div class="flex items-center">
+<span class="font-display-lg text-headline-md font-extrabold text-primary-container mr-8">StoryForge</span>
+</div>
+<div class="flex items-center gap-4 bg-surface-container px-4 py-1.5 rounded border border-outline-variant">
+<span class="text-sm font-semibold text-primary">代码天才重生记</span>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<span class="font-label-mono text-[10px] text-tertiary-fixed-dim uppercase tracking-wider">STAGE 3</span>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-tertiary-container rounded-full animate-pulse"></span>
+<span class="text-[10px] font-label-mono text-on-surface-variant">讨论模式</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-[10px] font-label-mono text-system-log">
+<span class="material-symbols-outlined text-sm">cloud_done</span>
+            自动保存中
+        </div>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-surface-container rounded-lg border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-xs w-48 font-body-ui placeholder:text-system-log" placeholder="搜索叙事分支或资产..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">hub</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-primary-container p-0.5">
+<img alt="User profile" class="w-full h-full object-cover rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBE7-ggj1p7g9ftX6x1NqAnf5JrshoNvysLIwT5wfQpnK2WR2LsMwpb0zENPHq0wi3W1fu8C9uCPHmic61axNy9d4yE8NzWprEiMZw_g0LUodORJOjE4XEjOj3ntNGoUvvnBGcWCVTff7ssxn8EH1uXys198ZReJzeg_1Rl_tM9Ybd6xknZzlKEesb1aliiP9sAIGAmxz5YrKyWGXiwv8DVjfg1i7A34rF3TYiKnnh9yyMIteydXj72SwZjpKd_2EGIMiF6ZNkVPXWy"/>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN CONTENT WRAPPER -->
+<div class="flex flex-1 overflow-hidden">
+<!-- LEFT SIDEBAR: Starts below Header -->
+<aside class="w-[280px] flex flex-col bg-surface border-r border-outline-variant shadow-xl z-40 shrink-0">
+<div class="p-4 space-y-4">
+<button class="w-full py-2.5 bg-primary-container text-on-primary-container font-label-mono text-xs font-bold rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all">
+<span class="material-symbols-outlined text-sm">add</span> 新建剧情分支
+            </button>
+</div>
+<nav class="flex-1 px-2 space-y-1 overflow-y-auto custom-scrollbar">
+<div class="px-3 py-2 text-[10px] font-label-mono text-system-log uppercase tracking-widest">项目</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">folder_open</span> 项目库
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">dashboard</span> 仪表盘
+            </a>
+<div class="px-3 py-2 mt-4 text-[10px] font-label-mono text-system-log uppercase tracking-widest">叙事阶段</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">explore</span> Stage 1 创意探索
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">public</span> Stage 2 世界观
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm bg-primary-container/10 text-primary-container border-l-2 border-primary-container rounded transition-all font-semibold" href="#">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">auto_graph</span> Stage 3 情节规划
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">edit_note</span> Stage 4 写作中心
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">fact_check</span> Stage 5 诊断修订
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">ios_share</span> Stage 6 导出发布
+            </a>
+<div class="px-3 py-2 mt-4 text-[10px] font-label-mono text-system-log uppercase tracking-widest">工作区</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">lightbulb</span> 灵感库
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">palette</span> 风格沙盒
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">inventory_2</span> 资产中心
+            </a>
+</nav>
+<div class="p-4 border-t border-outline-variant">
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">settings</span> 系统设置
+            </a>
+</div>
+</aside>
+<!-- CENTRAL WORKSPACE -->
+<main class="flex-1 flex flex-col overflow-hidden">
+<div class="flex-1 flex overflow-hidden">
+<!-- OUTLINE BOARD CONTENT -->
+<div class="flex-1 flex flex-col overflow-y-auto custom-scrollbar p-6 space-y-6">
+<!-- SECTION 1: Outline Board -->
+<div class="grid grid-cols-12 gap-4">
+<div class="col-span-12">
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-label-mono text-[14px] text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">view_kanban</span>
+                                情节结构树 / OUTLINE BOARD
+                            </h3>
+<div class="flex gap-2">
+<span class="px-2 py-0.5 border border-outline-variant text-[10px] text-outline font-label-mono cursor-pointer hover:text-primary-container">网格视图</span>
+<span class="px-2 py-0.5 border border-primary text-[10px] text-primary font-label-mono bg-primary/10">表格模式</span>
+</div>
+</div>
+</div>
+<!-- TABLE STRUCTURE -->
+<div class="col-span-12 border border-outline-variant bg-surface-container-lowest rounded-sm">
+<table class="w-full text-left font-body-ui text-[13px] border-collapse">
+<thead class="bg-surface-container-high text-on-surface-variant font-label-mono text-label-mono border-b border-outline-variant">
+<tr>
+<th class="p-4 w-24">卷册</th>
+<th class="p-4 w-32">章节</th>
+<th class="p-4">场景 / 行动描述</th>
+<th class="p-4 w-48">叙事标签</th>
+<th class="p-4 w-20 text-center">张力强度</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<tr class="hover:bg-surface-variant transition-colors group cursor-pointer">
+<td class="p-4 align-top text-secondary font-bold">第一卷</td>
+<td class="p-4 align-top text-primary">Ch. 01</td>
+<td class="p-4">
+<p class="text-on-surface mb-1">主角陆离在0-1代码潮中意外觉醒，发现旧世界的幽灵程序。</p>
+<p class="text-[11px] text-outline italic">Establishing the high-tech dystopia world-building nodes.</p>
+</td>
+<td class="p-4">
+<div class="flex flex-wrap gap-1">
+<span class="px-2 py-0.5 rounded-full bg-tertiary-container/10 border border-tertiary-container text-[10px] text-tertiary">爽点</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container/10 border border-secondary-container text-[10px] text-secondary">谜团</span>
+</div>
+</td>
+<td class="p-4 text-center">
+<div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-tertiary-fixed-dim" style="width: 35%"></div>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-variant transition-colors group cursor-pointer">
+<td class="p-4 align-top text-secondary/40">""</td>
+<td class="p-4 align-top text-primary">Ch. 02</td>
+<td class="p-4">
+<p class="text-on-surface mb-1">地下黑客竞技场，陆离用原始汇编语言击败了AI执法者。</p>
+<p class="text-[11px] text-outline italic">First combat scene, demonstrating superiority over existing AI.</p>
+</td>
+<td class="p-4">
+<div class="flex flex-wrap gap-1">
+<span class="px-2 py-0.5 rounded-full bg-tertiary-container/10 border border-tertiary-container text-[10px] text-tertiary">爽点</span>
+<span class="px-2 py-0.5 rounded-full bg-saturation-high/10 border border-saturation-high text-[10px] text-saturation-high">反转</span>
+</div>
+</td>
+<td class="p-4 text-center">
+<div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-tertiary-fixed-dim" style="width: 65%"></div>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-variant transition-colors group bg-surface-container-low cursor-pointer">
+<td class="p-4 align-top text-secondary/40">""</td>
+<td class="p-4 align-top text-primary-fixed">Ch. 03</td>
+<td class="p-4">
+<p class="text-on-surface mb-1">身份危机：陆离发现自己竟然是一个被废弃的Beta测试账号。</p>
+<p class="text-[11px] text-outline italic">Major narrative pivot point. Logic log check: OK.</p>
+</td>
+<td class="p-4">
+<div class="flex flex-wrap gap-1">
+<span class="px-2 py-0.5 rounded-full bg-secondary-container/10 border border-secondary-container text-[10px] text-secondary">谜团</span>
+<span class="px-2 py-0.5 rounded-full bg-saturation-high/10 border border-saturation-high text-[10px] text-saturation-high">反转</span>
+</div>
+</td>
+<td class="p-4 text-center">
+<div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-saturation-high" style="width: 90%"></div>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- SECTION 2: Branch Simulator -->
+<div class="grid grid-cols-12 gap-6 pt-4 border-t border-system-log/30">
+<div class="col-span-12">
+<h3 class="font-label-mono text-[14px] text-tertiary-fixed-dim flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">terminal</span>
+                            情节推演系统 / BRANCH SIMULATOR
+                        </h3>
+</div>
+<!-- Tension Curve Visualization -->
+<div class="col-span-8 glass-panel rounded-sm p-4 h-64 relative overflow-hidden">
+<div class="absolute inset-0 scan-line opacity-5"></div>
+<div class="flex justify-between items-center mb-4">
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<span class="w-3 h-0.5 bg-outline"></span>
+<span class="font-label-mono text-[10px] text-outline uppercase">当前方案</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-0.5 bg-primary"></span>
+<span class="font-label-mono text-[10px] text-primary uppercase">模拟演练 (将反派揭露移至Ch.20)</span>
+</div>
+</div>
+<span class="text-[11px] font-label-mono text-on-surface-variant">指标: 叙事张力指数</span>
+</div>
+<svg class="w-full h-40" viewbox="0 0 800 200">
+<path d="M0 50 L800 50 M0 100 L800 100 M0 150 L800 150" fill="none" stroke="#3b494b" stroke-width="0.5"></path>
+<path d="M0 160 Q 100 140, 200 150 T 400 100 T 600 120 T 800 40" fill="none" stroke="#849495" stroke-dasharray="4 4" stroke-width="1.5"></path>
+<path class="tension-line" d="M0 160 Q 100 140, 200 110 T 400 60 T 600 40 T 800 10" fill="none" stroke="#00dbe9" stroke-width="2"></path>
+</svg>
+<div class="flex justify-between mt-2 font-label-mono text-[10px] text-outline px-2">
+<span>起点</span>
+<span>第一幕</span>
+<span>高潮</span>
+<span>结局</span>
+</div>
+</div>
+<!-- Affected Foreshadowing -->
+<div class="col-span-4 glass-panel rounded-sm p-4 flex flex-col">
+<h4 class="font-label-mono text-[12px] text-secondary mb-3 border-b border-outline-variant pb-1">受影响的伏笔检测</h4>
+<div class="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-2">
+<div class="p-2 border border-outline-variant bg-surface-container-lowest rounded-sm flex justify-between items-center group hover:border-primary transition-colors">
+<span class="font-code-sm text-code-sm text-on-surface-variant">fs_001_p_old_code</span>
+<span class="material-symbols-outlined text-[16px] text-warning-p1">warning</span>
+</div>
+<div class="p-2 border border-outline-variant bg-surface-container-lowest rounded-sm flex justify-between items-center group">
+<span class="font-code-sm text-code-sm text-on-surface-variant">fs_012_v_identity</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary-fixed-dim">check_circle</span>
+</div>
+<div class="p-2 border border-outline-variant bg-surface-container-lowest rounded-sm flex justify-between items-center group">
+<span class="font-code-sm text-code-sm text-on-surface-variant">fs_025_m_beta_key</span>
+<span class="material-symbols-outlined text-[16px] text-error">cancel</span>
+</div>
+<div class="p-2 border border-outline-variant bg-surface-container-lowest rounded-sm flex justify-between items-center group">
+<span class="font-code-sm text-code-sm text-on-surface-variant">fs_033_w_ghost_net</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary-fixed-dim">check_circle</span>
+</div>
+</div>
+<button class="mt-4 py-1.5 bg-primary text-on-primary font-label-mono text-[11px] uppercase tracking-wider">确认修改方案</button>
+</div>
+</div>
+<!-- FOOTER LOG -->
+<div class="mt-auto border-t border-system-log/30 pt-4 pb-2">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-[14px] text-system-log">terminal</span>
+<span class="font-label-mono text-code-sm text-system-log uppercase">SF_日志 // 叙事引擎处理中...</span>
+</div>
+<div class="h-10 overflow-hidden opacity-50">
+<p class="font-label-mono text-code-sm text-system-log">[09:21:04] 线程安全检查：情节节点 "身份揭秘" 已通过世界锚点_02验证。</p>
+<p class="font-label-mono text-code-sm text-system-log">[09:21:05] 张力分析：检测到第3章局部峰值。强度比率 1.4:1。</p>
+</div>
+</div>
+</div>
+<!-- NEURAL INTERFACE / AI SIDEBAR -->
+<aside class="w-[320px] bg-surface-container-low flex flex-col border-l border-outline-variant">
+<div class="p-6 border-b border-outline-variant">
+<div class="flex items-center justify-between mb-4">
+<div class="flex flex-col">
+<h3 class="font-label-mono text-tertiary-fixed text-[14px] uppercase tracking-wider">神经交互界面</h3>
+<p class="font-code-sm text-code-sm text-tertiary-fixed-dim opacity-80">AI 辅助创作已开启</p>
+</div>
+<div class="w-10 h-10 rounded-sm border border-tertiary-fixed/30 flex items-center justify-center relative">
+<span class="material-symbols-outlined text-tertiary-fixed-dim" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+<span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-tertiary shadow-[0_0_8px_#4edea3] rounded-full"></span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 py-1.5 font-label-mono text-[10px] border border-tertiary-fixed-dim bg-surface-container-high text-tertiary-fixed shadow-[0_0_10px_rgba(78,222,163,0.2)]">分析模式</button>
+<button class="flex-1 py-1.5 font-label-mono text-[10px] border border-outline text-outline hover:text-tertiary hover:border-tertiary transition-all">创意模式</button>
+</div>
+</div>
+<div class="flex-1 flex flex-col overflow-hidden">
+<div class="p-4 flex-1 overflow-y-auto custom-scrollbar space-y-4">
+<div class="space-y-2">
+<span class="font-label-mono text-[11px] text-system-log uppercase">节奏与反转分析</span>
+<div class="p-3 bg-surface-container-highest border border-outline-variant rounded-sm group hover:border-tertiary transition-colors">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-[16px] text-tertiary">lightbulb</span>
+<span class="font-label-mono text-[12px] text-on-surface">节奏优化建议</span>
+</div>
+<p class="font-body-ui text-[12px] text-on-surface-variant leading-relaxed">
+                                    第一卷前三章的信息密度过高，建议在Ch. 02加入一个舒缓的生活场景，以衬托黑客竞技场的紧张感。
+                                </p>
+</div>
+<div class="p-3 bg-surface-container-highest border border-outline-variant rounded-sm group hover:border-tertiary transition-colors">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-[16px] text-tertiary">alt_route</span>
+<span class="font-label-mono text-[12px] text-on-surface">伏笔关联检测</span>
+</div>
+<p class="font-body-ui text-[12px] text-on-surface-variant leading-relaxed">
+                                    "旧世界幽灵程序"这一线索在第五卷前缺乏互动。建议在Ch. 04植入一个小规模的逻辑波动事件。
+                                </p>
+</div>
+</div>
+<div class="space-y-4 pt-4 border-t border-outline-variant">
+<div class="flex gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]">person</span>
+</div>
+<div class="bg-surface-variant p-2 rounded-sm max-w-[80%]">
+<p class="font-body-ui text-[11px] text-on-surface">如果我把反派的真实身份提前，会影响结尾的升华吗？</p>
+</div>
+</div>
+<div class="flex gap-2 flex-row-reverse">
+<div class="w-6 h-6 rounded-full bg-tertiary-container/20 border border-tertiary-fixed flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px] text-tertiary-fixed">smart_toy</span>
+</div>
+<div class="bg-tertiary-container/10 border border-tertiary-container/30 p-2 rounded-sm max-w-[80%]">
+<p class="font-body-ui text-[11px] text-on-surface">根据张力曲线推演，提前揭晓会显著提升第二卷的危机感。我建议在Ch. 20采用"部分揭露"策略...</p>
+</div>
+</div>
+</div>
+</div>
+<div class="p-4 bg-surface-container-high border-t border-outline-variant">
+<div class="relative">
+<textarea class="w-full bg-surface-container-lowest border-b border-outline-variant focus:border-tertiary-fixed text-on-surface font-body-ui text-[13px] p-2 pr-10 resize-none h-20 outline-none transition-colors" placeholder="咨询大纲助手..."></textarea>
+<button class="absolute bottom-2 right-2 p-1 text-tertiary-fixed-dim hover:text-tertiary transition-colors">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+<div class="flex justify-between items-center mt-2">
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline cursor-pointer hover:text-primary">mic</span>
+<span class="material-symbols-outlined text-[16px] text-outline cursor-pointer hover:text-primary">attachment</span>
+</div>
+<span class="font-label-mono text-[9px] text-system-log uppercase">当前激活: 第3章</span>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</main>
+</div>
+<script>
+    // Simple micro-interaction for the Outline Board rows
+    document.querySelectorAll('tbody tr').forEach(row => {
+        row.addEventListener('click', () => {
+            document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('bg-surface-container-highest', 'border-primary'));
+            row.classList.add('bg-surface-container-highest');
+        });
+    });
+</script>
+</body></html>

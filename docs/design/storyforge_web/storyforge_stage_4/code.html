@@ -1,0 +1,363 @@
+<!DOCTYPE html><html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&amp;family=Inter:wght@100..900&amp;family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+        :root {
+            --primary-container: #00f0ff;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b1326;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2d3449;
+            border-radius: 2px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f0ff;
+        }
+        .writing-canvas {
+            caret-color: #00f0ff;
+            outline: none;
+        }
+        .sf-log-inline {
+            background: rgba(0, 240, 255, 0.05);
+            border-left: 2px solid #00f0ff;
+            padding: 2px 8px;
+            margin: 8px 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #64748B;
+        }
+        .glass-panel {
+            backdrop-filter: blur(12px);
+            background: rgba(30, 41, 59, 0.7);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary-fixed-dim": "#00dbe9",
+                      "system-log": "#64748B",
+                      "surface-container-highest": "#2d3449",
+                      "on-primary-fixed-variant": "#004f54",
+                      "secondary": "#d0bcff",
+                      "outline": "#849495",
+                      "on-error": "#690005",
+                      "surface-variant": "#2d3449",
+                      "inverse-primary": "#006970",
+                      "primary": "#dbfcff",
+                      "on-tertiary-container": "#006d4a",
+                      "on-primary-fixed": "#002022",
+                      "outline-variant": "#3b494b",
+                      "surface-dim": "#0b1326",
+                      "on-secondary": "#3c0091",
+                      "on-primary": "#00363a",
+                      "error-container": "#93000a",
+                      "secondary-container": "#571bc1",
+                      "surface-bright": "#31394d",
+                      "secondary-fixed": "#e9ddff",
+                      "surface-panel": "#1E293B",
+                      "surface-container-low": "#131b2e",
+                      "secondary-fixed-dim": "#d0bcff",
+                      "on-tertiary-fixed": "#002113",
+                      "inverse-surface": "#dae2fd",
+                      "on-secondary-container": "#c4abff",
+                      "background": "#0b1326",
+                      "warning-p1": "#F59E0B",
+                      "tertiary-fixed": "#6ffbbe",
+                      "tertiary-container": "#65f2b5",
+                      "on-surface-variant": "#b9cacb",
+                      "surface-container-lowest": "#060e20",
+                      "surface-container": "#171f33",
+                      "error": "#ffb4ab",
+                      "surface-container-high": "#222a3d",
+                      "on-surface": "#dae2fd",
+                      "saturation-high": "#EF4444",
+                      "on-secondary-fixed-variant": "#5516be",
+                      "on-error-container": "#ffdad6",
+                      "on-secondary-fixed": "#23005c",
+                      "surface": "#0b1326",
+                      "on-tertiary": "#003824",
+                      "tertiary": "#d8ffe7",
+                      "primary-fixed": "#7df4ff",
+                      "error-p0": "#DC2626",
+                      "inverse-on-surface": "#283044",
+                      "primary-container": "#00f0ff",
+                      "on-primary-container": "#006970",
+                      "canvas-bg": "#020617",
+                      "on-tertiary-fixed-variant": "#005236",
+                      "novelty-high": "#3B82F6",
+                      "on-background": "#dae2fd",
+                      "surface-tint": "#00dbe9",
+                      "tertiary-fixed-dim": "#4edea3"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "panel-gap": "1px",
+                      "gutter": "16px",
+                      "container-margin": "24px",
+                      "canvas-padding": "64px"
+              },
+              "fontFamily": {
+                      "body-ui": ["Inter"],
+                      "display-lg": ["Hanken Grotesk"],
+                      "code-sm": ["JetBrains Mono"],
+                      "body-narrative": ["Inter"],
+                      "label-mono": ["JetBrains Mono"],
+                      "headline-md": ["Hanken Grotesk"]
+              },
+              "fontSize": {
+                      "body-ui": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "code-sm": ["11px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                      "body-narrative": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "label-mono": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                      "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}]
+              }
+            },
+          },
+        }
+    </script>
+</head>
+<body class="bg-canvas-bg text-on-surface font-body-ui selection:bg-primary-container/30 overflow-hidden h-screen flex flex-col">
+<!-- Top Navigation Bar (Full Width) -->
+<header class="w-full h-16 bg-canvas-bg border-b border-system-log flex items-center justify-between px-container-margin z-50 shrink-0">
+<div class="flex items-center gap-10">
+<div class="flex items-baseline gap-2">
+<h1 class="font-display-lg text-[28px] text-primary-container tracking-tighter">StoryForge</h1>
+<span class="font-label-mono text-[10px] text-system-log uppercase tracking-widest">v1.0</span>
+</div>
+<div class="h-6 w-[1px] bg-outline-variant"></div>
+<div class="flex items-center gap-6">
+<span class="font-headline-md text-headline-md text-on-surface tracking-tight">代码天才重生记</span>
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container-high rounded-full border border-outline-variant">
+<span class="material-symbols-outlined text-[16px] text-primary-container" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="font-label-mono text-label-mono text-primary-container">实时写作模式</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<nav class="flex gap-6">
+<a class="font-label-mono text-label-mono text-primary-container font-bold" href="#">项目状态</a>
+<a class="font-label-mono text-label-mono text-system-log hover:text-primary-fixed-dim" href="#">版本日志</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="p-2 text-system-log hover:text-primary-container transition-all">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-system-log hover:text-primary-container transition-all">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="User Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGqztFsWPrWFDEjVGWLR6AyKwHW3Rb12Tf9MugnkyVz2-vD5inJ6Bmy8IW4K8mxMBdVRH4FTBbb5LqZyfqa57wH1PfEUKLVtrTEKPMo4S291Z6PpgO_H7cDHe0Q92fl4CDm3GnzNQzL1svGMqADoJ1OXLVtljzWAbHhi2dC8Mmq75LZnJasdXlsx_LYyZujPfsqWyCAmIXUis_XwS9oSiTvBg8_v2YxlpjYRkijx1JM7GP9bziY9dbJEYz9YllyeNnIFp9UD18O_R3">
+</div>
+</div>
+</div>
+</header>
+<div class="flex-grow flex overflow-hidden">
+<!-- Sidebar: Stage Navigation (Below Header) -->
+<aside class="w-[260px] h-full bg-surface-panel border-r border-system-log flex flex-col p-6 shrink-0"><div class="mb-4 px-4"><h4 class="font-label-mono text-[10px] text-system-log uppercase tracking-widest">叙事阶段</h4></div><nav class="flex-grow space-y-1"><a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 rounded cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined">edit_note</span><span class="font-body-ui text-body-ui">第一阶段</span></a><a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 rounded cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined">auto_stories</span><span class="font-body-ui text-body-ui">第二阶段</span></a><a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 rounded cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined">account_tree</span><span class="font-body-ui text-body-ui">第三阶段</span></a><a class="flex items-center gap-3 px-4 py-3 text-primary-container border-r-2 border-primary-container bg-surface-container-highest/20 transition-colors duration-150 cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined">psychology</span><span class="font-body-ui text-body-ui">第四阶段 写作中心</span></a><a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 rounded cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined">history_edu</span><span class="font-body-ui text-body-ui">第五阶段</span></a><a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 rounded cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined">auto_fix_high</span><span class="font-body-ui text-body-ui">第六阶段</span></a></nav><button class="my-6 border border-primary-container text-primary-container py-2 px-4 font-label-mono text-label-mono uppercase tracking-widest hover:bg-primary-container/10 transition-all active:scale-95">新章节</button><div class="mt-4 mb-2 px-4"><h4 class="font-label-mono text-[10px] text-system-log uppercase tracking-widest">工作区</h4></div><div class="space-y-1 mb-6"><div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 rounded cursor-pointer"><span class="material-symbols-outlined">lightbulb</span><span class="font-body-ui text-body-ui">灵感库</span></div><div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 rounded cursor-pointer"><span class="material-symbols-outlined">palette</span><span class="font-body-ui text-body-ui">风格沙盒</span></div><div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 rounded cursor-pointer"><span class="material-symbols-outlined">inventory_2</span><span class="font-body-ui text-body-ui">资产中心</span></div></div><footer class="mt-auto pt-6 border-t border-outline-variant/30"><div class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface cursor-pointer"><span class="material-symbols-outlined">settings</span><span class="font-body-ui text-body-ui">设置</span></div></footer></aside>
+<!-- Central Creative Canvas + Panels -->
+<main class="flex-grow flex overflow-hidden">
+<!-- Central Creative Canvas -->
+<section class="flex-grow flex flex-col bg-canvas-bg overflow-hidden relative border-r border-system-log">
+<!-- Scene Planner -->
+<div class="p-gutter grid grid-cols-3 gap-4 border-b border-system-log bg-surface-container-lowest">
+<div class="p-3 bg-surface-panel border border-outline-variant rounded relative overflow-hidden">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-mono text-label-mono text-primary-container">场景 1</span>
+<span class="material-symbols-outlined text-[14px] text-system-log">drag_handle</span>
+</div>
+<div class="space-y-1">
+<p class="text-[11px] text-system-log font-label-mono">目标：建立技术代差</p>
+<p class="text-[11px] text-system-log font-label-mono">冲突：硬件落后</p>
+<div class="mt-2 h-1 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-secondary-container w-[40%]"></div>
+</div>
+</div>
+</div>
+<div class="p-3 bg-surface-panel border border-primary-container/50 rounded shadow-[0_0_10px_rgba(0,240,255,0.1)] relative">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-mono text-label-mono text-primary-container">场景 2</span>
+<span class="material-symbols-outlined text-[14px] text-primary-container">center_focus_strong</span>
+</div>
+<div class="space-y-1">
+<p class="text-[11px] text-system-log font-label-mono">目标：第一个核心成功</p>
+<p class="text-[11px] text-system-log font-label-mono">冲突：热载过载</p>
+<div class="mt-2 h-1 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-secondary-container w-[80%]"></div>
+</div>
+</div>
+</div>
+<div class="p-3 bg-surface-panel border border-outline-variant rounded opacity-60">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-mono text-label-mono text-primary-container">场景 3</span>
+</div>
+<div class="space-y-1">
+<p class="text-[11px] text-system-log font-label-mono">目标：市场冲击</p>
+<p class="text-[11px] text-system-log font-label-mono">冲突：对手破坏</p>
+</div>
+</div>
+</div>
+<!-- Rich Text Editor Area -->
+<div class="flex-grow overflow-y-auto p-canvas-padding custom-scrollbar">
+<div class="max-w-3xl mx-auto pb-32">
+<h2 class="font-headline-md text-[32px] text-on-surface mb-12 tracking-tight">第三章：编译第一个核心模块</h2>
+<div class="space-y-6 font-body-narrative text-body-narrative leading-relaxed text-on-surface/90 writing-canvas">
+<p class="">林峰盯着屏幕上跳动的绿色字符，指尖在布满油垢的机械键盘上飞速舞动。这间不到十平米的出租屋里，唯一的声音就是老旧风扇的轰鸣。重生前，他是主宰万亿级流量的代码之神；而现在，他只是个被主流互联网抛弃的“废材”外包工。</p>
+<div class="sf-log-inline">
+                            &lt;!-- SF_LOG character_emotion char="林峰" emotion="警惕" logic_confidence="0.94" --&gt;
+                            <span class="text-[10px] text-system-log ml-2">// AI 建议：通过提及电网限制来增加紧张感。</span>
+</div>
+<p class="">“三十秒。”他低声自语，目光如炬。在他面前，那段足以改写当今AI架构的底层逻辑正在进行最后的封装。他的身体由于高度集中而微微颤抖，汗水顺着鬓角滑落，滴在那个已经磨损到看不清字母的“Enter”键上。</p>
+<p class="">窗外，霓虹灯火辉煌，深海市的夜晚从未停歇。没有人知道，一个将颠覆整个数字世界的奇点，正在这个阴暗的角落里悄然诞生。</p>
+<div class="sf-log-inline">
+                            &lt;!-- SF_LOG world_building asset="Deep Sea City" state="Atmospheric contrast" --&gt;
+                        </div>
+<p class="">编译进度条：98%... 99%... </p>
+<p class="">就在这时，老旧的保险丝发出了一声刺耳的爆裂声。房间瞬间陷入了死寂的黑暗，唯有林峰眼中，那一抹深蓝色的光芒在瞳孔深处疯狂闪烁。</p>
+</div>
+</div>
+</div>
+<!-- Bottom Floating Action Bar -->
+<div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3 glass-panel p-2 rounded-full border border-outline-variant shadow-2xl z-10">
+<button class="px-6 py-2 bg-primary-container text-on-primary font-label-mono text-label-mono uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">done_all</span> 采纳
+                </button>
+<button class="px-6 py-2 border border-outline-variant text-on-surface hover:bg-surface-container-high font-label-mono text-label-mono uppercase tracking-widest active:scale-95 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">refresh</span> 重写
+                </button>
+<button class="px-6 py-2 border border-outline-variant text-on-surface hover:bg-surface-container-high font-label-mono text-label-mono uppercase tracking-widest active:scale-95 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">edit</span> 手动
+                </button>
+<div class="w-[1px] h-4 bg-outline-variant mx-1"></div>
+<button class="px-6 py-2 text-secondary font-label-mono text-label-mono uppercase tracking-widest hover:text-primary-container transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">auto_fix_high</span> 创新润色
+                </button>
+</div>
+<!-- SF_LOG Feed at the very bottom -->
+<div class="h-8 bg-surface-container-lowest border-t border-system-log flex items-center px-4 overflow-hidden shrink-0">
+<div class="flex items-center gap-4 animate-pulse">
+<span class="font-code-sm text-code-sm text-system-log">SF_LOG [运行中]: 正在分析叙事密度...</span>
+<span class="font-code-sm text-code-sm text-primary-container">正常 - Token 序列已优化</span>
+<span class="font-code-sm text-code-sm text-system-log">SF_LOG: 上下文记忆已更新 [第1-3章]</span>
+</div>
+</div>
+</section>
+<!-- Neural Interface AI Panel (RIGHT SIDE) -->
+<aside class="w-[320px] h-full bg-surface-panel flex flex-col shrink-0">
+<div class="p-container-margin border-b border-system-log">
+<div class="flex items-center justify-between mb-4">
+<h3 class="font-headline-md text-headline-md text-secondary tracking-tight">神经接口</h3>
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<div class="flex items-center gap-2 mb-2">
+<div class="w-2 h-2 rounded-full bg-primary-container animate-ping"></div>
+<span class="font-code-sm text-code-sm text-system-log">激活：叙事副驾驶</span>
+</div>
+</div>
+<div class="flex-grow overflow-y-auto p-4 space-y-6">
+<!-- Analytical Feed -->
+<section>
+<h4 class="font-label-mono text-[10px] text-system-log uppercase tracking-widest mb-3">分析提要</h4>
+<div class="space-y-4">
+<div class="bg-surface-container rounded p-3 border border-outline-variant/30">
+<div class="flex justify-between text-xs mb-1">
+<span class="text-on-surface-variant">紧张指数</span>
+<span class="text-primary-container font-code-sm">84%</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary-container" style="width: 84%"></div>
+</div>
+</div>
+<div class="bg-surface-container rounded p-3 border border-outline-variant/30">
+<div class="flex justify-between text-xs mb-1">
+<span class="text-on-surface-variant">新颖度指数</span>
+<span class="text-secondary font-code-sm">72%</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary" style="width: 72%"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Suggested Actions -->
+<section>
+<h4 class="font-label-mono text-[10px] text-system-log uppercase tracking-widest mb-3">建议操作</h4>
+<div class="space-y-2">
+<div class="p-2 border border-outline-variant rounded hover:border-secondary transition-colors cursor-text group">
+<p class="text-[12px] text-on-surface-variant group-hover:text-on-surface">“添加关于 GPU 热量的触觉感官细节。”</p>
+</div>
+<div class="p-2 border border-outline-variant rounded hover:border-secondary transition-colors cursor-text group">
+<p class="text-[12px] text-on-surface-variant group-hover:text-on-surface">“为竞争对手公司‘奥术科技’引入伏笔。”</p>
+</div>
+</div>
+</section>
+<!-- Image Placeholder for Context -->
+<section class="mt-4">
+<div class="rounded overflow-hidden border border-outline-variant">
+<img alt="Cyberpunk workspace" class="w-full h-32 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAMZO3ytja9HSysmNQEjnuBLOlPl-NIlV9lSR5FL4N4JqqXHYqpj-wEnN1tLQRebJM5SedWsyv28Aa00PhPbT6nkqBJtYR2pyfpQTbHN5Mf29wfddFhYUPxU2MUA7ZLGgo8SV_UqM61zxnnzZl1INyAo6VsQtGZ3OVdAZprs2nwwOLZWMeew4GJOb__TfvvevAPj2v2rPpUHixyphihu4mI-ip4ofwAZfJyzSSop6OiNFBAN7uyYst82HH07L9e6FpcSsz8Fh0l8KGZ">
+</div>
+</section>
+</div>
+<!-- Chat Input -->
+<div class="p-4 bg-surface-container-low border-t border-system-log">
+<div class="relative">
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant focus:border-secondary focus:ring-0 rounded p-3 text-[12px] font-body-ui resize-none h-20 text-on-surface placeholder:text-system-log" placeholder="输入指令或寻求建议..."></textarea>
+<button class="absolute bottom-2 right-2 text-secondary hover:text-primary-container transition-colors">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+<div class="flex justify-between mt-3 px-1">
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-system-log text-lg cursor-pointer hover:text-on-surface">terminal</span>
+<span class="material-symbols-outlined text-system-log text-lg cursor-pointer hover:text-on-surface">developer_board</span>
+</div>
+<span class="font-code-sm text-[10px] text-system-log">Tokens: 1,420 / 4k</span>
+</div>
+</div>
+</aside>
+</main>
+</div>
+<script>
+    // Micro-interaction for the writing canvas
+    const canvas = document.querySelector('.writing-canvas');
+    if (canvas) {
+        canvas.addEventListener('focus', () => {
+            console.log('Writing mode engaged.');
+        });
+    }
+
+    // Simple button click effect
+    document.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('mousedown', () => {
+            btn.style.transform = 'scale(0.98)';
+        });
+        btn.addEventListener('mouseup', () => {
+            btn.style.transform = 'scale(1)';
+        });
+    });
+</script>
+
+
+</body></html>

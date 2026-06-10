@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StoryForge | Inspiration Hub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#4edea3",
+                        "on-primary": "#00363a",
+                        "tertiary": "#d8ffe7",
+                        "inverse-on-surface": "#283044",
+                        "surface-container-high": "#222a3d",
+                        "secondary-fixed": "#e9ddff",
+                        "error-p0": "#DC2626",
+                        "surface-bright": "#31394d",
+                        "warning-p1": "#F59E0B",
+                        "background": "#0b1326",
+                        "on-primary-fixed": "#002022",
+                        "inverse-surface": "#dae2fd",
+                        "saturation-high": "#EF4444",
+                        "outline-variant": "#3b494b",
+                        "surface-variant": "#2d3449",
+                        "surface-container-highest": "#2d3449",
+                        "on-surface": "#dae2fd",
+                        "error": "#ffb4ab",
+                        "surface-panel": "#1E293B",
+                        "surface": "#0b1326",
+                        "on-tertiary": "#003824",
+                        "error-container": "#93000a",
+                        "surface-container-low": "#131b2e",
+                        "on-secondary-fixed": "#23005c",
+                        "system-log": "#64748B",
+                        "on-tertiary-container": "#006d4a",
+                        "novelty-high": "#3B82F6",
+                        "tertiary-container": "#65f2b5",
+                        "on-error": "#690005",
+                        "on-tertiary-fixed": "#002113",
+                        "on-secondary": "#3c0091",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "canvas-bg": "#020617",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-primary-fixed-variant": "#004f54",
+                        "on-background": "#dae2fd",
+                        "surface-dim": "#0b1326",
+                        "primary-fixed-dim": "#00dbe9",
+                        "on-primary-container": "#006970",
+                        "primary": "#dbfcff",
+                        "on-error-container": "#ffdad6",
+                        "secondary": "#d0bcff",
+                        "secondary-container": "#571bc1",
+                        "surface-container": "#171f33",
+                        "primary-fixed": "#7df4ff",
+                        "primary-container": "#00f0ff",
+                        "outline": "#849495",
+                        "surface-container-lowest": "#060e20",
+                        "on-secondary-container": "#c4abff",
+                        "surface-tint": "#00dbe9",
+                        "on-surface-variant": "#b9cacb",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "inverse-primary": "#006970",
+                        "secondary-fixed-dim": "#d0bcff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "panel-gap": "1px",
+                        "container-margin": "24px",
+                        "unit": "4px",
+                        "canvas-padding": "64px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "label-mono": ["JetBrains Mono"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "code-sm": ["JetBrains Mono"],
+                        "body-ui": ["Inter"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "body-narrative": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-mono": ["12px", { "lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "code-sm": ["11px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "body-ui": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-narrative": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { background-color: #020617; color: #dae2fd; }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card:hover {
+            border-color: #00f0ff;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.1);
+            transform: translateY(-2px);
+        }
+        .sf-scrollbar::-webkit-scrollbar { width: 4px; }
+        .sf-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .sf-scrollbar::-webkit-scrollbar-thumb { background: #3b494b; border-radius: 10px; }
+        .sf-scrollbar::-webkit-scrollbar-thumb:hover { background: #00dbe9; }
+        
+        .masonry-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+            align-items: start;
+        }
+
+        .active-glow {
+            box-shadow: 0 0 10px rgba(78, 222, 163, 0.2);
+        }
+    </style>
+</head>
+<body class="font-body-ui text-body-ui overflow-hidden h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-surface-container text-primary fixed top-0 left-0 right-0 z-50 border-b border-system-log flex justify-between items-center w-full px-gutter h-16 shrink-0">
+<div class="flex items-center gap-8">
+<h1 class="font-display-lg text-display-lg font-bold text-primary dark:text-primary tracking-tighter">StoryForge</h1>
+<nav class="hidden md:flex gap-6 items-center"><a class="text-on-surface-variant font-medium hover:text-primary-container transition-colors duration-200 cursor-pointer active:opacity-80" href="#">专注模式</a><a class="text-on-surface-variant font-medium hover:text-primary-container transition-colors duration-200 cursor-pointer active:opacity-80" href="#">逻辑日志</a><a class="text-on-surface-variant font-medium hover:text-primary-container transition-colors duration-200 cursor-pointer active:opacity-80" href="#">时间轴</a></nav>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined cursor-pointer hover:text-primary-container transition-colors" data-icon="search">search</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary-container transition-colors" data-icon="account_circle">account_circle</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary-container transition-colors" data-icon="settings">settings</span>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar -->
+<aside class="bg-surface-panel dark:bg-surface-panel fixed left-0 top-16 h-[calc(100vh-64px)] w-[280px] border-r border-system-log flex flex-col justify-between py-unit overflow-y-auto hidden md:flex z-40"><div class="flex flex-col gap-1 px-2"><div class="px-4 py-6 mb-2"><h2 class="font-headline-md text-headline-md text-on-surface">PROJECT: ORIGIN</h2><p class="font-label-mono text-label-mono text-system-log">V0.8 Narrative Engine</p></div><div class="mb-4"><p class="px-4 text-[10px] font-label-mono text-system-log uppercase tracking-widest mb-2">叙事阶段</p><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150 cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined" data-icon="lightbulb">lightbulb</span> 阶段 1: 概念</a><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150 cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined" data-icon="auto_stories">auto_stories</span> 阶段 2: 情节</a><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150 cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined" data-icon="edit_note">edit_note</span> 阶段 3: 草拟</a><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150 cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined" data-icon="public">public</span> 阶段 4: 世界观</a><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150 cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined" data-icon="analytics">analytics</span> 阶段 5: 评审</a><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150 cursor-pointer active:scale-95" href="#"><span class="material-symbols-outlined" data-icon="output">output</span> 阶段 6: 导出</a></div><div class="mt-4"><p class="px-4 text-[10px] font-label-mono text-system-log uppercase tracking-widest mb-2">工作区</p><button class="w-full text-primary bg-primary-container/10 border-l-4 border-primary px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono cursor-pointer active:scale-95"><span class="material-symbols-outlined" data-icon="auto_fix_high">auto_fix_high</span> 灵感库</button><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150" href="#"><span class="material-symbols-outlined" data-icon="palette">palette</span> 风格沙盒</a><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150" href="#"><span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span> 资产中心</a></div></div><div class="px-2 pb-4 mt-auto border-t border-white/5 pt-4"><a class="text-on-surface-variant px-4 py-3 flex items-center gap-3 font-label-mono text-label-mono hover:bg-surface-variant hover:text-on-surface transition-all duration-150" href="#"><span class="material-symbols-outlined" data-icon="settings">settings</span> 设置</a></div></aside>
+<!-- Main Content Area -->
+<main class="ml-0 md:ml-[280px] mt-16 flex-1 flex flex-col h-[calc(100vh-64px)] bg-canvas-bg overflow-hidden relative">
+<!-- Atmospheric Shader Background (Optional/Subtle) -->
+<div class="absolute inset-0 opacity-10 pointer-events-none">
+</div>
+<!-- Hub Header -->
+<div class="z-10 px-gutter pt-8 pb-6 bg-gradient-to-b from-canvas-bg to-transparent">
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">Inspiration Hub <span class="text-tertiary-fixed-dim">灵感库</span></h2>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
+<p class="font-label-mono text-label-mono text-system-log uppercase tracking-widest">SF_ANALYSIS: 124 SPARK_NODES_ACTIVE</p>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="bg-surface-panel hover:bg-surface-variant text-primary border border-primary/30 px-4 py-2 flex items-center gap-2 font-label-mono text-label-mono transition-all">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span> Capture Spark
+                        </button>
+</div>
+</div>
+<!-- Filters -->
+<div class="flex items-center gap-4 overflow-x-auto sf-scrollbar pb-2">
+<button class="px-4 py-1 rounded-full border border-primary text-primary font-label-mono text-label-mono bg-primary/10">All</button>
+<button class="px-4 py-1 rounded-full border border-system-log text-on-surface-variant font-label-mono text-label-mono hover:border-primary transition-all">Concept</button>
+<button class="px-4 py-1 rounded-full border border-system-log text-on-surface-variant font-label-mono text-label-mono hover:border-primary transition-all">World</button>
+<button class="px-4 py-1 rounded-full border border-system-log text-on-surface-variant font-label-mono text-label-mono hover:border-primary transition-all">Plot</button>
+<button class="px-4 py-1 rounded-full border border-system-log text-on-surface-variant font-label-mono text-label-mono hover:border-primary transition-all">Writing</button>
+<button class="px-4 py-1 rounded-full border border-system-log text-on-surface-variant font-label-mono text-label-mono hover:border-primary transition-all">Style</button>
+</div>
+</div>
+<div class="flex-1 flex overflow-hidden">
+<!-- Grid Content -->
+<div class="flex-1 overflow-y-auto px-gutter pb-12 sf-scrollbar">
+<div class="masonry-grid">
+<!-- Card 1 -->
+<div class="glass-card p-5 flex flex-col gap-4 relative group">
+<div class="flex justify-between items-start">
+<span class="bg-primary/20 text-primary-fixed-dim px-2 py-0.5 font-label-mono text-code-sm rounded">STAGE 1 DISCUSSION</span>
+<span class="text-tertiary-fixed-dim font-label-mono text-code-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span> Applied
+                                </span>
+</div>
+<p class="font-body-narrative text-on-surface leading-relaxed">“如果源代码修改会影响使用者自身？”</p>
+<div class="flex flex-wrap gap-2 mt-2">
+<span class="flex items-center gap-1 text-system-log font-label-mono text-code-sm">
+<span class="material-symbols-outlined text-[14px]" data-icon="person">person</span> Lin Feng
+                                </span>
+<span class="flex items-center gap-1 text-system-log font-label-mono text-code-sm">
+<span class="material-symbols-outlined text-[14px]" data-icon="menu_book">menu_book</span> CH. 12
+                                </span>
+</div>
+<div class="flex gap-2 pt-4 border-t border-white/5 opacity-40 group-hover:opacity-100 transition-opacity">
+<button class="flex-1 py-2 text-system-log font-label-mono text-code-sm hover:text-primary-fixed transition-colors">EDIT</button>
+<button class="flex-1 py-2 text-system-log font-label-mono text-code-sm hover:text-error transition-colors">DELETE</button>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="glass-card p-5 flex flex-col gap-4 relative group">
+<div class="flex justify-between items-start">
+<span class="bg-secondary-container/20 text-secondary px-2 py-0.5 font-label-mono text-code-sm rounded">SPARK</span>
+<span class="text-system-log font-label-mono text-code-sm">Unused</span>
+</div>
+<p class="font-body-narrative text-on-surface leading-relaxed">苏晓晓的真实身份其实是代码观察者派来的监视者</p>
+<div class="flex flex-wrap gap-2 mt-2">
+<span class="flex items-center gap-1 text-system-log font-label-mono text-code-sm">
+<span class="material-symbols-outlined text-[14px]" data-icon="person">person</span> Su Xiaoxiao
+                                </span>
+</div>
+<div class="flex gap-2 pt-4 border-t border-white/5">
+<button class="flex-1 py-2 bg-primary/10 hover:bg-primary/20 text-primary-fixed-dim font-label-mono text-code-sm transition-all border border-primary/20">APPLY TO CURRENT</button>
+<button class="w-10 h-10 flex items-center justify-center text-system-log hover:text-on-surface"><span class="material-symbols-outlined" data-icon="more_vert">more_vert</span></button>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="glass-card p-5 flex flex-col gap-4 relative group">
+<div class="flex justify-between items-start">
+<span class="bg-tertiary-container/10 text-tertiary-fixed-dim px-2 py-0.5 font-label-mono text-code-sm rounded">WORLDBUILDING</span>
+<span class="text-system-log font-label-mono text-code-sm">Unused</span>
+</div>
+<p class="font-body-narrative text-on-surface leading-relaxed">源层空间的物理规则是不稳定的，随情绪波动</p>
+<div class="flex flex-wrap gap-2 mt-2">
+<span class="flex items-center gap-1 text-system-log font-label-mono text-code-sm">
+<span class="material-symbols-outlined text-[14px]" data-icon="location_on">location_on</span> Source Layer
+                                </span>
+</div>
+<div class="flex gap-2 pt-4 border-t border-white/5">
+<button class="flex-1 py-2 bg-primary/10 hover:bg-primary/20 text-primary-fixed-dim font-label-mono text-code-sm transition-all border border-primary/20">APPLY TO CURRENT</button>
+<button class="w-10 h-10 flex items-center justify-center text-system-log hover:text-on-surface"><span class="material-symbols-outlined" data-icon="more_vert">more_vert</span></button>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="glass-card p-5 flex flex-col gap-4 relative group">
+<div class="flex justify-between items-start">
+<span class="bg-novelty-high/20 text-novelty-high px-2 py-0.5 font-label-mono text-code-sm rounded">PLOTTING</span>
+<span class="text-system-log font-label-mono text-code-sm">Unused</span>
+</div>
+<p class="font-body-narrative text-on-surface leading-relaxed">林峰在第50章重伤，导致短期记忆大规模丢失</p>
+<div class="flex flex-wrap gap-2 mt-2">
+<span class="flex items-center gap-1 text-system-log font-label-mono text-code-sm">
+<span class="material-symbols-outlined text-[14px]" data-icon="menu_book">menu_book</span> CH. 50
+                                </span>
+</div>
+<div class="flex gap-2 pt-4 border-t border-white/5">
+<button class="flex-1 py-2 bg-primary/10 hover:bg-primary/20 text-primary-fixed-dim font-label-mono text-code-sm transition-all border border-primary/20">APPLY TO CURRENT</button>
+<button class="w-10 h-10 flex items-center justify-center text-system-log hover:text-on-surface"><span class="material-symbols-outlined" data-icon="more_vert">more_vert</span></button>
+</div>
+</div>
+<!-- Drop Placeholder -->
+<div class="border-2 border-dashed border-system-log/30 rounded flex flex-col items-center justify-center py-12 text-system-log hover:border-primary/50 transition-all cursor-pointer group">
+<span class="material-symbols-outlined text-4xl mb-2 group-hover:scale-110 transition-transform" data-icon="cloud_upload">cloud_upload</span>
+<p class="font-label-mono text-code-sm">DRAG ASSETS HERE TO STORE</p>
+</div>
+</div>
+</div>
+<!-- Right Sidebar: Inspiration Router -->
+<aside class="w-80 border-l border-system-log bg-surface-container-low hidden xl:flex flex-col h-full overflow-hidden"><div class="p-6 flex flex-col h-full"><div class="flex items-center justify-between mb-8"><h3 class="font-headline-md text-headline-md text-on-surface">Neural Interface</h3><span class="material-symbols-outlined text-primary" data-icon="hub">hub</span></div><div class="flex-1 flex flex-col gap-6"><div class="p-4 bg-surface-container rounded border border-white/5"><p class="text-code-sm text-system-log uppercase mb-2">Active Context</p><p class="text-body-ui text-primary">Project: Origin / Stage 1</p></div><div class="flex-1 border border-dashed border-system-log/30 rounded flex flex-col items-center justify-center p-4 text-center"><span class="material-symbols-outlined text-4xl text-system-log/40 mb-4" data-icon="psychology">psychology</span><p class="text-code-sm text-system-log">Select a spark to view neural connections and narrative impact.</p></div></div><div class="mt-6 pt-6 border-t border-white/5"><div class="h-20 overflow-hidden text-[10px] font-label-mono text-system-log leading-tight sf-scrollbar"></div></div></div></aside>
+</div>
+</main>
+</div>
+<!-- Micro-interaction JS -->
+<script>
+        document.querySelectorAll('.glass-card').forEach(card => {
+            card.addEventListener('mousedown', () => {
+                card.style.transform = 'scale(0.98)';
+                card.style.transition = 'transform 0.1s ease';
+            });
+            card.addEventListener('mouseup', () => {
+                card.style.transform = 'translateY(-2px) scale(1)';
+            });
+        });
+
+        // Simple terminal log simulator
+        const logs = [
+            ">> DETECTING CREATIVE PEAK...",
+            ">> SYNCING_NODES_WITH_WORLD_ATLAS",
+            ">> LOGIC_VERIFICATION: PASSED",
+            ">> NEW_SPARK_DETECTED: 'THE_GARDENER'",
+            ">> OPTIMIZING_WORKSPACE_FLUX"
+        ];
+        const logFeed = document.querySelector('.h-20');
+        setInterval(() => {
+            const p = document.createElement('p');
+            p.textContent = logs[Math.floor(Math.random() * logs.length)];
+            logFeed.appendChild(p);
+            if (logFeed.children.length > 6) {
+                logFeed.removeChild(logFeed.firstChild);
+            }
+        }, 4000);
+    </script>
+</body></html>

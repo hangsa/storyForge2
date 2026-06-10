@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StoryForge - Creative OS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;family=Hanken+Grotesk:wght@600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-container": "#006970",
+                      "error-container": "#93000a",
+                      "primary-container": "#00f0ff",
+                      "on-tertiary-container": "#006d4a",
+                      "on-secondary-fixed": "#23005c",
+                      "on-surface": "#dae2fd",
+                      "outline-variant": "#3b494b",
+                      "on-tertiary-fixed": "#002113",
+                      "warning-p1": "#F59E0B",
+                      "secondary-fixed-dim": "#d0bcff",
+                      "novelty-high": "#3B82F6",
+                      "secondary": "#d0bcff",
+                      "tertiary-fixed-dim": "#4edea3",
+                      "surface-container-lowest": "#060e20",
+                      "surface-container-high": "#222a3d",
+                      "inverse-on-surface": "#283044",
+                      "canvas-bg": "#020617",
+                      "primary-fixed-dim": "#00dbe9",
+                      "on-primary-fixed": "#002022",
+                      "error-p0": "#DC2626",
+                      "on-secondary-container": "#c4abff",
+                      "surface-variant": "#2d3449",
+                      "on-error": "#690005",
+                      "inverse-primary": "#006970",
+                      "surface-tint": "#00dbe9",
+                      "primary-fixed": "#7df4ff",
+                      "surface-bright": "#31394d",
+                      "tertiary-fixed": "#6ffbbe",
+                      "system-log": "#64748B",
+                      "on-error-container": "#ffdad6",
+                      "background": "#0b1326",
+                      "on-background": "#dae2fd",
+                      "surface-dim": "#0b1326",
+                      "primary": "#dbfcff",
+                      "on-tertiary-fixed-variant": "#005236",
+                      "error": "#ffb4ab",
+                      "outline": "#849495",
+                      "on-secondary": "#3c0091",
+                      "on-primary-fixed-variant": "#004f54",
+                      "tertiary": "#d8ffe7",
+                      "surface-container-low": "#131b2e",
+                      "surface-container-highest": "#2d3449",
+                      "on-surface-variant": "#b9cacb",
+                      "surface-container": "#171f33",
+                      "saturation-high": "#EF4444",
+                      "tertiary-container": "#65f2b5",
+                      "surface": "#0b1326",
+                      "secondary-fixed": "#e9ddff",
+                      "inverse-surface": "#dae2fd",
+                      "secondary-container": "#571bc1",
+                      "on-tertiary": "#003824",
+                      "on-secondary-fixed-variant": "#5516be",
+                      "on-primary": "#00363a",
+                      "surface-panel": "#1E293B"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "canvas-padding": "64px",
+                      "container-margin": "24px",
+                      "gutter": "16px",
+                      "unit": "4px",
+                      "panel-gap": "1px"
+              },
+              "fontFamily": {
+                      "code-sm": ["JetBrains Mono"],
+                      "headline-md": ["Hanken Grotesk"],
+                      "display-lg": ["Hanken Grotesk"],
+                      "label-mono": ["JetBrains Mono"],
+                      "body-ui": ["Inter"],
+                      "body-narrative": ["Inter"]
+              },
+              "fontSize": {
+                      "code-sm": ["11px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                      "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                      "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "label-mono": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                      "body-ui": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "body-narrative": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .whatif-line {
+            stroke: #3b494b;
+            stroke-width: 1.5;
+            fill: none;
+            stroke-dasharray: 4;
+            animation: dash 15s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: -100; }
+        }
+        .node-glow {
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+        }
+        .preferred-glow {
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.4);
+            border-color: #00f0ff !important;
+        }
+        .glass-panel {
+            backdrop-filter: blur(12px);
+            background: rgba(17, 25, 46, 0.85);
+        }
+        .node-actions {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.2s ease;
+        }
+        .node-container:hover .node-actions {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="bg-surface selection:bg-primary-container selection:text-on-primary">
+<!-- TopAppBar (Full width, spans left to right) -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-gutter h-16 bg-surface-container-low border-b border-outline-variant">
+<div class="flex items-center gap-8">
+<span class="font-display-lg text-headline-md font-extrabold text-primary-container">StoryForge</span>
+<div class="flex items-center gap-4 bg-surface-container px-4 py-1.5 rounded border border-outline-variant">
+<span class="text-sm font-semibold text-primary">代码天才重生记</span>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<span class="font-label-mono text-[10px] text-tertiary-fixed-dim uppercase tracking-wider">阶段 1</span>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-tertiary-container rounded-full animate-pulse"></span>
+<span class="text-[10px] font-label-mono text-on-surface-variant">讨论模式</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-[10px] font-label-mono text-system-log">
+<span class="material-symbols-outlined text-sm">cloud_done</span>
+            已自动保存
+        </div>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-surface-container rounded-lg border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-xs w-48 font-body-ui placeholder:text-system-log" placeholder="搜索叙事分支或资产..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">hub</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-primary-container p-0.5" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGR4uGknWsbCNDWFSG1KouebQlS4A9eMgu_12kq7CrXPzMNOpqYdfZWfOy9Ka8ejl0IPhqqnSHZDrbbIW-99Zg2tqCNHaNPaH7G0NDf8iZsf0JwXWT9AruDXuy9ummeEbpMYkVSfLnptilszZnYebuEKvaExbemlQER_LeuQgi5KLdLdeE_hXzhnwpg9hq9zkxmNfuOGs8bFGjayE-u_KSll4yD0NcDEkbuoIavqKJaihBU5J8ETkDQrJhM8efm0HYN2f75KvWg64d"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar (Starts below header) -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-64px-32px)] w-[280px] flex flex-col z-40 bg-surface border-r border-outline-variant">
+<div class="p-4 space-y-4">
+<button class="w-full py-2.5 bg-primary-container text-on-primary-container font-label-mono text-xs font-bold rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all">
+<span class="material-symbols-outlined text-sm">add</span> 新建分支
+        </button>
+</div>
+<nav class="flex-1 px-2 space-y-1 overflow-y-auto">
+<div class="px-3 py-2 text-[10px] font-label-mono text-system-log uppercase tracking-widest">项目</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">folder_open</span> 项目库
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">dashboard</span> 仪表板
+        </a>
+<div class="px-3 py-2 mt-4 text-[10px] font-label-mono text-system-log uppercase tracking-widest">叙事阶段</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm bg-primary-container/10 text-primary-container border-l-2 border-primary-container rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">explore</span> 第一阶段：创意探索
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">public</span> 第二阶段：世界观
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">auto_graph</span> 第三阶段：情节规划
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">edit_note</span> 第四阶段：写作工坊
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">fact_check</span> 第五阶段：诊断修订
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">ios_share</span> 第六阶段：导出
+        </a>
+<div class="px-3 py-2 mt-4 text-[10px] font-label-mono text-system-log uppercase tracking-widest">工作区</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">lightbulb</span> 灵感库
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">palette</span> 风格沙盒
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">inventory_2</span> 资产中心
+        </a>
+</nav>
+<div class="p-4 border-t border-outline-variant">
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">settings</span> 设置
+        </a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-[280px] mt-16 mr-80 h-[calc(100vh-64px-32px)] relative overflow-hidden bg-canvas-bg">
+<!-- Canvas Grid -->
+<div class="absolute inset-0 pointer-events-none z-[1] opacity-5">
+<div class="w-full h-full" style="background-image: linear-gradient(#64748b 1px, transparent 1px), linear-gradient(90deg, #64748b 1px, transparent 1px); background-size: 50px 50px;"></div>
+</div>
+<!-- The Tree -->
+<div class="absolute inset-0 z-10 flex items-center justify-center p-canvas-padding">
+<svg class="absolute inset-0 w-full h-full pointer-events-none">
+<path class="whatif-line" d="M 500,350 C 400,350 350,250 250,220"></path>
+<path class="whatif-line" d="M 500,350 C 600,350 650,220 750,220" style="stroke: #00f0ff; opacity: 0.6;"></path>
+<path class="whatif-line" d="M 500,350 C 400,350 350,450 250,480"></path>
+</svg>
+<!-- Root Node -->
+<div class="node-container absolute glass-panel p-5 border border-primary-container/60 rounded-xl w-64 text-center node-glow z-20">
+<div class="font-label-mono text-[9px] text-primary-container mb-2 tracking-[0.2em] font-bold">核心种子</div>
+<div class="text-sm font-semibold text-on-surface leading-snug">代码天才重生到魔法世界，发现咒语底层逻辑是二进制代码。</div>
+<div class="node-actions absolute -bottom-10 left-1/2 -translate-x-1/2 flex gap-1.5 p-1 bg-surface-container-high rounded-full border border-outline-variant shadow-xl">
+<button class="p-1 hover:bg-primary/20 text-on-surface-variant hover:text-primary transition-colors rounded-full"><span class="material-symbols-outlined text-xs">favorite</span></button>
+<button class="p-1 hover:bg-error-container/20 text-on-surface-variant hover:text-error transition-colors rounded-full"><span class="material-symbols-outlined text-xs">content_cut</span></button>
+<button class="p-1 hover:bg-primary/20 text-on-surface-variant hover:text-primary transition-colors rounded-full"><span class="material-symbols-outlined text-xs">account_tree</span></button>
+<button class="p-1 hover:bg-primary/20 text-on-surface-variant hover:text-primary transition-colors rounded-full"><span class="material-symbols-outlined text-xs">add</span></button>
+</div>
+</div>
+<!-- Path 1 -->
+<div class="node-container absolute top-[15%] left-[10%] p-4 border border-outline-variant glass-panel rounded-lg w-52 opacity-80 cursor-pointer hover:border-primary transition-colors">
+<div class="font-label-mono text-[8px] text-system-log mb-1">变量_01_技术</div>
+<div class="text-xs text-on-surface-variant">他开始重写世界的内核，不小心导致了部分重力参数溢出。</div>
+</div>
+<!-- Path 2 (Preferred) -->
+<div class="node-container absolute top-[15%] right-[10%] p-5 border-2 border-primary-container glass-panel rounded-lg w-60 preferred-glow z-30">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-mono text-[8px] text-primary-container font-bold">变量_03_社会</span>
+<span class="px-1.5 py-0.5 bg-primary/20 text-primary-container text-[8px] rounded uppercase">优选</span>
+</div>
+<div class="text-sm font-medium text-on-surface leading-relaxed">魔法贵族实际上是高权限的“系统管理员”，平民则只有只读权限。</div>
+<div class="node-actions absolute -bottom-10 left-1/2 -translate-x-1/2 flex gap-1.5 p-1 bg-surface-container-high rounded-full border border-primary-container/40 shadow-xl">
+<button class="p-1 text-primary rounded-full"><span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">favorite</span></button>
+<button class="p-1 hover:bg-error-container/20 text-on-surface-variant hover:text-error rounded-full"><span class="material-symbols-outlined text-xs">content_cut</span></button>
+<button class="p-1 hover:bg-primary/20 text-on-surface-variant hover:text-primary rounded-full"><span class="material-symbols-outlined text-xs">account_tree</span></button>
+<button class="p-1 hover:bg-primary/20 text-on-surface-variant hover:text-primary rounded-full"><span class="material-symbols-outlined text-xs">add</span></button>
+</div>
+</div>
+</div>
+<!-- Node Detail Panel (Floating inside main) -->
+<div class="absolute top-4 right-4 bottom-4 w-72 glass-panel border border-outline-variant rounded-xl z-30 flex flex-col shadow-2xl bg-surface-container-low/90">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center">
+<h3 class="font-headline-md text-sm text-primary">分支详情</h3>
+<button class="material-symbols-outlined text-system-log hover:text-white text-sm">close</button>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-5">
+<!-- Score Cards -->
+<div class="grid grid-cols-2 gap-3">
+<div class="p-3 bg-surface-container rounded border border-outline-variant/30 text-center">
+<div class="text-[9px] text-system-log uppercase mb-1">新颖度</div>
+<div class="text-lg font-bold text-primary-container">92%</div>
+</div>
+<div class="p-3 bg-surface-container rounded border border-outline-variant/30 text-center">
+<div class="text-[9px] text-system-log uppercase mb-1">市场潜力</div>
+<div class="text-lg font-bold text-tertiary-container">S-级</div>
+</div>
+<div class="p-3 bg-surface-container rounded border border-outline-variant/30 text-center">
+<div class="text-[9px] text-system-log uppercase mb-1">冲突感</div>
+<div class="text-lg font-bold text-error">最高</div>
+</div>
+<div class="p-3 bg-surface-container rounded border border-outline-variant/30 text-center">
+<div class="text-[9px] text-system-log uppercase mb-1">热度</div>
+<div class="text-lg font-bold text-warning-p1">8.5k</div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="font-label-mono text-[9px] text-system-log uppercase tracking-widest">讨论重点</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+                    目前的逻辑建立在“权限等级”与“血缘”的绑定上，这为后期主角进行“提权攻击”埋下了强烈的矛盾伏笔。
+                </p>
+</div>
+<div class="p-3 bg-surface-container-high rounded border border-outline-variant">
+<div class="text-[9px] text-primary-container font-label-mono uppercase mb-2">关联资产</div>
+<div class="flex flex-wrap gap-1.5">
+<span class="px-1.5 py-0.5 bg-canvas-bg text-[8px] border border-outline-variant rounded">主角: 艾伦</span>
+<span class="px-1.5 py-0.5 bg-canvas-bg text-[8px] border border-outline-variant rounded">场景: 禁忌机房</span>
+<span class="px-1.5 py-0.5 bg-canvas-bg text-[8px] border border-outline-variant rounded">道具: 虚灵终端</span>
+</div>
+</div>
+</div>
+<div class="p-4 border-t border-outline-variant">
+<button class="w-full py-2 bg-primary text-on-primary font-bold text-xs rounded hover:shadow-[0_0_15px_rgba(0,219,233,0.3)] transition-all">
+                以此节点展开故事线
+            </button>
+</div>
+</div>
+</main>
+<!-- Right AI Pane (Creative Director) - Starts below header -->
+<aside class="fixed right-0 top-16 h-[calc(100vh-64px-32px)] w-80 bg-surface-container-low border-l border-outline-variant z-40 flex flex-col">
+<!-- Agent Identity -->
+<div class="p-4 border-b border-outline-variant bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-primary-container/10 rounded-lg flex items-center justify-center border border-primary-container/20">
+<span class="material-symbols-outlined text-primary-container">psychology</span>
+</div>
+<div>
+<div class="text-sm font-bold text-on-surface">创意总监</div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 bg-tertiary-container rounded-full animate-pulse"></span>
+<span class="text-[10px] text-on-surface-variant font-label-mono uppercase tracking-wider">分析模式</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Suggestions Area -->
+<div class="flex-1 overflow-y-auto p-4 space-y-6 bg-surface-container-lowest/50">
+<div class="space-y-3">
+<div class="text-[10px] font-label-mono text-system-log uppercase tracking-widest px-1 bg-surface-container-high">当前建议</div>
+<div class="p-3 bg-surface-container rounded-lg border border-outline-variant hover:border-primary-container/50 transition-all cursor-pointer bg-surface-container-high">
+<div class="flex gap-2 items-start">
+<span class="text-[10px] font-bold text-primary-container">01.</span>
+<p class="text-xs leading-relaxed text-on-surface">强化“底层代码”被主角以外的人误解为“神谕”的滑稽感，增加讽刺张力。</p>
+</div>
+</div>
+<div class="p-3 bg-surface-container rounded-lg border border-outline-variant hover:border-primary-container/50 transition-all cursor-pointer bg-surface-container-high">
+<div class="flex gap-2 items-start">
+<span class="text-[10px] font-bold text-primary-container">02.</span>
+<p class="text-xs leading-relaxed text-on-surface">考虑引入一个“硬件损坏”的区域，在魔法世界表现为“禁忌的混乱虚空”。</p>
+</div>
+</div>
+<div class="p-3 bg-surface-container rounded-lg border border-outline-variant hover:border-primary-container/50 transition-all cursor-pointer bg-surface-container-high">
+<div class="flex gap-2 items-start">
+<span class="text-[10px] font-bold text-primary-container">03.</span>
+<p class="text-xs leading-relaxed text-on-surface">增加“Debug”动作的代价：每次修正逻辑都会消耗主角在该世界的“人格完整度”。</p>
+</div>
+</div>
+</div>
+<div class="p-3 bg-tertiary-container/5 border border-tertiary-container/20 rounded-lg">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-sm text-tertiary-container">trending_up</span>
+<span class="text-[10px] font-bold text-tertiary-container uppercase">洞察</span>
+</div>
+<p class="text-[11px] italic text-on-surface-variant leading-relaxed">目前的方向在“极客圈层”的共鸣度极高，建议保持硬核技术隐喻。</p>
+</div>
+</div>
+<!-- Chat/Input Bottom Area -->
+<div class="p-4 border-t border-outline-variant bg-surface-container-low">
+<div class="relative">
+<textarea class="w-full bg-surface-container-highest/50 border border-outline-variant rounded-xl p-3 pr-12 text-xs font-body-ui focus:ring-1 focus:ring-primary-container/50 focus:border-primary-container/50 transition-all placeholder:text-system-log resize-none" placeholder="向创意总监提问..." rows="3"></textarea>
+<button class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center bg-primary-container text-on-primary-container rounded-lg hover:scale-105 transition-transform shadow-lg shadow-primary-container/20">
+<span class="material-symbols-outlined text-sm font-bold">send</span>
+</button>
+</div>
+<div class="flex justify-between mt-3 px-1">
+<button class="text-[10px] font-label-mono text-system-log hover:text-primary transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">auto_fix</span> 发散新灵感
+            </button>
+<button class="text-[10px] font-label-mono text-system-log hover:text-primary transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">history</span> 对话历史
+            </button>
+</div>
+</div>
+</aside>
+<!-- SF_LOG Footer (Spans full width bottom) -->
+<footer class="fixed bottom-0 left-0 w-full h-8 bg-surface-container-lowest border-t border-outline-variant px-4 flex items-center justify-between z-50">
+<div class="flex items-center gap-6">
+<span class="font-label-mono text-[9px] text-primary-container font-bold">STORYFORGE_OS v1.2</span>
+<div class="flex items-center gap-3">
+<span class="w-1 h-1 rounded-full bg-system-log"></span>
+<span class="font-label-mono text-[9px] text-system-log">内存负载: 42%</span>
+<span class="font-label-mono text-[9px] text-system-log">核心空闲: 89%</span>
+</div>
+<span class="font-label-mono text-[9px] text-on-surface-variant animate-pulse">| 等待用户输入_阶段_01...</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="font-label-mono text-[9px] text-system-log">内核同步完成</span>
+<div class="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(0,240,255,0.6)]"></div>
+</div>
+</footer>
+</body></html>

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Inter:wght@400;500&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .node-pulse {
+            animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.1); opacity: 0.4; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .glow-line {
+            filter: drop-shadow(0 0 4px rgba(0, 219, 233, 0.6));
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(59, 73, 75, 0.5);
+        }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #3b494b; border-radius: 10px; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-low": "#131b2e",
+                        "on-tertiary": "#003824",
+                        "on-background": "#dae2fd",
+                        "on-error": "#690005",
+                        "warning-p1": "#F59E0B",
+                        "surface": "#0b1326",
+                        "inverse-on-surface": "#283044",
+                        "canvas-bg": "#020617",
+                        "on-surface-variant": "#b9cacb",
+                        "outline": "#849495",
+                        "surface-container-high": "#222a3d",
+                        "secondary": "#d0bcff",
+                        "primary-fixed-dim": "#00dbe9",
+                        "tertiary": "#d8ffe7",
+                        "inverse-surface": "#dae2fd",
+                        "surface-tint": "#00dbe9",
+                        "surface-container-lowest": "#060e20",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "on-secondary-fixed-variant": "#5516be",
+                        "surface-bright": "#31394d",
+                        "tertiary-container": "#65f2b5",
+                        "secondary-container": "#571bc1",
+                        "system-log": "#64748B",
+                        "primary-container": "#00f0ff",
+                        "inverse-primary": "#006970",
+                        "on-surface": "#dae2fd",
+                        "surface-variant": "#2d3449",
+                        "on-secondary-container": "#c4abff",
+                        "on-tertiary-fixed": "#002113",
+                        "novelty-high": "#3B82F6",
+                        "background": "#0b1326",
+                        "on-secondary-fixed": "#23005c",
+                        "primary": "#dbfcff",
+                        "on-primary": "#00363a",
+                        "secondary-fixed": "#e9ddff",
+                        "error-p0": "#DC2626",
+                        "surface-panel": "#1E293B",
+                        "saturation-high": "#EF4444",
+                        "error-container": "#93000a",
+                        "on-primary-container": "#006970",
+                        "on-tertiary-container": "#006d4a",
+                        "error": "#ffb4ab",
+                        "surface-container-highest": "#2d3449",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "on-primary-fixed-variant": "#004f54",
+                        "secondary-fixed-dim": "#d0bcff",
+                        "surface-dim": "#0b1326",
+                        "outline-variant": "#3b494b",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-primary-fixed": "#002022",
+                        "primary-fixed": "#7df4ff",
+                        "surface-container": "#171f33",
+                        "on-secondary": "#3c0091",
+                        "on-error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "panel-gap": "1px",
+                        "canvas-padding": "64px",
+                        "unit": "4px",
+                        "container-margin": "24px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "code-sm": ["JetBrains Mono"],
+                        "body-ui": ["Inter"],
+                        "label-mono": ["JetBrains Mono"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-narrative": ["Inter"]
+                    },
+                    "fontSize": {
+                        "code-sm": ["11px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "body-ui": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "label-mono": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "body-narrative": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-canvas-bg text-on-surface font-body-ui min-h-screen">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 w-full h-16 z-50 bg-surface-container border-b border-outline-variant flex justify-between items-center px-gutter"><div class="flex items-center gap-6"><span class="text-headline-md font-headline-md font-bold text-primary tracking-tighter">StoryForge</span><div class="h-4 w-px bg-outline-variant"></div><div class="flex items-center gap-2 text-label-mono text-on-surface-variant"><span class="material-symbols-outlined text-[18px]">folder_open</span><span>代码天才重生记</span><span class="material-symbols-outlined text-[16px]">chevron_right</span><span class="text-primary">阶段 2: 角色工坊</span></div></div><div class="flex items-center gap-6"><nav class="hidden md:flex gap-6 text-label-mono"><a class="text-on-surface-variant hover:text-primary transition-colors" href="#">专注模式</a><a class="text-on-surface-variant hover:text-primary transition-colors" href="#">逻辑日志</a><a class="text-primary font-bold border-b-2 border-primary py-4" href="#">时间线</a></nav><div class="flex items-center gap-3 border-l border-outline-variant pl-6"><button class="material-symbols-outlined text-on-surface-variant hover:text-primary">share</button><button class="material-symbols-outlined text-on-surface-variant hover:text-primary">notifications</button><button class="material-symbols-outlined text-on-surface-variant hover:text-primary">settings</button><div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant ml-2"><img alt="User Profile Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCa8BUFssR8lZfKnkWM4VleH1V2r78YB-Hss4DhkdZHVCTKfp9MdpMEbv2iO33vN336VGcb_68DRQhuYWRMEkTWZivmwLRQkfAl-bUc8uwnhWhbOHoThhFF95Wv1Gmfe80yki10w9g6rFcEOgghJ5kXKzfTDauIOFmyJYRZapyx2QjBtCgtGdhnB6VQGbztuYvXg6xjvN7eDsMOrOMgHmQdK1NRahHhRVOil77XMVsR6a1E0Ixvwyopk27uwjfN3unZ3S6hJKhYAGit"/></div><button class="ml-2 px-4 py-1.5 bg-primary text-on-primary text-label-mono font-bold rounded-full hover:shadow-[0_0_12px_rgba(0,240,255,0.4)] transition-all">发布</button></div></div></header>
+<!-- Main Layout Container -->
+<div class="pt-16 flex h-screen overflow-hidden">
+<!-- Left SideNavBar -->
+<aside class="fixed left-0 top-16 w-[280px] h-[calc(100vh-64px)] z-40 bg-surface-container-low border-r border-outline-variant flex flex-col py-6 overflow-y-auto"><div class="px-6 mb-4"><h2 class="text-[11px] font-bold text-secondary uppercase tracking-[0.2em] opacity-80">叙事阶段</h2></div><nav class="flex flex-col gap-0.5 mb-8"><a class="group flex items-center gap-3 px-6 py-2.5 text-on-surface-variant hover:bg-surface-variant/50 transition-colors" href="#"><span class="text-[10px] font-label-mono opacity-40 group-hover:opacity-100">01</span><span class="text-label-mono">世界观设定</span></a><a class="flex items-center gap-3 px-6 py-2.5 bg-primary/10 text-primary border-r-2 border-primary" href="#"><span class="text-[10px] font-label-mono">02</span><span class="text-label-mono font-bold">角色塑造</span></a><a class="group flex items-center gap-3 px-6 py-2.5 text-on-surface-variant hover:bg-surface-variant/50 transition-colors" href="#"><span class="text-[10px] font-label-mono opacity-40 group-hover:opacity-100">03</span><span class="text-label-mono">情节脉络</span></a><a class="group flex items-center gap-3 px-6 py-2.5 text-on-surface-variant hover:bg-surface-variant/50 transition-colors" href="#"><span class="text-[10px] font-label-mono opacity-40 group-hover:opacity-100">04</span><span class="text-label-mono">场景编写</span></a><a class="group flex items-center gap-3 px-6 py-2.5 text-on-surface-variant hover:bg-surface-variant/50 transition-colors" href="#"><span class="text-[10px] font-label-mono opacity-40 group-hover:opacity-100">05</span><span class="text-label-mono">叙事修辞</span></a><a class="group flex items-center gap-3 px-6 py-2.5 text-on-surface-variant hover:bg-surface-variant/50 transition-colors" href="#"><span class="text-[10px] font-label-mono opacity-40 group-hover:opacity-100">06</span><span class="text-label-mono">逻辑校对</span></a></nav><div class="px-6 mb-4"><h2 class="text-[11px] font-bold text-secondary uppercase tracking-[0.2em] opacity-80">工作区</h2></div><nav class="flex flex-col gap-0.5"><a class="flex items-center gap-3 px-6 py-2.5 text-on-surface-variant hover:bg-surface-variant/50 transition-colors" href="#"><span class="material-symbols-outlined text-[20px]">lightbulb</span><span class="text-label-mono">灵感中心</span></a><a class="flex items-center gap-3 px-6 py-2.5 text-on-surface-variant hover:bg-surface-variant/50 transition-colors" href="#"><span class="material-symbols-outlined text-[20px]">palette</span><span class="text-label-mono">风格沙盒</span></a><a class="flex items-center gap-3 px-6 py-2.5 text-on-surface-variant hover:bg-surface-variant/50 transition-colors" href="#"><span class="material-symbols-outlined text-[20px]">inventory_2</span><span class="text-label-mono">资产中心</span></a></nav><div class="mt-auto px-6 pb-6"><button class="w-full py-3 border border-dashed border-outline-variant rounded-lg text-on-surface-variant hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2 text-label-mono"><span class="material-symbols-outlined text-[18px]">add_circle</span>新建分支</button></div></aside>
+<!-- Main Content Area -->
+<main class="ml-[280px] mr-[320px] flex-1 overflow-y-auto bg-canvas-bg p-container-margin">
+<!-- Secondary Navigation / Tabs -->
+<div class="flex items-center gap-8 border-b border-outline-variant mb-8">
+<button class="px-2 py-4 font-label-mono text-label-mono text-on-surface-variant hover:text-primary transition-colors border-b-2 border-transparent">WORLD BUILDER (世界构建)</button>
+<button class="px-2 py-4 font-label-mono text-label-mono text-primary-fixed-dim border-b-2 border-primary-fixed-dim">CHARACTER WORKSHOP (角色工坊)</button>
+</div>
+<!-- Content Header -->
+<div class="mb-8">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">角色成长工坊 (Growth Workshop)</h2>
+<p class="text-on-surface-variant font-body-ui">监控并模拟主要角色的能力跃迁与心理状态演化。</p>
+</div>
+<!-- 1. Character Selector -->
+<div class="flex gap-4 mb-10 overflow-x-auto pb-2 scroll-smooth">
+<div class="flex-shrink-0 flex flex-col items-center gap-2 cursor-pointer group">
+<div class="w-16 h-16 rounded-full border-2 border-primary-fixed-dim p-1 ring-4 ring-primary-fixed-dim/10">
+<img alt="Avatar 林峰" class="w-full h-full rounded-full bg-surface-container" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPLg-1gXiKocfSB2P93VexVcNQ8SY8O6Sly5n85utFHIQXdCtktasK3KLkyBXTl3ELYd06RBBgDUd0lTuCiFqQbJZ1KhMyC1FIEiq7GpyWmiZ354V5vg4Jw1g34ow5s0vUEdHgiZP3mWSJ4cIohrAfVgsu8RzelH1pLLvGs2zNQpn6ZkVUZZCF4v9gppUforTssN_Mw-cxWQf7dPQ3SAnKpqkUcu3fQjOx3ShStQIaPh2sMdRSdOUHE-u301xEnPABsNFN1vDC68LW"/>
+</div>
+<span class="font-label-mono text-primary-fixed-dim">林峰</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2 cursor-pointer group opacity-60 hover:opacity-100 transition-opacity">
+<div class="w-16 h-16 rounded-full border border-outline-variant p-1">
+<img alt="Avatar 苏晓晓" class="w-full h-full rounded-full bg-surface-container" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDdMhqCW0T9trMFDS_pwm6uOJrnkkeWkjbx4QMVefk4rPX35pOYNzlM0fHeCoNp-SiC9OSjots67M7tS49MwbGvjseKraPaWVb_J9ZUpVAD8FCCBWN1nyJLwbmkeN2RWNZNHoklTLXa1obWV9lOZP2KTsm8qCtMRdkd6ynyaT8bmAdTbIWeWnBeTKBD0eBbVKbsUdj2a8G4FecxpaKVHRzCkDEFzEm_AfzoBxjzaDdNNFgu3Gb28VAF1eeY_a6jDfpvHEtz-i_qyhLO"/>
+</div>
+<span class="font-label-mono text-on-surface-variant">苏晓晓</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2 cursor-pointer group opacity-60 hover:opacity-100 transition-opacity">
+<div class="w-16 h-16 rounded-full border border-outline-variant p-1">
+<img alt="Avatar char_003" class="w-full h-full rounded-full bg-surface-container" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSiqQG-AEcQ4hSpTeqjR0nZpGBfJA06c8C765AE32fqFIqVSj8C5OA3sEb3jfnFyfo_9k1B6qE8lupVs-H6wA-nUvwaOARNpm1gycqfVWFUZaWyYG5JZ7vlxmBjhN-3O0TFU53TSUnMD3gfjgry3P2QUG09p5jJC-rd13C3HBnh4VO8e0n6EpBKKzCnS8J_KMVaNihg9xbk-ptITVYj9BFFbnVEfQ2rgnhxiBGFFipIONZiqzpqwOC5v0kk00dtQgLmb8AMUIm3Gcq"/>
+</div>
+<span class="font-label-mono text-on-surface-variant">char_003</span>
+</div>
+<button class="w-16 h-16 rounded-full border border-dashed border-outline-variant flex items-center justify-center text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+</div>
+<!-- 2. Growth Chart -->
+<div class="glass-panel rounded-xl p-6 mb-8 relative min-h-[400px]">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-label-mono text-label-mono text-primary uppercase flex items-center gap-2">
+<span class="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
+                        成长弧线模拟: 林峰
+                    </h3>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-primary-fixed-dim"></span>
+<span class="text-code-sm font-code-sm text-outline">综合战力</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-secondary"></span>
+<span class="text-code-sm font-code-sm text-outline">叙事契合度</span>
+</div>
+</div>
+</div>
+<!-- Chart Visualization (Simulated with SVG) -->
+<div class="relative w-full h-64 border-l border-b border-outline-variant/30 mt-4">
+<svg class="w-full h-full overflow-visible" viewbox="0 0 1000 256">
+<!-- Path: Growth Curve -->
+<path class="glow-line" d="M0,230 L100,220 L260,180 L400,160 L580,80 L600,180 L700,120 L820,40 L1000,20" fill="none" stroke="#00dbe9" stroke-width="3"></path>
+<!-- Grid Lines -->
+<line stroke="#3b494b" stroke-dasharray="4" x1="260" x2="260" y1="0" y2="256"></line>
+<line stroke="#3b494b" stroke-dasharray="4" x1="580" x2="580" y1="0" y2="256"></line>
+<line stroke="#3b494b" stroke-dasharray="4" x1="820" x2="820" y1="0" y2="256"></line>
+<!-- Interactive Nodes -->
+<!-- TP1 -->
+<circle class="cursor-pointer hover:r-8 transition-all" cx="260" cy="180" fill="#00dbe9" r="6"></circle>
+<circle class="node-pulse" cx="260" cy="180" fill="none" r="12" stroke="#00dbe9" stroke-opacity="0.3"></circle>
+<text fill="#b9cacb" font-family="JetBrains Mono" font-size="10" text-anchor="middle" x="260" y="165">TP1: Ch.26</text>
+<!-- TP2 (Focus) -->
+<circle class="cursor-pointer ring-4 ring-primary-fixed-dim/30" cx="580" cy="80" fill="#00dbe9" r="8"></circle>
+<circle class="node-pulse" cx="580" cy="80" fill="none" r="16" stroke="#00dbe9" stroke-opacity="0.4"></circle>
+<text fill="#00dbe9" font-family="JetBrains Mono" font-size="10" font-weight="bold" text-anchor="middle" x="580" y="65">TP2: Ch.58 [ACTIVE]</text>
+<!-- Valley -->
+<circle class="cursor-pointer" cx="600" cy="180" fill="#DC2626" r="6"></circle>
+<text fill="#DC2626" font-family="JetBrains Mono" font-size="10" text-anchor="middle" x="600" y="195">THE VALLEY: Ch.60</text>
+<!-- TP3 -->
+<circle class="cursor-pointer" cx="820" cy="40" fill="#00dbe9" r="6"></circle>
+<text fill="#b9cacb" font-family="JetBrains Mono" font-size="10" text-anchor="middle" x="820" y="25">TP3: Ch.82</text>
+</svg>
+<!-- Labels -->
+<div class="absolute -left-12 top-0 h-full flex flex-col justify-between font-code-sm text-code-sm text-outline">
+<span>100</span>
+<span>50</span>
+<span>0</span>
+</div>
+<div class="absolute -bottom-6 w-full flex justify-between font-code-sm text-code-sm text-outline">
+<span>Ch.0</span>
+<span>Ch.25</span>
+<span>Ch.50</span>
+<span>Ch.75</span>
+<span>Ch.100</span>
+</div>
+</div>
+<div class="mt-12 grid grid-cols-3 gap-6">
+<div class="p-4 border border-outline-variant/30 rounded bg-surface-container-lowest">
+<span class="font-label-mono text-system-log block mb-1">CURRENT PEAK</span>
+<span class="text-headline-md font-display-lg text-primary-fixed-dim">LV. 84</span>
+</div>
+<div class="p-4 border border-outline-variant/30 rounded bg-surface-container-lowest">
+<span class="font-label-mono text-system-log block mb-1">STORY FRICTION</span>
+<span class="text-headline-md font-display-lg text-secondary">0.14</span>
+</div>
+<div class="p-4 border border-outline-variant/30 rounded bg-surface-container-lowest">
+<span class="font-label-mono text-system-log block mb-1">RISK LEVEL</span>
+<span class="text-headline-md font-display-lg text-warning-p1">MODERATE</span>
+</div>
+</div>
+</div>
+<!-- 4. Metrics Panel (Grid) -->
+<div class="grid grid-cols-3 gap-6">
+<div class="col-span-2 glass-panel rounded-xl p-6">
+<h3 class="font-label-mono text-label-mono text-on-surface uppercase mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="analytics">analytics</span>
+                        状态量化指标 (Quantitative State)
+                    </h3>
+<div class="space-y-6">
+<div>
+<div class="flex justify-between mb-2">
+<span class="text-body-ui">性格稳定性 (Personality Stability)</span>
+<span class="font-code-sm text-primary">78%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 78%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between mb-2">
+<span class="text-body-ui">战力天花板 (Power Ceiling)</span>
+<span class="font-code-sm text-primary">92%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary-fixed-dim" style="width: 92%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between mb-2">
+<span class="text-body-ui">记忆完整度 (Memory Integrity)</span>
+<span class="font-code-sm text-error-p0">42%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-error-p0" style="width: 42%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="glass-panel rounded-xl p-6">
+<h3 class="font-label-mono text-label-mono text-on-surface uppercase mb-4">世界冲突系数</h3>
+<div class="flex items-center justify-center py-4">
+<!-- Minimal Radar Visual -->
+<div class="relative w-32 h-32 rounded-full border-2 border-outline-variant/30 flex items-center justify-center">
+<div class="absolute inset-0 rounded-full border border-primary/20 scale-75"></div>
+<div class="absolute inset-0 rounded-full border border-primary/10 scale-50"></div>
+<div class="w-1 h-1 bg-primary rounded-full shadow-[0_0_10px_#00dbe9]"></div>
+<svg class="absolute inset-0 w-full h-full rotate-45" viewbox="0 0 100 100">
+<polygon fill="rgba(0, 219, 233, 0.2)" points="50,10 90,40 70,90 30,90 10,40" stroke="#00dbe9" stroke-width="1"></polygon>
+</svg>
+</div>
+</div>
+<div class="text-code-sm font-code-sm text-outline mt-4 text-center">
+                        当前冲突极值点：第八章、第廿六章
+                    </div>
+</div>
+</div>
+<!-- SF_LOG Feed -->
+<div class="mt-12 border-t border-system-log/30 pt-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="text-system-log font-code-sm text-code-sm uppercase">SF_LOG v1.4</span>
+<div class="h-[1px] flex-1 bg-system-log/20"></div>
+</div>
+<div class="font-code-sm text-code-sm text-system-log space-y-1">
+<p>[INFO] Character 'Lin Feng' data nodes loaded... 100%</p>
+<p>[WARN] Potential logic contradiction detected in Chapter 62. Correlation: Memory Integrity &lt; 45%</p>
+<p>[INFO] Recalculating relationship impact for 'Su Xiaoxiao' based on TP2 outcome.</p>
+</div>
+</div>
+</main>
+<!-- Right Side Panel (Turning Point Detail) -->
+<aside class="fixed right-0 top-16 h-[calc(100vh-64px)] w-[320px] bg-surface-container-low border-l border-outline-variant flex flex-col z-40">
+<div class="p-6 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<div>
+<h3 class="font-label-mono text-label-mono text-tertiary-fixed">Neural Interface</h3>
+<div class="text-code-sm text-outline uppercase">Turning Point: TP2 Detail</div>
+</div>
+<span class="material-symbols-outlined text-tertiary-fixed-dim" data-icon="smart_toy">smart_toy</span>
+</div>
+<div class="flex-1 overflow-y-auto p-6 space-y-8">
+<!-- Trigger Event -->
+<section>
+<label class="font-label-mono text-label-mono text-outline block mb-3 uppercase">Trigger Event (核心诱因)</label>
+<div class="p-4 bg-surface-container-high border-l-2 border-primary-fixed-dim rounded-r">
+<p class="text-body-ui text-on-background">首次被迫使用代码编辑救苏晓晓</p>
+<p class="text-code-sm text-outline mt-2 italic">“如果代价是遗忘，那我愿替她承受整个世界的崩塌。”</p>
+</div>
+</section>
+<!-- Capability Change -->
+<section>
+<label class="font-label-mono text-label-mono text-outline block mb-3 uppercase">Capability Change (能力阶梯)</label>
+<div class="flex items-center gap-4">
+<div class="flex-1 p-3 bg-surface-variant text-center rounded">
+<span class="font-label-mono text-system-log">一阶</span>
+</div>
+<span class="material-symbols-outlined text-primary-fixed-dim" data-icon="trending_flat">trending_flat</span>
+<div class="flex-1 p-3 bg-primary/10 border border-primary/30 text-center rounded">
+<span class="font-label-mono text-primary font-bold">二阶 (局部编辑)</span>
+</div>
+</div>
+</section>
+<!-- Psychological Cost -->
+<section>
+<label class="font-label-mono text-label-mono text-outline block mb-3 uppercase">Psychological Cost (心理代价)</label>
+<div class="space-y-3">
+<div class="flex items-start gap-3 text-body-ui">
+<span class="material-symbols-outlined text-error mt-0.5" data-icon="memory">memory</span>
+<p><span class="text-error font-bold">记忆侵蚀:</span> 遗忘大学入学面试细节</p>
+</div>
+<div class="flex items-start gap-3 text-body-ui">
+<span class="material-symbols-outlined text-warning-p1 mt-0.5" data-icon="psychology">psychology</span>
+<p><span class="text-warning-p1">自我怀疑:</span> +12% 认知失调</p>
+</div>
+</div>
+</section>
+<!-- Relationship Impact -->
+<section>
+<label class="font-label-mono text-label-mono text-outline block mb-3 uppercase">Relationship Impact (关系扰动)</label>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<img class="w-8 h-8 rounded-full border border-outline-variant" data-alt="Close up profile illustration of a female character with light hair and expressive eyes, styled in a cyberpunk aesthetic with neon accents. The background is a clean, modern digital interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkQFKIPM5oDsK4ik5sDVZGxqrNbeBWh-mTAAOsWWflWpBxGQ8Qk8levEqofNy6HWptJj9A5JLPzQrPMisyshBBT3uckKukEdc0xqXryBmDf1hznGsX67iS8vGwhA4OBgNeKfENGtwxvP9x-dS_mdC2wwVOrwkQrNSgYGWj02so2rS5cSE4QE8kuVEebN3pvkmCHq9E4jYVNlgZg_vUqs6UhqgY4xiBlAC7-Sl5p3ab8mAmtzl9Fhl-saxLmxWVvNvAOUB9d8GvHN57"/>
+<span class="text-body-ui">苏晓晓</span>
+</div>
+<div class="flex gap-2">
+<span class="text-code-sm bg-primary/10 text-primary-fixed-dim px-2 py-0.5 rounded">信任度+15</span>
+<span class="text-code-sm bg-error/10 text-error px-2 py-0.5 rounded">愧疚感+20</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Footer Action -->
+<div class="p-6 bg-surface-container border-t border-outline-variant">
+<button class="w-full bg-surface-container-highest border border-tertiary-fixed-dim text-tertiary-fixed-dim py-3 rounded-lg font-label-mono uppercase tracking-widest hover:bg-tertiary-fixed/10 transition-all active:scale-95 shadow-[0_0_10px_rgba(78,222,163,0.1)]">
+                    APPLY CHANGES TO PLOT
+                </button>
+</div>
+</aside>
+</div>
+<!-- Background Elements -->
+<div class="fixed inset-0 pointer-events-none z-[-1] opacity-20">
+</div>
+<script>
+        // Micro-interactions for chart nodes
+        document.querySelectorAll('circle').forEach(circle => {
+            circle.addEventListener('mouseenter', () => {
+                circle.style.transform = 'scale(1.5)';
+                circle.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+            });
+            circle.addEventListener('mouseleave', () => {
+                circle.style.transform = 'scale(1)';
+            });
+        });
+
+        // Tab Switcher interaction
+        const tabs = document.querySelectorAll('.flex.items-center.gap-8 button');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => {
+                    t.classList.remove('text-primary-fixed-dim', 'border-primary-fixed-dim');
+                    t.classList.add('text-on-surface-variant', 'border-transparent');
+                });
+                tab.classList.remove('text-on-surface-variant', 'border-transparent');
+                tab.classList.add('text-primary-fixed-dim', 'border-primary-fixed-dim');
+            });
+        });
+    </script>
+</body></html>

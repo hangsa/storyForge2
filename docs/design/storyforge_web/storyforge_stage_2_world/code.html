@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StoryForge | Stage 2: 世界观与角色工坊</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Hanken+Grotesk:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "inverse-surface": "#dae2fd",
+                    "primary-container": "#00f0ff",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "on-secondary": "#3c0091",
+                    "surface-container-high": "#222a3d",
+                    "surface-panel": "#1E293B",
+                    "on-surface-variant": "#b9cacb",
+                    "error": "#ffb4ab",
+                    "on-tertiary-container": "#006d4a",
+                    "surface-bright": "#31394d",
+                    "surface-variant": "#2d3449",
+                    "background": "#0b1326",
+                    "error-p0": "#DC2626",
+                    "surface-container": "#171f33",
+                    "on-primary": "#00363a",
+                    "secondary-fixed": "#e9ddff",
+                    "primary-fixed-dim": "#00dbe9",
+                    "primary-fixed": "#7df4ff",
+                    "on-background": "#dae2fd",
+                    "warning-p1": "#F59E0B",
+                    "on-tertiary-fixed": "#002113",
+                    "on-primary-fixed-variant": "#004f54",
+                    "surface": "#0b1326",
+                    "system-log": "#64748B",
+                    "surface-container-low": "#131b2e",
+                    "outline-variant": "#3b494b",
+                    "on-primary-container": "#006970",
+                    "surface-container-highest": "#2d3449",
+                    "on-secondary-fixed-variant": "#5516be",
+                    "novelty-high": "#3B82F6",
+                    "inverse-on-surface": "#283044",
+                    "surface-dim": "#0b1326",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "on-surface": "#dae2fd",
+                    "on-error": "#690005",
+                    "tertiary-fixed": "#6ffbbe",
+                    "saturation-high": "#EF4444",
+                    "on-secondary-container": "#c4abff",
+                    "surface-container-lowest": "#060e20",
+                    "secondary-container": "#571bc1",
+                    "outline": "#849495",
+                    "canvas-bg": "#020617",
+                    "on-primary-fixed": "#002022",
+                    "on-error-container": "#ffdad6",
+                    "secondary": "#d0bcff",
+                    "error-container": "#93000a",
+                    "tertiary-container": "#65f2b5",
+                    "on-tertiary": "#003824",
+                    "secondary-fixed-dim": "#d0bcff",
+                    "on-secondary-fixed": "#23005c",
+                    "inverse-primary": "#006970",
+                    "tertiary": "#d8ffe7",
+                    "primary": "#dbfcff",
+                    "surface-tint": "#00dbe9"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "container-margin": "24px",
+                    "gutter": "16px",
+                    "unit": "4px",
+                    "panel-gap": "1px",
+                    "canvas-padding": "64px"
+            },
+            "fontFamily": {
+                    "body-ui": ["Inter"],
+                    "code-sm": ["JetBrains Mono"],
+                    "body-narrative": ["Inter"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "label-mono": ["JetBrains Mono"],
+                    "display-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "body-ui": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "code-sm": ["11px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                    "body-narrative": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "label-mono": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #64748B; border-radius: 2px; }
+        .glow-active { box-shadow: 0 0 15px rgba(0, 240, 255, 0.3); }
+        .glass-panel { backdrop-filter: blur(12px); background: rgba(30, 41, 59, 0.7); }
+        .growth-node:hover .node-popup { opacity: 1; transform: translateY(-8px); }
+    </style>
+</head>
+<body class="bg-surface selection:bg-primary-container selection:text-on-primary-container h-screen overflow-hidden">
+<!-- UPDATED HEADER: FULL WIDTH -->
+<header class="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-gutter h-16 bg-surface-container-low border-b border-outline-variant">
+<div class="flex items-center gap-8">
+<span class="font-display-lg text-headline-md font-extrabold text-primary-container">StoryForge</span>
+<div class="flex items-center gap-4 bg-surface-container px-4 py-1.5 rounded border border-outline-variant">
+<span class="text-sm font-semibold text-primary">代码天才重生记</span>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<span class="font-label-mono text-[10px] text-tertiary-fixed-dim uppercase tracking-wider">STAGE 2</span>
+<div class="w-px h-4 bg-outline-variant mx-1"></div>
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-tertiary-container rounded-full animate-pulse"></span>
+<span class="text-[10px] font-label-mono text-on-surface-variant">讨论模式</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-[10px] font-label-mono text-system-log">
+<span class="material-symbols-outlined text-sm">cloud_done</span> 已自动保存
+        </div>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-surface-container rounded-lg border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-xs w-48 font-body-ui placeholder:text-system-log" placeholder="搜索叙事分支或资产..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">hub</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-primary-container p-0.5">
+<img alt="用户头像" class="w-full h-full object-cover rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtAoFHrXaAJue9K4TwMT7n8I8JgiRzv27A_K1st-7V1Q6-DadNFc3uvMf2NryN1qqlU6AyGycVq9AsyTvSPT5b4PTrOWJo2vxmKH5aIlykPWQ7-i3izEJ2wxshbrQAptAUVNnGYELIbMUk4RHsfcIAFkiQnwXkGFmmIC1eq2cyphncaBbZOWsBkEp0eaMOOfhtr-2bWYWbZm8CvgGQkUZ7pGQ8aUDFtRTI3tShKaOToUybxaiGty_MkJQQd8l_oxNKYbf0Ss3fJCjQ"/>
+</div>
+</div>
+</div>
+</header>
+<!-- UPDATED SIDEBAR: START BELOW HEADER -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-64px)] w-[280px] flex flex-col z-40 bg-surface-container-low border-r border-outline-variant">
+<div class="p-4">
+<button class="w-full py-2.5 bg-primary-container text-on-primary-container font-label-mono text-xs font-bold rounded flex items-center justify-center gap-2 hover:brightness-110 transition-all">
+<span class="material-symbols-outlined text-sm">add</span> 新建分支
+        </button>
+</div>
+<nav class="flex-1 px-2 space-y-1 overflow-y-auto custom-scrollbar">
+<div class="px-3 py-2 text-[10px] font-label-mono text-system-log uppercase tracking-widest">项目</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">folder_open</span> 项目库
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">dashboard</span> 仪表盘
+        </a>
+<div class="px-3 py-2 mt-4 text-[10px] font-label-mono text-system-log uppercase tracking-widest">叙事阶段</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">explore</span> 第一阶段 创意探索
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm bg-primary-container/10 text-primary-container border-l-2 border-primary-container rounded transition-all font-semibold" href="#">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">public</span> 第二阶段 世界观
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">auto_graph</span> 第三阶段 情节规划
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">edit_note</span> 第四阶段 写作中心
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">fact_check</span> 第五阶段 诊断修订
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">ios_share</span> 第六阶段 导出
+        </a>
+<div class="px-3 py-2 mt-4 text-[10px] font-label-mono text-system-log uppercase tracking-widest">工作区</div>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">lightbulb</span> 灵感库
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">palette</span> 风格沙盒
+        </a>
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">inventory_2</span> 资产中心
+        </a>
+</nav>
+<div class="p-4 border-t border-outline-variant">
+<a class="flex items-center gap-3 px-3 py-2 font-body-ui text-sm text-on-surface-variant hover:bg-surface-container-high rounded transition-all" href="#">
+<span class="material-symbols-outlined text-lg">settings</span> 设置
+        </a>
+</div>
+</aside>
+<!-- MAIN CONTENT WRAPPER: OFFSET FROM SIDEBAR AND HEADER -->
+<main class="ml-[280px] mt-16 h-[calc(100vh-64px-32px)] flex flex-row bg-canvas-bg relative">
+<!-- Workspace Center -->
+<div class="flex-1 flex flex-col min-w-0">
+<!-- Sub Header & Tabs -->
+<div class="flex items-center justify-between px-gutter py-4 border-b border-outline-variant bg-surface-container-low">
+<div class="flex gap-8">
+<button class="flex items-center gap-2 text-primary border-b-2 border-primary-container pb-1 transition-all" id="tab-world" onclick="switchTab('world')">
+<span class="material-symbols-outlined text-sm">public</span>
+<span class="font-label-mono text-label-mono uppercase tracking-wider">世界构建 (World Builder)</span>
+</button>
+<button class="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-all" id="tab-character" onclick="switchTab('character')">
+<span class="material-symbols-outlined text-sm">person_pin</span>
+<span class="font-label-mono text-label-mono uppercase tracking-wider">角色工坊 (Character Workshop)</span>
+</button>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-3 py-1 text-label-mono font-label-mono text-on-tertiary-container bg-tertiary-container/10 rounded border border-tertiary-container/30">
+<span class="material-symbols-outlined text-xs">forum</span> 讨论模式已开启
+                </button>
+</div>
+</div>
+<!-- Content Area -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6" id="workspace-content">
+<!-- World Builder View -->
+<section class="grid grid-cols-12 gap-6 h-full" id="view-world">
+<!-- World Structure Tree -->
+<div class="col-span-4 bg-surface-panel p-4 border border-outline-variant rounded-lg">
+<h3 class="font-label-mono text-label-mono text-primary mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">account_tree</span> 结构节点
+                    </h3>
+<div class="space-y-2">
+<div class="group">
+<div class="flex items-center gap-2 p-2 hover:bg-surface-container-high cursor-pointer rounded transition-colors text-primary-container">
+<span class="material-symbols-outlined text-sm">expand_more</span>
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span class="font-label-mono text-label-mono">时代: 二进制重生</span>
+</div>
+<div class="ml-6 space-y-1">
+<div class="flex items-center gap-2 p-1.5 hover:bg-surface-container cursor-pointer rounded text-on-surface-variant">
+<span class="material-symbols-outlined text-xs">location_on</span>
+<span class="text-sm">霓虹重庆区</span>
+</div>
+<div class="flex items-center gap-2 p-1.5 hover:bg-surface-container cursor-pointer rounded text-on-surface-variant">
+<span class="material-symbols-outlined text-xs">location_on</span>
+<span class="text-sm">源云端</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2 p-2 hover:bg-surface-container-high cursor-pointer rounded transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="material-symbols-outlined text-sm">groups</span>
+<span class="font-label-mono text-label-mono">派系 (4)</span>
+</div>
+<div class="flex items-center gap-2 p-2 hover:bg-surface-container-high cursor-pointer rounded transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="material-symbols-outlined text-sm">bolt</span>
+<span class="font-label-mono text-label-mono">动力系统: 逻辑流</span>
+</div>
+<div class="flex items-center gap-2 p-2 hover:bg-surface-container-high cursor-pointer rounded transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+<span class="material-symbols-outlined text-sm">shield</span>
+<span class="font-label-mono text-label-mono">全局法则: 熵沉陷</span>
+</div>
+</div>
+</div>
+<!-- Detail Editor -->
+<div class="col-span-8 space-y-6">
+<div class="bg-surface-panel p-6 border border-outline-variant rounded-lg border-l-4 border-l-primary-container">
+<div class="flex justify-between items-start mb-6">
+<div>
+<h2 class="font-headline-md text-primary text-2xl mb-1">霓虹重庆区 (Neon-Chongqing Sector)</h2>
+<p class="text-on-surface-variant text-sm font-label-mono uppercase tracking-widest">资产 ID: LOC_7729_NC</p>
+</div>
+<button class="material-symbols-outlined text-primary-container">edit_note</button>
+</div>
+<div class="grid grid-cols-2 gap-8 mb-8">
+<div>
+<h4 class="text-xs font-label-mono text-system-log uppercase mb-2">视觉氛围</h4>
+<div class="w-full h-40 rounded-lg overflow-hidden relative">
+<img class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmV4yhFr9u_ylh9e_0M9e1DDsYBP6-HRTjSGLY-HiVsAN-fqjL7IJbYtVwU5-c91UxqaYVJdPAwYQ_LsqeVDnJvGSAyuU01GrzZMrPvteFvdVso8ij8lncZ2c2j-F2srDNCB5SCYx6QtHv5DAjzMXl0sa_mKMjaGwYTO6p_4PRuJjRMPU_IMgaabUsq1affOeeevavBvNFIrMo7fNMtYwDfvt5lJiwJ6x94XCraNMJZJiMMFJ9LdpcXaErN7gmffrO_rMWaHALmGu9"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-panel to-transparent"></div>
+</div>
+</div>
+<div class="space-y-4">
+<div>
+<h4 class="text-xs font-label-mono text-system-log uppercase mb-1">人口密度</h4>
+<div class="h-1 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[85%]"></div>
+</div>
+</div>
+<div>
+<h4 class="text-xs font-label-mono text-system-log uppercase mb-1">冲突指数</h4>
+<div class="h-1 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-saturation-high w-[60%]"></div>
+</div>
+</div>
+<div>
+<h4 class="text-xs font-label-mono text-system-log uppercase mb-1">神秘等级</h4>
+<div class="h-1 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-novelty-high w-[40%]"></div>
+</div>
+</div>
+</div>
+</div>
+<div>
+<h4 class="text-xs font-label-mono text-system-log uppercase mb-2">叙事挂钩 (Narrative Hook)</h4>
+<p class="text-on-surface leading-relaxed font-body-narrative">
+                                霓虹重庆建立在21世纪巨型城市的废墟之上，是一个垂直的迷宫，底层已经五十多年没有阳光了。在这里，“逻辑流”动力系统最不稳定，经常导致被称为“代码地震”的现实崩溃。
+                            </p>
+</div>
+</div>
+<!-- SF_LOG Integrated Feed -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-outline-variant">
+<div class="flex items-center gap-2 mb-2 text-system-log font-label-mono text-[10px]">
+<span class="material-symbols-outlined text-[12px]">terminal</span> 系统日志流 SYSTEM_SF_LOG.STREAM
+                        </div>
+<div class="space-y-1 font-code-sm text-on-surface-variant" id="log-feed">
+<p class="transition-all duration-500">[SYNC] 世界节点映射已初始化。</p>
+<p class="transition-all duration-500">[LOGIC] 霓虹重庆冲突层级已验证。</p>
+<p class="transition-all duration-500">[MEM] 未使用资产ID缓存已清除。</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Character Workshop View (Hidden by default) -->
+<section class="hidden space-y-8" id="view-character">
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+<!-- Character Card 1 -->
+<div class="bg-surface-panel border border-outline-variant rounded-xl overflow-hidden hover:border-primary-container/50 transition-all group">
+<div class="h-48 overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpbw9AvrtRNni8Z8RvdiwfQDsc6d7sDDXeu8c99v-94-5u0YIdaDHOB8lQrUEnvDxo_EoqLRblF1tCBiUZjVAdrqvs1JN91QCOP5yy_uJC1g4smG9e_XI9gA5YKODgKaWCs3JQcqrki3zIdYj8OGkL5XKaapsdJhwrZko878kC8VEL-UdYZf9FwRY2uvntS9b0AM77102VD49x559fHurfL3f0f80U4NHzjx-Vmib2bTvyT5sK9pnH-MiyHN43pC7ph9BVmsPkX4V-"/>
+<div class="absolute bottom-4 left-4">
+<span class="bg-primary-container text-on-primary-container text-[10px] px-2 py-0.5 font-label-mono rounded">主角</span>
+</div>
+</div>
+<div class="p-5">
+<div class="flex justify-between items-center mb-4">
+<h3 class="text-xl font-headline-md text-primary">林峰 (Lin Feng)</h3>
+<span class="text-on-surface-variant font-label-mono text-xs">LVL 08 成长</span>
+</div>
+<div class="flex flex-wrap gap-2 mb-6">
+<span class="bg-surface-container-highest text-on-surface-variant text-[10px] font-label-mono px-2 py-1 rounded">代码奇才</span>
+<span class="bg-surface-container-highest text-on-surface-variant text-[10px] font-label-mono px-2 py-1 rounded">复仇者</span>
+<span class="bg-surface-container-highest text-on-surface-variant text-[10px] font-label-mono px-2 py-1 rounded">重生</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden mb-2">
+<div class="h-full bg-primary-container w-[72%]"></div>
+</div>
+<div class="flex justify-between text-[10px] font-label-mono text-system-log">
+<span>逻辑一致性: 92%</span>
+<span>同理心指数: 22%</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+<!-- AI Pane: Positioned between workspace and sidebar -->
+<aside class="w-80 bg-surface-container-lowest border-l border-outline-variant flex flex-col z-30">
+<div class="p-4 border-b border-outline-variant flex items-center justify-between bg-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-primary-container/10 rounded-lg flex items-center justify-center border border-primary-container/20">
+<span class="material-symbols-outlined text-primary-container">bolt</span>
+</div>
+<div>
+<div class="text-sm font-bold text-on-surface">世界构建 AI</div>
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 bg-tertiary-container rounded-full animate-pulse"></span>
+<span class="text-[10px] text-on-surface-variant font-label-mono uppercase tracking-wider">分析模式</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+<div class="p-4 bg-surface-container rounded-lg border border-primary-container/20 space-y-3 hover:bg-surface-container-high transition-colors cursor-pointer group">
+<div class="flex items-center gap-2">
+<span class="text-[10px] font-label-mono bg-primary-container/10 text-primary-container px-1.5 py-0.5 rounded">新点子</span>
+<span class="text-xs text-system-log font-label-mono">2分钟前</span>
+</div>
+<p class="text-sm text-on-surface leading-snug">考虑将 <span class="text-primary-container">源云端</span> 设定为一个需要“生物贡品”才能运行的有意识实体。</p>
+<div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-[10px] font-label-mono text-primary-container bg-primary-container/10 px-2 py-1 rounded">采纳</button>
+</div>
+</div>
+<div class="p-4 bg-surface-container rounded-lg border border-novelty-high/20 space-y-3 hover:bg-surface-container-high transition-colors cursor-pointer group">
+<div class="flex items-center gap-2">
+<span class="text-[10px] font-label-mono bg-novelty-high/10 text-novelty-high px-1.5 py-0.5 rounded">逻辑检查</span>
+<span class="text-xs text-system-log font-label-mono">15分钟前</span>
+</div>
+<p class="text-sm text-on-surface leading-snug">苏晓晓的“失忆”特质与她在第10章揭秘中的角色存在冲突。</p>
+<div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-[10px] font-label-mono text-novelty-high bg-novelty-high/10 px-2 py-1 rounded">解决</button>
+</div>
+</div>
+</div>
+<!-- Chat Input -->
+<div class="p-4 bg-surface-container-low border-t border-outline-variant">
+<div class="relative">
+<textarea class="w-full bg-surface-container-highest/30 border border-outline-variant rounded-xl p-3 pr-12 text-xs font-body-ui focus:ring-1 focus:ring-primary-container/50 focus:border-primary-container/50 transition-all placeholder:text-system-log resize-none" placeholder="向世界构建AI提问..." rows="3"></textarea>
+<button class="absolute right-3 bottom-3 w-8 h-8 flex items-center justify-center bg-primary-container text-on-primary-container rounded-lg hover:scale-105 transition-transform shadow-lg shadow-primary-container/20">
+<span class="material-symbols-outlined text-sm font-bold">send</span>
+</button>
+</div>
+<div class="mt-2 flex justify-between items-center px-1">
+<span class="text-[9px] font-label-mono text-system-log uppercase">语境: Stage 2 草案 v1.4</span>
+<span class="text-[9px] font-label-mono text-system-log uppercase">剩余 842 Tokens</span>
+</div>
+</div>
+</aside>
+</main>
+<footer class="fixed bottom-0 left-0 right-0 h-8 bg-surface-container-lowest border-t border-outline-variant px-4 flex items-center justify-between z-50">
+<div class="flex items-center gap-6">
+<span class="font-label-mono text-[9px] text-primary-container font-bold">STORYFORGE_OS v1.2</span>
+<div class="flex items-center gap-3">
+<span class="w-1 h-1 rounded-full bg-system-log"></span>
+<span class="font-label-mono text-[9px] text-system-log">内存负载: 42%</span>
+<span class="font-label-mono text-[9px] text-system-log">核心空闲: 89%</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="font-label-mono text-[9px] text-system-log">核心已同步</span>
+<div class="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(0,240,255,0.6)]"></div>
+</div>
+</footer>
+<script>
+    function switchTab(view) {
+        const worldTab = document.getElementById('tab-world');
+        const characterTab = document.getElementById('tab-character');
+        const worldView = document.getElementById('view-world');
+        const characterView = document.getElementById('view-character');
+
+        if (view === 'world') {
+            worldTab.className = 'flex items-center gap-2 text-primary border-b-2 border-primary-container pb-1 transition-all';
+            characterTab.className = 'flex items-center gap-2 text-on-surface-variant hover:text-primary transition-all';
+            worldView.classList.remove('hidden');
+            characterView.classList.add('hidden');
+        } else {
+            characterTab.className = 'flex items-center gap-2 text-primary border-b-2 border-primary-container pb-1 transition-all';
+            worldTab.className = 'flex items-center gap-2 text-on-surface-variant hover:text-primary transition-all';
+            characterView.classList.remove('hidden');
+            worldView.classList.add('hidden');
+        }
+    }
+
+    // Micro-interactions for SF_LOG
+    setInterval(() => {
+        const logs = [
+            "[SYNC] 世界节点映射已初始化。",
+            "[INFO] 检测到新角色深度: 林峰。",
+            "[DATA] 正在计算叙事张力... 平衡。",
+            "[LOGIC] 霓虹重庆冲突层级已验证。",
+            "[MEM] 未使用资产ID缓存已清除。"
+        ];
+        const logContainer = document.getElementById('log-feed');
+        if (logContainer) {
+            const newLog = document.createElement('p');
+            newLog.className = 'opacity-0 translate-y-2 transition-all duration-500';
+            newLog.textContent = logs[Math.floor(Math.random() * logs.length)];
+            logContainer.prepend(newLog);
+            if (logContainer.children.length > 5) logContainer.lastElementChild.remove();
+            setTimeout(() => {
+                newLog.classList.remove('opacity-0', 'translate-y-2');
+            }, 50);
+        }
+    }, 8000);
+</script>
+</body></html>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
@@ -7,6 +7,22 @@ from backend.agents.planner import PlannerAgent
 
 router = APIRouter(prefix="/api/stage3", tags=["stage3"])
 fm = FileManager(settings.projects_dir)
+
+
+@router.get("/outline")
+async def get_outline(project_id: str = Query(...)):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+    data = fm.read_json(project_id, "outline.json")
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": data or {},
+    }
 
 
 @router.post("/generate")

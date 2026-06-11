@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useState, useCallback, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import api, { World, Character } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 
@@ -7,13 +7,26 @@ type Tab = "world" | "character";
 
 export default function Stage2Page() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<Tab>("world");
   const [world, setWorld] = useState<World | null>(null);
   const [character, setCharacter] = useState<Character | null>(null);
   const [loadingWorld, setLoadingWorld] = useState(false);
   const [loadingCharacter, setLoadingCharacter] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load existing data on mount
+  useEffect(() => {
+    if (!projectId) return;
+    api.getWorld(projectId)
+      .then((data) => { if (data && Object.keys(data).length > 0) setWorld(data); })
+      .catch(() => {});
+    api.getCharacter(projectId)
+      .then((data) => { if (data && Object.keys(data).length > 0) setCharacter(data); })
+      .catch(() => {});
+  }, [projectId]);
 
   const handleGenerateWorld = useCallback(async () => {
     if (!projectId) return;
@@ -43,7 +56,23 @@ export default function Stage2Page() {
     }
   }, [projectId]);
 
+  const handleAdvance = async () => {
+    if (!projectId) return;
+    setAdvancing(true);
+    setError(null);
+    try {
+      await api.advance(projectId, "STAGE3");
+      navigate(`/project/${projectId}/stage3`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "阶段推进失败");
+    } finally {
+      setAdvancing(false);
+    }
+  };
+
   if (!projectId) return null;
+
+  const canAdvance = world && character;
 
   const tabs: { key: Tab; label: string; icon: string }[] = [
     { key: "world", label: "世界观", icon: "public" },
@@ -59,6 +88,16 @@ export default function Stage2Page() {
             构建故事世界的基础规则与核心角色设定
           </p>
         </div>
+        {canAdvance && (
+          <button
+            onClick={handleAdvance}
+            disabled={advancing}
+            className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
+                       rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+          >
+            {advancing ? "推进中..." : "进入情节头脑风暴 →"}
+          </button>
+        )}
       </div>
 
       {error && (

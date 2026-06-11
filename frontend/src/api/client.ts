@@ -259,14 +259,23 @@ export const api = {
   generateConcept: (projectId: string) =>
     request<ConceptResponse>("POST", "/stage1/generate", { project_id: projectId }),
 
+  getConcept: (projectId: string) =>
+    request<ConceptResponse>("GET", `/stage1/concept?project_id=${encodeURIComponent(projectId)}`),
+
   updateConcept: (projectId: string, concept: Concept, storyDna: StoryDNA) =>
     request<void>("PUT", "/stage1/concept", { project_id: projectId, concept, story_dna: storyDna }),
 
   generateWorld: (projectId: string) =>
     request<World>("POST", "/stage2/generate-world", { project_id: projectId }),
 
+  getWorld: (projectId: string) =>
+    request<World>("GET", `/stage2/world?project_id=${encodeURIComponent(projectId)}`),
+
   generateCharacter: (projectId: string) =>
     request<Character>("POST", "/stage2/generate-character", { project_id: projectId }),
+
+  getCharacter: (projectId: string) =>
+    request<Character>("GET", `/stage2/character?project_id=${encodeURIComponent(projectId)}`),
 
   updateWorld: (projectId: string, world: World) =>
     request<void>("PUT", "/stage2/world", { project_id: projectId, world }),
@@ -276,6 +285,9 @@ export const api = {
 
   generateOutline: (projectId: string) =>
     request<Outline>("POST", "/stage3/generate", { project_id: projectId }),
+
+  getOutline: (projectId: string) =>
+    request<Outline>("GET", `/stage3/outline?project_id=${encodeURIComponent(projectId)}`),
 
   updateOutline: (projectId: string, outline: Outline) =>
     request<void>("PUT", "/stage3/outline", { project_id: projectId, outline }),

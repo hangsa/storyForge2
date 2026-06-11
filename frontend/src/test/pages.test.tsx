@@ -11,11 +11,15 @@ vi.mock("react-router-dom", () => ({
 vi.mock("../api/client", () => ({
   default: {
     generateConcept: vi.fn(),
+    getConcept: vi.fn().mockResolvedValue({}),
     updateConcept: vi.fn(),
     advance: vi.fn(),
     generateWorld: vi.fn(),
+    getWorld: vi.fn().mockResolvedValue({}),
     generateCharacter: vi.fn(),
+    getCharacter: vi.fn().mockResolvedValue({}),
     generateOutline: vi.fn(),
+    getOutline: vi.fn().mockResolvedValue({}),
     writeScene: vi.fn(),
     forcePass: vi.fn(),
     skipScene: vi.fn(),

@@ -1,15 +1,25 @@
-import { useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useState, useCallback, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import api, { Outline, ScenePlan } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 
 export default function Stage3Page() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
 
   const [outline, setOutline] = useState<Outline | null>(null);
   const [loading, setLoading] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedScene, setExpandedScene] = useState<string | null>(null);
+
+  // Load existing outline on mount
+  useEffect(() => {
+    if (!projectId) return;
+    api.getOutline(projectId)
+      .then((data) => { if (data && Object.keys(data).length > 0) setOutline(data); })
+      .catch(() => {});
+  }, [projectId]);
 
   const handleGenerate = useCallback(async () => {
     if (!projectId) return;
@@ -25,7 +35,23 @@ export default function Stage3Page() {
     }
   }, [projectId]);
 
+  const handleAdvance = async () => {
+    if (!projectId) return;
+    setAdvancing(true);
+    setError(null);
+    try {
+      await api.advance(projectId, "STAGE4");
+      navigate(`/project/${projectId}/stage4`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "阶段推进失败");
+    } finally {
+      setAdvancing(false);
+    }
+  };
+
   if (!projectId) return null;
+
+  const canAdvance = outline && outline.chapters.length > 0;
 
   const narrativeRoleLabels: Record<ScenePlan["narrative_role"], string> = {
     setup: "铺垫",
@@ -50,14 +76,26 @@ export default function Stage3Page() {
             规划章节结构与场景节奏，设计叙事弧线
           </p>
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
-                     rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-        >
-          {loading ? "生成中..." : outline ? "重新生成" : "生成大纲"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+                       rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+          >
+            {loading ? "生成中..." : outline ? "重新生成" : "生成大纲"}
+          </button>
+          {canAdvance && (
+            <button
+              onClick={handleAdvance}
+              disabled={advancing}
+              className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
+                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {advancing ? "推进中..." : "进入写作中心 →"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (

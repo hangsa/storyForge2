@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
@@ -15,6 +15,17 @@ export default function Stage1Page() {
   const [error, setError] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+
+  // Load existing concept on mount
+  useEffect(() => {
+    if (!projectId) return;
+    api.getConcept(projectId)
+      .then((data) => {
+        if (data?.concept) setConcept(data.concept);
+        if (data?.story_dna) setStoryDna(data.story_dna);
+      })
+      .catch(() => {});
+  }, [projectId]);
 
   const handleGenerate = useCallback(async () => {
     if (!projectId) return;

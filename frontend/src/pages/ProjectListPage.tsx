@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useProject } from "../hooks/useProject";
 import api, { ProjectSummary } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 
@@ -21,11 +22,29 @@ const STAGE_COLORS: Record<string, string> = {
   COMPLETED: "bg-green-500/20 text-green-300",
 };
 
+const GENRES: Record<string, string> = {
+  cool_novel: "爽文",
+  xianxia: "仙侠",
+  xuanhuan: "玄幻",
+  dushi: "都市",
+  kehuan: "科幻",
+};
+
+type CreateStep = "intent" | "settings";
+
 export default function ProjectListPage() {
   const navigate = useNavigate();
+  const { createProject, loading: creating, error: createError, clearError } = useProject();
+
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createStep, setCreateStep] = useState<CreateStep>("intent");
+  const [intent, setIntent] = useState("");
+  const [title, setTitle] = useState("");
+  const [genre, setGenre] = useState("cool_novel");
+  const [minWords, setMinWords] = useState(4000);
 
   useEffect(() => {
     loadProjects();
@@ -33,12 +52,43 @@ export default function ProjectListPage() {
 
   const loadProjects = async () => {
     try {
-      const projects = await api.listProjects();
-      setProjects(Array.isArray(projects) ? projects : []);
+      const p = await api.listProjects();
+      setProjects(Array.isArray(p) ? p : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载项目列表失败");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openCreate = () => {
+    setCreateStep("intent");
+    setIntent("");
+    setTitle("");
+    setGenre("cool_novel");
+    setMinWords(4000);
+    clearError();
+    setShowCreateModal(true);
+  };
+
+  const handleCreateNext = () => {
+    if (!intent.trim()) return;
+    setCreateStep("settings");
+  };
+
+  const handleCreateSubmit = async () => {
+    if (!intent.trim()) return;
+    try {
+      const project = await createProject(intent, genre, minWords, title.trim() || undefined);
+      try {
+        await api.advance(project.id, "STAGE1");
+      } catch {
+        // proceed even if advance fails
+      }
+      setShowCreateModal(false);
+      navigate(`/project/${project.id}/stage1`);
+    } catch {
+      // error handled by hook
     }
   };
 
@@ -54,7 +104,7 @@ export default function ProjectListPage() {
             </p>
           </div>
           <button
-            onClick={() => navigate("/init")}
+            onClick={openCreate}
             className="btn-ghost flex items-center gap-2"
           >
             <span className="material-symbols-outlined text-lg">add</span>
@@ -87,7 +137,7 @@ export default function ProjectListPage() {
               StoryForge 提供从概念生成到场景写作的端到端 AI 辅助，帮助你完成网文创作。
             </p>
             <button
-              onClick={() => navigate("/init")}
+              onClick={openCreate}
               className="btn-ghost inline-flex items-center gap-2"
             >
               <span className="material-symbols-outlined">rocket_launch</span>
@@ -117,7 +167,7 @@ export default function ProjectListPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-xs font-label-mono text-system-log">
-                    <span>{p.genre === "cool_novel" ? "爽文" : p.genre}</span>
+                    <span>{GENRES[p.genre] || p.genre}</span>
                     <span>·</span>
                     <span>{p.min_words.toLocaleString()} 字</span>
                     {p.created_at && (
@@ -133,6 +183,155 @@ export default function ProjectListPage() {
           </div>
         )}
       </main>
+
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-surface-container-low border border-outline-variant rounded-lg max-w-lg w-full mx-4 overflow-hidden">
+            {/* Modal header */}
+            <div className="px-4 py-3 flex items-center justify-between border-b border-outline-variant">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary-container">rocket_launch</span>
+                <span className="font-label-mono text-primary">新建项目</span>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-system-log hover:text-primary"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Step indicator */}
+            <div className="flex items-center gap-3 px-6 pt-4 pb-2">
+              {(["intent", "settings"] as CreateStep[]).map((s, i) => (
+                <div key={s} className="flex items-center gap-2">
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-label-mono
+                      ${createStep === s
+                        ? "bg-primary-container text-surface-container-low"
+                        : "bg-surface-container text-system-log"
+                      }`}
+                  >
+                    {i + 1}
+                  </div>
+                  <span className={`text-xs ${createStep === s ? "text-primary" : "text-system-log"}`}>
+                    {s === "intent" ? "创作意图" : "项目设置"}
+                  </span>
+                  {i === 0 && <div className="w-8 h-px bg-outline-variant" />}
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6">
+              {createStep === "intent" ? (
+                <>
+                  <label className="block font-label-mono text-system-log mb-2 text-xs">故事构思</label>
+                  <textarea
+                    value={intent}
+                    onChange={(e) => { setIntent(e.target.value); clearError(); }}
+                    placeholder="例如：一个被家族抛弃的少年，在异世界觉醒了隐藏的血脉之力..."
+                    className="w-full h-32 bg-surface-container border border-outline-variant rounded-lg px-4 py-3
+                               text-sm text-primary placeholder:text-system-log/50
+                               focus:outline-none focus:border-primary-container resize-none"
+                    autoFocus
+                  />
+
+                  {createError && (
+                    <div className="mt-3 p-2 bg-error-container/20 border border-error rounded text-error text-xs">
+                      {createError}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={handleCreateNext}
+                      disabled={!intent.trim()}
+                      className="px-5 py-2 bg-primary-container text-surface-container-low text-sm
+                                 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+                    >
+                      下一步
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block font-label-mono text-system-log mb-1 text-xs">项目名称</label>
+                      <input
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder={intent.slice(0, 30) || "输入项目名称"}
+                        className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2
+                                   text-sm text-primary focus:outline-none focus:border-primary-container"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-label-mono text-system-log mb-1 text-xs">体裁模板</label>
+                      <select
+                        value={genre}
+                        onChange={(e) => setGenre(e.target.value)}
+                        className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2
+                                   text-sm text-primary focus:outline-none focus:border-primary-container"
+                      >
+                        {Object.entries(GENRES).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-label-mono text-system-log mb-1 text-xs">最低字数（字）</label>
+                      <input
+                        type="number"
+                        value={minWords}
+                        onChange={(e) => setMinWords(Number(e.target.value))}
+                        min={2000}
+                        max={20000}
+                        step={1000}
+                        className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2
+                                   text-sm text-primary focus:outline-none focus:border-primary-container"
+                      />
+                    </div>
+
+                    <div className="bg-surface-container rounded-lg p-3">
+                      <span className="font-label-mono text-system-log text-xs">创作意图</span>
+                      <p className="text-sm text-primary mt-1">{intent}</p>
+                    </div>
+                  </div>
+
+                  {createError && (
+                    <div className="mt-3 p-2 bg-error-container/20 border border-error rounded text-error text-xs">
+                      {createError}
+                    </div>
+                  )}
+
+                  <div className="mt-5 flex justify-between">
+                    <button
+                      onClick={() => setCreateStep("intent")}
+                      className="px-4 py-2 bg-surface-container text-system-log text-sm
+                                 rounded-lg hover:bg-surface-container-low transition-colors"
+                    >
+                      返回
+                    </button>
+                    <button
+                      onClick={handleCreateSubmit}
+                      disabled={creating}
+                      className="px-5 py-2 bg-primary-container text-surface-container-low text-sm
+                                 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+                    >
+                      {creating ? "创建中..." : "创建项目"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

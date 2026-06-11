@@ -4,7 +4,6 @@ interface SideNavBarProps {
 }
 
 const STAGES = [
-  { key: "INIT", label: "项目初始化", icon: "rocket_launch" },
   { key: "STAGE1", label: "概念讨论", icon: "lightbulb" },
   { key: "STAGE2", label: "世界观+角色", icon: "public" },
   { key: "STAGE3", label: "情节头脑风暴", icon: "account_tree" },

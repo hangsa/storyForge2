@@ -2,7 +2,6 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, useParams } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
 import ProjectListPage from "./pages/ProjectListPage";
-import InitPage from "./pages/InitPage";
 import StageErrorBoundary from "./components/shared/StageErrorBoundary";
 
 const Stage1Page = lazy(() => import("./pages/Stage1Page"));
@@ -33,7 +32,6 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<ProjectListPage />} />
-      <Route path="/init" element={<InitPage />} />
       <Route element={<MainLayout />}>
         <Route
           path="/project/:projectId/stage1"

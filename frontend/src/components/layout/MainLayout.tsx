@@ -12,7 +12,6 @@ const STAGE_FROM_PATH: Record<string, string> = {
 };
 
 const STAGE_TO_PATH: Record<string, string> = {
-  INIT: "/init",
   STAGE1: "stage1",
   STAGE2: "stage2",
   STAGE3: "stage3",
@@ -44,10 +43,6 @@ export default function MainLayout() {
     (stage: string) => {
       if (stage === "dashboard") {
         navigate("/");
-        return;
-      }
-      if (stage === "INIT") {
-        navigate("/init");
         return;
       }
       const path = STAGE_TO_PATH[stage];

@@ -4,6 +4,7 @@ import CircuitBreaker from "./CircuitBreaker";
 interface Props {
   children: ReactNode;
   projectId?: string;
+  stageName?: string;
   onReset?: () => void;
 }
 
@@ -31,7 +32,7 @@ export default class StageErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <CircuitBreaker
-          title="页面渲染异常"
+          title={`${this.props.stageName ? `STAGE ${this.props.stageName.replace("stage", "")} ` : ""}页面渲染异常`}
           message={this.state.error?.message || "LLM 输出或数据格式异常导致渲染失败"}
           userOptions={[
             {

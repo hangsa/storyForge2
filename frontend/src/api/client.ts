@@ -1,5 +1,5 @@
 const API_BASE = "/api";
-const TIMEOUT_MS = 120_000;
+const TIMEOUT_MS = 300_000;
 
 class ApiError extends Error {
   code: string;

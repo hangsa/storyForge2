@@ -16,12 +16,14 @@ async def get_outline(project_id: str = Query(...)):
             status_code=400,
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
         )
-    data = fm.read_json(project_id, "outline.json")
+    data = fm.read_json(project_id, "outline.json") or {}
+    if "chapters" not in data:
+        data = {"chapters": [data]} if data else {"chapters": []}
     return {
         "error": False,
         "code": "OK",
         "message": "",
-        "detail": data or {},
+        "detail": data,
     }
 
 
@@ -78,13 +80,13 @@ async def generate_outline(data: dict):
             detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
         )
 
-    fm.write_json(project_id, "outline.json", result)
+    fm.write_json(project_id, "outline.json", {"chapters": [result]})
 
     return {
         "error": False,
         "code": "OK",
         "message": "大纲生成成功",
-        "detail": result,
+        "detail": {"chapters": [result]},
     }
 
 

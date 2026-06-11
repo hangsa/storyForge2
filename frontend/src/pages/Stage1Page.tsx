@@ -1,14 +1,17 @@
 import { useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 
 export default function Stage1Page() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
 
   const [concept, setConcept] = useState<Concept | null>(null);
   const [storyDna, setStoryDna] = useState<StoryDNA | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -33,13 +36,38 @@ export default function Stage1Page() {
     setEditValue(value);
   };
 
-  const handleEditSave = () => {
-    if (!concept || !editingField) return;
-    setConcept({ ...concept, [editingField]: editValue });
+  const handleEditSave = async () => {
+    if (!concept || !editingField || !projectId) return;
+    const updated = { ...concept, [editingField]: editValue };
+    setConcept(updated);
     setEditingField(null);
+    setSaving(true);
+    try {
+      await api.updateConcept(projectId, updated, storyDna!);
+    } catch {
+      // save failed, but local state is already updated
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAdvance = async () => {
+    if (!projectId) return;
+    setAdvancing(true);
+    setError(null);
+    try {
+      await api.advance(projectId, "STAGE2");
+      navigate(`/project/${projectId}/stage2`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "阶段推进失败");
+    } finally {
+      setAdvancing(false);
+    }
   };
 
   if (!projectId) return null;
+
+  const canAdvance = concept && storyDna;
 
   return (
     <div className="max-w-5xl mx-auto py-8 space-y-6">
@@ -50,14 +78,26 @@ export default function Stage1Page() {
             生成故事概念与核心矛盾，构建小说的叙事基础
           </p>
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
-                     rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-        >
-          {loading ? "生成中..." : concept ? "重新生成" : "生成概念"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+                       rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+          >
+            {loading ? "生成中..." : concept ? "重新生成" : "生成概念"}
+          </button>
+          {canAdvance && (
+            <button
+              onClick={handleAdvance}
+              disabled={advancing}
+              className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
+                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {advancing ? "推进中..." : "进入世界观+角色 →"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -103,9 +143,10 @@ export default function Stage1Page() {
                       />
                       <button
                         onClick={handleEditSave}
+                        disabled={saving}
                         className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm"
                       >
-                        保存
+                        {saving ? "保存中..." : "保存"}
                       </button>
                     </div>
                   ) : (

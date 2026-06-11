@@ -63,7 +63,8 @@ async def generate_concept(data: dict):
 @router.put("/concept")
 async def update_concept(data: dict):
     project_id = data.get("project_id", "")
-    concept_data = data.get("concept_and_dna", data)
+    concept = data.get("concept") or {}
+    story_dna = data.get("story_dna") or {}
 
     if not project_id:
         raise HTTPException(
@@ -77,11 +78,12 @@ async def update_concept(data: dict):
             detail={"error": True, "code": "PROJECT_NOT_FOUND", "message": f"项目 {project_id} 不存在", "detail": {}},
         )
 
-    fm.write_json(project_id, "concept_and_dna.json", concept_data)
+    concept_and_dna = {"concept": concept, "story_dna": story_dna}
+    fm.write_json(project_id, "concept_and_dna.json", concept_and_dna)
 
     return {
         "error": False,
         "code": "OK",
         "message": "概念已更新",
-        "detail": concept_data,
+        "detail": concept_and_dna,
     }

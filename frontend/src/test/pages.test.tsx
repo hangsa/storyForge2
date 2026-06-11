@@ -4,12 +4,15 @@ import { render, screen, act } from "@testing-library/react";
 vi.mock("react-router-dom", () => ({
   useParams: () => ({ projectId: "test-project" }),
   useLocation: () => ({ pathname: "/project/test-project/stage1" }),
+  useNavigate: () => vi.fn(),
   Outlet: () => null,
 }));
 
 vi.mock("../api/client", () => ({
   default: {
     generateConcept: vi.fn(),
+    updateConcept: vi.fn(),
+    advance: vi.fn(),
     generateWorld: vi.fn(),
     generateCharacter: vi.fn(),
     generateOutline: vi.fn(),

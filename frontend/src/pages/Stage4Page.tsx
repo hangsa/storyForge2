@@ -217,7 +217,7 @@ export default function Stage4Page() {
             </div>
 
             {state.draftText ? (
-              <div className="prose prose-invert prose-sm max-w-none font-body-narrative text-primary leading-relaxed
+              <div className="prose prose-invert prose-sm max-w-none text-sm text-primary leading-relaxed
                               [&_code]:text-xs [&_code]:bg-surface-container [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded
                               [&_code]:text-system-log [&_code]:font-mono [&_code]:before:content-none [&_code]:after:content-none">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -332,7 +332,7 @@ export default function Stage4Page() {
                       {Object.entries(log.params).map(([k, v]) => (
                         <div key={k} className="flex items-baseline gap-1.5 pl-5">
                           <code className="text-system-log/70 font-mono">{k}</code>
-                          <span className="text-primary font-body-narrative">
+                          <span className="text-primary text-xs">
                             {typeof v === "object" ? JSON.stringify(v) : String(v)}
                           </span>
                         </div>

@@ -28,7 +28,7 @@ system_prompt: |
   - twist_reveal: id="转折ID" trigger="触发事件"
   - expectation_fulfill: id="期望ID" trigger="触发事件"
   - goal_milestone: id="目标ID" progress="进度描述"
-  - registry_create: type="注册类型" data='{JSON数据}'
+  - registry_create: type="注册类型" data='{{JSON数据}}'
 
   写作风格：
   - 章节字数控制在合理范围内，场景描述要有画面感

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useProject } from "../hooks/useProject";
+import api from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 
 type WizardStep = "intent" | "settings";
@@ -23,6 +24,11 @@ export default function InitPage() {
     if (!intent.trim()) return;
     try {
       const project = await createProject(intent, genre, minWords);
+      try {
+        await api.advance(project.id, "STAGE1");
+      } catch {
+        // proceed even if advance fails — user can advance manually
+      }
       navigate(`/project/${project.id}/stage1`);
     } catch {
       // error handled by hook

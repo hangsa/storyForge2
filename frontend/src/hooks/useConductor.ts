@@ -16,11 +16,11 @@ export function useConductor(): UseConductorReturn {
   const [error, setError] = useState<string | null>(null);
 
   const advance = useCallback(
-    async (projectId: string): Promise<AdvanceResponse | null> => {
+    async (projectId: string, targetStage: string): Promise<AdvanceResponse | null> => {
       setLoading(true);
       setError(null);
       try {
-        const result = await api.advance(projectId);
+        const result = await api.advance(projectId, targetStage);
         setCurrentStage(result.current_stage);
         return result;
       } catch (e) {

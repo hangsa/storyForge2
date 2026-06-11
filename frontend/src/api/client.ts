@@ -251,8 +251,8 @@ export const api = {
   getProjectStatus: (id: string) =>
     request<ProjectStatus>("GET", `/project/${id}/status`),
 
-  advance: (projectId: string) =>
-    request<AdvanceResponse>("POST", "/conductor/advance", { project_id: projectId }),
+  advance: (projectId: string, targetStage: string) =>
+    request<AdvanceResponse>("POST", "/conductor/advance", { project_id: projectId, target_stage: targetStage }),
 
   generateConcept: (projectId: string) =>
     request<ConceptResponse>("POST", "/stage1/generate", { project_id: projectId }),

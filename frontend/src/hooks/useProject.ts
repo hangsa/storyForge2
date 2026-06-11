@@ -6,7 +6,7 @@ interface UseProjectReturn {
   projectStatus: ProjectStatus | null;
   loading: boolean;
   error: string | null;
-  createProject: (intent: string, genre: string, minWords: number) => Promise<Project>;
+  createProject: (intent: string, genre: string, minWords: number, title?: string) => Promise<Project>;
   loadProjectStatus: (projectId: string) => Promise<void>;
   clearError: () => void;
 }
@@ -18,7 +18,7 @@ export function useProject(): UseProjectReturn {
   const [error, setError] = useState<string | null>(null);
 
   const createProject = useCallback(
-    async (intent: string, genre: string, minWords: number): Promise<Project> => {
+    async (intent: string, genre: string, minWords: number, title?: string): Promise<Project> => {
       setLoading(true);
       setError(null);
       try {
@@ -26,6 +26,7 @@ export function useProject(): UseProjectReturn {
           intent,
           genre,
           min_words: minWords,
+          title: title || undefined,
         });
         setProject(result);
         return result;

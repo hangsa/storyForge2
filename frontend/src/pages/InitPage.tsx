@@ -12,6 +12,7 @@ export default function InitPage() {
 
   const [step, setStep] = useState<WizardStep>("intent");
   const [intent, setIntent] = useState("");
+  const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("cool_novel");
   const [minWords, setMinWords] = useState(4000);
 
@@ -23,7 +24,7 @@ export default function InitPage() {
   const handleSubmit = async () => {
     if (!intent.trim()) return;
     try {
-      const project = await createProject(intent, genre, minWords);
+      const project = await createProject(intent, genre, minWords, title.trim() || undefined);
       try {
         await api.advance(project.id, "STAGE1");
       } catch {
@@ -104,6 +105,19 @@ export default function InitPage() {
           <h2 className="font-display-lg text-primary-container mb-6">项目设置</h2>
 
           <div className="space-y-5">
+            {/* Title */}
+            <div>
+              <label className="block font-label-mono text-system-log mb-2">项目名称</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={intent.slice(0, 30) || "输入项目名称"}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-4 py-2.5
+                           font-body-ui text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+
             {/* Genre */}
             <div>
               <label className="block font-label-mono text-system-log mb-2">体裁模板</label>

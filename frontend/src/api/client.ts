@@ -247,7 +247,7 @@ export const api = {
   listProjects: () =>
     request<ProjectSummary[]>("GET", "/project/list"),
 
-  createProject: (data: { intent: string; genre: string; min_words: number }) =>
+  createProject: (data: { intent: string; genre: string; min_words: number; title?: string }) =>
     request<Project>("POST", "/project/create", data),
 
   getProjectStatus: (id: string) =>

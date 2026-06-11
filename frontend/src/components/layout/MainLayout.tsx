@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Outlet, useParams, useLocation, useMatch } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Outlet, useParams, useLocation, useMatch, useNavigate } from "react-router-dom";
 import TopHeader from "./TopHeader";
 import SideNavBar from "./SideNavBar";
 import api from "../../api/client";
@@ -11,9 +11,18 @@ const STAGE_FROM_PATH: Record<string, string> = {
   stage4: "STAGE4",
 };
 
+const STAGE_TO_PATH: Record<string, string> = {
+  INIT: "/init",
+  STAGE1: "stage1",
+  STAGE2: "stage2",
+  STAGE3: "stage3",
+  STAGE4: "stage4",
+};
+
 export default function MainLayout() {
   const { projectId: paramId } = useParams<{ projectId: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const match = useMatch("/project/:projectId/*");
   const projectId = match?.params.projectId || paramId || "";
 
@@ -31,6 +40,24 @@ export default function MainLayout() {
       .catch(() => {});
   }, [projectId]);
 
+  const handleNavigate = useCallback(
+    (stage: string) => {
+      if (stage === "dashboard") {
+        navigate("/");
+        return;
+      }
+      if (stage === "INIT") {
+        navigate("/init");
+        return;
+      }
+      const path = STAGE_TO_PATH[stage];
+      if (path && projectId) {
+        navigate(`/project/${projectId}/${path}`);
+      }
+    },
+    [projectId, navigate]
+  );
+
   return (
     <div className="min-h-screen bg-canvas-bg">
       <TopHeader
@@ -39,7 +66,7 @@ export default function MainLayout() {
         collaborationMode="live"
         autoSaveStatus="saved"
       />
-      <SideNavBar currentStage={currentStage} onNavigate={() => {}} />
+      <SideNavBar currentStage={currentStage} onNavigate={handleNavigate} />
       <main className="ml-[280px] mt-16 p-6">
         <Outlet />
       </main>

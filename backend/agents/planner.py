@@ -41,6 +41,9 @@ class PlannerAgent(BaseAgent):
         self,
         concept: dict,
         world: dict,
+        character_type: str = "protagonist",
+        character_index: int = 0,
+        existing_characters: Optional[list[dict]] = None,
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
 
@@ -54,12 +57,43 @@ class PlannerAgent(BaseAgent):
             ps_name = str(power_system)
             ps_rules = ""
 
+        type_labels = {
+            "protagonist": "主角",
+            "antagonist": "反派",
+            "supporting": "配角",
+            "mentor": "导师",
+        }
+        is_core = "true" if character_type == "protagonist" else "false"
+
+        existing_chars = existing_characters or []
+        if existing_chars:
+            existing_summary = json.dumps(
+                [
+                    {
+                        "name": c.get("name", ""),
+                        "character_type": c.get("character_type", ""),
+                        "core_traits": c.get("personality", {}).get("core_traits", []),
+                        "role": c.get("personality", {}).get("beliefs", []),
+                    }
+                    for c in existing_chars
+                ],
+                ensure_ascii=False,
+                indent=2,
+            )
+            existing_section = f"已有角色（避免性格/能力重叠）：\n{existing_summary}"
+        else:
+            existing_section = ""
+
         result, response = await self.generate_from_template(
             "character_generation",
             concept_context=concept_context,
             world_era=world.get("era", ""),
             power_system_name=ps_name,
             power_system_rules=ps_rules,
+            character_type=character_type,
+            character_type_label=type_labels.get(character_type, "角色"),
+            is_core_character=is_core,
+            existing_characters_section=existing_section,
         )
         self.log_usage("character_generation", response)
         return result, response

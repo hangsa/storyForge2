@@ -26,19 +26,32 @@ async def get_world(project_id: str = Query(...)):
 
 
 @router.get("/character")
-async def get_character(project_id: str = Query(...)):
+async def get_character(project_id: str = Query(...), character_index: int = Query(None)):
     if not project_id:
         raise HTTPException(
             status_code=400,
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
         )
     data = fm.read_json(project_id, "characters.json")
+
+    # Migrate old-format characters.json (single object → {characters: [...]})
+    if isinstance(data, dict) and "characters" not in data:
+        data = {"characters": [data]}
+        fm.write_json(project_id, "characters.json", data)
+
     characters = (data or {}).get("characters", [])
+    if character_index is not None and 0 <= character_index < len(characters):
+        return {
+            "error": False,
+            "code": "OK",
+            "message": "",
+            "detail": {"characters": characters, "current": characters[character_index]},
+        }
     return {
         "error": False,
         "code": "OK",
         "message": "",
-        "detail": characters[0] if characters else {},
+        "detail": {"characters": characters, "current": characters[0] if characters else {}},
     }
 
 
@@ -97,11 +110,19 @@ async def generate_world(data: dict):
 
 @router.post("/generate-character")
 async def generate_character(data: dict):
+    ALLOWED_TYPES = {"protagonist", "antagonist", "supporting", "mentor"}
     project_id = data.get("project_id", "")
+    character_type = data.get("character_type", "protagonist")
+    character_index = data.get("character_index", 0)
     if not project_id:
         raise HTTPException(
             status_code=400,
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+    if character_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"character_type 无效，允许值: {', '.join(sorted(ALLOWED_TYPES))}", "detail": {}},
         )
 
     sm = StageStateMachine(settings.projects_dir)
@@ -125,11 +146,20 @@ async def generate_character(data: dict):
             detail={"error": True, "code": "PRECONDITION_FAILED", "message": "请先生成概念和世界观", "detail": {}},
         )
 
+    # Load existing characters for context (with old-format migration)
+    existing = fm.read_json(project_id, "characters.json") or {}
+    if isinstance(existing, dict) and "characters" not in existing:
+        existing = {"characters": [existing]}
+        fm.write_json(project_id, "characters.json", existing)
+    existing_characters = existing.get("characters", [])
+
     agent = PlannerAgent(project_id)
     try:
         result, response = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),
             world=world,
+            character_type=character_type,
+            existing_characters=existing_characters,
         )
     except ValueError as e:
         raise HTTPException(
@@ -137,14 +167,23 @@ async def generate_character(data: dict):
             detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
         )
 
-    characters = {"characters": [result]}
+    # Ensure character_type and relations are set with explicit defaults
+    result.setdefault("character_type", character_type)
+    result.setdefault("relations", {})
+    if character_type == "protagonist":
+        result["is_core_character"] = True
+    else:
+        result.setdefault("is_core_character", False)
+
+    existing_characters.append(result)
+    characters = {"characters": existing_characters}
     fm.write_json(project_id, "characters.json", characters)
 
     return {
         "error": False,
         "code": "OK",
-        "message": "角色生成成功",
-        "detail": result,
+        "message": f"角色生成成功（共 {len(existing_characters)} 个）",
+        "detail": {"characters": existing_characters, "created": result},
     }
 
 

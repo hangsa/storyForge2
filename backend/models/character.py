@@ -22,6 +22,19 @@ class CharacterCurrentState(BaseModel):
     known_secrets: list[str] = []
 
 
+class RelationChangeEvent(BaseModel):
+    chapter: int = 0
+    from_status: str = "neutral"
+    to_status: str = "neutral"
+    trigger: str = ""
+
+
+class RelationStatus(BaseModel):
+    status: str = "neutral"
+    history: list[RelationChangeEvent] = []
+    last_update_chapter: int = 0
+
+
 class Character(BaseModel):
     id: str
     name: str = ""
@@ -30,6 +43,8 @@ class Character(BaseModel):
     voice_signature: VoiceSignature = Field(default_factory=VoiceSignature)
     unknown_to_character: list[str] = []
     is_core_character: bool = True
+    character_type: str = "protagonist"
+    relations: dict[str, RelationStatus] = Field(default_factory=dict)
 
 
 class CharacterSet(BaseModel):

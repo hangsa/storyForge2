@@ -129,6 +129,8 @@ export interface World {
 export interface Character {
   id: string;
   name: string;
+  is_core_character: boolean;
+  character_type: "protagonist" | "antagonist" | "supporting" | "mentor";
   personality: {
     beliefs: string[];
     desires: string[];
@@ -148,7 +150,12 @@ export interface Character {
     taboos: string[];
   };
   unknown_to_character: string[];
-  is_core_character: boolean;
+  relations: Record<string, { status: string; history: Array<Record<string, unknown>>; last_update_chapter: number }>;
+}
+
+export interface CharacterSet {
+  characters: Character[];
+  current: Character;
 }
 
 export interface ScenePlan {
@@ -271,17 +278,20 @@ export const api = {
   getWorld: (projectId: string) =>
     request<World>("GET", `/stage2/world?project_id=${encodeURIComponent(projectId)}`),
 
-  generateCharacter: (projectId: string) =>
-    request<Character>("POST", "/stage2/generate-character", { project_id: projectId }),
+  generateCharacter: (projectId: string, characterType?: string) =>
+    request<CharacterSet>("POST", "/stage2/generate-character", { project_id: projectId, character_type: characterType || "protagonist" }),
 
-  getCharacter: (projectId: string) =>
-    request<Character>("GET", `/stage2/character?project_id=${encodeURIComponent(projectId)}`),
+  getCharacter: (projectId: string, characterIndex?: number) =>
+    request<CharacterSet>(
+      "GET",
+      `/stage2/character?project_id=${encodeURIComponent(projectId)}${characterIndex !== undefined ? `&character_index=${characterIndex}` : ""}`
+    ),
 
   updateWorld: (projectId: string, world: World) =>
     request<void>("PUT", "/stage2/world", { project_id: projectId, world }),
 
-  updateCharacter: (projectId: string, character: Character) =>
-    request<void>("PUT", "/stage2/character", { project_id: projectId, character }),
+  updateCharacter: (projectId: string, characterData: CharacterSet) =>
+    request<void>("PUT", "/stage2/character", { project_id: projectId, characters: characterData.characters }),
 
   generateOutline: (projectId: string) =>
     request<Outline>("POST", "/stage3/generate", { project_id: projectId }),

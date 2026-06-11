@@ -14,14 +14,18 @@ FORMAT_CHECK_PATTERN = re.compile(
     r"<!-- SF_LOG \w+ (?:[\w-]+=\"[^\"]*\"\s*)+ -->"
 )
 
-# --- Valid SF_LOG types (7 for MVP) ---
+# --- Valid SF_LOG types (11 for v1.5) ---
 VALID_LOG_TYPES = {
     "character_emotion",
     "character_relation_change",
     "character_location_change",
+    "character_physical_change",
     "knowledge_gain",
     "conflict_escalate",
     "mystery_clue",
+    "twist_reveal",
+    "expectation_fulfill",
+    "goal_milestone",
     "registry_create",
 }
 

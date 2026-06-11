@@ -52,14 +52,7 @@ user_prompt_template: |
   - 绝对上限：
   {ceilings}
 
-  【角色信息】
-  - 姓名：{character_name}
-  - 当前位置：{character_location}
-  - 当前情绪：{character_emotion}
-  - 行为禁忌（绝对不能做）：
-  {character_taboos}
-  - 角色不知道的信息（不能在文中出现）：
-  {character_unknown}
+  {characters_context}
 
   【本场场景规划】
   - 场景目标：{scene_goal}

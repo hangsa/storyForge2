@@ -38,7 +38,7 @@ class ReviewerAgent:
     def run_fact_guard(
         self,
         draft_text: str,
-        character: dict,
+        characters: list[dict],
         world_rules: dict,
         scene_plan: dict,
         storyos_state: Optional[dict] = None,
@@ -46,9 +46,43 @@ class ReviewerAgent:
         if storyos_state is None:
             storyos_state = {}
 
+        # Run per-character checks (1 & 2) for each character and aggregate
+        timeline_results = []
+        char_state_results = []
+        for character in characters:
+            if not character:
+                continue
+            timeline_results.append(self.check_1_timeline(draft_text, character))
+            char_state_results.append(
+                self.check_2_character_state(draft_text, character)
+            )
+
+        # Aggregate per-character results: passed only if ALL pass
+        merged_timeline = CheckResult(
+            check_id=1,
+            name="时间线连续性",
+            passed=all(r.passed for r in timeline_results),
+            detail="\n".join(
+                f"  [{character.get('name', '?')}] {r.detail}"
+                for r, character in zip(timeline_results, characters)
+                if character
+            ) if timeline_results else "无角色数据",
+        )
+
+        merged_char_state = CheckResult(
+            check_id=2,
+            name="角色状态一致性",
+            passed=all(r.passed for r in char_state_results),
+            detail="\n".join(
+                f"  [{character.get('name', '?')}] {r.detail}"
+                for r, character in zip(char_state_results, characters)
+                if character
+            ) if char_state_results else "无角色数据",
+        )
+
         checks = [
-            self.check_1_timeline(draft_text, character),
-            self.check_2_character_state(draft_text, character),
+            merged_timeline,
+            merged_char_state,
             self.check_3_world_rules(draft_text, world_rules),
             self.check_4_asset_compliance(draft_text, storyos_state),
             self.check_5_log_completeness(draft_text, scene_plan),

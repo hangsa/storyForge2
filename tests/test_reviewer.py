@@ -277,13 +277,13 @@ class TestFactGuardIntegration:
             '<!-- SF_LOG knowledge_gain char="林峰" content="古籍内容" -->'
         )
         storyos_state = {"conflicts": {"cf_001": {"id": "cf_001", "status": "active"}}}
-        result = reviewer.run_fact_guard(text, sample_character, sample_world_rules, sample_scene_plan, storyos_state)
+        result = reviewer.run_fact_guard(text, [sample_character], sample_world_rules, sample_scene_plan, storyos_state)
         assert result.all_passed
         assert result.coherence_score == 100
 
     def test_some_fail(self, reviewer, sample_character, sample_world_rules, sample_scene_plan):
         text = "林峰知道了师父的秘密身份，然后背叛了宗门。"
-        result = reviewer.run_fact_guard(text, sample_character, sample_world_rules, sample_scene_plan)
+        result = reviewer.run_fact_guard(text, [sample_character], sample_world_rules, sample_scene_plan)
         assert not result.all_passed
         assert result.retry_hints != ""
         assert "请修复以下问题后重写" in result.retry_hints

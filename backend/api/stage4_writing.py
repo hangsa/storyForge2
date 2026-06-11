@@ -27,6 +27,11 @@ def _load_context(project_id: str) -> dict:
     if "chapters" not in outline and "scene_plan" in outline:
         outline = {"chapters": [outline]}
 
+    # Migrate old-format characters.json (single object → {characters: [...]})
+    if isinstance(characters_data, dict) and "characters" not in characters_data:
+        characters_data = {"characters": [characters_data]}
+        fm.write_json(project_id, "characters.json", characters_data)
+
     characters = characters_data.get("characters", []) if characters_data else []
     character = characters[0] if characters else {}
     chapters = outline.get("chapters", [])
@@ -37,6 +42,7 @@ def _load_context(project_id: str) -> dict:
         "genre": project.get("genre", "cool_novel") if project else "cool_novel",
         "concept": concept_and_dna or {},
         "world": world or {},
+        "characters": characters,
         "character": character,
         "outline": outline or {},
         "chapter": chapter,
@@ -120,7 +126,7 @@ async def write_scene(data: dict):
             genre=ctx["genre"],
             concept=ctx["concept"],
             world_rules=ctx["world"],
-            character=ctx["character"],
+            characters=ctx["characters"],
             scene_plan=scene_plan,
             l0_context=l0.get_context_string(),
             l1_context=l1.get_context_string(),
@@ -141,7 +147,7 @@ async def write_scene(data: dict):
     while True:
         fg_result = reviewer.run_fact_guard(
             draft_text=current_draft,
-            character=ctx["character"],
+            characters=ctx["characters"],
             world_rules=ctx["world"],
             scene_plan=scene_plan,
         )
@@ -170,7 +176,7 @@ async def write_scene(data: dict):
                     genre=ctx["genre"],
                     concept=ctx["concept"],
                     world_rules=ctx["world"],
-                    character=ctx["character"],
+                    characters=ctx["characters"],
                     scene_plan=scene_plan,
                     retry_hints=hints,
                     previous_draft=current_draft,
@@ -209,7 +215,7 @@ async def write_scene(data: dict):
         current_chapter=ctx["chapter"].get("chapter_number", 1),
         current_scene=scene_number,
         l0_snapshot={"scene": scene_number, "goal": scene_plan.get("goal", "")},
-        character_states=[ctx["character"]],
+        character_states=ctx["characters"],
     )
 
     # Update progress

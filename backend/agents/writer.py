@@ -5,12 +5,63 @@ from backend.agents.base_agent import BaseAgent, LLMResponse
 
 class WriterAgent(BaseAgent):
 
+    @staticmethod
+    def _build_characters_context(characters: list[dict]) -> str:
+        if not characters:
+            return "无角色信息"
+
+        # POV character: first protagonist, or first character
+        pov = next(
+            (c for c in characters if c.get("character_type") == "protagonist"),
+            characters[0],
+        )
+
+        def _char_basic(c: dict) -> str:
+            cs = c.get("current_state", {})
+            return (
+                f"- {c.get('name', '未知')}"
+                f" | {c.get('character_type', '未知')}"
+                f" | 位置：{cs.get('location', '未知')}"
+                f" | 情绪：{cs.get('emotional', '平静')}"
+            )
+
+        lines = ["【主要角色（POV）】"]
+        lines.append(f"- 姓名：{pov.get('name', '主角')}")
+        lines.append(f"- 角色类型：{pov.get('character_type', 'protagonist')}")
+        lines.append(f"- 当前位置：{pov.get('current_state', {}).get('location', '未知')}")
+        lines.append(f"- 当前情绪：{pov.get('current_state', {}).get('emotional', '平静')}")
+
+        taboos = pov.get("voice_signature", {}).get("taboos", [])
+        lines.append("- 行为禁忌（绝对不能做）：")
+        if taboos:
+            for t in taboos:
+                lines.append(f"  - {t}")
+        else:
+            lines.append("  无")
+
+        unknown = pov.get("unknown_to_character", [])
+        lines.append("- 角色不知道的信息（不能在文中出现）：")
+        if unknown:
+            for u in unknown:
+                lines.append(f"  - {u}")
+        else:
+            lines.append("  无")
+
+        others = [c for c in characters if c.get("id") != pov.get("id")]
+        if others:
+            lines.append("")
+            lines.append("【其他出场角色】")
+            for c in others:
+                lines.append(_char_basic(c))
+
+        return "\n".join(lines)
+
     def _build_base_vars(
         self,
         genre: str,
         concept: dict,
         world_rules: dict,
-        character: dict,
+        characters: list[dict],
         scene_plan: dict,
         l0_context: str,
         l1_context: str,
@@ -42,20 +93,6 @@ class WriterAgent(BaseAgent):
             else str(ceilings)
         )
 
-        char_name = character.get("name", "主角")
-        char_location = character.get("current_state", {}).get("location", "未知")
-        char_emotion = character.get("current_state", {}).get("emotion", "平静")
-
-        char_taboos = character.get("voice_signature", {}).get("taboos", [])
-        taboos_str = (
-            "\n".join(f"  - {t}" for t in char_taboos) if char_taboos else "无"
-        )
-
-        char_unknown = character.get("unknown_to_character", [])
-        unknown_str = (
-            "\n".join(f"  - {u}" for u in char_unknown) if char_unknown else "无"
-        )
-
         required_logs = scene_plan.get("required_logs", [])
         logs_list = (
             "\n".join(f"  - {log_type}" for log_type in required_logs)
@@ -71,11 +108,7 @@ class WriterAgent(BaseAgent):
             "power_system_description": ps_desc,
             "core_rules": core_rules_str,
             "ceilings": ceilings_str,
-            "character_name": char_name,
-            "character_location": char_location,
-            "character_emotion": char_emotion,
-            "character_taboos": taboos_str,
-            "character_unknown": unknown_str,
+            "characters_context": self._build_characters_context(characters),
             "scene_goal": scene_plan.get("goal", ""),
             "scene_conflict": scene_plan.get("conflict", ""),
             "scene_emotional_arc": scene_plan.get("emotional_arc", ""),
@@ -91,7 +124,7 @@ class WriterAgent(BaseAgent):
         genre: str,
         concept: dict,
         world_rules: dict,
-        character: dict,
+        characters: list[dict],
         scene_plan: dict,
         l0_context: str = "",
         l1_context: str = "",
@@ -100,7 +133,7 @@ class WriterAgent(BaseAgent):
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
-            genre, concept, world_rules, character, scene_plan,
+            genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
         )
         return await self.generate_from_template(
@@ -113,7 +146,7 @@ class WriterAgent(BaseAgent):
         genre: str,
         concept: dict,
         world_rules: dict,
-        character: dict,
+        characters: list[dict],
         scene_plan: dict,
         retry_hints: str,
         previous_draft: str,
@@ -122,7 +155,7 @@ class WriterAgent(BaseAgent):
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
-            genre, concept, world_rules, character, scene_plan,
+            genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
         )
         template_vars["retry_hints"] = retry_hints

@@ -332,7 +332,9 @@ export default function Stage4Page() {
                       {Object.entries(log.params).map(([k, v]) => (
                         <div key={k} className="flex items-baseline gap-1.5 pl-5">
                           <code className="text-system-log/70 font-mono">{k}</code>
-                          <span className="text-primary font-body-narrative">{v}</span>
+                          <span className="text-primary font-body-narrative">
+                            {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                          </span>
                         </div>
                       ))}
                     </div>

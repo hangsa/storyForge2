@@ -13,19 +13,20 @@ fm = FileManager(settings.projects_dir)
 
 @router.post("/create")
 async def create_project(data: dict):
-    title = data.get("title", "")
+    intent = data.get("intent", "")
+    title = data.get("title", "") or (intent[:30] + "..." if len(intent) > 30 else intent)
     genre = data.get("genre", "cool_novel")
     min_words = data.get("min_words", 4000)
-    free_text = data.get("free_text", "")
+    free_text = data.get("free_text", "") or intent
     inspiration_source = data.get("inspiration_source")
 
-    if not title or not free_text:
+    if not free_text:
         raise HTTPException(
             status_code=400,
             detail={
                 "error": True,
                 "code": "VALIDATION_ERROR",
-                "message": "title 和 free_text 不能为空",
+                "message": "intent 或 free_text 不能为空",
                 "detail": {},
             },
         )

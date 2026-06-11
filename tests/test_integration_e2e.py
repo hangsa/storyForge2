@@ -34,7 +34,6 @@ class TestProjectLifecycle:
         assert data["detail"]["title"] == "测试小说"
         assert data["detail"]["current_stage"] == "INIT"
         assert data["detail"]["id"].startswith("proj_")
-        return data["detail"]["id"]
 
     def test_create_project_validation(self, client):
         resp = client.post("/api/project/create", json={"title": "", "free_text": ""})

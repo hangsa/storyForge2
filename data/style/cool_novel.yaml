@@ -1,40 +1,102 @@
+# 爽文 (Cool Novel) Genre Template
+# Used by Style Engine L1 for genre-specific pacing, tone, and constraints.
+
 name: cool_novel
-display_name: 爽文
-description: 快节奏、高爽点、主角强势的网络小说风格
+description: >
+  爽文体裁——以主角成长为核心，节奏快速、爽点密集、升级感强烈的网络小说类型。
+  适用于仙侠、玄幻、都市、系统流等子类型的爽文创作。
 
+# Narrative pacing configuration
 pacing:
-  paragraph_max_chars: 200
-  sentences_per_paragraph: 2-4
-  action_to_description_ratio: "7:3"
+  # Beats per thousand words (minimum density)
+  min_beats_per_1k: 1.5
+  # Conflict escalation rate (chapters between intensity changes)
+  escalation_interval: 3
+  # Action scenes vs dialogue/reflection ratio
+  action_ratio: 0.45
+  # Maximum consecutive non-action scenes before reader fatigue
+  max_consecutive_non_action: 2
+  # Chapter word count range
+  chapter_words:
+    min: 3000
+    max: 6000
+  # Scene word count range
+  scene_words:
+    min: 500
+    max: 2000
 
-emotional_cadence:
-  - beat: setup
-    emotion: neutral
-    duration: short
-  - beat: tension_build
-    emotion: rising_anger
-    duration: medium
-  - beat: mini_payoff
-    emotion: satisfaction
-    duration: short
-  - beat: cliffhanger
-    emotion: curiosity
-    duration: short
-
-tone:
-  protagonist_voice: confident
-  narrative_distance: close
-  humor_level: low
-
-taboo_words:
-  - 也许
-  - 可能
-  - 似乎
-  - 大概
+# Tone and style rules
+tone: >
+  轻松自信，节奏明快。主角遇强则强，逆势崛起。在困境中保持乐观，
+  在逆境中展现智慧。避免过度悲情和无力感。
 
 style_rules:
-  - "每段不超过200字"
-  - "避免心理描写超过3句"
-  - "打斗场景每句话不超过15字"
-  - "爽点每章至少3次小爆发"
-  - "结尾必有悬念或期待"
+  - "每500字内至少有一个爽点（能力展示/打脸/逆袭/收获）"
+  - "战斗场景每300字插入一次能力使用描写"
+  - "升级描写要具体（数值/层次/境界），不能含糊"
+  - "配角反应要描写（震惊/羡慕/嫉妒），强化主角成就感"
+  - "每章结尾必须有悬念钩子（新敌人/新目标/新线索）"
+  - "避免超过200字的纯静态描写"
+  - "对话占比不低于全文的20%"
+
+# Writing formula (quantitative)
+writing_formula:
+  # Sentence structure distribution
+  sentence:
+    short_ratio: 0.40      # ≤15 chars: action punch
+    medium_ratio: 0.45     # 15-40 chars: narrative flow
+    long_ratio: 0.15       # >40 chars: detailed description
+  # Dialogue mechanics
+  dialogue:
+    max_consecutive_lines: 8
+    action_beat_interval: 4  # Insert action beat every N dialogue lines
+    tag_variety: "high"      # Avoid repeating "说"/"道" — use action tags
+  # Paragraph density
+  paragraph:
+    max_sentences: 5
+    max_words_per_paragraph: 300
+
+# Taboo words and patterns (L3 constraint layer)
+taboo_words:
+  - "无能为力"
+  - "绝望"
+  - "放弃"
+  - "认命"
+  - "太强了打不过"
+  - "不可能"
+  - "没办法"
+  # Overused cliches
+  - "恐怖如斯"
+  - "倒吸一口凉气"
+  - "此子不可留"
+
+# Genre-specific trope patterns
+trope_patterns:
+  - name: "逆袭打脸"
+    description: "被轻视后展现实力，打脸反派"
+    min_interval: 3  # chapters
+  - name: "越级挑战"
+    description: "主角以弱胜强，跨境界/层次战斗"
+    intensity_boost: 0.3
+  - name: "奇遇突破"
+    description: "意外收获导致实力大幅提升"
+    max_per_volume: 2
+  - name: "身份揭露"
+    description: "主角隐藏身份被揭露引发震惊"
+    min_interval: 5
+
+# Reader state targets (for ReaderOS formula calculations)
+reader_targets:
+  curiosity_base: 0.6
+  tension_peak: 0.85
+  satisfaction_min: 0.5
+  frustration_max: 0.3
+  fatigue_warning: 0.4
+  addiction_target: 0.7
+  discussion_potential_min: 0.4
+
+# Model tier preferences
+model_preferences:
+  creative_core: "deepseek-chat"
+  temperature: 0.9
+  # Tuned for high novelty and dramatic tension

@@ -1,35 +1,52 @@
 name: concept_generation
 provider: deepseek
 model: deepseek-chat
-temperature: 0.7
+temperature: 0.8
 max_tokens: 4096
 system_prompt: |
-  你是一个专业的小说概念设计师，擅长从简单的创作意图中提炼出完整的故事概念和Story DNA。
+  你是一位资深的网络小说策划顾问，擅长为作者提供高质量的故事概念设计。
+  你需要根据作者的初始意图，生成一个完整的故事概念和故事DNA。
 
-  请根据用户提供的信息生成：
-  1. 一个完整的故事概念（concept）：包含书名、前提、基调、主题、目标受众
-  2. 一个Story DNA：包含核心矛盾（能力vs限制的对立）和价值栈
+  要求：
+  1. 概念要有明确的市场定位（类型、基调、主题、目标读者）
+  2. Story DNA 必须包含一个有深度和冲突张力的核心矛盾（core_contradiction）
+  3. 核心矛盾要有两个对立的立场（side_a vs side_b），体现价值观冲突
+  4. 价值层级（value_stack）至少3组价值对立，从具体到抽象递进
+  5. 用中文输出，保持专业性和创意性
+  6. 前提（premise）要一句话说清故事的独特卖点
+  7. 只输出JSON，不要输出任何其他内容
 
 user_prompt_template: |
-  ## 创作意图
+  作者初始意图：
   {initial_intent}
 
-  ## 目标体裁
-  {genre}
+  目标类型：{genre}
 
-  请生成以上内容，以JSON格式返回。
+  请生成：
+  1. 故事概念（title, genre, premise, tone, theme, target_audience）
+  2. Story DNA（core_contradiction + value_stack）
+
+  输出JSON格式：
+  {{
+    "concept": {{
+      "title": "故事标题",
+      "genre": "类型",
+      "premise": "一句话前提（独特卖点）",
+      "tone": "基调（如：热血、黑暗、轻松、史诗）",
+      "theme": "主题（如：成长、复仇、救赎、自由）",
+      "target_audience": "目标读者"
+    }},
+    "story_dna": {{
+      "core_contradiction": {{
+        "statement": "核心矛盾的完整表述",
+        "side_a": "立场A的描述",
+        "side_b": "立场B的描述"
+      }},
+      "value_stack": [
+        {{"value_a": "价值A", "value_b": "价值B", "level": "层级说明"}}
+      ]
+    }}
+  }}
+
 output_format:
   type: json
-  schema:
-    concept:
-      title: string
-      premise: string
-      tone: string
-      theme: string
-      target_audience: string
-    story_dna:
-      core_contradiction:
-        statement: string
-        side_a: string
-        side_b: string
-      value_stack: list

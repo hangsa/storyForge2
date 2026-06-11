@@ -97,8 +97,7 @@ export default function Stage1Page() {
                       <input
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
-                        className="flex-1 bg-surface-container border border-primary-container rounded px-3 py-1.5
-                                   font-body-narrative text-primary text-sm focus:outline-none"
+                        className="flex-1 input-underline text-sm"
                         autoFocus
                         onKeyDown={(e) => e.key === "Enter" && handleEditSave()}
                       />

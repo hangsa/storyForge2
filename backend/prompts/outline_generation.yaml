@@ -1,57 +1,90 @@
 name: outline_generation
 provider: deepseek
 model: deepseek-chat
-temperature: 0.6
-max_tokens: 4096
+temperature: 0.7
+max_tokens: 8192
 system_prompt: |
-  你是一个专业的小说情节规划师，擅长设计紧凑、有张力的章节大纲和场景规划。
+  你是一位资深的小说结构顾问，擅长为网络小说设计紧凑、有趣的情节大纲。
+  你需要根据故事概念、世界观和角色设定，生成一个章节的场景规划。
 
-  请根据完整的故事上下文，生成一章小说的详细大纲，包含3-6个Scene的规划。
-  每个Scene需要：
-  - 场景目标
-  - 核心冲突
-  - 情感弧线
-  - 叙事角色（setup/mini_payoff/cliffhanger/major_reveal）
-  - 需要创建/更新的叙事资产
-  - 必须嵌入的SF_LOG标记类型
+  要求：
+  1. 每个场景（scene）必须有明确的叙事角色（setup/mini_payoff/cliffhanger/major_reveal）
+  2. 每个场景要有明确的节拍类型（setup/tension_build/mini_payoff/major_payoff/cliffhanger/transition）
+  3. 每个场景要声明需要的 SF_LOG 类型（required_logs），用于后续叙事追踪
+  4. 每个场景要声明注册表变化（registry_changes），包括 create 和 update
+  5. 场景之间要有情绪弧线（emotional_arc）的自然流动
+  6. 一章通常3-6个场景，首场景为setup，末场景为cliffhanger
+  7. 用中文输出，场景设计要有网文的节奏感
+  8. 只输出JSON，不要输出任何其他内容
 
 user_prompt_template: |
-  ## 故事概念
+  故事概念：
   {concept_context}
 
-  ## Story DNA
+  Story DNA：
   {story_dna_context}
 
-  ## 世界观
+  世界观：
   {world_context}
 
-  ## 角色
+  角色设定：
   {character_context}
 
-  ## 要求
-  第{chapter_number}章，至少{min_words}字，生成Scene规划，以JSON格式返回。
+  目标章节：第 {chapter_number} 章
+  最低字数：{min_words} 字
 
-  ## SF_LOG标记类型（必须选择其中几种作为每个Scene的required_logs）
-  - character_emotion: 角色情绪变化
-  - character_relation_change: 角色关系变化
-  - character_location_change: 角色位置变化
-  - knowledge_gain: 角色获得知识
-  - conflict_escalate: 冲突升级
-  - mystery_clue: 谜团线索
-  - registry_create: 创建叙事资产
+  请生成该章节的场景规划大纲。
+
+  输出JSON格式：
+  {{
+    "chapter_number": {chapter_number},
+    "title": "章节标题",
+    "theme": "本章主题",
+    "scene_plan": [
+      {{
+        "scene_number": 1,
+        "goal": "场景目标（角色要达成什么）",
+        "conflict": "核心冲突（什么阻碍角色）",
+        "emotional_arc": "情绪弧线（如：平静→紧张→爆发）",
+        "narrative_role": "setup",
+        "beat_type": "setup",
+        "required_logs": [
+          "character_location_change",
+          "conflict_escalate"
+        ],
+        "registry_changes": {{
+          "created": [
+            {{
+              "type": "conflict",
+              "id_pattern": "cf_001",
+              "description": "创建的新冲突描述"
+            }}
+          ],
+          "updated": [
+            {{
+              "asset_id": "cf_001",
+              "field": "intensity",
+              "new_value": "critical",
+              "reason": "升级原因"
+            }}
+          ]
+        }}
+      }}
+    ]
+  }}
+
+  SF_LOG 可选类型：
+  - character_relation_change：角色关系变化
+  - character_emotion：角色情感变化
+  - knowledge_gain：知识获取
+  - conflict_escalate：冲突升级
+  - mystery_clue：线索揭露
+  - twist_reveal：转折揭示
+  - expectation_fulfill：期望满足
+  - goal_milestone：目标里程碑
+  - registry_create：注册创建
+  - character_location_change：位置变更
+  - character_physical_change：物理状态变更
+
 output_format:
   type: json
-  schema:
-    chapters:
-      - chapter_number: int
-        title: string
-        scene_plan:
-          - scene_number: int
-            goal: string
-            conflict: string
-            emotional_arc: string
-            narrative_role: string
-            registry_changes:
-              created: list
-              updated: list
-            required_logs: list

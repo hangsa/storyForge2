@@ -1,0 +1,271 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import TopHeader from "../components/layout/TopHeader";
+import SideNavBar from "../components/layout/SideNavBar";
+import CircuitBreaker from "../components/shared/CircuitBreaker";
+import SFLogFeed from "../components/shared/SFLogFeed";
+import StageErrorBoundary from "../components/shared/StageErrorBoundary";
+
+describe("TopHeader", () => {
+  it("renders StoryForge branding", () => {
+    render(
+      <TopHeader
+        projectName="测试项目"
+        currentStage="STAGE1"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+      />
+    );
+    expect(screen.getByText("StoryForge")).toBeInTheDocument();
+    expect(screen.getByText("测试项目")).toBeInTheDocument();
+  });
+
+  it("shows current stage badge", () => {
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="STAGE3"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+      />
+    );
+    expect(screen.getByText("STAGE3")).toBeInTheDocument();
+  });
+
+  it("shows collaboration mode in Chinese", () => {
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+      />
+    );
+    expect(screen.getByText("实时写作")).toBeInTheDocument();
+  });
+
+  it("shows discussion mode", () => {
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="discuss"
+        autoSaveStatus="saved"
+      />
+    );
+    expect(screen.getByText("讨论模式")).toBeInTheDocument();
+  });
+
+  it("hides project name separator when empty", () => {
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+      />
+    );
+    expect(screen.queryByText("/")).not.toBeInTheDocument();
+  });
+});
+
+describe("SideNavBar", () => {
+  const onNavigate = vi.fn();
+
+  it("renders all stage navigation items", () => {
+    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    expect(screen.getByText("项目初始化")).toBeInTheDocument();
+    expect(screen.getByText("概念讨论")).toBeInTheDocument();
+    expect(screen.getByText("世界观+角色")).toBeInTheDocument();
+    expect(screen.getByText("情节头脑风暴")).toBeInTheDocument();
+    expect(screen.getByText("写作中心")).toBeInTheDocument();
+  });
+
+  it("highlights the active stage", () => {
+    render(<SideNavBar currentStage="STAGE4" onNavigate={onNavigate} />);
+    const activeButton = screen.getByText("写作中心").closest("button");
+    expect(activeButton).toHaveClass("border-primary-container");
+  });
+
+  it("renders disabled workspace items", () => {
+    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    const inspirationBtn = screen.getByText("灵感库").closest("button");
+    expect(inspirationBtn).toBeDisabled();
+  });
+
+  it("calls onNavigate when stage clicked", () => {
+    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByText("概念讨论"));
+    expect(onNavigate).toHaveBeenCalledWith("STAGE1");
+  });
+
+  it("renders section headers", () => {
+    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    expect(screen.getByText("项目")).toBeInTheDocument();
+    expect(screen.getByText("叙事阶段")).toBeInTheDocument();
+    expect(screen.getByText("工作区")).toBeInTheDocument();
+  });
+});
+
+describe("CircuitBreaker", () => {
+  it("renders title and message", () => {
+    render(
+      <CircuitBreaker
+        title="逻辑矛盾检测"
+        message="Fact Guard 在第 3 次重试后仍未通过。"
+        userOptions={[
+          { label: "强制通过", action: vi.fn(), variant: "danger" },
+          { label: "取消", action: vi.fn() },
+        ]}
+      />
+    );
+    expect(screen.getByText("逻辑矛盾检测")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Fact Guard 在第 3 次重试后仍未通过/)
+    ).toBeInTheDocument();
+    expect(screen.getByText("强制通过")).toBeInTheDocument();
+    expect(screen.getByText("取消")).toBeInTheDocument();
+  });
+
+  it("renders circuit breaker header", () => {
+    render(
+      <CircuitBreaker
+        title="测试"
+        message="错误"
+        userOptions={[{ label: "确认", action: vi.fn() }]}
+      />
+    );
+    expect(screen.getByText("电路熔断 — Circuit Breaker")).toBeInTheDocument();
+  });
+
+  it("applies danger variant styles", () => {
+    render(
+      <CircuitBreaker
+        title="测试"
+        message="错误"
+        userOptions={[{ label: "危险操作", action: vi.fn(), variant: "danger" }]}
+      />
+    );
+    const btn = screen.getByText("危险操作");
+    expect(btn).toHaveClass("bg-error-p0/20");
+  });
+
+  it("applies primary variant styles", () => {
+    render(
+      <CircuitBreaker
+        title="测试"
+        message="错误"
+        userOptions={[{ label: "主操作", action: vi.fn(), variant: "primary" }]}
+      />
+    );
+    const btn = screen.getByText("主操作");
+    expect(btn).toHaveClass("border-primary-container/30");
+  });
+
+  it("calls action on button click", () => {
+    const action = vi.fn();
+    render(
+      <CircuitBreaker
+        title="测试"
+        message="错误"
+        userOptions={[{ label: "执行", action }]}
+      />
+    );
+    fireEvent.click(screen.getByText("执行"));
+    expect(action).toHaveBeenCalledOnce();
+  });
+});
+
+describe("SFLogFeed", () => {
+  it("renders empty state", () => {
+    render(<SFLogFeed logs={[]} />);
+    expect(screen.getByText("等待解析...")).toBeInTheDocument();
+  });
+
+  it("renders log entries with Chinese labels", () => {
+    const logs = [
+      {
+        type: "conflict_escalate",
+        params: { id: "cf_001", new_intensity: "critical" },
+      },
+      {
+        type: "knowledge_gain",
+        params: { char: "林峰", content: "秘密联络记录" },
+      },
+    ];
+    render(<SFLogFeed logs={logs} />);
+    expect(screen.getByText("冲突升级")).toBeInTheDocument();
+    expect(screen.getByText("知识")).toBeInTheDocument();
+  });
+
+  it("falls back to raw type for unknown log types", () => {
+    const logs = [{ type: "custom_event", params: { key: "val" } }];
+    render(<SFLogFeed logs={logs} />);
+    expect(screen.getByText("custom_event")).toBeInTheDocument();
+  });
+
+  it("shows up to 3 params per log entry", () => {
+    const logs = [
+      {
+        type: "character_emotion",
+        params: { a: "1", b: "2", c: "3", d: "4" },
+      },
+    ];
+    render(<SFLogFeed logs={logs} />);
+    expect(screen.getByText("a=1")).toBeInTheDocument();
+    expect(screen.getByText("b=2")).toBeInTheDocument();
+    expect(screen.getByText("c=3")).toBeInTheDocument();
+    expect(screen.queryByText("d=4")).not.toBeInTheDocument();
+  });
+
+  it("renders SF_LOG Feed header", () => {
+    render(<SFLogFeed logs={[]} />);
+    expect(screen.getByText("SF_LOG Feed")).toBeInTheDocument();
+  });
+});
+
+describe("StageErrorBoundary", () => {
+  it("renders children when no error", () => {
+    render(
+      <StageErrorBoundary>
+        <span>正常内容</span>
+      </StageErrorBoundary>
+    );
+    expect(screen.getByText("正常内容")).toBeInTheDocument();
+  });
+
+  it("shows CircuitBreaker on error", () => {
+    const ThrowError = () => {
+      throw new Error("渲染失败: 数据格式异常");
+    };
+    // Suppress expected error logging during test
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <StageErrorBoundary>
+        <ThrowError />
+      </StageErrorBoundary>
+    );
+    spy.mockRestore();
+
+    expect(screen.getByText("页面渲染异常")).toBeInTheDocument();
+    expect(
+      screen.getByText("渲染失败: 数据格式异常")
+    ).toBeInTheDocument();
+  });
+
+  it("provides reset and fallback options on error", () => {
+    const ThrowError = () => {
+      throw new Error("test error");
+    };
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <StageErrorBoundary>
+        <ThrowError />
+      </StageErrorBoundary>
+    );
+    spy.mockRestore();
+
+    expect(screen.getByText("重试渲染")).toBeInTheDocument();
+    expect(screen.getByText("回退")).toBeInTheDocument();
+  });
+});

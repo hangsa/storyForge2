@@ -68,7 +68,7 @@ export default function InitPage() {
             onChange={(e) => { setIntent(e.target.value); clearError(); }}
             placeholder="例如：一个被家族抛弃的少年，在异世界觉醒了隐藏的血脉之力，从此踏上强者之路..."
             className="w-full h-40 bg-surface-container border border-outline-variant rounded-lg px-4 py-3
-                       font-body-narrative text-primary placeholder-system-log/50
+                       font-body-narrative text-primary placeholder:text-system-log/50
                        focus:outline-none focus:border-primary-container resize-none"
             autoFocus
           />

@@ -11,6 +11,39 @@ router = APIRouter(prefix="/api/project", tags=["project"])
 fm = FileManager(settings.projects_dir)
 
 
+@router.get("/list")
+async def list_projects():
+    projects = []
+    projects_dir = settings.projects_dir
+    if projects_dir.exists():
+        for proj_dir in sorted(projects_dir.iterdir(), reverse=True):
+            if not proj_dir.is_dir():
+                continue
+            proj_file = proj_dir / "project.json"
+            if not proj_file.exists():
+                continue
+            try:
+                data = fm.read_json(proj_dir.name, "project.json")
+                if data:
+                    projects.append({
+                        "id": data.get("id", proj_dir.name),
+                        "title": data.get("title", "未命名"),
+                        "genre": data.get("genre", ""),
+                        "current_stage": data.get("current_stage", "INIT"),
+                        "created_at": data.get("created_at", ""),
+                        "min_words": data.get("min_words", 4000),
+                    })
+            except Exception:
+                continue
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": projects,
+    }
+
+
 @router.post("/create")
 async def create_project(data: dict):
     intent = data.get("intent", "")

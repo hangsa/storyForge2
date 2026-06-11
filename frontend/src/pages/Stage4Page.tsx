@@ -240,7 +240,7 @@ export default function Stage4Page() {
 
           {/* Fact Guard Results */}
           {state.factGuardChecks.length > 0 && (
-            <GlassPanel>
+            <GlassPanel className="!rounded-none">
               <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
                 Fact Guard 检查
               </h2>
@@ -248,7 +248,7 @@ export default function Stage4Page() {
                 {state.factGuardChecks.map((check: CheckResult) => (
                   <div
                     key={check.check_id}
-                    className={`flex items-start gap-3 p-3 rounded ${
+                    className={`flex items-start gap-3 p-3 rounded-none ${
                       check.passed
                         ? "bg-green-500/10 border border-green-500/30"
                         : "bg-red-500/10 border border-red-500/30"

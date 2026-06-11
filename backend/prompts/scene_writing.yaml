@@ -1,67 +1,85 @@
 name: scene_writing
 provider: deepseek
 model: deepseek-chat
-temperature: 0.7
+temperature: 0.9
 max_tokens: 8192
 system_prompt: |
-  你是一个专业网文写手，擅长{genre}风格写作。
-  你的任务是写一个小说场景。
+  你是一位资深的网络小说作家，擅长创作节奏紧凑、情感充沛的场景文本。
+  你需要根据提供的场景规划和上下文信息，撰写一个完整的场景。
 
-  写作规则：
-  1. 使用简洁有力的中文
-  2. 在文本中嵌入SF_LOG标记来追踪叙事变化
-  3. 严格遵循角色设定和世界观规则
-  4. 每段不超过200字，保持阅读节奏
-  5. 角色不能做其禁忌行为列表中的事情
-  6. 角色不能知道其未知秘密列表中的内容
-  7. 能力使用不能超过世界观设定的上限
+  核心要求：
+  1. 严格遵守角色声音签名（voice_signature），不要违反行为禁忌
+  2. 角色不能知道 "未知信息" 中列出的内容（知识泄漏禁止）
+  3. 使用力量体系时不能超过设定的上限
+  4. 如果力量体系有代价系统，使用能力时必须在文中明确提及代价
+  5. 所有场景级别的叙事变化必须用 SF_LOG 标签标记
 
-  生成完成后，以JSON格式返回，包含完整的场景文本。
+  SF_LOG 标签格式（HTML注释语法，读者不可见）：
+  <!-- SF_LOG <类型> <参数列表> -->
+
+  支持的 SF_LOG 类型及参数：
+  - character_relation_change: char_a="A" char_b="B" status="新状态" trigger="触发事件"
+  - character_emotion: char="角色名" emotion="情绪" trigger="触发事件"
+  - character_location_change: char="角色名" from="原位置" to="新位置"
+  - character_physical_change: char="角色名" change="变化描述"
+  - knowledge_gain: char="角色名" content="获取的知识" source="来源"
+  - conflict_escalate: id="冲突ID" new_intensity="新强度" trigger="触发事件"
+  - mystery_clue: id="谜团ID" clue="线索内容"
+  - twist_reveal: id="转折ID" trigger="触发事件"
+  - expectation_fulfill: id="期望ID" trigger="触发事件"
+  - goal_milestone: id="目标ID" progress="进度描述"
+  - registry_create: type="注册类型" data='{JSON数据}'
+
+  写作风格：
+  - 章节字数控制在合理范围内，场景描述要有画面感
+  - 对话要符合角色的语言风格
+  - 动作描写要干净利落，避免冗长
+  - 情绪描写要有层次，不直白
+  - 遵守该类型网文的节奏感和爽点密度
+  - 用中文创作
+
 user_prompt_template: |
-  ## 故事背景
-  核心矛盾：{core_contradiction}
-  前提：{premise}
+  【故事背景】
+  - 类型：{genre}
+  - 核心矛盾：{core_contradiction}
+  - 前提：{premise}
 
-  ## 世界观规则
-  能力体系：{power_system_name} — {power_system_description}
-  核心规则：{core_rules}
-  能力上限：{ceilings}
+  【世界观规则】
+  - 力量体系：{power_system_name}
+  - 力量描述：{power_system_description}
+  - 核心规则：
+  {core_rules}
+  - 绝对上限：
+  {ceilings}
 
-  ## 当前角色状态
-  角色：{character_name}
-  当前位置：{character_location}
-  当前情绪：{character_emotion}
-  角色不能做的事：{character_taboos}
-  角色不知道的事：{character_unknown}
+  【角色信息】
+  - 姓名：{character_name}
+  - 当前位置：{character_location}
+  - 当前情绪：{character_emotion}
+  - 行为禁忌（绝对不能做）：
+  {character_taboos}
+  - 角色不知道的信息（不能在文中出现）：
+  {character_unknown}
 
-  ## 本幕目标
-  叙事目标：{scene_goal}
-  核心冲突：{scene_conflict}
-  情感弧线：{scene_emotional_arc}
-  叙事角色：{scene_narrative_role}
-
-  ## SF_LOG标记要求
-  本幕必须嵌入以下类型的标记：
+  【本场场景规划】
+  - 场景目标：{scene_goal}
+  - 核心冲突：{scene_conflict}
+  - 情绪弧线：{scene_emotional_arc}
+  - 叙事角色：{scene_narrative_role}
+  - 必需的 SF_LOG 标签：
   {required_logs_list}
 
-  标记格式：
-  <!-- SF_LOG <类型> <参数名>="<参数值>" ... -->
+  【实时上下文】
+  {l0_context}
 
-  示例：
-  <!-- SF_LOG character_emotion char="角色名" emotion="愤怒" -->
-  <!-- SF_LOG character_location_change char="角色名" from="地点A" to="地点B" -->
-  <!-- SF_LOG conflict_escalate id="cf_001" new_intensity="critical" trigger="事件" -->
-  <!-- SF_LOG mystery_clue id="mys_001" clue="线索内容" -->
-  <!-- SF_LOG registry_create type="conflict" data='{"owner":"角色","target":"目标","type":"personal"}' -->
-  <!-- SF_LOG knowledge_gain char="角色名" content="获得的知识" source="来源" -->
-  <!-- SF_LOG character_relation_change char_a="角色A" char_b="角色B" status="新关系" -->
-
-  ## 前文回顾
+  【近期章节摘要】
   {l1_context}
 
-  请开始写作本幕。
+  请撰写该场景的完整文本。注意：
+  1. 文中必须插入所有 "必需的 SF_LOG 标签"
+  2. 不要违反任何行为禁忌
+  3. 不要提及角色不知道的信息
+  4. 使用能力时不超过上限，需要代价时必须在文中体现
+
 output_format:
   type: json
-  schema:
-    text: string
-    embedded_logs: list

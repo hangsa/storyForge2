@@ -1,42 +1,63 @@
 name: world_generation
 provider: deepseek
 model: deepseek-chat
-temperature: 0.7
+temperature: 0.8
 max_tokens: 4096
 system_prompt: |
-  你是一个专业的幻想世界构建师，擅长设计完整、自洽、有深度的世界观。
+  你是一位资深的世界观架构师，擅长为网络小说构建引人入胜的虚构世界。
+  你需要根据给定的故事概念和核心矛盾，生成一个完整的世界观设定。
 
-  请根据故事概念和Story DNA，生成世界观设定，包括：
-  - 时代背景
-  - 地理环境
-  - 能力体系（名称、描述、阶段、核心规则、上限）
-  - 主要势力
-  - 世界核心规则
+  要求：
+  1. 世界规则必须服务于核心矛盾，为冲突提供舞台
+  2. 力量体系要有清晰的层次结构和明确的代价系统
+  3. 设定力量上限（ceilings），避免战力膨胀
+  4. 势力分布要有明确的利益关系和对立关系
+  5. 用中文输出，专业且富有想象力
+  6. 只输出JSON，不要输出任何其他内容
 
 user_prompt_template: |
-  ## 故事概念
-  书名：{concept_title}
-  前提：{concept_premise}
-  基调：{concept_tone}
-  主题：{concept_theme}
+  故事概念：
+  - 标题：{concept_title}
+  - 前提：{concept_premise}
+  - 基调：{concept_tone}
+  - 主题：{concept_theme}
+  - 核心矛盾：{core_contradiction}
+  - 类型：{genre}
 
-  ## Story DNA
-  核心矛盾：{core_contradiction}
+  请生成世界观设定，包含：
+  1. 时代背景与地理环境
+  2. 力量体系（名称、描述、阶段、代价系统、上限）
+  3. 世界核心规则
+  4. 势力分布
 
-  ## 目标体裁
-  {genre}
+  输出JSON格式：
+  {{
+    "era": "时代背景描述",
+    "geography": "地理环境描述",
+    "power_system": {{
+      "name": "力量体系名称",
+      "description": "体系运作原理的简要描述",
+      "stages": ["阶段1", "阶段2", "阶段3"],
+      "cost_system": "使用力量的代价（可选，有则填写）",
+      "ceilings": [
+        "绝对上限1：具体限制内容",
+        "绝对上限2：具体限制内容"
+      ]
+    }},
+    "core_rules": [
+      "世界规则1",
+      "世界规则2",
+      "世界规则3"
+    ],
+    "factions": [
+      {{
+        "name": "势力名称",
+        "type": "势力类型（宗门/帝国/组织/种族等）",
+        "goal": "势力目标",
+        "relations": "与其他势力的关系"
+      }}
+    ]
+  }}
 
-  请生成世界观设定，以JSON格式返回。
 output_format:
   type: json
-  schema:
-    era: string
-    geography: string
-    power_system:
-      name: string
-      description: string
-      stages: list
-      core_rules: list
-      ceilings: list
-    factions: list
-    core_rules: list

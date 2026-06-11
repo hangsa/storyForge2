@@ -61,6 +61,15 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 // --- Type definitions (mirror Pydantic models) ---
 
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  genre: string;
+  current_stage: string;
+  created_at: string;
+  min_words: number;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -233,6 +242,9 @@ export interface AdvanceResponse {
 // --- API functions ---
 
 export const api = {
+  listProjects: () =>
+    request<{ detail: ProjectSummary[] }>("GET", "/project/list"),
+
   createProject: (data: { intent: string; genre: string; min_words: number }) =>
     request<Project>("POST", "/project/create", data),
 

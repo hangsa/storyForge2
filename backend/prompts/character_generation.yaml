@@ -1,44 +1,60 @@
 name: character_generation
 provider: deepseek
 model: deepseek-chat
-temperature: 0.8
+temperature: 0.9
 max_tokens: 4096
 system_prompt: |
-  你是一个专业的小说角色设计师，擅长创造有深度、有矛盾、有成长弧光的角色。
+  你是一位资深的人物设计顾问，擅长为网络小说创作立体、有深度的角色。
+  你需要根据故事概念和世界观，设计一个令人印象深刻的主要角色。
 
-  请根据故事概念和世界观，生成主角设定，包括：
-  - 基础信息
-  - 人格层（信念、欲望、恐惧、价值观、核心特质）
-  - 当前状态
-  - 声音签名（说话风格、思维模式、禁忌行为）
-  - 角色不知道的秘密
+  要求：
+  1. 角色性格要有层次：核心特质、信念、欲望、恐惧、价值观五层
+  2. 声音签名（voice_signature）要有独特的语言风格和思维模式
+  3. 明确角色的行为禁忌（taboos），这是绝对不能违反的
+  4. 列出角色当前不知道的信息（unknown_to_character），用于后续揭秘
+  5. 角色设计要与世界观的力量体系协调
+  6. 用中文输出，角色要有网文主角的魅力和辨识度
+  7. 只输出JSON，不要输出任何其他内容
 
 user_prompt_template: |
-  ## 故事概念
+  故事概念：
   {concept_context}
 
-  ## 世界观
-  时代：{world_era}
-  能力体系：{power_system_name}
-  能力规则：{power_system_rules}
+  世界观：
+  - 时代背景：{world_era}
+  - 力量体系：{power_system_name}
+  - 力量规则：{power_system_rules}
 
-  ## 要求
-  生成一个核心角色（主角），以JSON格式返回。
+  请生成一个主要角色，包含完整的人格层、当前状态、声音签名和行为限制。
+
+  输出JSON格式：
+  {{
+    "id": "角色ID（英文，如 lin_feng）",
+    "name": "角色姓名（中文）",
+    "is_core_character": true,
+    "personality": {{
+      "core_traits": ["特质1", "特质2", "特质3"],
+      "beliefs": ["信念1", "信念2"],
+      "desires": ["欲望1", "欲望2"],
+      "fears": ["恐惧1", "恐惧2"],
+      "values": ["价值观1", "价值观2"]
+    }},
+    "current_state": {{
+      "location": "当前所在位置",
+      "physical_condition": "身体状况",
+      "emotional": "当前情绪",
+      "known_secrets": ["角色已知的秘密1"]
+    }},
+    "voice_signature": {{
+      "speech_style": "语言风格描述",
+      "thought_patterns": "思维模式描述",
+      "taboos": ["绝对不会做的事1", "绝对不会做的事2"]
+    }},
+    "unknown_to_character": [
+      "角色不知道但会影响剧情的信息1",
+      "角色不知道但会影响剧情的信息2"
+    ]
+  }}
+
 output_format:
   type: json
-  schema:
-    name: string
-    personality:
-      beliefs: list
-      desires: list
-      fears: list
-      values: list
-      core_traits: list
-    current_state:
-      location: string
-      emotional: string
-    voice_signature:
-      speech_style: string
-      thought_patterns: string
-      taboos: list
-    unknown_to_character: list

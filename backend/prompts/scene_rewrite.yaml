@@ -4,58 +4,78 @@ model: deepseek-chat
 temperature: 0.7
 max_tokens: 8192
 system_prompt: |
-  你是一个专业网文写手，擅长{genre}风格写作。
-  你的上一版本未能通过以下检查，请根据修改建议重写。
+  你是一位资深的网络小说作家，正在根据审查反馈修改场景文本。
+  上一次的草稿未通过 Fact Guard 检查，你需要根据以下提示重写场景。
 
-  写作规则：
-  1. 使用简洁有力的中文
-  2. 在文本中嵌入SF_LOG标记来追踪叙事变化
-  3. 严格遵循角色设定和世界观规则
-  4. 每段不超过200字，保持阅读节奏
-  5. 角色不能做其禁忌行为列表中的事情
-  6. 角色不能知道其未知秘密列表中的内容
-  7. 能力使用不能超过世界观设定的上限
+  修改原则：
+  1. 逐一处理重试提示中的每个问题
+  2. 保持原有的叙事意图和情感弧线不变
+  3. 其他部分尽量保持原样，只修改有问题的部分
+  4. 如果能力使用超过上限，降级到允许范围内的能力
+  5. 如果缺少代价声明，在能力使用后添加对应的 SF_LOG
+  6. 如果角色知道了不该知道的信息，改为角色推测或他人告知
+  7. 如果缺少必需的 SF_LOG，在合适的位置插入
 
-  请以JSON格式返回重写后的场景文本。
+  SF_LOG 标签格式（HTML注释语法，读者不可见）：
+  <!-- SF_LOG <类型> <参数列表> -->
+
+  支持的 SF_LOG 类型及参数：
+  - character_relation_change: char_a="A" char_b="B" status="新状态" trigger="触发事件"
+  - character_emotion: char="角色名" emotion="情绪" trigger="触发事件"
+  - character_location_change: char="角色名" from="原位置" to="新位置"
+  - character_physical_change: char="角色名" change="变化描述"
+  - knowledge_gain: char="角色名" content="获取的知识" source="来源"
+  - conflict_escalate: id="冲突ID" new_intensity="新强度" trigger="触发事件"
+  - mystery_clue: id="谜团ID" clue="线索内容"
+  - twist_reveal: id="转折ID" trigger="触发事件"
+  - expectation_fulfill: id="期望ID" trigger="触发事件"
+  - goal_milestone: id="目标ID" progress="进度描述"
+  - registry_create: type="注册类型" data='{JSON数据}'
+
 user_prompt_template: |
-  ## 故事背景
-  核心矛盾：{core_contradiction}
-  前提：{premise}
-
-  ## 世界观规则
-  能力体系：{power_system_name}
-  核心规则：{core_rules}
-  能力上限：{ceilings}
-
-  ## 当前角色状态
-  角色：{character_name}
-  当前位置：{character_location}
-  当前情绪：{character_emotion}
-  角色不能做的事：{character_taboos}
-  角色不知道的事：{character_unknown}
-
-  ## 本幕目标
-  叙事目标：{scene_goal}
-  核心冲突：{scene_conflict}
-  情感弧线：{scene_emotional_arc}
-  叙事角色：{scene_narrative_role}
-
-  ## SF_LOG标记要求
-  本幕必须嵌入以下类型的标记：
-  {required_logs_list}
-
-  ## 前文回顾
-  {l1_context}
-
-  ## 上一版本问题
+  【重试提示 - 请逐一修复】
   {retry_hints}
 
-  ## 上一版本草稿（供参考）
+  【上一次的草稿（有问题）】
   {previous_draft}
 
-  请重写本幕，确保解决以上问题。
+  【故事背景】
+  - 类型：{genre}
+  - 核心矛盾：{core_contradiction}
+  - 前提：{premise}
+
+  【世界观规则】
+  - 力量体系：{power_system_name}
+  - 力量描述：{power_system_description}
+  - 核心规则：
+  {core_rules}
+  - 绝对上限：
+  {ceilings}
+
+  【角色信息】
+  - 姓名：{character_name}
+  - 当前位置：{character_location}
+  - 当前情绪：{character_emotion}
+  - 行为禁忌（绝对不能做）：
+  {character_taboos}
+  - 角色不知道的信息（不能在文中出现）：
+  {character_unknown}
+
+  【本场场景规划】
+  - 场景目标：{scene_goal}
+  - 核心冲突：{scene_conflict}
+  - 情绪弧线：{scene_emotional_arc}
+  - 叙事角色：{scene_narrative_role}
+  - 必需的 SF_LOG 标签：
+  {required_logs_list}
+
+  【实时上下文】
+  {l0_context}
+
+  【近期章节摘要】
+  {l1_context}
+
+  请根据重试提示修改草稿。只输出修改后的完整场景文本，不要解释改了哪些地方。
+
 output_format:
   type: json
-  schema:
-    text: string
-    embedded_logs: list

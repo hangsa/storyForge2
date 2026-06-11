@@ -71,7 +71,7 @@ export default function Stage3Page() {
     <div className="max-w-5xl mx-auto py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display-lg text-primary-container">STAGE 3 — 情节头脑风暴</h1>
+          <h1 className="font-headline-md text-primary-container">情节头脑风暴</h1>
           <p className="font-body-ui text-system-log mt-1">
             规划章节结构与场景节奏，设计叙事弧线
           </p>

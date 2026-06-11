@@ -84,7 +84,7 @@ export default function Stage1Page() {
     <div className="max-w-5xl mx-auto py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display-lg text-primary-container">STAGE 1 — 概念讨论</h1>
+          <h1 className="font-headline-md text-primary-container">概念讨论</h1>
           <p className="font-body-ui text-system-log mt-1">
             生成故事概念与核心矛盾，构建小说的叙事基础
           </p>

@@ -1,4 +1,5 @@
 const API_BASE = "/api";
+const TIMEOUT_MS = 120_000;
 
 class ApiError extends Error {
   code: string;
@@ -13,16 +14,46 @@ class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  const json = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new ApiError("TIMEOUT", "请求超时", {});
+    }
+    throw new ApiError("NETWORK_ERROR", "网络请求失败", {});
+  } finally {
+    clearTimeout(timer);
+  }
 
-  if (json.error) {
-    throw new ApiError(json.code, json.message, json.detail);
+  let json: Record<string, unknown>;
+  try {
+    json = await res.json();
+  } catch {
+    throw new ApiError(
+      "PARSE_ERROR",
+      `服务器返回无效响应 (${res.status})`,
+      {}
+    );
+  }
+
+  // FastAPI wraps HTTPException detail: {"detail": {"error": true, "code": "X", ...}}
+  const errorPayload = (json.detail as Record<string, unknown>) || json;
+  if (errorPayload.error) {
+    throw new ApiError(
+      (errorPayload.code as string) || "UNKNOWN",
+      (errorPayload.message as string) || "未知错误",
+      (errorPayload.detail as Record<string, unknown>) || {}
+    );
   }
 
   return json as T;

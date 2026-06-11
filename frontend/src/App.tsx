@@ -1,10 +1,22 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
 import InitPage from "./pages/InitPage";
-import Stage1Page from "./pages/Stage1Page";
-import Stage2Page from "./pages/Stage2Page";
-import Stage3Page from "./pages/Stage3Page";
-import Stage4Page from "./pages/Stage4Page";
+
+const Stage1Page = lazy(() => import("./pages/Stage1Page"));
+const Stage2Page = lazy(() => import("./pages/Stage2Page"));
+const Stage3Page = lazy(() => import("./pages/Stage3Page"));
+const Stage4Page = lazy(() => import("./pages/Stage4Page"));
+
+function LoadingFallback() {
+  return (
+    <div className="flex items-center justify-center py-24">
+      <span className="material-symbols-outlined text-3xl text-system-log/30 animate-spin">
+        progress_activity
+      </span>
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -12,10 +24,38 @@ function App() {
       <Route path="/" element={<InitPage />} />
       <Route path="/init" element={<InitPage />} />
       <Route element={<MainLayout />}>
-        <Route path="/project/:projectId/stage1" element={<Stage1Page />} />
-        <Route path="/project/:projectId/stage2" element={<Stage2Page />} />
-        <Route path="/project/:projectId/stage3" element={<Stage3Page />} />
-        <Route path="/project/:projectId/stage4" element={<Stage4Page />} />
+        <Route
+          path="/project/:projectId/stage1"
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <Stage1Page />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/project/:projectId/stage2"
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <Stage2Page />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/project/:projectId/stage3"
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <Stage3Page />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/project/:projectId/stage4"
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <Stage4Page />
+            </Suspense>
+          }
+        />
       </Route>
     </Routes>
   );

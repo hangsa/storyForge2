@@ -81,5 +81,10 @@ user_prompt_template: |
   3. 不要提及角色不知道的信息
   4. 使用能力时不超过上限，需要代价时必须在文中体现
 
+  输出JSON格式：
+  {{
+    "text": "场景完整文本（含SF_LOG标签）..."
+  }}
+
 output_format:
   type: json

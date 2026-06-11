@@ -77,5 +77,10 @@ user_prompt_template: |
 
   请根据重试提示修改草稿。只输出修改后的完整场景文本，不要解释改了哪些地方。
 
+  输出JSON格式：
+  {{
+    "text": "修改后的完整场景文本（含SF_LOG标签）..."
+  }}
+
 output_format:
   type: json

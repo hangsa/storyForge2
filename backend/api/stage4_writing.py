@@ -21,11 +21,15 @@ def _load_context(project_id: str) -> dict:
     concept_and_dna = fm.read_json(project_id, "concept_and_dna.json")
     world = fm.read_json(project_id, "world.json")
     characters_data = fm.read_json(project_id, "characters.json")
-    outline = fm.read_json(project_id, "outline.json")
+    outline = fm.read_json(project_id, "outline.json") or {}
+
+    # Normalize old-format outline (single chapter without chapters wrapper)
+    if "chapters" not in outline and "scene_plan" in outline:
+        outline = {"chapters": [outline]}
 
     characters = characters_data.get("characters", []) if characters_data else []
     character = characters[0] if characters else {}
-    chapters = outline.get("chapters", []) if outline else []
+    chapters = outline.get("chapters", [])
     chapter = chapters[0] if chapters else {}
 
     return {

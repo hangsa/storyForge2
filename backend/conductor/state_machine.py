@@ -92,9 +92,13 @@ class StageStateMachine:
         path = self._project_dir(project_id) / filename
         if not path.exists():
             return None
+        import json
         with open(path, "r", encoding="utf-8") as f:
-            import json
-            return json.load(f)
+            data = json.load(f)
+        # Normalize old-format outline.json (single chapter without chapters wrapper)
+        if filename == "outline.json" and "chapters" not in data and "scene_plan" in data:
+            data = {"chapters": [data]}
+        return data
 
     def get_current_stage(self, project_id: str) -> Stage:
         data = self._read_json(project_id, "project.json")

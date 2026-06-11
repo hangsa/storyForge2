@@ -83,7 +83,7 @@ export default function Stage2Page() {
     <div className="max-w-5xl mx-auto py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-headline-md text-primary-container">世界观与角色</h1>
+          <h1 className="text-4xl font-bold text-primary-container">世界观与角色</h1>
           <p className="font-body-ui text-system-log mt-1">
             构建故事世界的基础规则与核心角色设定
           </p>

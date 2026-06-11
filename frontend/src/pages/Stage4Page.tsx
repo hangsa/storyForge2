@@ -88,7 +88,7 @@ export default function Stage4Page() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-headline-md text-primary-container">写作中心</h1>
+          <h1 className="text-4xl font-bold text-primary-container">写作中心</h1>
           <p className="font-body-ui text-system-log mt-1">
             端到端写作循环：撰写 → 审查 → 解析 → 注册表更新
           </p>

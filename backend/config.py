@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     prompts_dir: Path = Path("backend/prompts")
     style_dir: Path = Path("data/style")
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": "backend/.env", "env_file_encoding": "utf-8"}
 
 
 settings = Settings()

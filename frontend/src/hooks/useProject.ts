@@ -46,7 +46,6 @@ export function useProject(): UseProjectReturn {
     try {
       const status = await api.getProjectStatus(projectId);
       setProjectStatus(status);
-      setProject(status.project);
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "加载项目状态失败";
       setError(msg);

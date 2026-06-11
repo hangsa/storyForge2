@@ -33,8 +33,8 @@ export default function ProjectListPage() {
 
   const loadProjects = async () => {
     try {
-      const data = await api.listProjects();
-      setProjects(Array.isArray(data?.detail) ? data.detail : []);
+      const projects = await api.listProjects();
+      setProjects(Array.isArray(projects) ? projects : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载项目列表失败");
     } finally {

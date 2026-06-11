@@ -71,7 +71,9 @@ async def advance_stage(data: dict):
         "code": "OK",
         "message": result.message,
         "detail": {
+            "current_stage": target_stage.value,
             "from_stage": result.from_stage.value,
             "to_stage": result.to_stage.value,
+            "preconditions": {},
         },
     }

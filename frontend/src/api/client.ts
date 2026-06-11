@@ -56,7 +56,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     );
   }
 
-  return json as T;
+  return (json.detail as T) ?? (json as T);
 }
 
 // --- Type definitions (mirror Pydantic models) ---
@@ -212,8 +212,10 @@ export interface WriteSceneResponse {
 }
 
 export interface ProjectStatus {
-  project: Project;
-  progress: ProgressFile;
+  project_id: string;
+  current_stage: string;
+  title: string;
+  created_at: string;
 }
 
 export interface ProgressFile {
@@ -243,7 +245,7 @@ export interface AdvanceResponse {
 
 export const api = {
   listProjects: () =>
-    request<{ detail: ProjectSummary[] }>("GET", "/project/list"),
+    request<ProjectSummary[]>("GET", "/project/list"),
 
   createProject: (data: { intent: string; genre: string; min_words: number }) =>
     request<Project>("POST", "/project/create", data),

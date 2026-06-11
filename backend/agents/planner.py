@@ -1,0 +1,106 @@
+import json
+from typing import Optional
+
+from backend.agents.base_agent import BaseAgent, LLMResponse
+
+
+class PlannerAgent(BaseAgent):
+
+    async def generate_concept_and_dna(
+        self, initial_intent: str, genre: str = "cool_novel"
+    ) -> tuple[dict, LLMResponse]:
+        result, response = await self.generate_from_template(
+            "concept_generation",
+            initial_intent=initial_intent,
+            genre=genre,
+        )
+        self.log_usage("concept_generation", response)
+        return result, response
+
+    async def generate_world(
+        self,
+        concept: dict,
+        story_dna: dict,
+        genre: str = "cool_novel",
+    ) -> tuple[dict, LLMResponse]:
+        result, response = await self.generate_from_template(
+            "world_generation",
+            concept_title=concept.get("title", ""),
+            concept_premise=concept.get("premise", ""),
+            concept_tone=concept.get("tone", ""),
+            concept_theme=concept.get("theme", ""),
+            core_contradiction=story_dna.get("core_contradiction", {}).get(
+                "statement", ""
+            ),
+            genre=genre,
+        )
+        self.log_usage("world_generation", response)
+        return result, response
+
+    async def generate_character(
+        self,
+        concept: dict,
+        world: dict,
+    ) -> tuple[dict, LLMResponse]:
+        concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
+
+        power_system = world.get("power_system", {})
+        if isinstance(power_system, dict):
+            ps_name = power_system.get("name", "")
+            ps_rules = "\n".join(
+                f"  - {r}" for r in power_system.get("core_rules", [])
+            )
+        else:
+            ps_name = str(power_system)
+            ps_rules = ""
+
+        result, response = await self.generate_from_template(
+            "character_generation",
+            concept_context=concept_context,
+            world_era=world.get("era", ""),
+            power_system_name=ps_name,
+            power_system_rules=ps_rules,
+        )
+        self.log_usage("character_generation", response)
+        return result, response
+
+    async def generate_outline(
+        self,
+        concept: dict,
+        story_dna: dict,
+        world: dict,
+        character: dict,
+        chapter_number: int = 1,
+        min_words: int = 4000,
+    ) -> tuple[dict, LLMResponse]:
+        concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
+        story_dna_context = json.dumps(story_dna, ensure_ascii=False, indent=2)
+
+        world_context = json.dumps(
+            {
+                "era": world.get("era", ""),
+                "power_system": world.get("power_system", {}).get("name", ""),
+                "core_rules": world.get("core_rules", []),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+        char_summary = {
+            "name": character.get("name", ""),
+            "personality": character.get("personality", {}),
+            "current_state": character.get("current_state", {}),
+        }
+        character_context = json.dumps(char_summary, ensure_ascii=False, indent=2)
+
+        result, response = await self.generate_from_template(
+            "outline_generation",
+            concept_context=concept_context,
+            story_dna_context=story_dna_context,
+            world_context=world_context,
+            character_context=character_context,
+            chapter_number=chapter_number,
+            min_words=min_words,
+        )
+        self.log_usage("outline_generation", response)
+        return result, response

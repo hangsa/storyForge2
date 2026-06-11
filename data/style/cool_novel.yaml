@@ -1,0 +1,40 @@
+name: cool_novel
+display_name: 爽文
+description: 快节奏、高爽点、主角强势的网络小说风格
+
+pacing:
+  paragraph_max_chars: 200
+  sentences_per_paragraph: 2-4
+  action_to_description_ratio: "7:3"
+
+emotional_cadence:
+  - beat: setup
+    emotion: neutral
+    duration: short
+  - beat: tension_build
+    emotion: rising_anger
+    duration: medium
+  - beat: mini_payoff
+    emotion: satisfaction
+    duration: short
+  - beat: cliffhanger
+    emotion: curiosity
+    duration: short
+
+tone:
+  protagonist_voice: confident
+  narrative_distance: close
+  humor_level: low
+
+taboo_words:
+  - 也许
+  - 可能
+  - 似乎
+  - 大概
+
+style_rules:
+  - "每段不超过200字"
+  - "避免心理描写超过3句"
+  - "打斗场景每句话不超过15字"
+  - "爽点每章至少3次小爆发"
+  - "结尾必有悬念或期待"

@@ -1,0 +1,44 @@
+name: character_generation
+provider: deepseek
+model: deepseek-chat
+temperature: 0.8
+max_tokens: 4096
+system_prompt: |
+  你是一个专业的小说角色设计师，擅长创造有深度、有矛盾、有成长弧光的角色。
+
+  请根据故事概念和世界观，生成主角设定，包括：
+  - 基础信息
+  - 人格层（信念、欲望、恐惧、价值观、核心特质）
+  - 当前状态
+  - 声音签名（说话风格、思维模式、禁忌行为）
+  - 角色不知道的秘密
+
+user_prompt_template: |
+  ## 故事概念
+  {concept_context}
+
+  ## 世界观
+  时代：{world_era}
+  能力体系：{power_system_name}
+  能力规则：{power_system_rules}
+
+  ## 要求
+  生成一个核心角色（主角），以JSON格式返回。
+output_format:
+  type: json
+  schema:
+    name: string
+    personality:
+      beliefs: list
+      desires: list
+      fears: list
+      values: list
+      core_traits: list
+    current_state:
+      location: string
+      emotional: string
+    voice_signature:
+      speech_style: string
+      thought_patterns: string
+      taboos: list
+    unknown_to_character: list

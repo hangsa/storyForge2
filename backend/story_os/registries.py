@@ -1,0 +1,109 @@
+import json
+from pathlib import Path
+from typing import Optional, Union
+
+from backend.config import settings
+
+
+class RegistryManager:
+    """CRUD for 4 narrative asset registries: Conflict, Mystery, Twist, Goal."""
+
+    REGISTRY_FILES = {
+        "conflict": "conflicts.json",
+        "mystery": "mysteries.json",
+        "twist": "twists.json",
+        "goal": "goals.json",
+    }
+
+    def __init__(self, project_id: str, projects_dir: Optional[Path] = None):
+        self.project_id = project_id
+        self.projects_dir = Path(projects_dir) if projects_dir else settings.projects_dir
+        self._registries_dir = self.projects_dir / project_id / "storyos"
+
+    def _ensure_dir(self) -> None:
+        self._registries_dir.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, registry_type: str) -> Path:
+        filename = self.REGISTRY_FILES.get(registry_type, f"{registry_type}s.json")
+        return self._registries_dir / filename
+
+    def _read(self, registry_type: str) -> list[dict]:
+        path = self._path(registry_type)
+        if not path.exists():
+            return []
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _write(self, registry_type: str, data: list[dict]) -> None:
+        self._ensure_dir()
+        path = self._path(registry_type)
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        tmp.replace(path)
+
+    def get_all(self, registry_type: str) -> list[dict]:
+        return self._read(registry_type)
+
+    def get_by_id(self, registry_type: str, entry_id: str) -> Optional[dict]:
+        items = self._read(registry_type)
+        for item in items:
+            if item.get("id") == entry_id:
+                return item
+        return None
+
+    def create(self, registry_type: str, entry: dict) -> bool:
+        items = self._read(registry_type)
+        entry_id = entry.get("id", "")
+        if entry_id and any(item.get("id") == entry_id for item in items):
+            return False
+        items.append(entry)
+        self._write(registry_type, items)
+        return True
+
+    def update(self, registry_type: str, entry_id: str, updates: dict) -> bool:
+        items = self._read(registry_type)
+        for item in items:
+            if item.get("id") == entry_id:
+                item.update(updates)
+                self._write(registry_type, items)
+                return True
+        return False
+
+    def delete(self, registry_type: str, entry_id: str) -> bool:
+        items = self._read(registry_type)
+        new_items = [item for item in items if item.get("id") != entry_id]
+        if len(new_items) == len(items):
+            return False
+        self._write(registry_type, new_items)
+        return True
+
+    def exists(self, registry_type: str, entry_id: str) -> bool:
+        return self.get_by_id(registry_type, entry_id) is not None
+
+    def add_clue(self, mystery_id: str, clue: dict) -> bool:
+        mystery = self.get_by_id("mystery", mystery_id)
+        if not mystery:
+            return False
+        clues = mystery.get("clues", [])
+        clues.append(clue)
+        return self.update("mystery", mystery_id, {"clues": clues})
+
+    def escalate_conflict(
+        self, conflict_id: str, new_intensity: str, trigger: str = ""
+    ) -> bool:
+        conflict = self.get_by_id("conflict", conflict_id)
+        if not conflict:
+            return False
+        old_intensity = conflict.get("intensity", "")
+        event = {
+            "from_intensity": old_intensity,
+            "to_intensity": new_intensity,
+            "trigger": trigger,
+        }
+        history = conflict.get("escalation_history", [])
+        history.append(event)
+        return self.update("conflict", conflict_id, {
+            "intensity": new_intensity,
+            "escalation_history": history,
+        })

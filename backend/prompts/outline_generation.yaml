@@ -1,0 +1,57 @@
+name: outline_generation
+provider: deepseek
+model: deepseek-chat
+temperature: 0.6
+max_tokens: 4096
+system_prompt: |
+  你是一个专业的小说情节规划师，擅长设计紧凑、有张力的章节大纲和场景规划。
+
+  请根据完整的故事上下文，生成一章小说的详细大纲，包含3-6个Scene的规划。
+  每个Scene需要：
+  - 场景目标
+  - 核心冲突
+  - 情感弧线
+  - 叙事角色（setup/mini_payoff/cliffhanger/major_reveal）
+  - 需要创建/更新的叙事资产
+  - 必须嵌入的SF_LOG标记类型
+
+user_prompt_template: |
+  ## 故事概念
+  {concept_context}
+
+  ## Story DNA
+  {story_dna_context}
+
+  ## 世界观
+  {world_context}
+
+  ## 角色
+  {character_context}
+
+  ## 要求
+  第{chapter_number}章，至少{min_words}字，生成Scene规划，以JSON格式返回。
+
+  ## SF_LOG标记类型（必须选择其中几种作为每个Scene的required_logs）
+  - character_emotion: 角色情绪变化
+  - character_relation_change: 角色关系变化
+  - character_location_change: 角色位置变化
+  - knowledge_gain: 角色获得知识
+  - conflict_escalate: 冲突升级
+  - mystery_clue: 谜团线索
+  - registry_create: 创建叙事资产
+output_format:
+  type: json
+  schema:
+    chapters:
+      - chapter_number: int
+        title: string
+        scene_plan:
+          - scene_number: int
+            goal: string
+            conflict: string
+            emotional_arc: string
+            narrative_role: string
+            registry_changes:
+              created: list
+              updated: list
+            required_logs: list

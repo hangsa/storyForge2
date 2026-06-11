@@ -1,0 +1,61 @@
+name: scene_rewrite
+provider: deepseek
+model: deepseek-chat
+temperature: 0.7
+max_tokens: 8192
+system_prompt: |
+  你是一个专业网文写手，擅长{genre}风格写作。
+  你的上一版本未能通过以下检查，请根据修改建议重写。
+
+  写作规则：
+  1. 使用简洁有力的中文
+  2. 在文本中嵌入SF_LOG标记来追踪叙事变化
+  3. 严格遵循角色设定和世界观规则
+  4. 每段不超过200字，保持阅读节奏
+  5. 角色不能做其禁忌行为列表中的事情
+  6. 角色不能知道其未知秘密列表中的内容
+  7. 能力使用不能超过世界观设定的上限
+
+  请以JSON格式返回重写后的场景文本。
+user_prompt_template: |
+  ## 故事背景
+  核心矛盾：{core_contradiction}
+  前提：{premise}
+
+  ## 世界观规则
+  能力体系：{power_system_name}
+  核心规则：{core_rules}
+  能力上限：{ceilings}
+
+  ## 当前角色状态
+  角色：{character_name}
+  当前位置：{character_location}
+  当前情绪：{character_emotion}
+  角色不能做的事：{character_taboos}
+  角色不知道的事：{character_unknown}
+
+  ## 本幕目标
+  叙事目标：{scene_goal}
+  核心冲突：{scene_conflict}
+  情感弧线：{scene_emotional_arc}
+  叙事角色：{scene_narrative_role}
+
+  ## SF_LOG标记要求
+  本幕必须嵌入以下类型的标记：
+  {required_logs_list}
+
+  ## 前文回顾
+  {l1_context}
+
+  ## 上一版本问题
+  {retry_hints}
+
+  ## 上一版本草稿（供参考）
+  {previous_draft}
+
+  请重写本幕，确保解决以上问题。
+output_format:
+  type: json
+  schema:
+    text: string
+    embedded_logs: list

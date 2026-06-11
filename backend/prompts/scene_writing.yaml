@@ -1,0 +1,67 @@
+name: scene_writing
+provider: deepseek
+model: deepseek-chat
+temperature: 0.7
+max_tokens: 8192
+system_prompt: |
+  你是一个专业网文写手，擅长{genre}风格写作。
+  你的任务是写一个小说场景。
+
+  写作规则：
+  1. 使用简洁有力的中文
+  2. 在文本中嵌入SF_LOG标记来追踪叙事变化
+  3. 严格遵循角色设定和世界观规则
+  4. 每段不超过200字，保持阅读节奏
+  5. 角色不能做其禁忌行为列表中的事情
+  6. 角色不能知道其未知秘密列表中的内容
+  7. 能力使用不能超过世界观设定的上限
+
+  生成完成后，以JSON格式返回，包含完整的场景文本。
+user_prompt_template: |
+  ## 故事背景
+  核心矛盾：{core_contradiction}
+  前提：{premise}
+
+  ## 世界观规则
+  能力体系：{power_system_name} — {power_system_description}
+  核心规则：{core_rules}
+  能力上限：{ceilings}
+
+  ## 当前角色状态
+  角色：{character_name}
+  当前位置：{character_location}
+  当前情绪：{character_emotion}
+  角色不能做的事：{character_taboos}
+  角色不知道的事：{character_unknown}
+
+  ## 本幕目标
+  叙事目标：{scene_goal}
+  核心冲突：{scene_conflict}
+  情感弧线：{scene_emotional_arc}
+  叙事角色：{scene_narrative_role}
+
+  ## SF_LOG标记要求
+  本幕必须嵌入以下类型的标记：
+  {required_logs_list}
+
+  标记格式：
+  <!-- SF_LOG <类型> <参数名>="<参数值>" ... -->
+
+  示例：
+  <!-- SF_LOG character_emotion char="角色名" emotion="愤怒" -->
+  <!-- SF_LOG character_location_change char="角色名" from="地点A" to="地点B" -->
+  <!-- SF_LOG conflict_escalate id="cf_001" new_intensity="critical" trigger="事件" -->
+  <!-- SF_LOG mystery_clue id="mys_001" clue="线索内容" -->
+  <!-- SF_LOG registry_create type="conflict" data='{"owner":"角色","target":"目标","type":"personal"}' -->
+  <!-- SF_LOG knowledge_gain char="角色名" content="获得的知识" source="来源" -->
+  <!-- SF_LOG character_relation_change char_a="角色A" char_b="角色B" status="新关系" -->
+
+  ## 前文回顾
+  {l1_context}
+
+  请开始写作本幕。
+output_format:
+  type: json
+  schema:
+    text: string
+    embedded_logs: list

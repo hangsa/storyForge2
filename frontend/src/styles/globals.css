@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Surface */
+  --color-canvas-bg: #020617;
+  --color-surface: #0b1326;
+  --color-surface-panel: #1e293b;
+  --color-surface-container: #171f33;
+  --color-surface-container-low: #131b2e;
+  --color-surface-container-lowest: #060e20;
+  --color-surface-container-high: #222a3d;
+  --color-outline-variant: #334155;
+
+  /* Primary (Tech Blue) */
+  --color-primary: #dbfcff;
+  --color-primary-container: #00f0ff;
+  --color-primary-fixed-dim: #00dbe9;
+  --color-on-primary: #00363a;
+  --color-on-primary-container: #006970;
+
+  /* Secondary (Ether Purple) */
+  --color-secondary: #d0bcff;
+  --color-secondary-container: #571bc1;
+
+  /* Tertiary (Vitality Green) */
+  --color-tertiary: #d8ffe7;
+  --color-tertiary-container: #65f2b5;
+  --color-tertiary-fixed-dim: #4edea3;
+
+  /* Semantic */
+  --color-error-p0: #dc2626;
+  --color-warning-p1: #f59e0b;
+  --color-system-log: #64748b;
+  --color-novelty-high: #3b82f6;
+  --color-saturation-high: #ef4444;
+
+  /* Typography */
+  --font-display: "Hanken Grotesk", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer components {
+  .font-display-lg {
+    font-family: var(--font-display);
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .font-body-narrative {
+    font-family: var(--font-body);
+    font-size: 18px;
+    line-height: 1.8;
+  }
+
+  .font-body-ui {
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .font-label-mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+  }
+
+  .font-code-sm {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .sf-log-inline {
+    background: rgba(0, 240, 255, 0.05);
+    border-left: 2px solid var(--color-primary-container);
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-system-log);
+  }
+
+  .glass-panel {
+    background: rgba(23, 31, 51, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+}

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import api, {
   WriteSceneResponse,
   CheckResult,
@@ -44,6 +44,28 @@ const initialState: WritingState = {
   error: null,
 };
 
+const STORAGE_KEY = "storyforge_stage4_state";
+
+function loadPersistedState(): WritingState {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as WritingState;
+  } catch { /* ignore corrupt data */ }
+  return initialState;
+}
+
+function persistState(state: WritingState) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch { /* ignore quota errors */ }
+}
+
+function clearPersistedState() {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch { /* ignore */ }
+}
+
 interface UseStage4WritingReturn {
   state: WritingState;
   writeScene: (
@@ -57,7 +79,25 @@ interface UseStage4WritingReturn {
 }
 
 export function useStage4Writing(): UseStage4WritingReturn {
-  const [state, setState] = useState<WritingState>(initialState);
+  const [state, setState] = useState<WritingState>(loadPersistedState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Persist state on changes (except "loading" transient state)
+  useEffect(() => {
+    if (state.status !== "loading") {
+      persistState(state);
+    }
+  }, [state]);
+
+  // Clear persisted state on unmount only if reset
+  useEffect(() => {
+    return () => {
+      if (stateRef.current.status === "idle" && !stateRef.current.draftText) {
+        clearPersistedState();
+      }
+    };
+  }, []);
 
   const writeScene = useCallback(
     async (
@@ -149,6 +189,7 @@ export function useStage4Writing(): UseStage4WritingReturn {
   );
 
   const reset = useCallback(() => {
+    clearPersistedState();
     setState(initialState);
   }, []);
 

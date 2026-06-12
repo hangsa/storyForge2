@@ -164,6 +164,12 @@ async def write_scene(data: dict):
         )
 
     draft_text = result.get("text", "")
+    if not draft_text or not draft_text.strip():
+        raise HTTPException(
+            status_code=503,
+            detail={"error": True, "code": "LLM_GENERATION_FAILED",
+                    "message": "LLM 返回了空文本，请重试", "detail": {}},
+        )
     writer.log_usage("scene_writing", response)
 
     # --- Review & Retry Loop ---
@@ -208,6 +214,7 @@ async def write_scene(data: dict):
                     previous_draft=current_draft,
                     l0_context=l0.get_context_string(),
                     l1_context=l1.get_context_string(),
+                    reader_os_warnings=reader_warnings_str,
                 )
             except ValueError as e:
                 raise HTTPException(

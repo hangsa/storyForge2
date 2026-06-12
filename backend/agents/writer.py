@@ -114,7 +114,6 @@ class WriterAgent(BaseAgent):
             "scene_emotional_arc": scene_plan.get("emotional_arc", ""),
             "scene_narrative_role": scene_plan.get("narrative_role", "setup"),
             "required_logs_list": logs_list,
-            "reader_os_warnings": "",
             "l0_context": l0_context,
             "l1_context": l1_context,
         }
@@ -131,12 +130,14 @@ class WriterAgent(BaseAgent):
         l1_context: str = "",
         style_template: Optional[dict] = None,
         storyos_state: Optional[dict] = None,
+        reader_os_warnings: str = "",
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
             genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
         )
+        template_vars["reader_os_warnings"] = reader_os_warnings
         return await self.generate_from_template(
             "scene_writing", **template_vars, **kwargs
         )
@@ -153,12 +154,14 @@ class WriterAgent(BaseAgent):
         previous_draft: str,
         l0_context: str = "",
         l1_context: str = "",
+        reader_os_warnings: str = "",
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
             genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
         )
+        template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["retry_hints"] = retry_hints
         template_vars["previous_draft"] = previous_draft
         return await self.generate_from_template(

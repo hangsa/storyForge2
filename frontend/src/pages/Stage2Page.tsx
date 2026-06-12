@@ -20,6 +20,33 @@ const TYPE_STYLES: Record<string, string> = {
 };
 
 function CharacterDetail({ character }: { character: Character }) {
+  const safe = {
+    ...character,
+    personality: {
+      core_traits: [] as string[],
+      beliefs: [] as string[],
+      desires: [] as string[],
+      fears: [] as string[],
+      values: [] as string[],
+      ...(character.personality || {}),
+    },
+    current_state: {
+      location: "",
+      physical_condition: "normal",
+      emotional: "neutral",
+      known_secrets: [] as string[],
+      ...(character.current_state || {}),
+    },
+    voice_signature: {
+      speech_style: "",
+      thought_patterns: "",
+      taboos: [] as string[],
+      ...(character.voice_signature || {}),
+    },
+    unknown_to_character: character.unknown_to_character || [],
+    relations: character.relations || {},
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Character Header */}
@@ -31,18 +58,18 @@ function CharacterDetail({ character }: { character: Character }) {
             </span>
           </div>
           <div>
-            <h2 className="font-display-lg text-primary-container">{character.name}</h2>
+            <h2 className="font-display-lg text-primary-container">{safe.name}</h2>
             <div className="flex gap-2 mt-1">
-              {character.is_core_character && (
+              {safe.is_core_character && (
                 <span className="text-xs px-2 py-0.5 bg-primary-container/20 text-primary-container rounded font-label-mono">
                   核心角色
                 </span>
               )}
-              <span className={`text-xs px-2 py-0.5 rounded font-label-mono border ${TYPE_STYLES[character.character_type] || TYPE_STYLES.protagonist}`}>
-                {CHARACTER_TYPES.find(t => t.value === character.character_type)?.label || character.character_type}
+              <span className={`text-xs px-2 py-0.5 rounded font-label-mono border ${TYPE_STYLES[safe.character_type] || TYPE_STYLES.protagonist}`}>
+                {CHARACTER_TYPES.find(t => t.value === safe.character_type)?.label || safe.character_type}
               </span>
               <span className="text-xs px-2 py-0.5 bg-surface-container text-system-log rounded font-label-mono">
-                ID: {character.id}
+                ID: {safe.id}
               </span>
             </div>
           </div>
@@ -56,11 +83,11 @@ function CharacterDetail({ character }: { character: Character }) {
         </h2>
         <div className="space-y-4">
           {[
-            { key: "core_traits", label: "核心特质", items: character.personality.core_traits },
-            { key: "beliefs", label: "信念", items: character.personality.beliefs },
-            { key: "desires", label: "欲望", items: character.personality.desires },
-            { key: "fears", label: "恐惧", items: character.personality.fears },
-            { key: "values", label: "价值观", items: character.personality.values },
+            { key: "core_traits", label: "核心特质", items: safe.personality.core_traits },
+            { key: "beliefs", label: "信念", items: safe.personality.beliefs },
+            { key: "desires", label: "欲望", items: safe.personality.desires },
+            { key: "fears", label: "恐惧", items: safe.personality.fears },
+            { key: "values", label: "价值观", items: safe.personality.values },
           ].map(({ key, label, items }) => (
             <div key={key}>
               <span className="font-label-mono text-system-log text-xs">{label}</span>
@@ -88,26 +115,26 @@ function CharacterDetail({ character }: { character: Character }) {
           <div className="p-3 bg-surface-container rounded">
             <span className="font-label-mono text-system-log text-xs">位置</span>
             <p className="font-body-narrative text-primary text-sm mt-1">
-              {character.current_state.location}
+              {safe.current_state.location}
             </p>
           </div>
           <div className="p-3 bg-surface-container rounded">
             <span className="font-label-mono text-system-log text-xs">身体状况</span>
             <p className="font-body-narrative text-primary text-sm mt-1">
-              {character.current_state.physical_condition}
+              {safe.current_state.physical_condition}
             </p>
           </div>
           <div className="p-3 bg-surface-container rounded">
             <span className="font-label-mono text-system-log text-xs">情绪状态</span>
             <p className="font-body-narrative text-primary text-sm mt-1">
-              {character.current_state.emotional}
+              {safe.current_state.emotional}
             </p>
           </div>
-          {character.current_state.known_secrets.length > 0 && (
+          {safe.current_state.known_secrets.length > 0 && (
             <div>
               <span className="font-label-mono text-system-log text-xs">已知秘密</span>
               <div className="space-y-1 mt-1">
-                {character.current_state.known_secrets.map((s, i) => (
+                {safe.current_state.known_secrets.map((s, i) => (
                   <div key={i} className="flex items-center gap-1.5 text-xs text-primary font-body-ui">
                     <span className="material-symbols-outlined text-sm text-system-log">
                       lock_open
@@ -130,20 +157,20 @@ function CharacterDetail({ character }: { character: Character }) {
           <div className="p-3 bg-surface-container rounded">
             <span className="font-label-mono text-system-log text-xs">语言风格</span>
             <p className="font-body-narrative text-primary text-sm mt-1">
-              {character.voice_signature.speech_style}
+              {safe.voice_signature.speech_style}
             </p>
           </div>
           <div className="p-3 bg-surface-container rounded">
             <span className="font-label-mono text-system-log text-xs">思维模式</span>
             <p className="font-body-narrative text-primary text-sm mt-1">
-              {character.voice_signature.thought_patterns}
+              {safe.voice_signature.thought_patterns}
             </p>
           </div>
-          {character.voice_signature.taboos.length > 0 && (
+          {safe.voice_signature.taboos.length > 0 && (
             <div>
               <span className="font-label-mono text-system-log text-xs">行为禁忌</span>
               <div className="space-y-1 mt-1">
-                {character.voice_signature.taboos.map((t, i) => (
+                {safe.voice_signature.taboos.map((t, i) => (
                   <div key={i} className="flex items-center gap-1.5 text-xs text-error font-body-ui">
                     <span className="material-symbols-outlined text-sm">dangerous</span>
                     {t}
@@ -160,9 +187,9 @@ function CharacterDetail({ character }: { character: Character }) {
         <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
           角色未知信息
         </h2>
-        {character.unknown_to_character.length > 0 ? (
+        {safe.unknown_to_character.length > 0 ? (
           <div className="space-y-1">
-            {character.unknown_to_character.map((item, i) => (
+            {safe.unknown_to_character.map((item, i) => (
               <div key={i} className="flex items-center gap-1.5 text-xs text-system-log font-body-ui p-2 bg-surface-container rounded">
                 <span className="material-symbols-outlined text-sm">visibility_off</span>
                 {item}
@@ -175,13 +202,13 @@ function CharacterDetail({ character }: { character: Character }) {
       </GlassPanel>
 
       {/* Relations */}
-      {Object.keys(character.relations).length > 0 && (
+      {Object.keys(safe.relations).length > 0 && (
         <GlassPanel className="lg:col-span-2">
           <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
             角色关系
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {Object.entries(character.relations).map(([targetId, rel]) => (
+            {Object.entries(safe.relations).map(([targetId, rel]) => (
               <div key={targetId} className="p-3 bg-surface-container rounded flex items-center justify-between">
                 <div>
                   <span className="font-label-mono text-primary text-sm">{targetId}</span>

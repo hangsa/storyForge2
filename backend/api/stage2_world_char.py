@@ -4,6 +4,7 @@ from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage
 from backend.agents.planner import PlannerAgent
+from backend.models.character import Character as CharacterModel
 
 router = APIRouter(prefix="/api/stage2", tags=["stage2"])
 fm = FileManager(settings.projects_dir)
@@ -40,18 +41,32 @@ async def get_character(project_id: str = Query(...), character_index: int = Que
         fm.write_json(project_id, "characters.json", data)
 
     characters = (data or {}).get("characters", [])
-    if character_index is not None and 0 <= character_index < len(characters):
+
+    # Fill missing nested fields with Pydantic model defaults (defense against incomplete LLM output)
+    safe_characters = []
+    for c in characters:
+        try:
+            safe_characters.append(CharacterModel(**c).model_dump())
+        except Exception:
+            c.setdefault("personality", {"core_traits": [], "beliefs": [], "desires": [], "fears": [], "values": []})
+            c.setdefault("current_state", {"location": "", "physical_condition": "normal", "emotional": "neutral", "known_secrets": []})
+            c.setdefault("voice_signature", {"speech_style": "", "thought_patterns": "", "taboos": []})
+            c.setdefault("unknown_to_character", [])
+            c.setdefault("relations", {})
+            safe_characters.append(c)
+
+    if character_index is not None and 0 <= character_index < len(safe_characters):
         return {
             "error": False,
             "code": "OK",
             "message": "",
-            "detail": {"characters": characters, "current": characters[character_index]},
+            "detail": {"characters": safe_characters, "current": safe_characters[character_index]},
         }
     return {
         "error": False,
         "code": "OK",
         "message": "",
-        "detail": {"characters": characters, "current": characters[0] if characters else {}},
+        "detail": {"characters": safe_characters, "current": safe_characters[0] if safe_characters else {}},
     }
 
 
@@ -167,13 +182,22 @@ async def generate_character(data: dict):
             detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
         )
 
-    # Ensure character_type and relations are set with explicit defaults
+    # Fill missing nested structures with Pydantic model defaults
     result.setdefault("character_type", character_type)
-    result.setdefault("relations", {})
     if character_type == "protagonist":
         result["is_core_character"] = True
     else:
         result.setdefault("is_core_character", False)
+
+    try:
+        char_model = CharacterModel(**result)
+        result = char_model.model_dump()
+    except Exception:
+        result.setdefault("personality", {"core_traits": [], "beliefs": [], "desires": [], "fears": [], "values": []})
+        result.setdefault("current_state", {"location": "", "physical_condition": "normal", "emotional": "neutral", "known_secrets": []})
+        result.setdefault("voice_signature", {"speech_style": "", "thought_patterns": "", "taboos": []})
+        result.setdefault("unknown_to_character", [])
+        result.setdefault("relations", {})
 
     existing_characters.append(result)
     characters = {"characters": existing_characters}

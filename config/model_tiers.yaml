@@ -1,0 +1,82 @@
+# StoryForge v1.6 — Agent LLM 配置
+# 层级 (Tier) 定义模型池，Agent 映射声明每个任务使用哪个 Tier 的哪个模型。
+# 热重载：POST /api/settings/reload-config 或 SIGHUP 信号。
+
+tiers:
+  tier_1:                        # 创意核心 —— 写作质量敏感
+    description: "Scene 写作、STAGE 1-3 内容生成"
+    models:
+      - id: claude-opus-4
+        provider: anthropic
+        cost_per_1k_input: 0.015
+        cost_per_1k_output: 0.075
+        max_tokens: 8192
+      - id: deepseek-v4-pro
+        provider: deepseek
+        cost_per_1k_input: 0.002
+        cost_per_1k_output: 0.008
+        max_tokens: 8192
+    default: deepseek-v4-pro
+    retry_on_failure: true
+    max_retries: 2
+    fallback: claude-opus-4
+
+  tier_2:                        # 分析 —— 推理质量敏感，成本适中
+    description: "Narrative Guard 状态漂移检测"
+    models:
+      - id: claude-sonnet-4
+        provider: anthropic
+        cost_per_1k_input: 0.003
+        cost_per_1k_output: 0.015
+        max_tokens: 4096
+    default: claude-sonnet-4
+    retry_on_failure: true
+    max_retries: 1
+    fallback: null               # 无降级 → 失败则跳过（Narrative Guard 不阻断）
+
+  tier_3:                        # 辅助 —— 成本优先
+    description: "L1 细节重提取、章摘要生成、风格分类"
+    models:
+      - id: claude-haiku
+        provider: anthropic
+        cost_per_1k_input: 0.00025
+        cost_per_1k_output: 0.00125
+        max_tokens: 2048
+    default: claude-haiku
+    retry_on_failure: true
+    max_retries: 1
+    fallback: null
+
+  tier_0:                        # 确定性 —— 零 LLM
+    description: "Fact Guard、StoryOS SF_LOG 解析、ReaderOS 计算"
+    models: []
+    default: none
+
+# Agent → 任务 → Tier 映射
+agent_mapping:
+  planner:
+    concept_generation:        { tier: tier_1, model: default }
+    world_generation:          { tier: tier_1, model: default }
+    character_generation:      { tier: tier_1, model: default }
+    outline_generation:        { tier: tier_1, model: default }
+
+  writer:
+    scene_writing:             { tier: tier_1, model: deepseek-v4-pro, fallback: claude-opus-4 }
+    scene_rewrite:             { tier: tier_1, model: default }
+    context_assembly:          { tier: tier_0 }
+
+  reviewer:
+    fact_guard:                { tier: tier_0 }
+    narrative_guard:           { tier: tier_2, model: default }
+    style_guard:               { tier: tier_0 }
+    coherence_scoring:         { tier: tier_0 }
+
+  storyos_agent:
+    sf_log_parsing:            { tier: tier_0 }
+    cascade_propagation:       { tier: tier_0 }
+    conflict_detection:        { tier: tier_0 }
+
+  summary_archiver:
+    chapter_summary:           { tier: tier_3, model: default }
+    l1_reextraction:           { tier: tier_3, model: default }
+    style_extraction:          { tier: tier_3, model: default }

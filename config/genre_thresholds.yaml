@@ -1,0 +1,84 @@
+# StoryForge v1.6 — 体裁差异化阈值默认值
+# 每个指标定义三个阈值级别：critical（严重）、high（高度）、moderate（中度）
+# 项目创建时按体裁自动填充到 project.json，用户可在设置中覆盖。
+
+genres:
+  爽文:
+    addiction_critical: 50
+    addiction_moderate: 35
+    frustration_high: 60
+    frustration_moderate: 45
+    fatigue_moderate: 55
+    fatigue_low: 40
+    curiosity_moderate: 35
+    curiosity_low: 20
+    tension_moderate: 55
+    tension_low: 40
+    satisfaction_moderate: 60
+    satisfaction_low: 45
+    discussion_high: 50
+    discussion_moderate: 35
+
+  严肃文学:
+    addiction_critical: 30
+    addiction_moderate: 20
+    frustration_high: 80
+    frustration_moderate: 65
+    fatigue_moderate: 40
+    fatigue_low: 30
+    curiosity_moderate: 20
+    curiosity_low: 10
+    tension_moderate: 70
+    tension_low: 55
+    satisfaction_moderate: 40
+    satisfaction_low: 25
+    discussion_high: 70
+    discussion_moderate: 55
+
+  悬疑推理:
+    addiction_critical: 45
+    addiction_moderate: 30
+    frustration_high: 65
+    frustration_moderate: 50
+    fatigue_moderate: 60
+    fatigue_low: 45
+    curiosity_moderate: 30
+    curiosity_low: 15
+    tension_moderate: 60
+    tension_low: 45
+    satisfaction_moderate: 50
+    satisfaction_low: 35
+    discussion_high: 60
+    discussion_moderate: 45
+
+  科幻:
+    addiction_critical: 35
+    addiction_moderate: 25
+    frustration_high: 70
+    frustration_moderate: 55
+    fatigue_moderate: 55
+    fatigue_low: 40
+    curiosity_moderate: 25
+    curiosity_low: 12
+    tension_moderate: 65
+    tension_low: 50
+    satisfaction_moderate: 45
+    satisfaction_low: 30
+    discussion_high: 55
+    discussion_moderate: 40
+
+  奇幻:
+    addiction_critical: 40
+    addiction_moderate: 28
+    frustration_high: 70
+    frustration_moderate: 55
+    fatigue_moderate: 50
+    fatigue_low: 38
+    curiosity_moderate: 25
+    curiosity_low: 12
+    tension_moderate: 60
+    tension_low: 45
+    satisfaction_moderate: 50
+    satisfaction_low: 35
+    discussion_high: 55
+    discussion_moderate: 40

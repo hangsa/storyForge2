@@ -1,7 +1,9 @@
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+from backend.utils.json_parser import parse_json_text
 from backend.utils.regex_patterns import (
     SF_LOG_PATTERN,
     PARAM_PATTERN,
@@ -11,6 +13,8 @@ from backend.utils.regex_patterns import (
     ASSET_REF_PATTERN,
     VALID_LOG_TYPES,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,8 +33,28 @@ class FactGuardResult:
     retry_hints: str = ""
 
 
+# --- v1.6: Narrative Guard data types ---
+
+
+@dataclass
+class NarrativeDrift:
+    drift_type: str          # "emotion_surge" / "relation_shift" / "behavior_contradiction" / "knowledge_leak"
+    character_name: str
+    severity: str            # "high" / "medium" / "low"
+    description: str         # 人类可读的漂移描述
+    suggested_log_type: str  # 建议补充的 SF_LOG 类型
+
+
+@dataclass
+class NarrativeGuardResult:
+    drifts: list[NarrativeDrift] = field(default_factory=list)
+    overall_assessment: str = ""
+    model_used: str = ""
+    tokens_used: int = 0
+
+
 class ReviewerAgent:
-    """Fact Guard reviewer. All 5 checks are deterministic — zero LLM calls."""
+    """Fact Guard reviewer + v1.6 Narrative Guard + Style Guard L3. Checks 1-5 are zero-LLM."""
 
     def __init__(self, project_id: str):
         self.project_id = project_id
@@ -86,6 +110,7 @@ class ReviewerAgent:
             self.check_3_world_rules(draft_text, world_rules),
             self.check_4_asset_compliance(draft_text, storyos_state),
             self.check_5_log_completeness(draft_text, scene_plan),
+            self.check_6_semantic_precheck_review(),  # v1.6: framework stub
         ]
 
         all_passed = all(c.passed for c in checks)
@@ -338,6 +363,168 @@ class ReviewerAgent:
             detail=f"检测到 {len(found_types)} 种SF_LOG类型，必需类型全部覆盖",
         )
 
+    # --- Check 6: Semantic precheck review (v1.6 framework) ---
+
+    def check_6_semantic_precheck_review(
+        self,
+        semantic_precheck_results: Optional[list[CheckResult]] = None,
+    ) -> CheckResult:
+        """
+        Fact Guard 第 6 项：语义预检结果复核。
+
+        v1.6: semantic_precheck_results 始终为 None → 始终 passed
+        v1.7: 接入 LLM 语义完整性预检结果，复核并过滤误报
+
+        此项不阻断——语义预检基于 LLM，存在误报可能。
+        """
+        if semantic_precheck_results is None:
+            return CheckResult(
+                check_id=6,
+                name="语义预检结果复核",
+                passed=True,
+                detail="v1.6 — 语义预检尚未接入，此项暂不生效",
+            )
+
+        # v1.7: 以下为预留逻辑
+        failed_checks = [c for c in semantic_precheck_results if not c.passed]
+        if not failed_checks:
+            return CheckResult(
+                check_id=6, name="语义预检结果复核", passed=True,
+                detail="语义预检全部通过",
+            )
+
+        return CheckResult(
+            check_id=6,
+            name="语义预检结果复核",
+            passed=True,  # 不阻断
+            detail=f"语义预检 {len(failed_checks)} 项未通过，待 v1.7 复核引擎处理",
+        )
+
+    # --- v1.6: Narrative Guard ---
+
+    async def run_narrative_guard(
+        self,
+        scene_text: str,
+        character_behavior_summary: str,
+        voice_signatures: str,
+        unknown_to_character: str,
+    ) -> NarrativeGuardResult:
+        """
+        执行 Narrative Guard 状态漂移检测（Tier 2 LLM）。
+
+        从 L2 温记忆中加载角色历史行为模式，
+        使用 Tier 2 模型对比当前 Scene 中角色行为与其历史模式，
+        检测情感突变/关系突变/行为矛盾/知识泄露四类漂移。
+
+        Tier 2 不可用时静默跳过，返回空结果。
+        """
+        from backend.llm.model_router import get_model_router, ModelUnavailableError
+
+        router = get_model_router()
+
+        # Truncate scene text to ~6K tokens (≈ 12K chars for Chinese)
+        scene_snippet = scene_text[:12000] if len(scene_text) > 12000 else scene_text
+
+        # Load prompt template
+        from pathlib import Path
+        import yaml
+        prompt_path = Path("backend/prompts/narrative_guard.yaml")
+        if not prompt_path.exists():
+            logger.warning("narrative_guard.yaml not found, skipping Narrative Guard")
+            return NarrativeGuardResult(
+                overall_assessment="Narrative Guard prompt 未找到，已跳过",
+            )
+
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            prompt_data = yaml.safe_load(f) or {}
+
+        system_prompt = prompt_data.get("system_prompt", "")
+        user_template = prompt_data.get("user_prompt_template", "")
+
+        user_prompt = user_template.format(
+            scene_text=scene_snippet,
+            character_behavior_summary=character_behavior_summary,
+            voice_signatures=voice_signatures,
+            unknown_to_character=unknown_to_character,
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            result = await router.execute(
+                agent_name="reviewer",
+                task_name="narrative_guard",
+                messages=messages,
+                json_mode=False,
+            )
+        except (ModelUnavailableError, KeyError):
+            logger.warning("Narrative Guard Tier 2 unavailable, skipping")
+            return NarrativeGuardResult(
+                overall_assessment="Narrative Guard 不可用（Tier 2 模型不可用），已跳过",
+            )
+
+        content = result.get("content", "")
+        if not content:
+            return NarrativeGuardResult(
+                overall_assessment="Narrative Guard 不可用，已跳过",
+            )
+
+        # Parse LLM response
+        try:
+            parsed = self._parse_json_text(content)
+            drifts_data = parsed.get("drifts", []) if parsed else []
+        except Exception:
+            logger.warning("Failed to parse Narrative Guard response: %s", content[:200])
+            return NarrativeGuardResult(
+                overall_assessment="Narrative Guard 响应解析失败",
+                model_used=result.get("model", ""),
+                tokens_used=result.get("usage", {}).get("input", 0),
+            )
+
+        # Post-process: filter drifts that have corresponding SF_LOG coverage
+        confirmed_drifts = []
+        for d in drifts_data:
+            if not isinstance(d, dict):
+                continue
+            raw_text = scene_text
+
+            # Check if drift has corresponding SF_LOG coverage
+            drift_type = d.get("drift_type", "")
+            char_name = d.get("character_name", "")
+            suggested_log = d.get("suggested_log_type", "")
+
+            has_log_coverage = False
+            if suggested_log and char_name:
+                pattern = rf"<!--\s*SF_LOG\s+{re.escape(suggested_log)}\b"
+                matches = re.findall(pattern, raw_text)
+                for match in matches:
+                    if char_name in match:
+                        has_log_coverage = True
+                        break
+
+            if not has_log_coverage:
+                confirmed_drifts.append(NarrativeDrift(
+                    drift_type=drift_type,
+                    character_name=char_name,
+                    severity=d.get("severity", "medium"),
+                    description=d.get("description", ""),
+                    suggested_log_type=suggested_log,
+                ))
+
+        return NarrativeGuardResult(
+            drifts=confirmed_drifts,
+            overall_assessment=parsed.get("overall_assessment", "") if parsed else "",
+            model_used=result.get("model", ""),
+            tokens_used=result.get("usage", {}).get("input", 0),
+        )
+
+    @staticmethod
+    def _parse_json_text(text: str) -> Optional[dict]:
+        return parse_json_text(text)
+
     # --- Coherence scoring ---
 
     def compute_coherence_score(self, checks: list[CheckResult]) -> int:
@@ -347,6 +534,7 @@ class ReviewerAgent:
             3: 20,   # World rules
             4: 10,   # Asset compliance
             5: 10,   # Log completeness
+            6: 0,    # Semantic precheck (informational only)
         }
         score = 0
         for c in checks:

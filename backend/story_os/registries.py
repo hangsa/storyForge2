@@ -1,8 +1,16 @@
 import json
+import logging
 from pathlib import Path
 from typing import Optional, Union
 
 from backend.config import settings
+from backend.story_os.registry_transaction import (
+    RegistryTransactionManager,
+    CascadeTrigger,
+    CascadeResult,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class RegistryManager:
@@ -19,10 +27,16 @@ class RegistryManager:
         "foreshadowing": "foreshadowing.json",
     }
 
-    def __init__(self, project_id: str, projects_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        project_id: str,
+        projects_dir: Optional[Path] = None,
+        transaction_mgr: Optional[RegistryTransactionManager] = None,
+    ):
         self.project_id = project_id
         self.projects_dir = Path(projects_dir) if projects_dir else settings.projects_dir
         self._registries_dir = self.projects_dir / project_id / "storyos"
+        self._transaction_mgr = transaction_mgr or RegistryTransactionManager(self.projects_dir)
 
     def _ensure_dir(self) -> None:
         self._registries_dir.mkdir(parents=True, exist_ok=True)
@@ -111,6 +125,91 @@ class RegistryManager:
             "intensity": new_intensity,
             "escalation_history": history,
         })
+
+    # --- v1.6: Cascade-aware status update ---
+
+    def update_asset_status(
+        self, asset_type: str, asset_id: str, new_status: str
+    ) -> CascadeResult:
+        """
+        更新资产状态 → 检测级联触发 → 执行级联传播 → 写入注册表。
+
+        这是 v1.6 替代直接 update() 调用的推荐方式。
+        如果状态变更触发了级联规则，自动展开和验证级联路径。
+        """
+        entry = self.get_by_id(asset_type, asset_id)
+        if not entry:
+            return CascadeResult(
+                success=False,
+                conflict_details=[f"资产不存在：{asset_type}/{asset_id}"],
+            )
+
+        old_status = entry.get("status", "")
+
+        # Detect cascade trigger before writing anything
+        trigger = self._detect_cascade_trigger(asset_type, old_status, new_status, asset_id)
+
+        if trigger is None:
+            # No cascade needed — simple status update
+            self.update(asset_type, asset_id, {"status": new_status})
+            return CascadeResult(success=True)
+
+        # Execute cascade propagation first (atomic with its own rollback)
+        result = self._transaction_mgr.propagate(
+            self.project_id, trigger, asset_type, asset_id
+        )
+
+        # Write primary update after cascade completes
+        self.update(asset_type, asset_id, {"status": new_status})
+
+        if not result.success:
+            logger.warning(
+                "Cascade partially blocked for %s/%s → %s: %d executed, %d blocked",
+                asset_type, asset_id, new_status,
+                len(result.steps_executed), len(result.blocked_steps),
+            )
+            # Executed steps were already written by RegistryTransactionManager
+            # Blocked steps are reported for manual review
+
+        return result
+
+    def _detect_cascade_trigger(
+        self, asset_type: str, old_status: str, new_status: str, asset_id: str = ""
+    ) -> Optional[CascadeTrigger]:
+        """
+        根据状态变更判断是否触发级联。
+
+        特殊处理：Conflict → resolved 不触发标准级联链，
+        而是触发孤儿 Mystery 检查（警告，不阻断）。
+        """
+        # Conflict → resolved: orphan check, no cascade
+        if asset_type == "conflict" and new_status == "resolved":
+            orphaned = self._transaction_mgr.check_orphaned_mysteries(
+                self.project_id, asset_id
+            )
+            if orphaned:
+                logger.warning(
+                    "Conflict %s resolved, orphaned mysteries: %s", asset_id, orphaned
+                )
+            return None  # 不触发级联
+
+        # Mystery → revealed
+        if asset_type == "mystery" and new_status == "revealed" and old_status != "revealed":
+            return CascadeTrigger.MYSTERY_REVEALED
+
+        # Twist → revealed
+        if asset_type == "twist" and new_status == "revealed" and old_status != "revealed":
+            return CascadeTrigger.TWIST_REVEALED
+
+        # Reveal → revealed
+        if asset_type == "reveal" and new_status == "revealed" and old_status != "revealed":
+            return CascadeTrigger.REVEAL_REVEALED
+
+        # Promise → fulfilled
+        if asset_type == "promise" and new_status == "fulfilled" and old_status != "fulfilled":
+            return CascadeTrigger.PROMISE_FULFILLED
+
+        return None
 
     # --- Promise ---
 

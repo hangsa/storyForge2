@@ -4,6 +4,7 @@ from backend.agents.base_agent import BaseAgent, LLMResponse
 
 
 class WriterAgent(BaseAgent):
+    agent_name = "writer"
 
     @staticmethod
     def _build_characters_context(characters: list[dict]) -> str:

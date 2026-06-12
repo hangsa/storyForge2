@@ -6,6 +6,7 @@ from backend.agents.base_agent import BaseAgent, LLMResponse
 
 class SummaryArchiver(BaseAgent):
     """Tier 3 Agent — 使用轻量模型生成章摘要和 L1 重提取"""
+    agent_name = "summary_archiver"
 
     async def archive_chapter(
         self,

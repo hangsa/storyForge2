@@ -5,6 +5,7 @@ from backend.agents.base_agent import BaseAgent, LLMResponse
 
 
 class PlannerAgent(BaseAgent):
+    agent_name = "planner"
 
     async def generate_concept_and_dna(
         self, initial_intent: str, genre: str = "cool_novel"

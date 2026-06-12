@@ -352,6 +352,10 @@ export const api = {
 
   resolveIssue: (projectId: string, issueId: string, action: "resolve" | "skip") =>
     request<{ issue_id: string; status: string }>("POST", `/stage5/resolve/${issueId}`, { project_id: projectId, action }),
+
+  // STAGE 6 — Export
+  exportNovel: (projectId: string, options: { strip_sf_logs?: boolean; add_toc?: boolean; include_title_page?: boolean }) =>
+    request<{ preview: string; total_chars: number; file_path: string }>("POST", "/stage6/export", { project_id: projectId, options }),
 };
 
 export { ApiError };

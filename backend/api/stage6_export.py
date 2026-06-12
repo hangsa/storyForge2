@@ -53,20 +53,12 @@ class NovelExporter:
         chapter_texts: dict[int, str] = {}
 
         if chapters_dir.exists():
-            for draft_file in sorted(chapters_dir.glob("scene_*_draft.md")):
-                match = re.match(r"scene_(\d+)_draft\.md", draft_file.name)
+            for draft_file in sorted(chapters_dir.glob("ch*_scene_*_draft.md")):
+                match = re.match(r"ch(\d+)_scene_(\d+)_draft\.md", draft_file.name)
                 if not match:
                     continue
-                scene_num = int(match.group(1))
-
-                # Find which chapter this scene belongs to
-                ch_num = 0
-                for cn, scenes in chapter_scenes.items():
-                    if scene_num in scenes:
-                        ch_num = cn
-                        break
-                if ch_num == 0:
-                    continue
+                ch_num = int(match.group(1))
+                scene_num = int(match.group(2))
 
                 text = draft_file.read_text(encoding="utf-8")
 

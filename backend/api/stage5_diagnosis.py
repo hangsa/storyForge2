@@ -99,12 +99,13 @@ class DiagnosisEngine:
         if not chapters_dir.exists():
             return
 
-        for draft_file in sorted(chapters_dir.glob("scene_*_draft.md")):
-            match = re.match(r"scene_(\d+)_draft\.md", draft_file.name)
+        for draft_file in sorted(chapters_dir.glob("ch*_scene_*_draft.md")):
+            match = re.match(r"ch(\d+)_scene_(\d+)_draft\.md", draft_file.name)
             if not match:
                 continue
-            scene_num = int(match.group(1))
-            ch_num = scene_to_chapter.get(scene_num, 0)
+            ch_from_file = int(match.group(1))
+            scene_num = int(match.group(2))
+            ch_num = ch_from_file or scene_to_chapter.get(scene_num, 0)
             if ch_num == 0:
                 continue
 

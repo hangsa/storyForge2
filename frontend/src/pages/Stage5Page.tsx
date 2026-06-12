@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import api, { DiagnosisReport, DiagnosisIssue } from "../api/client";
+import api, { DiagnosisReport, DiagnosisIssue, ApiError } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -61,6 +61,19 @@ export default function Stage5Page() {
     if (!projectId) return;
     setLoading(true);
     setError("");
+    try {
+      // Advance from STAGE4 to STAGE5 if not already advanced
+      await api.advance(projectId, "STAGE5");
+    } catch (e) {
+      const apiErr = e instanceof ApiError ? e : null;
+      const fromStage = (apiErr?.detail as Record<string, unknown>)?.from_stage as string | undefined;
+      // Only proceed if already at STAGE5 or beyond
+      if (!fromStage || !["STAGE5", "STAGE6", "COMPLETED"].includes(fromStage)) {
+        setError(apiErr?.message || "推进到 STAGE5 失败");
+        setLoading(false);
+        return;
+      }
+    }
     try {
       const r = await api.runDiagnosis(projectId);
       setReport(r);

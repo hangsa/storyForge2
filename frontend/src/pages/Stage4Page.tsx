@@ -68,6 +68,8 @@ export default function Stage4Page() {
 
   const handleNextScene = () => {
     if (!projectId) return;
+    const maxScenes = currentChapter?.total_scenes || currentChapter?.scenes?.length || 0;
+    if (maxScenes > 0 && sceneNum >= maxScenes) return;
     const nextScene = sceneNum + 1;
     setSceneNum(nextScene);
     loadDraft(projectId, chapterNum, nextScene);
@@ -115,9 +117,10 @@ export default function Stage4Page() {
 
   if (!projectId) return null;
 
-  const sceneFromProgress = progress?.chapters
-    ?.find((c) => c.chapter_number === chapterNum)
-    ?.scenes?.find((s) => s.scene_number === sceneNum);
+  const totalChapters = progress?.total_chapters || 1;
+  const currentChapter = progress?.chapters?.find((c) => c.chapter_number === chapterNum);
+  const totalScenes = currentChapter?.total_scenes || currentChapter?.scenes?.length || 0;
+  const sceneFromProgress = currentChapter?.scenes?.find((s) => s.scene_number === sceneNum);
 
   const checkLabels: Record<number, string> = {
     1: "时间线连续性",
@@ -185,6 +188,7 @@ export default function Stage4Page() {
           <input
             type="number"
             min={1}
+            max={totalChapters}
             value={chapterNum}
             onChange={(e) => handleChapterNumChange(Number(e.target.value))}
             className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
@@ -196,6 +200,7 @@ export default function Stage4Page() {
           <input
             type="number"
             min={1}
+            max={totalScenes || 1}
             value={sceneNum}
             onChange={(e) => handleSceneChange(Number(e.target.value))}
             className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
@@ -315,8 +320,10 @@ export default function Stage4Page() {
               </button>
               <button
                 onClick={handleNextScene}
+                disabled={totalScenes > 0 && sceneNum >= totalScenes}
                 className="flex-1 px-4 py-2.5 bg-surface-container text-system-log font-body-ui text-sm
-                           rounded-lg hover:bg-surface-container-low transition-colors flex items-center justify-center gap-2"
+                           rounded-lg hover:bg-surface-container-low transition-colors flex items-center justify-center gap-2
+                           disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 下一场景
                 <span className="material-symbols-outlined text-lg">skip_next</span>

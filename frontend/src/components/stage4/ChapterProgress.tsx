@@ -119,8 +119,8 @@ export default function ChapterProgress({
         </div>
       )}
 
-      {/* Advance chapter button */}
-      {chapterDone && (
+      {/* Advance chapter button — only when not last chapter */}
+      {chapterDone && chapterNumber < totalChapters && (
         <button
           onClick={onAdvance}
           disabled={advancing}

@@ -68,18 +68,36 @@ export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps
         </div>
         {[
           { label: "灵感库", icon: "draw" },
-          { label: "风格沙盒", icon: "palette" },
+          { label: "风格沙盒", icon: "palette", stage: "STYLE" },
           { label: "资产中心", icon: "database" },
-        ].map((item) => (
-          <button
-            key={item.label}
-            disabled
-            className="w-full text-left font-body-ui text-system-log/50 px-3 py-2 rounded flex items-center gap-2 opacity-50 pointer-events-none"
-          >
-            <span className="material-symbols-outlined text-lg">{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
+        ].map((item) => {
+          if ("stage" in item) {
+            return (
+              <button
+                key={item.label}
+                onClick={() => onNavigate(item.stage)}
+                className={`w-full text-left font-body-ui px-3 py-2 rounded transition-colors flex items-center gap-2 ${
+                  currentStage === item.stage
+                    ? "bg-primary-container/10 border-l-2 border-primary-container text-primary-container"
+                    : "text-system-log hover:bg-surface-container hover:text-primary"
+                }`}
+              >
+                <span className="material-symbols-outlined text-lg">{item.icon}</span>
+                {item.label}
+              </button>
+            );
+          }
+          return (
+            <button
+              key={item.label}
+              disabled
+              className="w-full text-left font-body-ui text-system-log/50 px-3 py-2 rounded flex items-center gap-2 opacity-50 pointer-events-none"
+            >
+              <span className="material-symbols-outlined text-lg">{item.icon}</span>
+              {item.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Settings */}

@@ -356,6 +356,10 @@ export const api = {
   // STAGE 6 — Export
   exportNovel: (projectId: string, options: { strip_sf_logs?: boolean; add_toc?: boolean; include_title_page?: boolean }) =>
     request<{ preview: string; total_chars: number; file_path: string }>("POST", "/stage6/export", { project_id: projectId, options }),
+
+  // Style Extractor
+  extractStyle: (projectId: string, referenceText: string) =>
+    request<Record<string, unknown>>("POST", "/style/extract", { project_id: projectId, reference_text: referenceText }),
 };
 
 export { ApiError };

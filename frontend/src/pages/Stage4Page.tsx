@@ -356,8 +356,35 @@ export default function Stage4Page() {
           )}
         </div>
 
-        {/* Right: SF Log Feed */}
+        {/* Right: Scene Navigation + SF Log Feed */}
         <div className="space-y-6">
+          {/* Scene Navigation — always visible */}
+          <GlassPanel>
+            <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
+              场景导航
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrevScene}
+                disabled={sceneNum <= 1}
+                className="flex-1 px-4 py-2.5 bg-surface-container text-system-log font-body-ui text-sm
+                           rounded-lg hover:bg-surface-container-low transition-colors
+                           disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined text-lg">skip_previous</span>
+                上一场景
+              </button>
+              <button
+                onClick={handleNextScene}
+                className="flex-1 px-4 py-2.5 bg-surface-container text-system-log font-body-ui text-sm
+                           rounded-lg hover:bg-surface-container-low transition-colors flex items-center justify-center gap-2"
+              >
+                下一场景
+                <span className="material-symbols-outlined text-lg">skip_next</span>
+              </button>
+            </div>
+          </GlassPanel>
+
           <GlassPanel>
             <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
               SF Log 解析
@@ -408,33 +435,6 @@ export default function Stage4Page() {
                 </p>
               </div>
             )}
-          </GlassPanel>
-
-          {/* Scene Navigation — always visible */}
-          <GlassPanel>
-            <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
-              场景导航
-            </h2>
-            <div className="flex gap-2">
-              <button
-                onClick={handlePrevScene}
-                disabled={sceneNum <= 1}
-                className="flex-1 px-4 py-2.5 bg-surface-container text-system-log font-body-ui text-sm
-                           rounded-lg hover:bg-surface-container-low transition-colors
-                           disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <span className="material-symbols-outlined text-lg">skip_previous</span>
-                上一场景
-              </button>
-              <button
-                onClick={handleNextScene}
-                className="flex-1 px-4 py-2.5 bg-surface-container text-system-log font-body-ui text-sm
-                           rounded-lg hover:bg-surface-container-low transition-colors flex items-center justify-center gap-2"
-              >
-                下一场景
-                <span className="material-symbols-outlined text-lg">skip_next</span>
-              </button>
-            </div>
           </GlassPanel>
 
           {/* Force-pass — only when complete and breaker triggered */}

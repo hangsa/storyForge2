@@ -283,3 +283,174 @@ class TestStoryOS:
         resp = client.get(f"/api/storyos/invalid?project_id={proj_id}")
         assert resp.status_code == 400
         assert resp.json()["detail"]["code"] == "INVALID_TYPE"
+
+
+class TestMultiChapterE2E:
+    """Full project lifecycle: create → advance through all stages → diagnose → export → download."""
+
+    def _write_json(self, path_str: str, data: dict):
+        import os
+        os.makedirs(os.path.dirname(path_str), exist_ok=True)
+        import json
+        with open(path_str, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+
+    def test_full_lifecycle_3_chapters(self, client, project_data):
+        """E2E: create project, advance INIT→COMPLETED with 3 chapters, diagnose, export, download."""
+        # ── INIT: Create project ──
+        create_resp = client.post("/api/project/create", json=project_data)
+        assert create_resp.status_code == 200
+        proj_id = create_resp.json()["detail"]["id"]
+
+        # ── INIT → STAGE1 ──
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "STAGE1",
+        })
+        assert resp.status_code == 200
+
+        # ── STAGE1 → STAGE2: Provide concept ──
+        proj_dir = f"projects/{proj_id}"
+        self._write_json(f"{proj_dir}/concept_and_dna.json", {
+            "concept": {"title": "测试小说", "genre": "cool_novel", "premise": "测试", "tone": "dark"},
+            "story_dna": {"core_contradiction": {"statement": "力量与责任的矛盾", "side_a": "力量", "side_b": "责任"}},
+        })
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "STAGE2",
+        })
+        assert resp.status_code == 200
+
+        # ── STAGE2 → STAGE3: Provide characters + world ──
+        self._write_json(f"{proj_dir}/characters.json", {
+            "characters": [
+                {"id": "char_001", "name": "林峰", "character_type": "protagonist"},
+                {"id": "char_002", "name": "苏晓晓", "character_type": "supporting"},
+            ],
+        })
+        self._write_json(f"{proj_dir}/world.json", {
+            "era": "近未来", "geography": "废土城市",
+            "power_system": {"name": "灵力", "ceilings": ["第九境"], "core_rules": []},
+        })
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "STAGE3",
+        })
+        assert resp.status_code == 200
+
+        # ── STAGE3 → STAGE4: Provide outline ──
+        self._write_json(f"{proj_dir}/outline.json", {
+            "chapters": [
+                {"chapter_number": 1, "title": "觉醒", "scene_plan": [
+                    {"scene_number": 1, "narrative_role": "setup"},
+                    {"scene_number": 2, "narrative_role": "mini_payoff"},
+                ]},
+                {"chapter_number": 2, "title": "试炼", "scene_plan": [
+                    {"scene_number": 3, "narrative_role": "cliffhanger"},
+                ]},
+                {"chapter_number": 3, "title": "决战", "scene_plan": [
+                    {"scene_number": 4, "narrative_role": "major_reveal"},
+                ]},
+            ],
+        })
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "STAGE4",
+        })
+        assert resp.status_code == 200
+
+        # ── Simulate writing: Create scene drafts for 3 chapters ──
+        import os
+        os.makedirs(f"{proj_dir}/chapters", exist_ok=True)
+
+        # Chapter 1 — Scene 1
+        with open(f"{proj_dir}/chapters/scene_001_draft.md", "w", encoding="utf-8") as f:
+            f.write('林峰站在废墟上。冷风吹过。\n<!-- SF_LOG character_emotion char="林峰" emotion="愤怒" -->\n')
+        # Chapter 1 — Scene 2
+        with open(f"{proj_dir}/chapters/scene_002_draft.md", "w", encoding="utf-8") as f:
+            f.write('他握紧拳头，走向前方。\n<!-- SF_LOG character_location_change char="林峰" from="废墟" to="工厂" -->\n')
+        # Chapter 2 — Scene 3
+        with open(f"{proj_dir}/chapters/scene_003_draft.md", "w", encoding="utf-8") as f:
+            f.write('工厂内黑影闪动。\n<!-- SF_LOG conflict_escalate id="cf_001" new_intensity="high" -->\n')
+        # Chapter 3 — Scene 4
+        with open(f"{proj_dir}/chapters/scene_004_draft.md", "w", encoding="utf-8") as f:
+            f.write('最终决战开始。\n<!-- SF_LOG mystery_clue id="mys_001" clue="真相" -->\n')
+
+        # ── STAGE4 → STAGE5: Provide completed progress ──
+        self._write_json(f"{proj_dir}/progress.json", {
+            "project_id": proj_id,
+            "current_chapter": 3,
+            "total_chapters": 3,
+            "chapters": [
+                {"chapter_number": 1, "status": "completed", "scenes": [
+                    {"scene_number": 1, "status": "completed", "coherence_score": 85},
+                    {"scene_number": 2, "status": "completed", "coherence_score": 88},
+                ]},
+                {"chapter_number": 2, "status": "completed", "scenes": [
+                    {"scene_number": 3, "status": "completed", "coherence_score": 90},
+                ]},
+                {"chapter_number": 3, "status": "completed", "scenes": [
+                    {"scene_number": 4, "status": "completed", "coherence_score": 92},
+                ]},
+            ],
+            "circuit_breaker_events": [],
+        })
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "STAGE5",
+        })
+        assert resp.status_code == 200
+
+        # ── STAGE5: Run diagnosis ──
+        diag_resp = client.post("/api/stage5/diagnose", json={"project_id": proj_id})
+        assert diag_resp.status_code == 200
+        diag_data = diag_resp.json()
+        assert diag_data["error"] is False
+
+        # ── STAGE5 → STAGE6: Provide diagnosis report with P0 resolved ──
+        self._write_json(f"{proj_dir}/diagnosis_report.json", {
+            "project_id": proj_id,
+            "total_chapters": 3,
+            "issues": [],
+            "summary": {"p0_count": 0, "p1_count": 0, "p2_count": 0},
+        })
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "STAGE6",
+        })
+        assert resp.status_code == 200
+
+        # ── STAGE6: Export ──
+        export_resp = client.post("/api/stage6/export", json={
+            "project_id": proj_id,
+            "options": {"strip_sf_logs": True, "add_toc": True, "include_title_page": True},
+        })
+        assert export_resp.status_code == 200
+        export_data = export_resp.json()
+        assert export_data["error"] is False
+        detail = export_data["detail"]
+        assert detail["total_chars"] > 0
+        assert detail["file_path"] == f"projects/{proj_id}/exports/novel.md"
+
+        # SF_LOG should be stripped from export
+        assert "SF_LOG" not in detail["preview"]
+
+        # ── Download ──
+        download_resp = client.get(f"/api/stage6/download?project_id={proj_id}")
+        assert download_resp.status_code == 200
+        assert "text/markdown" in download_resp.headers["content-type"]
+
+        # ── STAGE6 → COMPLETED ──
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "COMPLETED",
+        })
+        assert resp.status_code == 200
+
+        # ── Verify final stage ──
+        status_resp = client.get(f"/api/project/{proj_id}/status")
+        assert status_resp.status_code == 200
+        assert status_resp.json()["detail"]["current_stage"] == "COMPLETED"
+
+        # ── Style extractor still works at COMPLETED ──
+        style_resp = client.post("/api/style/extract", json={
+            "project_id": proj_id,
+            "reference_text": "林峰站在废墟上。冷风吹过。他握紧拳头，走向前方。工厂内黑影闪动。最终决战开始。",
+        })
+        assert style_resp.status_code == 200
+        style_data = style_resp.json()
+        assert style_data["error"] is False
+        assert style_data["detail"]["sentence"]["avg_length"] > 0

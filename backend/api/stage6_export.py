@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -86,12 +87,19 @@ class NovelExporter:
 
         novel_text = "\n".join(output_parts).strip()
 
+        # Generate filename: {safe_title}_{YYYYMMDD}.md
+        safe_title = re.sub(r"[^\w一-鿿\-]", "_", title).strip("_") or "novel"
+        today = date.today().strftime("%Y%m%d")
+        export_filename = f"{safe_title}_{today}.md"
+
         # Write to exports/
         exports_dir = self._project_dir / "exports"
         exports_dir.mkdir(parents=True, exist_ok=True)
+        (exports_dir / export_filename).write_text(novel_text, encoding="utf-8")
+        # Also save as novel.md for download endpoint compatibility
         (exports_dir / "novel.md").write_text(novel_text, encoding="utf-8")
 
-        return novel_text
+        return novel_text, export_filename
 
     def _generate_title_page(self, title: str, author: str, total_chapters: int) -> str:
         lines = [
@@ -144,7 +152,7 @@ async def export_novel(data: dict):
 
     try:
         exporter = NovelExporter(project_id)
-        full_text = exporter.export(options)
+        full_text, export_filename = exporter.export(options)
 
         # Return preview (first 500 chars)
         preview = full_text[:500] if len(full_text) > 500 else full_text
@@ -156,7 +164,7 @@ async def export_novel(data: dict):
             "detail": {
                 "preview": preview,
                 "total_chars": len(full_text),
-                "file_path": f"projects/{project_id}/exports/novel.md",
+                "file_path": f"projects/{project_id}/exports/{export_filename}",
             },
         }
     except Exception as e:
@@ -174,15 +182,23 @@ async def download_novel(project_id: str):
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
         )
 
-    novel_path = settings.projects_dir / project_id / "exports" / "novel.md"
+    exports_dir = settings.projects_dir / project_id / "exports"
+    novel_path = exports_dir / "novel.md"
     if not novel_path.exists():
         raise HTTPException(
             status_code=404,
             detail={"error": True, "code": "EXPORT_NOT_FOUND", "message": "导出文件不存在，请先执行导出", "detail": {}},
         )
 
+    # Find the dated export file for the download filename
+    download_name = "novel.md"
+    for f in sorted(exports_dir.glob("*.md"), reverse=True):
+        if f.name != "novel.md":
+            download_name = f.name
+            break
+
     return FileResponse(
         path=str(novel_path),
-        filename="novel.md",
+        filename=download_name,
         media_type="text/markdown",
     )

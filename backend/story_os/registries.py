@@ -6,13 +6,17 @@ from backend.config import settings
 
 
 class RegistryManager:
-    """CRUD for 4 narrative asset registries: Conflict, Mystery, Twist, Goal."""
+    """CRUD for 8 narrative asset registries: Conflict, Mystery, Twist, Goal, Promise, Reveal, Expectation, Foreshadowing."""
 
     REGISTRY_FILES = {
         "conflict": "conflicts.json",
         "mystery": "mysteries.json",
         "twist": "twists.json",
         "goal": "goals.json",
+        "promise": "promises.json",
+        "reveal": "reveals.json",
+        "expectation": "expectations.json",
+        "foreshadowing": "foreshadowing.json",
     }
 
     def __init__(self, project_id: str, projects_dir: Optional[Path] = None):
@@ -107,3 +111,84 @@ class RegistryManager:
             "intensity": new_intensity,
             "escalation_history": history,
         })
+
+    # --- Promise ---
+
+    def fulfill_promise(self, promise_id: str, chapter: int, scene: int = 0) -> bool:
+        return self.update("promise", promise_id, {
+            "status": "fulfilled",
+            "fulfilled_chapter": chapter,
+            "fulfilled_scene": scene,
+        })
+
+    def list_pending_promises(self) -> list[dict]:
+        return [p for p in self._read("promise") if p.get("status") == "pending"]
+
+    # --- Reveal ---
+
+    def reveal(self, reveal_id: str, chapter: int, method: str = "") -> bool:
+        return self.update("reveal", reveal_id, {
+            "status": "revealed",
+            "revealed_chapter": chapter,
+            "reveal_method": method,
+        })
+
+    def list_hidden_from(self, character_id: str) -> list[dict]:
+        return [
+            r for r in self._read("reveal")
+            if r.get("status") == "hidden" and r.get("about") == character_id
+        ]
+
+    # --- Expectation ---
+
+    def fulfill_expectation(self, expectation_id: str, chapter: int) -> bool:
+        return self.update("expectation", expectation_id, {
+            "status": "fulfilled",
+            "fulfilled_chapter": chapter,
+        })
+
+    def update_expectation_intensity(self, expectation_id: str, delta: int) -> bool:
+        entry = self.get_by_id("expectation", expectation_id)
+        if not entry:
+            return False
+        new_intensity = max(0, min(100, entry.get("intensity", 50) + delta))
+        return self.update("expectation", expectation_id, {"intensity": new_intensity})
+
+    def list_accumulating(self) -> list[dict]:
+        result = self._read("expectation")
+        result.sort(key=lambda e: e.get("intensity", 0), reverse=True)
+        return [e for e in result if e.get("status") == "accumulating"]
+
+    # --- Foreshadowing ---
+
+    def add_foreshadowing_clue(self, fs_id: str, clue: dict) -> bool:
+        entry = self.get_by_id("foreshadowing", fs_id)
+        if not entry:
+            return False
+        clues = entry.get("clues", [])
+        clues.append(clue)
+        new_status = "developing" if entry.get("status") == "planted" else entry.get("status")
+        return self.update("foreshadowing", fs_id, {
+            "clues": clues,
+            "status": new_status,
+        })
+
+    def reveal_foreshadowing(self, fs_id: str, chapter: int, detail: str) -> bool:
+        return self.update("foreshadowing", fs_id, {
+            "status": "revealed",
+            "revealed_chapter": chapter,
+            "reveal_detail": detail,
+        })
+
+    def mark_foreshadowing_dead(self, fs_id: str) -> bool:
+        return self.update("foreshadowing", fs_id, {"status": "dead"})
+
+    def list_dead_foreshadowings(self) -> list[dict]:
+        return [f for f in self._read("foreshadowing") if f.get("status") == "dead"]
+
+    def list_planted_without_clues(self, current_chapter: int, min_chapters: int = 5) -> list[dict]:
+        return [
+            f for f in self._read("foreshadowing")
+            if f.get("status") == "planted"
+            and f.get("created_chapter", 0) <= current_chapter - min_chapters
+        ]

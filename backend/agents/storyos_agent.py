@@ -129,10 +129,17 @@ class StoryOSAgent:
                 self._handle_conflict_escalate(log, report)
             elif log.type == "mystery_clue":
                 self._handle_mystery_clue(log, report)
+            elif log.type == "twist_reveal":
+                self._handle_twist_reveal(log, report)
+            elif log.type == "expectation_fulfill":
+                self._handle_expectation_fulfill(log, report)
+            elif log.type == "goal_milestone":
+                self._handle_goal_milestone(log, report)
             elif log.type in (
                 "character_emotion",
                 "character_relation_change",
                 "character_location_change",
+                "character_physical_change",
             ):
                 self._collect_character_update(log, report)
 
@@ -158,6 +165,14 @@ class StoryOSAgent:
             filename = "twists.json"
         elif reg_type == "goal":
             filename = "goals.json"
+        elif reg_type == "promise":
+            filename = "promises.json"
+        elif reg_type == "reveal":
+            filename = "reveals.json"
+        elif reg_type == "expectation":
+            filename = "expectations.json"
+        elif reg_type == "foreshadowing":
+            filename = "foreshadowing.json"
         else:
             report.unregistered_new.append(reg_type)
             return
@@ -246,6 +261,83 @@ class StoryOSAgent:
                 report.updated.append(f"mystery:{mystery_id}")
                 return
 
+    def _handle_twist_reveal(
+        self, log: ParsedLog, report: RegistryUpdateReport
+    ) -> None:
+        twist_id = log.params.get("id", "")
+        trigger = log.params.get("trigger", "")
+
+        if not twist_id:
+            return
+
+        self._ensure_registry_dir()
+        twists = self._read_registry("twists.json")
+
+        if not isinstance(twists, list):
+            return
+
+        for twist in twists:
+            if not isinstance(twist, dict):
+                continue
+            if twist.get("id") == twist_id:
+                twist["status"] = "revealed"
+                twist["reveal_trigger"] = trigger
+                self._write_registry("twists.json", twists)
+                report.updated.append(f"twist:{twist_id}")
+                return
+
+    def _handle_expectation_fulfill(
+        self, log: ParsedLog, report: RegistryUpdateReport
+    ) -> None:
+        expectation_id = log.params.get("id", "")
+        trigger = log.params.get("trigger", "")
+
+        if not expectation_id:
+            return
+
+        self._ensure_registry_dir()
+        expectations = self._read_registry("expectations.json")
+
+        if not isinstance(expectations, list):
+            return
+
+        for exp in expectations:
+            if not isinstance(exp, dict):
+                continue
+            if exp.get("id") == expectation_id:
+                exp["status"] = "fulfilled"
+                exp["fulfill_trigger"] = trigger
+                self._write_registry("expectations.json", expectations)
+                report.updated.append(f"expectation:{expectation_id}")
+                return
+
+    def _handle_goal_milestone(
+        self, log: ParsedLog, report: RegistryUpdateReport
+    ) -> None:
+        goal_id = log.params.get("id", "")
+        progress = log.params.get("progress", "")
+
+        if not goal_id:
+            return
+
+        self._ensure_registry_dir()
+        goals = self._read_registry("goals.json")
+
+        if not isinstance(goals, list):
+            return
+
+        for goal in goals:
+            if not isinstance(goal, dict):
+                continue
+            if goal.get("id") == goal_id:
+                goal["progress"] = progress
+                if "progress_history" not in goal:
+                    goal["progress_history"] = []
+                goal["progress_history"].append(progress)
+                self._write_registry("goals.json", goals)
+                report.updated.append(f"goal:{goal_id}")
+                return
+
     def _collect_character_update(
         self, log: ParsedLog, report: RegistryUpdateReport
     ) -> None:
@@ -272,6 +364,13 @@ class StoryOSAgent:
                 report.character_state_updates["relations"][
                     f"{char_a}<->{char_b}"
                 ] = status
+
+        elif log.type == "character_physical_change":
+            char = log.params.get("char", "")
+            change = log.params.get("change", "")
+            if char:
+                report.character_state_updates.setdefault(char, {})
+                report.character_state_updates[char]["physical_change"] = change
 
     def _ensure_registry_dir(self) -> None:
         self._registries_dir.mkdir(parents=True, exist_ok=True)

@@ -248,6 +248,24 @@ export interface AdvanceResponse {
   preconditions: Record<string, boolean>;
 }
 
+export interface DiagnosisIssue {
+  id: string;
+  priority: "P0" | "P1" | "P2";
+  category: string;
+  chapter: number;
+  description: string;
+  suggestion: string;
+  asset_id: string;
+  status: "open" | "resolved" | "accepted";
+}
+
+export interface DiagnosisReport {
+  project_id: string;
+  total_chapters: number;
+  issues: DiagnosisIssue[];
+  summary: { p0_count: number; p1_count: number; p2_count: number };
+}
+
 // --- API functions ---
 
 export const api = {
@@ -324,6 +342,16 @@ export const api = {
 
   getRegistry: (projectId: string, registryType: string) =>
     request<Array<Record<string, unknown>>>("GET", `/storyos/${registryType}?project_id=${projectId}`),
+
+  // STAGE 5 — Diagnosis
+  runDiagnosis: (projectId: string) =>
+    request<DiagnosisReport>("POST", "/stage5/diagnose", { project_id: projectId }),
+
+  getDiagnosis: (projectId: string) =>
+    request<DiagnosisReport>("GET", `/stage5/diagnosis?project_id=${projectId}`),
+
+  resolveIssue: (projectId: string, issueId: string, action: "resolve" | "skip") =>
+    request<{ issue_id: string; status: string }>("POST", `/stage5/resolve/${issueId}`, { project_id: projectId, action }),
 };
 
 export { ApiError };

@@ -8,6 +8,8 @@ const STAGES = [
   { key: "STAGE2", label: "世界观+角色", icon: "public" },
   { key: "STAGE3", label: "情节头脑风暴", icon: "account_tree" },
   { key: "STAGE4", label: "写作中心", icon: "edit_note" },
+  { key: "STAGE5", label: "全书诊断", icon: "clinical_notes" },
+  { key: "STAGE6", label: "导出中心", icon: "download" },
 ];
 
 export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps) {

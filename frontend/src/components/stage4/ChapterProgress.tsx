@@ -26,8 +26,9 @@ export default function ChapterProgress({
       (s) => s.status === "completed" || s.status === "force_passed"
     ).length || 0;
 
-  const totalScenes = currentChapterProgress?.scenes.length || 0;
-  const chapterDone = totalScenes > 0 && completedScenes >= totalScenes;
+  const trackedScenes = currentChapterProgress?.scenes.length || 0;
+  const plannedScenes = currentChapterProgress?.total_scenes || trackedScenes;
+  const chapterDone = plannedScenes > 0 && completedScenes >= plannedScenes;
   const overallPercent =
     totalChapters > 1
       ? Math.round((chapters.filter((ch) => ch.status === "completed").length / totalChapters) * 100)
@@ -86,28 +87,34 @@ export default function ChapterProgress({
       </div>
 
       {/* Scene progress within chapter */}
-      {totalScenes > 0 && (
+      {plannedScenes > 0 && (
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="font-label-mono text-system-log text-xs">本章场景</span>
             <span className="font-label-mono text-system-log text-xs">
-              {completedScenes}/{totalScenes}
+              已完成 {completedScenes} / 共 {plannedScenes} 场景
             </span>
           </div>
           <div className="flex gap-1.5">
-            {currentChapterProgress?.scenes.map((s) => (
-              <div
-                key={s.scene_number}
-                className={`flex-1 h-1.5 rounded-full ${
-                  s.status === "completed" || s.status === "force_passed"
-                    ? "bg-tertiary-container"
-                    : s.status === "skipped"
-                      ? "bg-system-log/40"
-                      : "bg-surface-container-low"
-                }`}
-                title={`Scene ${s.scene_number}: ${s.status}`}
-              />
-            ))}
+            {Array.from({ length: plannedScenes }, (_, i) => {
+              const s = currentChapterProgress?.scenes.find(
+                (sc) => sc.scene_number === i + 1
+              );
+              const status = s?.status || "pending";
+              return (
+                <div
+                  key={i}
+                  className={`flex-1 h-1.5 rounded-full ${
+                    status === "completed" || status === "force_passed"
+                      ? "bg-tertiary-container"
+                      : status === "skipped"
+                        ? "bg-system-log/40"
+                        : "bg-surface-container-low"
+                  }`}
+                  title={`Scene ${i + 1}: ${status}`}
+                />
+              );
+            })}
           </div>
         </div>
       )}

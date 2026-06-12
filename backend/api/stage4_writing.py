@@ -317,11 +317,13 @@ async def write_scene(data: dict):
     )
 
     # Update progress
+    outline = ctx["outline"]
+    total_chapters = len(outline.get("chapters", [])) if outline else 1
     progress = fm.read_json(project_id, "progress.json") or {
         "project_id": project_id,
         "current_stage": "STAGE4",
         "current_chapter": 1,
-        "total_chapters": 1,
+        "total_chapters": total_chapters,
         "chapters": [],
         "circuit_breaker_events": [],
     }
@@ -430,11 +432,13 @@ async def skip_scene(data: dict):
 
     progress = fm.read_json(project_id, "progress.json")
     if progress is None:
+        outline = fm.read_json(project_id, "outline.json") or {}
+        total_chapters = len(outline.get("chapters", [])) if outline else 1
         progress = {
             "project_id": project_id,
             "current_stage": "STAGE4",
             "current_chapter": 1,
-            "total_chapters": 1,
+            "total_chapters": total_chapters,
             "chapters": [],
             "circuit_breaker_events": [],
         }
@@ -469,6 +473,16 @@ async def skip_scene(data: dict):
 @router.get("/progress")
 async def get_progress(project_id: str):
     progress = fm.read_json(project_id, "progress.json")
+
+    # Enrich with outline data (total chapters and scene counts per chapter)
+    outline = fm.read_json(project_id, "outline.json") or {}
+    outline_chapters = outline.get("chapters", [])
+    total_chapters = len(outline_chapters) if outline_chapters else 1
+    chapter_scene_counts = {
+        ch.get("chapter_number", 0): len(ch.get("scene_plan", []))
+        for ch in outline_chapters
+    }
+
     if progress is None:
         return {
             "error": False,
@@ -480,6 +494,12 @@ async def get_progress(project_id: str):
                 "chapters": [],
             },
         }
+
+    # Ensure total_chapters is correct and add scene counts
+    progress["total_chapters"] = progress.get("total_chapters", 1) or total_chapters
+    for ch in progress.get("chapters", []):
+        ch_num = ch.get("chapter_number", 0)
+        ch["total_scenes"] = chapter_scene_counts.get(ch_num, ch.get("total_scenes", 0))
 
     return {
         "error": False,

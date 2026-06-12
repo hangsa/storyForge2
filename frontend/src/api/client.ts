@@ -233,6 +233,7 @@ export interface ProgressFile {
   chapters: Array<{
     chapter_number: number;
     status: string;
+    total_scenes?: number;
     scenes: Array<{
       scene_number: number;
       status: string;

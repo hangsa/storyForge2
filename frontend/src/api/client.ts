@@ -335,6 +335,15 @@ export const api = {
   getStage4Progress: (projectId: string) =>
     request<ProgressFile>("GET", `/stage4/progress?project_id=${projectId}`),
 
+  getSceneDraft: (projectId: string, chapterNumber: number, sceneNumber: number) =>
+    request<{
+      draft_text: string; chapter_number: number; scene_number: number;
+      parsed_logs: ParsedLog[]; fact_guard_results: { all_passed: boolean; checks: CheckResult[] } | null;
+      coherence_score: number;
+    }>(
+      "GET", `/stage4/scene-draft?project_id=${projectId}&chapter_number=${chapterNumber}&scene_number=${sceneNumber}`
+    ),
+
   advanceChapter: (projectId: string) =>
     request<{ status: string; from_chapter: number; to_chapter: number; reader_os_snapshot: Record<string, unknown>; l2_summary: Record<string, unknown> }>(
       "POST", "/stage4/advance-chapter", { project_id: projectId }

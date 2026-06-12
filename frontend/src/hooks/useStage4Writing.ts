@@ -75,6 +75,7 @@ interface UseStage4WritingReturn {
   ) => Promise<void>;
   forcePass: (projectId: string, sceneNumber: number) => Promise<void>;
   skipScene: (projectId: string, sceneNumber: number) => Promise<void>;
+  loadDraft: (projectId: string, chapterNumber: number, sceneNumber: number) => Promise<void>;
   reset: () => void;
 }
 
@@ -188,10 +189,36 @@ export function useStage4Writing(): UseStage4WritingReturn {
     []
   );
 
+  const loadDraft = useCallback(
+    async (projectId: string, chapterNumber: number, sceneNumber: number) => {
+      clearPersistedState();
+      try {
+        const resp = await api.getSceneDraft(projectId, chapterNumber, sceneNumber);
+        if (resp.draft_text) {
+          setState({
+            ...initialState,
+            sceneNumber,
+            draftText: resp.draft_text,
+            status: "complete",
+            parsedLogs: resp.parsed_logs || [],
+            factGuardChecks: resp.fact_guard_results?.checks || [],
+            coherenceScore: resp.coherence_score || 0,
+            allPassed: resp.fact_guard_results?.all_passed || false,
+          });
+          return;
+        }
+      } catch {
+        // draft doesn't exist yet — start fresh
+      }
+      setState({ ...initialState, sceneNumber });
+    },
+    []
+  );
+
   const reset = useCallback(() => {
     clearPersistedState();
     setState(initialState);
   }, []);
 
-  return { state, writeScene, forcePass, skipScene, reset };
+  return { state, writeScene, forcePass, skipScene, loadDraft, reset };
 }

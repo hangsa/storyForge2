@@ -23,7 +23,7 @@ const LOG_TYPE_LABELS: Record<string, string> = {
 
 export default function Stage4Page() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { state, writeScene, forcePass, skipScene, reset } = useStage4Writing();
+  const { state, writeScene, forcePass, skipScene, loadDraft, reset } = useStage4Writing();
 
   const [chapterNum, setChapterNum] = useState(1);
   const [sceneNum, setSceneNum] = useState(1);
@@ -67,14 +67,37 @@ export default function Stage4Page() {
   };
 
   const handleNextScene = () => {
-    setSceneNum((n) => n + 1);
-    reset();
+    if (!projectId) return;
+    const nextScene = sceneNum + 1;
+    setSceneNum(nextScene);
+    loadDraft(projectId, chapterNum, nextScene);
+  };
+
+  const handlePrevScene = () => {
+    if (!projectId || sceneNum <= 1) return;
+    const prevScene = sceneNum - 1;
+    setSceneNum(prevScene);
+    loadDraft(projectId, chapterNum, prevScene);
+  };
+
+  const handleSceneChange = (scene: number) => {
+    if (!projectId || scene < 1) return;
+    setSceneNum(scene);
+    loadDraft(projectId, chapterNum, scene);
+  };
+
+  const handleChapterNumChange = (chapter: number) => {
+    if (!projectId || chapter < 1) return;
+    setChapterNum(chapter);
+    setSceneNum(1);
+    loadDraft(projectId, chapter, 1);
   };
 
   const handleChapterChange = (chapter: number) => {
+    if (!projectId) return;
     setChapterNum(chapter);
     setSceneNum(1);
-    reset();
+    loadDraft(projectId, chapter, 1);
   };
 
   const handleAdvance = async () => {
@@ -163,7 +186,7 @@ export default function Stage4Page() {
             type="number"
             min={1}
             value={chapterNum}
-            onChange={(e) => setChapterNum(Number(e.target.value))}
+            onChange={(e) => handleChapterNumChange(Number(e.target.value))}
             className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
                        font-body-ui text-primary text-sm focus:outline-none focus:border-primary-container"
           />
@@ -174,7 +197,7 @@ export default function Stage4Page() {
             type="number"
             min={1}
             value={sceneNum}
-            onChange={(e) => setSceneNum(Number(e.target.value))}
+            onChange={(e) => handleSceneChange(Number(e.target.value))}
             className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
                        font-body-ui text-primary text-sm focus:outline-none focus:border-primary-container"
           />
@@ -387,32 +410,44 @@ export default function Stage4Page() {
             )}
           </GlassPanel>
 
-          {/* Actions panel */}
-          {state.status === "complete" && (
+          {/* Scene Navigation — always visible */}
+          <GlassPanel>
+            <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
+              场景导航
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrevScene}
+                disabled={sceneNum <= 1}
+                className="flex-1 px-4 py-2.5 bg-surface-container text-system-log font-body-ui text-sm
+                           rounded-lg hover:bg-surface-container-low transition-colors
+                           disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined text-lg">skip_previous</span>
+                上一场景
+              </button>
+              <button
+                onClick={handleNextScene}
+                className="flex-1 px-4 py-2.5 bg-surface-container text-system-log font-body-ui text-sm
+                           rounded-lg hover:bg-surface-container-low transition-colors flex items-center justify-center gap-2"
+              >
+                下一场景
+                <span className="material-symbols-outlined text-lg">skip_next</span>
+              </button>
+            </div>
+          </GlassPanel>
+
+          {/* Force-pass — only when complete and breaker triggered */}
+          {state.status === "complete" && state.circuitBreakerTriggered && (
             <GlassPanel>
-              <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
-                操作
-              </h2>
-              <div className="space-y-2">
-                {state.circuitBreakerTriggered && (
-                  <button
-                    onClick={handleForcePass}
-                    className="w-full px-4 py-2.5 bg-error/20 text-error font-body-ui text-sm
-                               rounded-lg hover:bg-error/30 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-lg">flash_on</span>
-                    强制通过（熔断）
-                  </button>
-                )}
-                <button
-                  onClick={handleNextScene}
-                  className="w-full px-4 py-2.5 bg-primary-container text-surface-container-low font-body-ui text-sm
-                             rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-lg">skip_next</span>
-                  下一个场景
-                </button>
-              </div>
+              <button
+                onClick={handleForcePass}
+                className="w-full px-4 py-2.5 bg-error/20 text-error font-body-ui text-sm
+                           rounded-lg hover:bg-error/30 transition-colors flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined text-lg">flash_on</span>
+                强制通过（熔断）
+              </button>
             </GlassPanel>
           )}
 

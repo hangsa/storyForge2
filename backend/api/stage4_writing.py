@@ -78,6 +78,46 @@ async def get_scene_plan(scene_num: int, project_id: str):
     )
 
 
+@router.get("/scene-draft")
+async def get_scene_draft(project_id: str, chapter_number: int = 1, scene_number: int = 1):
+    """Load a previously saved scene draft from disk."""
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+    draft_filename = f"ch{chapter_number:02d}_scene_{scene_number:03d}_draft.md"
+    chapters_dir = fm.project_path(project_id, "chapters")
+    draft_path = chapters_dir / draft_filename
+    if not draft_path.exists():
+        return {
+            "error": False,
+            "code": "OK",
+            "message": "草稿不存在",
+            "detail": {"draft_text": "", "chapter_number": chapter_number, "scene_number": scene_number,
+                       "parsed_logs": [], "fact_guard_results": None, "coherence_score": 0},
+        }
+    draft_text = draft_path.read_text(encoding="utf-8")
+
+    # Load scene metadata if available
+    meta_filename = f"ch{chapter_number:02d}_scene_{scene_number:03d}_meta.json"
+    meta = fm.read_json(project_id, f"chapters/{meta_filename}") or {}
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": {
+            "draft_text": draft_text,
+            "chapter_number": chapter_number,
+            "scene_number": scene_number,
+            "parsed_logs": meta.get("parsed_logs", []),
+            "fact_guard_results": meta.get("fact_guard_results"),
+            "coherence_score": meta.get("coherence_score", 0),
+        },
+    }
+
+
 @router.post("/write-scene")
 async def write_scene(data: dict):
     project_id = data.get("project_id", "")
@@ -121,7 +161,7 @@ async def write_scene(data: dict):
     # Load L1 from previous scene drafts in this chapter
     chapters_dir = fm.project_path(project_id, "chapters")
     if chapters_dir.exists():
-        for draft_file in sorted(chapters_dir.glob("scene_*_draft.md")):
+        for draft_file in sorted(chapters_dir.glob(f"ch{chapter_number:02d}_scene_*_draft.md")):
             text = draft_file.read_text(encoding="utf-8")
             l1.append_scene(scene_number, text, chapter_number=chapter_number)
 
@@ -235,11 +275,36 @@ async def write_scene(data: dict):
     # Update L0 from character state changes
     l0.update_from_logs(registry_report.character_state_updates)
 
-    # Save draft
+    # Save draft (chapter-aware filename to preserve cross-chapter drafts)
     chapters_dir = fm.project_path(project_id, "chapters")
     chapters_dir.mkdir(parents=True, exist_ok=True)
-    draft_file = chapters_dir / f"scene_{scene_number:03d}_draft.md"
-    fm.write_markdown(project_id, f"chapters/scene_{scene_number:03d}_draft.md", current_draft)
+    draft_filename = f"ch{chapter_number:02d}_scene_{scene_number:03d}_draft.md"
+    fm.write_markdown(project_id, f"chapters/{draft_filename}", current_draft)
+
+    # Save scene metadata (SF logs, Fact Guard results) for cross-scene retrieval
+    meta_filename = f"ch{chapter_number:02d}_scene_{scene_number:03d}_meta.json"
+    scene_meta = {
+        "chapter_number": chapter_number,
+        "scene_number": scene_number,
+        "status": breaker_result,
+        "retry_count": attempt - 1,
+        "coherence_score": fg_result.coherence_score,
+        "parsed_logs": [
+            {"type": log.type, "params": log.params} for log in parsed_logs
+        ],
+        "fact_guard_results": {
+            "all_passed": fg_result.all_passed,
+            "checks": [
+                {"check_id": c.check_id, "name": c.name, "passed": c.passed, "detail": c.detail}
+                for c in fg_result.checks
+            ],
+        },
+        "registry_updates": {
+            "created": registry_report.created,
+            "updated": registry_report.updated,
+        },
+    }
+    fm.write_json(project_id, f"chapters/{meta_filename}", scene_meta)
 
     # Save checkpoint
     cpm = CheckpointManager(project_id)
@@ -474,8 +539,8 @@ async def advance_chapter(data: dict):
     all_sf_logs = []
     chapters_dir = fm.project_path(project_id, "chapters")
     if chapters_dir.exists():
-        for draft_file in sorted(chapters_dir.glob("scene_*_draft.md")):
-            draft_text = fm.read_text(project_id, f"chapters/{draft_file.name}")
+        for draft_file in sorted(chapters_dir.glob(f"ch{current_chapter:02d}_scene_*_draft.md")):
+            draft_text = draft_file.read_text(encoding="utf-8")
             if draft_text:
                 scene_drafts.append(draft_text)
                 parsed = storyos.parse_sf_logs(draft_text)
@@ -536,12 +601,7 @@ async def advance_chapter(data: dict):
 
     fm.write_json(project_id, "progress.json", progress)
 
-    # 7. Clean up scene drafts from completed chapter
-    if chapters_dir.exists():
-        for draft_file in chapters_dir.glob("scene_*_draft.md"):
-            draft_file.unlink()
-
-    # 8. Write checkpoint
+    # 7. Write checkpoint (drafts preserved on disk for cross-chapter retrieval)
     cpm = CheckpointManager(project_id)
     cpm.save(
         pipeline_stage="chapter_advanced",

@@ -293,67 +293,6 @@ export default function Stage4Page() {
             )}
           </GlassPanel>
 
-          {/* Fact Guard Results */}
-          {state.factGuardChecks.length > 0 && (
-            <GlassPanel className="!rounded-none">
-              <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
-                Fact Guard 检查
-              </h2>
-              <div className="space-y-2">
-                {state.factGuardChecks.map((check: CheckResult) => (
-                  <div
-                    key={check.check_id}
-                    className={`flex items-start gap-3 p-3 rounded-none ${
-                      check.passed
-                        ? "bg-green-500/10 border border-green-500/30"
-                        : "bg-red-500/10 border border-red-500/30"
-                    }`}
-                  >
-                    <span
-                      className={`material-symbols-outlined text-lg mt-0.5 ${
-                        check.passed ? "text-green-400" : "text-red-400"
-                      }`}
-                    >
-                      {check.passed ? "check_circle" : "cancel"}
-                    </span>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-label-mono text-sm text-primary">
-                          {checkLabels[check.check_id] || check.name}
-                        </span>
-                        <span
-                          className={`text-xs font-label-mono ${
-                            check.passed ? "text-green-400" : "text-red-400"
-                          }`}
-                        >
-                          {check.passed ? "PASS" : "FAIL"}
-                        </span>
-                      </div>
-                      {check.detail && (
-                        <p className="font-body-ui text-system-log text-xs mt-1">{check.detail}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {!state.allPassed && state.retryHints && (
-                <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded">
-                  <span className="font-label-mono text-amber-300 text-xs">重试提示</span>
-                  <p className="font-body-ui text-system-log text-xs mt-1 whitespace-pre-wrap">
-                    {state.retryHints}
-                  </p>
-                </div>
-              )}
-
-              {state.circuitBreakerTriggered && state.compatibilityNote && (
-                <div className="mt-4 p-3 bg-error/10 border border-error/30 rounded">
-                  <span className="font-label-mono text-error text-xs">兼容性说明</span>
-                  <p className="font-body-ui text-system-log text-xs mt-1">{state.compatibilityNote}</p>
-                </div>
-              )}
-            </GlassPanel>
-          )}
         </div>
 
         {/* Right: Scene Navigation + SF Log Feed */}
@@ -436,6 +375,68 @@ export default function Stage4Page() {
               </div>
             )}
           </GlassPanel>
+
+          {/* Fact Guard Results */}
+          {state.factGuardChecks.length > 0 && (
+            <GlassPanel className="!rounded-none">
+              <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
+                Fact Guard 检查
+              </h2>
+              <div className="space-y-2">
+                {state.factGuardChecks.map((check: CheckResult) => (
+                  <div
+                    key={check.check_id}
+                    className={`flex items-start gap-3 p-3 rounded-none ${
+                      check.passed
+                        ? "bg-green-500/10 border border-green-500/30"
+                        : "bg-red-500/10 border border-red-500/30"
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-lg mt-0.5 ${
+                        check.passed ? "text-green-400" : "text-red-400"
+                      }`}
+                    >
+                      {check.passed ? "check_circle" : "cancel"}
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-sm text-primary">
+                          {checkLabels[check.check_id] || check.name}
+                        </span>
+                        <span
+                          className={`text-xs font-label-mono ${
+                            check.passed ? "text-green-400" : "text-red-400"
+                          }`}
+                        >
+                          {check.passed ? "PASS" : "FAIL"}
+                        </span>
+                      </div>
+                      {check.detail && (
+                        <p className="font-body-ui text-system-log text-xs mt-1">{check.detail}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {!state.allPassed && state.retryHints && (
+                <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded">
+                  <span className="font-label-mono text-amber-300 text-xs">重试提示</span>
+                  <p className="font-body-ui text-system-log text-xs mt-1 whitespace-pre-wrap">
+                    {state.retryHints}
+                  </p>
+                </div>
+              )}
+
+              {state.circuitBreakerTriggered && state.compatibilityNote && (
+                <div className="mt-4 p-3 bg-error/10 border border-error/30 rounded">
+                  <span className="font-label-mono text-error text-xs">兼容性说明</span>
+                  <p className="font-body-ui text-system-log text-xs mt-1">{state.compatibilityNote}</p>
+                </div>
+              )}
+            </GlassPanel>
+          )}
 
           {/* Force-pass — only when complete and breaker triggered */}
           {state.status === "complete" && state.circuitBreakerTriggered && (

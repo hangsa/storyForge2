@@ -44,12 +44,16 @@ class TestStageEnum:
             Stage.STAGE2,
             Stage.STAGE3,
             Stage.STAGE4,
+            Stage.STAGE5,
+            Stage.STAGE6,
             Stage.COMPLETED,
         ]
 
     def test_stage_values(self):
         assert Stage.INIT.value == "INIT"
         assert Stage.STAGE4.value == "STAGE4"
+        assert Stage.STAGE5.value == "STAGE5"
+        assert Stage.STAGE6.value == "STAGE6"
         assert Stage.COMPLETED.value == "COMPLETED"
 
 
@@ -67,8 +71,14 @@ class TestGetNextStage:
     def test_init_to_stage1(self, sm):
         assert sm.get_next_stage(Stage.INIT) == Stage.STAGE1
 
-    def test_stage4_to_completed(self, sm):
-        assert sm.get_next_stage(Stage.STAGE4) == Stage.COMPLETED
+    def test_stage4_to_stage5(self, sm):
+        assert sm.get_next_stage(Stage.STAGE4) == Stage.STAGE5
+
+    def test_stage5_to_stage6(self, sm):
+        assert sm.get_next_stage(Stage.STAGE5) == Stage.STAGE6
+
+    def test_stage6_to_completed(self, sm):
+        assert sm.get_next_stage(Stage.STAGE6) == Stage.COMPLETED
 
     def test_completed_is_terminal(self, sm):
         assert sm.get_next_stage(Stage.COMPLETED) is None
@@ -97,10 +107,20 @@ class TestPreconditions:
         files = {p[0] for p in pre}
         assert "outline.json" in files
 
-    def test_completed_needs_all_scenes_done(self):
-        pre = PRECONDITIONS[Stage.COMPLETED]
+    def test_stage5_needs_all_scenes_done(self):
+        pre = PRECONDITIONS[Stage.STAGE5]
         assert len(pre) == 1
         assert pre[0][0] == "progress.json"
+
+    def test_stage6_needs_diagnosis_report(self):
+        pre = PRECONDITIONS[Stage.STAGE6]
+        assert len(pre) == 1
+        assert pre[0][0] == "diagnosis_report.json"
+
+    def test_completed_needs_export(self):
+        pre = PRECONDITIONS[Stage.COMPLETED]
+        assert len(pre) == 1
+        assert pre[0][0] == "exports/novel.md"
 
 
 class TestTransitionCheck:
@@ -191,12 +211,26 @@ class TestAdvance:
         })
         assert sm.advance(pid, Stage.STAGE4).allowed
 
+        # STAGE4 → STAGE5: all scenes completed
         _write_json(projects_dir, pid, "progress.json", {
             "chapters": [{
                 "chapter_number": 1,
                 "scenes": [{"scene_number": 1, "status": "completed"}],
             }],
         })
+        assert sm.advance(pid, Stage.STAGE5).allowed
+
+        # STAGE5 → STAGE6: diagnosis_report with no P0 issues
+        _write_json(projects_dir, pid, "diagnosis_report.json", {
+            "issues": [{"id": "i1", "severity": "P1", "status": "resolved"}],
+        })
+        assert sm.advance(pid, Stage.STAGE6).allowed
+
+        # STAGE6 → COMPLETED: exports/novel.md exists
+        import os
+        export_dir = projects_dir / pid / "exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        (export_dir / "novel.md").write_text("# Test Novel")
         assert sm.advance(pid, Stage.COMPLETED).allowed
         assert sm.get_current_stage(pid) == Stage.COMPLETED
 

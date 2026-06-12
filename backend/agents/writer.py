@@ -114,6 +114,7 @@ class WriterAgent(BaseAgent):
             "scene_emotional_arc": scene_plan.get("emotional_arc", ""),
             "scene_narrative_role": scene_plan.get("narrative_role", "setup"),
             "required_logs_list": logs_list,
+            "reader_os_warnings": "",
             "l0_context": l0_context,
             "l1_context": l1_context,
         }

@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import api, { ParsedLog, CheckResult, ProgressFile } from "../api/client";
 import { useStage4Writing } from "../hooks/useStage4Writing";
 import GlassPanel from "../components/shared/GlassPanel";
+import ChapterProgress from "../components/stage4/ChapterProgress";
 
 const LOG_TYPE_LABELS: Record<string, string> = {
   character_relation_change: "角色关系",
@@ -28,6 +29,7 @@ export default function Stage4Page() {
   const [sceneNum, setSceneNum] = useState(1);
   const [progress, setProgress] = useState<ProgressFile | null>(null);
   const [showCircuitBreaker, setShowCircuitBreaker] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
 
   const loadProgress = useCallback(async () => {
     if (!projectId) return;
@@ -67,6 +69,25 @@ export default function Stage4Page() {
   const handleNextScene = () => {
     setSceneNum((n) => n + 1);
     reset();
+  };
+
+  const handleChapterChange = (chapter: number) => {
+    setChapterNum(chapter);
+    setSceneNum(1);
+    reset();
+  };
+
+  const handleAdvance = async () => {
+    if (!projectId) return;
+    setAdvancing(true);
+    try {
+      await api.advanceChapter(projectId);
+      loadProgress();
+    } catch {
+      // silent fail
+    } finally {
+      setAdvancing(false);
+    }
   };
 
   if (!projectId) return null;
@@ -122,6 +143,17 @@ export default function Stage4Page() {
           {state.error}
         </div>
       )}
+
+      {/* Chapter Progress */}
+      <GlassPanel>
+        <ChapterProgress
+          chapterNumber={chapterNum}
+          onChapterChange={handleChapterChange}
+          onAdvance={handleAdvance}
+          advancing={advancing}
+          progress={progress}
+        />
+      </GlassPanel>
 
       {/* Controls bar */}
       <div className="flex items-center gap-4 p-4 bg-surface-container rounded-lg flex-wrap">

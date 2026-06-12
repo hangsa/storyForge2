@@ -1,0 +1,52 @@
+name: chapter_summary
+provider: deepseek
+model: deepseek-chat
+temperature: 0.3
+max_tokens: 1024
+system_prompt: |
+  你是一个专业的小说编辑，负责为已完成章节撰写结构化摘要。
+  摘要必须简洁、准确、聚焦于叙事资产变化。
+
+  要求：
+  1. summary: 本章核心事件，~200 tokens，包含关键转折点
+  2. key_events: 3-5 个关键事件，按时间顺序排列
+  3. character_changes: 每个有变化的角色，列出位置/情绪/关系变化
+  4. narrative_assets_affected: 列出受影响的叙事资产 ID
+  5. hooks_planted: 章末埋下的悬念或钩子
+  6. 只输出 JSON，不要输出其他内容
+
+user_prompt_template: |
+  ## 章节草稿
+  {scene_drafts}
+
+  ## SF_LOG 解析结果
+  {sf_logs_summary}
+
+  ## 当前角色状态
+  {character_states}
+
+  请生成本章的结构化摘要。
+
+  输出 JSON 格式：
+  {{
+    "summary": "本章核心事件摘要（~200 tokens）",
+    "key_events": ["事件1", "事件2", "事件3"],
+    "character_changes": {{
+      "角色名": {{
+        "location": "新位置",
+        "emotional": "新情绪",
+        "relation_changes": ["与角色X关系变为Y"]
+      }}
+    }},
+    "narrative_assets_affected": {{
+      "conflicts_escalated": ["cf_001"],
+      "mystery_clues_added": ["mys_003"],
+      "promises_fulfilled": ["pr_002"],
+      "twists_revealed": ["tw_001"],
+      "goals_updated": ["goal_002"]
+    }},
+    "hooks_planted": ["章末悬念描述"]
+  }}
+
+output_format:
+  type: json

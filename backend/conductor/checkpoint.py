@@ -67,6 +67,41 @@ class CheckpointManager:
                 "message": "未找到检查点文件",
             }
 
+        checkpoint_chapter = checkpoint.get("current_chapter", 1)
+        checkpoint_scene = checkpoint.get("current_scene", 1)
+
+        # Cross-chapter validation: compare with progress.json
+        progress_path = self._project_dir / "progress.json"
+        progress_consistent = True
+        if progress_path.exists():
+            with open(progress_path, "r", encoding="utf-8") as f:
+                progress = json.load(f)
+            progress_chapter = progress.get("current_chapter", 1)
+            chapters = progress.get("chapters", [])
+
+            # If checkpoint is behind progress, skip ahead
+            if checkpoint_chapter < progress_chapter:
+                progress_consistent = False
+                checkpoint_chapter = progress_chapter
+                # Find next incomplete scene
+                ch_progress = next(
+                    (ch for ch in chapters if ch.get("chapter_number") == progress_chapter),
+                    None,
+                )
+                if ch_progress:
+                    for s in ch_progress.get("scenes", []):
+                        if s.get("status") not in ("completed", "force_passed"):
+                            checkpoint_scene = s.get("scene_number", 1)
+                            break
+                    else:
+                        checkpoint_scene = 1  # all scenes done, start next chapter
+
+            # If checkpoint is ahead of progress (partial advance), trust checkpoint
+            elif checkpoint_chapter > progress_chapter:
+                progress_consistent = False
+        else:
+            progress_consistent = False
+
         missing_files = []
         registry_dir = self._project_dir / "storyos"
         for name, items in checkpoint.get("registry_snapshots", {}).items():
@@ -74,26 +109,34 @@ class CheckpointManager:
             if not path.exists():
                 missing_files.append(str(path))
 
+        recovery_instructions = []
+        if not progress_consistent:
+            recovery_instructions.append(
+                f"进度不一致，调整为: 第{checkpoint_chapter}章 第{checkpoint_scene}幕"
+            )
+
         if missing_files:
-            return {
-                "recoverable": True,
-                "checkpoint": checkpoint,
-                "recovery_instructions": [
-                    f"注册表文件缺失: {', '.join(missing_files)}",
-                    "将从检查点快照恢复注册表文件",
-                ],
-                "missing_files": missing_files,
-            }
+            recovery_instructions.append(
+                f"注册表文件缺失: {', '.join(missing_files)}，将从检查点快照恢复"
+            )
+
+        if not recovery_instructions:
+            recovery_instructions.append(
+                f"恢复至: 第{checkpoint_chapter}章 "
+                f"第{checkpoint_scene}幕 "
+                f"({checkpoint.get('pipeline_stage', 'unknown')})"
+            )
 
         return {
             "recoverable": True,
             "checkpoint": checkpoint,
-            "recovery_instructions": [
-                f"恢复至: 第{checkpoint.get('current_chapter', 0)}章 "
-                f"第{checkpoint.get('current_scene', 0)}幕 "
-                f"({checkpoint.get('pipeline_stage', 'unknown')})"
-            ],
-            "missing_files": [],
+            "recovery_instructions": recovery_instructions,
+            "recovery_point": {
+                "chapter_number": checkpoint_chapter,
+                "scene_number": checkpoint_scene,
+                "pipeline_stage": checkpoint.get("pipeline_stage", "unknown"),
+            },
+            "missing_files": missing_files,
         }
 
     def restore_registries_from_snapshot(self, snapshot: dict) -> None:

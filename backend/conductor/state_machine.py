@@ -11,6 +11,8 @@ class Stage(str, Enum):
     STAGE2 = "STAGE2"
     STAGE3 = "STAGE3"
     STAGE4 = "STAGE4"
+    STAGE5 = "STAGE5"
+    STAGE6 = "STAGE6"
     COMPLETED = "COMPLETED"
 
 
@@ -20,6 +22,8 @@ STAGE_ORDER = [
     Stage.STAGE2,
     Stage.STAGE3,
     Stage.STAGE4,
+    Stage.STAGE5,
+    Stage.STAGE6,
     Stage.COMPLETED,
 ]
 
@@ -56,19 +60,37 @@ PRECONDITIONS: dict[Stage, list[tuple]] = {
         ("outline.json", "chapters[0].scene_plan", lambda v: bool(v), "chapters[0].scene_plan 不能为空"),
     ],
     Stage.COMPLETED: [
-        (
-            "progress.json",
-            "chapters",
-            lambda v: isinstance(v, list)
-            and all(
-                s.get("status") in ("completed", "force_passed")
-                for ch in v
-                for s in ch.get("scenes", [])
-            ),
-            "所有 Scene 状态必须为 completed 或 force_passed",
-        ),
+        ("exports/novel.md", "", lambda v: v is not None, "exports/novel.md 不存在"),
     ],
 }
+
+# STAGE5 and STAGE6 preconditions
+PRECONDITIONS[Stage.STAGE5] = [
+    (
+        "progress.json",
+        "chapters",
+        lambda v: isinstance(v, list)
+        and all(
+            s.get("status") in ("completed", "force_passed")
+            for ch in v
+            for s in ch.get("scenes", [])
+        ),
+        "所有 Scene 状态必须为 completed 或 force_passed",
+    ),
+]
+PRECONDITIONS[Stage.STAGE6] = [
+    (
+        "diagnosis_report.json",
+        "issues",
+        lambda v: isinstance(v, list)
+        and all(
+            i.get("status") in ("resolved", "accepted")
+            for i in v
+            if i.get("severity") == "P0"
+        ),
+        "所有 P0 问题必须为 resolved 或 accepted",
+    ),
+]
 
 
 @dataclass
@@ -93,6 +115,9 @@ class StageStateMachine:
         if not path.exists():
             return None
         import json
+        # Handle non-JSON files (e.g., novel.md for COMPLETED check)
+        if not filename.endswith(".json"):
+            return {"_file_exists": True, "_path": str(path)}
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         # Normalize old-format outline.json (single chapter without chapters wrapper)

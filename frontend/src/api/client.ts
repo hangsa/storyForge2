@@ -317,6 +317,11 @@ export const api = {
   getStage4Progress: (projectId: string) =>
     request<ProgressFile>("GET", `/stage4/progress?project_id=${projectId}`),
 
+  advanceChapter: (projectId: string) =>
+    request<{ status: string; from_chapter: number; to_chapter: number; reader_os_snapshot: Record<string, unknown>; l2_summary: Record<string, unknown> }>(
+      "POST", "/stage4/advance-chapter", { project_id: projectId }
+    ),
+
   getRegistry: (projectId: string, registryType: string) =>
     request<Array<Record<string, unknown>>>("GET", `/storyos/${registryType}?project_id=${projectId}`),
 };

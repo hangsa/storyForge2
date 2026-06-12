@@ -68,6 +68,9 @@ user_prompt_template: |
   【近期章节摘要】
   {l1_context}
 
+  【读者反馈预警】
+  {reader_os_warnings}
+
   请根据重试提示修改草稿。只输出修改后的完整场景文本，不要解释改了哪些地方。
 
   输出JSON格式：

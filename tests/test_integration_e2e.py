@@ -153,9 +153,29 @@ class TestConductorStageTransitions:
         })
         assert resp.status_code == 200
 
-        # Create progress.json, then STAGE4 -> COMPLETED
+        # Create progress.json, then STAGE4 -> STAGE5
         with open(f"{proj_dir}/progress.json", "w") as f:
             json.dump({"chapters": [{"chapter_number": 1, "scenes": [{"scene_number": 1, "status": "completed"}]}]}, f, ensure_ascii=False)
+
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "STAGE5",
+        })
+        assert resp.status_code == 200
+
+        # Create diagnosis_report.json, then STAGE5 -> STAGE6
+        with open(f"{proj_dir}/diagnosis_report.json", "w") as f:
+            json.dump({"issues": []}, f, ensure_ascii=False)
+
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": "STAGE6",
+        })
+        assert resp.status_code == 200
+
+        # Create exports/novel.md, then STAGE6 -> COMPLETED
+        export_dir = os.path.join(proj_dir, "exports")
+        os.makedirs(export_dir, exist_ok=True)
+        with open(f"{export_dir}/novel.md", "w") as f:
+            f.write("# Test Novel")
 
         resp = client.post("/api/conductor/advance", json={
             "project_id": proj_id, "target_stage": "COMPLETED",

@@ -66,6 +66,10 @@ class WriterAgent(BaseAgent):
         scene_plan: dict,
         l0_context: str,
         l1_context: str,
+        l2_context: str = "",
+        l3_context: str = "",
+        l4_context: str = "",
+        growth_stage_hint: str = "",
     ) -> dict:
         core_contradiction = concept.get("story_dna", {}).get(
             "core_contradiction", {}
@@ -117,6 +121,10 @@ class WriterAgent(BaseAgent):
             "required_logs_list": logs_list,
             "l0_context": l0_context,
             "l1_context": l1_context,
+            "l2_context": l2_context,
+            "l3_context": l3_context,
+            "l4_context": l4_context,
+            "growth_stage_hint": growth_stage_hint,
         }
 
     async def write_scene(
@@ -129,6 +137,10 @@ class WriterAgent(BaseAgent):
         scene_plan: dict,
         l0_context: str = "",
         l1_context: str = "",
+        l2_context: str = "",
+        l3_context: str = "",
+        l4_context: str = "",
+        growth_stage_hint: str = "",
         style_template: Optional[dict] = None,
         storyos_state: Optional[dict] = None,
         reader_os_warnings: str = "",
@@ -137,6 +149,7 @@ class WriterAgent(BaseAgent):
         template_vars = self._build_base_vars(
             genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
+            l2_context, l3_context, l4_context, growth_stage_hint,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         return await self.generate_from_template(
@@ -155,12 +168,17 @@ class WriterAgent(BaseAgent):
         previous_draft: str,
         l0_context: str = "",
         l1_context: str = "",
+        l2_context: str = "",
+        l3_context: str = "",
+        l4_context: str = "",
+        growth_stage_hint: str = "",
         reader_os_warnings: str = "",
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
             genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
+            l2_context, l3_context, l4_context, growth_stage_hint,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["retry_hints"] = retry_hints

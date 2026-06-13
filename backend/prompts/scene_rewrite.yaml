@@ -68,6 +68,18 @@ user_prompt_template: |
   【近期章节摘要】
   {l1_context}
 
+  【全书叙事摘要】
+  {l2_context}
+
+  【叙事模式分析】
+  {l4_context}
+
+  【相关历史文本片段】
+  {l3_context}
+
+  【当前创作阶段】
+  {growth_stage_hint}
+
   【读者反馈预警】
   {reader_os_warnings}
 

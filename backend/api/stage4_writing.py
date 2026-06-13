@@ -14,6 +14,7 @@ from backend.agents.summary_archiver import SummaryArchiver
 from backend.memory_os.l0_runtime import L0Runtime
 from backend.memory_os.l1_hot import L1Hot
 from backend.memory_os.l2_warm import L2WarmMemory
+from backend.memory_os.memory_coordinator import MemoryCoordinator
 from backend.reader_os.calculator import ReaderOS
 
 router = APIRouter(prefix="/api/stage4", tags=["stage4"])
@@ -154,17 +155,19 @@ async def write_scene(data: dict):
             detail={"error": True, "code": "SCENE_NOT_FOUND", "message": f"Scene {scene_number} 不存在", "detail": {}},
         )
 
-    # Initialize per-request components
+    # Initialize MemoryCoordinator for full L0-L4 context assembly
+    mc = MemoryCoordinator(project_id, settings.projects_dir)
+    character_names = [c.get("name", "") for c in ctx["characters"]]
+    ctx_mem = mc.assemble_for_scene(
+        scene_number=scene_number,
+        scene_goal=scene_plan.get("goal", ""),
+        scene_conflict=scene_plan.get("conflict", ""),
+        character_names=character_names,
+        chapter_number=chapter_number,
+    )
+
+    # Keep L0Runtime reference for later L0 updates after StoryOS parsing
     l0 = L0Runtime()
-    l1 = L1Hot()
-
-    # Load L1 from previous scene drafts in this chapter
-    chapters_dir = fm.project_path(project_id, "chapters")
-    if chapters_dir.exists():
-        for draft_file in sorted(chapters_dir.glob(f"ch{chapter_number:02d}_scene_*_draft.md")):
-            text = draft_file.read_text(encoding="utf-8")
-            l1.append_scene(scene_number, text, chapter_number=chapter_number)
-
     l0.set_scene_context(scene_number, scene_plan.get("goal", ""))
 
     writer = WriterAgent(project_id)
@@ -193,8 +196,12 @@ async def write_scene(data: dict):
             world_rules=ctx["world"],
             characters=ctx["characters"],
             scene_plan=scene_plan,
-            l0_context=l0.get_context_string(),
-            l1_context=l1.get_context_string(),
+            l0_context=ctx_mem.l0_context,
+            l1_context=ctx_mem.l1_context,
+            l2_context=ctx_mem.l2_context,
+            l3_context=ctx_mem.l3_context,
+            l4_context=ctx_mem.l4_context,
+            growth_stage_hint=ctx_mem.growth_stage_hint,
             reader_os_warnings=reader_warnings_str,
         )
     except ValueError as e:
@@ -252,8 +259,12 @@ async def write_scene(data: dict):
                     scene_plan=scene_plan,
                     retry_hints=hints,
                     previous_draft=current_draft,
-                    l0_context=l0.get_context_string(),
-                    l1_context=l1.get_context_string(),
+                    l0_context=ctx_mem.l0_context,
+                    l1_context=ctx_mem.l1_context,
+                    l2_context=ctx_mem.l2_context,
+                    l3_context=ctx_mem.l3_context,
+                    l4_context=ctx_mem.l4_context,
+                    growth_stage_hint=ctx_mem.growth_stage_hint,
                     reader_os_warnings=reader_warnings_str,
                 )
             except ValueError as e:
@@ -595,6 +606,13 @@ async def advance_chapter(data: dict):
 
     # 4. Update L2 memory
     l2.update_from_summary(current_chapter, summary, all_sf_logs)
+
+    # 4b. Trigger L4 sync + L3 indexing (Phase 2: deterministic, tier_0)
+    mc = MemoryCoordinator(project_id, settings.projects_dir)
+    mc.assemble_for_chapter_advance(
+        chapter_number=current_chapter,
+        scene_drafts=scene_drafts,
+    )
 
     # 5. Trigger ReaderOS calculation
     reader_os = ReaderOS(project_id)

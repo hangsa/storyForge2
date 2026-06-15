@@ -1,8 +1,7 @@
 """StoryForge v1.6 Phase 4a -- WritingFormulaAnalyzer for L2 writing formula compliance."""
 import json
 import logging
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from backend.style_engine.style_extractor import (
     _split_sentences,
@@ -55,7 +54,7 @@ class WritingFormulaAnalyzer:
         sentences = _split_sentences(merged)
         total_chars = _char_count(merged)
 
-        # Sentence stats
+        # Sentence stats (note: short ≤15 matches spec; StyleExtractor uses <15)
         if sentences:
             lengths = [_char_count(s) for s in sentences]
             avg = sum(lengths) / len(lengths)

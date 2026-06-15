@@ -521,6 +521,60 @@ class ReviewerAgent:
             tokens_used=result.get("usage", {}).get("input", 0),
         )
 
+    # --- v1.6 Phase 4b: Style Guard ---
+
+    async def run_style_guard(
+        self,
+        scene_text: str,
+        genre_template: dict,
+        characters: list[dict],
+    ) -> list[dict]:
+        """
+        执行 Style Guard L3 禁忌约束检测。
+        在 Narrative Guard 之后调用。不阻断 Scene。
+        返回 TabooViolation 列表的 dict 形式。
+
+        Args:
+            scene_text: Scene draft text
+            genre_template: Loaded genre template dict (contains taboos key)
+            characters: List of character dicts with voice_signature.taboos
+        """
+        try:
+            from backend.style_engine.taboo_constraints import TabooConstraintChecker
+
+            checker = TabooConstraintChecker()
+
+            genre_taboos = genre_template.get("taboos", []) if genre_template else []
+
+            character_taboos = [
+                {
+                    "name": c.get("name", "未知角色"),
+                    "taboos": c.get("voice_signature", {}).get("taboos", []),
+                }
+                for c in characters
+                if c.get("voice_signature", {}).get("taboos")
+            ]
+
+            violations = await checker.check_async(
+                scene_text=scene_text,
+                genre_taboos=genre_taboos,
+                character_taboos=character_taboos,
+            )
+
+            return [
+                {
+                    "pattern_name": v.pattern_name,
+                    "layer": v.layer,
+                    "severity": v.severity,
+                    "matched_text": v.matched_text,
+                    "context": v.context,
+                }
+                for v in violations
+            ]
+        except Exception as e:
+            logger.warning("Style Guard check failed (non-blocking): %s", e)
+            return []
+
     @staticmethod
     def _parse_json_text(text: str) -> Optional[dict]:
         return parse_json_text(text)

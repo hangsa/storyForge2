@@ -261,6 +261,67 @@ class TestLayer3CharacterTaboos:
         assert "character" in layers
 
 
+class TestReviewerStyleGuard:
+    @pytest.fixture
+    def genre_template(self):
+        return {
+            "taboos": [
+                {"name": "禁用语", "type": "keyword", "words": ["绝望", "放弃"], "severity": "warning"},
+            ]
+        }
+
+    @pytest.fixture
+    def characters(self):
+        return [
+            {
+                "name": "林峰",
+                "voice_signature": {"taboos": ["禁止说脏话", "禁止主动求助"]},
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_run_style_guard_returns_violations(self, genre_template, characters):
+        from backend.agents.reviewer import ReviewerAgent
+        reviewer = ReviewerAgent("test_project")
+        violations = await reviewer.run_style_guard(
+            scene_text="作者说林峰绝望地喊道：'他妈的都是废物！救命啊！'",
+            genre_template=genre_template,
+            characters=characters,
+        )
+        assert isinstance(violations, list)
+        assert len(violations) > 0
+
+    @pytest.mark.asyncio
+    async def test_run_style_guard_no_taboos_no_violations(self, genre_template, characters):
+        from backend.agents.reviewer import ReviewerAgent
+        reviewer = ReviewerAgent("test_project")
+        violations = await reviewer.run_style_guard(
+            scene_text="主角推开石门，步入大殿。",
+            genre_template={"taboos": []},
+            characters=[{"name": "林峰", "voice_signature": {}}],
+        )
+        assert all(v["layer"] == "global" for v in violations), (
+            "Should only have global violations, not genre or character"
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_style_guard_returns_dicts(self, genre_template, characters):
+        from backend.agents.reviewer import ReviewerAgent
+        reviewer = ReviewerAgent("test_project")
+        violations = await reviewer.run_style_guard(
+            scene_text="林峰说：'他妈的！'",
+            genre_template=genre_template,
+            characters=characters,
+        )
+        for v in violations:
+            assert isinstance(v, dict)
+            assert "pattern_name" in v
+            assert "layer" in v
+            assert "severity" in v
+            assert "matched_text" in v
+            assert "context" in v
+
+
 class TestCheckSyncIntegration:
     @pytest.fixture
     def checker(self):

@@ -506,6 +506,10 @@ async def skip_scene(data: dict):
 
 @router.get("/progress")
 async def get_progress(project_id: str):
+    # v1.6 Phase 3b: ensure baseline manifest exists on first STAGE 4 entry
+    from backend.conductor.impact_analyzer import ImpactAnalyzer
+    ImpactAnalyzer().ensure_baseline(project_id)
+
     progress = fm.read_json(project_id, "progress.json")
 
     # Enrich with outline data (total chapters and scene counts per chapter)

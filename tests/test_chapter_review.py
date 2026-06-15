@@ -10,7 +10,7 @@ from backend.conductor.chapter_review import (
 class TestCoherenceScorer:
     def test_rule_score_in_range(self):
         scorer = CoherenceScorer()
-        score = scorer._compute_rule_score(
+        score = scorer.compute_rule_score(
             narrative_health=70.0,
             reader_os_avg=65.0,
             fact_guard_pass_rate=0.85,
@@ -19,16 +19,16 @@ class TestCoherenceScorer:
 
     def test_rule_score_all_perfect(self):
         scorer = CoherenceScorer()
-        score = scorer._compute_rule_score(
+        score = scorer.compute_rule_score(
             narrative_health=100.0,
             reader_os_avg=100.0,
             fact_guard_pass_rate=1.0,
         )
-        assert score == 60  # 100*0.2 + 100*0.2 + 100*0.2 = 60 (rule is 60% of total)
+        assert score == 100  # (100 + 100 + 100) / 3 = 100
 
     def test_rule_score_all_zero(self):
         scorer = CoherenceScorer()
-        score = scorer._compute_rule_score(
+        score = scorer.compute_rule_score(
             narrative_health=0.0,
             reader_os_avg=0.0,
             fact_guard_pass_rate=0.0,
@@ -60,6 +60,23 @@ class TestChapterReviewBuilder:
         (proj_dir / "memory" / "l2").mkdir(parents=True)
         (proj_dir / "storyos").mkdir(parents=True)
         (proj_dir / "chapters").mkdir(parents=True)
+        # Write scene meta files with fact_guard_results for chapter-level FG summary
+        for sn in (1, 2, 3):
+            meta = {
+                "chapter_number": 3,
+                "scene_number": sn,
+                "fact_guard_results": {
+                    "all_passed": True,
+                    "checks": [
+                        {"check_id": 1, "name": "check_a", "passed": True, "detail": ""},
+                        {"check_id": 2, "name": "check_b", "passed": True, "detail": ""},
+                        {"check_id": 3, "name": "check_c", "passed": sn != 2, "detail": ""},
+                    ],
+                },
+            }
+            (proj_dir / "chapters" / f"ch03_scene_{sn:03d}_meta.json").write_text(
+                json.dumps(meta), encoding="utf-8"
+            )
         (proj_dir / "progress.json").write_text(json.dumps({
             "project_id": "test_proj",
             "current_chapter": 3,
@@ -73,12 +90,6 @@ class TestChapterReviewBuilder:
                         {"scene_number": 3, "status": "completed", "retry_count": 0},
                     ],
                 }
-            ],
-            "circuit_breaker_events": [
-                {"scene_number": 1, "attempt": 1, "result": "passed"},
-                {"scene_number": 2, "attempt": 1, "result": "retry"},
-                {"scene_number": 2, "attempt": 2, "result": "passed"},
-                {"scene_number": 3, "attempt": 1, "result": "passed"},
             ],
         }), encoding="utf-8")
         return ChapterReviewBuilder("test_proj", projects_dir=projects_dir)
@@ -105,10 +116,10 @@ class TestChapterReviewBuilder:
     def test_build_review_fact_guard_summary(self, builder):
         review = builder.build_review(3)
         fgs = review["fact_guard_summary"]
-        assert fgs["total"] == 4
-        assert fgs["passed"] == 3
+        assert fgs["total"] == 9   # 3 scenes × 3 checks
+        assert fgs["passed"] == 8  # scene 2 check_c failed
         assert fgs["failed"] == 1
-        assert fgs["pass_rate"] == 0.75
+        assert fgs["pass_rate"] == 0.89
 
     def test_get_review_data_returns_none_for_missing(self, builder):
         result = builder.get_review_data(99)

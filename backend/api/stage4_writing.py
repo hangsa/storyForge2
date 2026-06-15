@@ -381,7 +381,7 @@ async def write_scene(data: dict):
     # v1.6 Phase 3a: Chapter review trigger
     chapter_review_ready = False
     all_scenes_done = all(
-        s.get("status") in ("completed", "force_passed")
+        s.get("status") in ("completed", "force_passed", "skipped")
         for s in chapter_progress.get("scenes", [])
     )
     if all_scenes_done and chapter_progress.get("scenes"):

@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 
 class CoherenceScorer:
     """
-    Scores chapter coherence: rule-based (60%) + Tier 3 LLM +/-10 delta fine-tuning.
+    Scores chapter coherence: rule-based (three equal 1/3 weights) + Tier 3 LLM +/-10 delta.
 
-    Rule part weights (each 20%):
+    Rule part (equal weights, normalized to 0-100):
     - Narrative asset health: active asset completion rate
     - ReaderOS state avg: (addiction + satisfaction + curiosity) / 3
-    - Fact Guard pass rate: first-attempt pass / total checks
+    - Fact Guard pass rate: passed / total checks
 
     LLM part: +/-10 delta adjustment + one-liner comment from Tier 3 Haiku.
     Final: clamp(rule_score + llm_delta, 0, 100).
@@ -28,16 +28,14 @@ class CoherenceScorer:
 
     MAX_DELTA = 10
 
-    def _compute_rule_score(
+    def compute_rule_score(
         self,
         narrative_health: float,
         reader_os_avg: float,
         fact_guard_pass_rate: float,
     ) -> float:
         return round(
-            narrative_health * 0.20
-            + reader_os_avg * 0.20
-            + fact_guard_pass_rate * 100 * 0.20
+            (narrative_health + reader_os_avg + fact_guard_pass_rate * 100) / 3
         )
 
     def _clamp_delta(self, delta: int) -> int:
@@ -122,7 +120,7 @@ class ChapterReviewBuilder:
         if not scenes:
             return False
         return all(
-            s.get("status") in ("completed", "force_passed")
+            s.get("status") in ("completed", "force_passed", "skipped")
             for s in scenes
         )
 
@@ -210,7 +208,7 @@ class ChapterReviewBuilder:
 
         fg_pass_rate = fact_guard.get("pass_rate", 0.0)
 
-        return self._scorer._compute_rule_score(
+        return self._scorer.compute_rule_score(
             narrative_health=narrative_health,
             reader_os_avg=reader_os_avg,
             fact_guard_pass_rate=fg_pass_rate,
@@ -255,32 +253,28 @@ class ChapterReviewBuilder:
         }
 
     def _summarize_fact_guard(self, chapter_number: int) -> dict:
-        """Count Fact Guard pass/fail for scenes in this chapter."""
-        progress = self._fm.read_json(self.project_id, "progress.json") or {}
-        events = progress.get("circuit_breaker_events", [])
+        """Count Fact Guard pass/fail from scene meta files (chapter-level)."""
+        total_checks = 0
+        total_passed = 0
+        chapters_dir = self._project_dir / "chapters"
+        if not chapters_dir.exists():
+            return {"passed": 0, "failed": 0, "total": 0, "pass_rate": 0.0}
 
-        chapter_scene_numbers = set()
-        for ch in progress.get("chapters", []):
-            if ch.get("chapter_number") == chapter_number:
-                chapter_scene_numbers = {
-                    s["scene_number"] for s in ch.get("scenes", [])
-                }
-                break
-
-        chapter_events = [
-            e for e in events
-            if e.get("scene_number") in chapter_scene_numbers
-        ]
-
-        total = len(chapter_events)
-        passed = sum(1 for e in chapter_events if e.get("result") == "passed")
-        failed = total - passed
+        for meta_file in sorted(chapters_dir.glob(f"ch{chapter_number:02d}_scene_*_meta.json")):
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                fgr = meta.get("fact_guard_results", {})
+                checks = fgr.get("checks", [])
+                total_checks += len(checks)
+                total_passed += sum(1 for c in checks if c.get("passed"))
+            except Exception:
+                continue
 
         return {
-            "passed": passed,
-            "failed": failed,
-            "total": total,
-            "pass_rate": round(passed / max(1, total), 2),
+            "passed": total_passed,
+            "failed": total_checks - total_passed,
+            "total": total_checks,
+            "pass_rate": round(total_passed / max(1, total_checks), 2) if total_checks > 0 else 0.0,
         }
 
     def _collect_narrative_guard_warnings(self, chapter_number: int) -> list[dict]:

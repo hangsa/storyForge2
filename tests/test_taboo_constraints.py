@@ -133,6 +133,15 @@ class TestLayer2GenreTaboos:
         assert any(v.pattern_name == "虐主" for v in violations)
         assert all(v.severity == "error" for v in violations)
 
+    def test_sliding_window_dedup_overlapping(self, checker, genre_taboos):
+        """Multiple overlapping windows hitting same cluster → only 1 violation."""
+        sliding_taboo = [t for t in genre_taboos if t["name"] == "虐主"]
+        filler = "正文填充" * 15  # ~60 chars
+        text = "主角受伤吐血惨叫" + filler + "遭到虐待碾压" + filler
+        violations = checker._check_genre_taboos(text, sliding_taboo)
+        count = sum(1 for v in violations if v.pattern_name == "虐主")
+        assert count == 1, f"Expected 1 violation, got {count}"
+
     # --- consecutive_match type ---
 
     def test_consecutive_match_below_threshold(self, checker, genre_taboos):

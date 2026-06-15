@@ -147,7 +147,7 @@ class TabooConstraintChecker:
 
         step = max(1, max_chars // 4)
         violations = []
-        seen_windows: set[int] = set()  # deduplicate overlapping windows
+        last_reported_end = -max_chars  # ensure first window always reports
 
         for start in range(0, len(scene_text), step):
             window_end = min(len(scene_text), start + max_chars)
@@ -161,10 +161,8 @@ class TabooConstraintChecker:
                     hit_positions.append(start + m.start())
 
             if hit_count >= 3:
-                # Check if this window overlaps significantly with an already-reported one
-                window_key = start // step
-                if window_key not in seen_windows:
-                    seen_windows.add(window_key)
+                if start >= last_reported_end:
+                    last_reported_end = start + max_chars
                     match_pos = hit_positions[0] if hit_positions else start
                     violations.append(TabooViolation(
                         pattern_name=taboo["name"],

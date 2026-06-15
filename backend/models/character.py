@@ -1,3 +1,6 @@
+from enum import Enum
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -35,6 +38,38 @@ class RelationStatus(BaseModel):
     last_update_chapter: int = 0
 
 
+# --- v1.6 TRD 4.1: Character Growth Curve ---
+
+
+class GrowthEventType(str, Enum):
+    """8-class belief change trigger whitelist."""
+    BETRAYAL_EXPERIENCED = "betrayal_experienced"
+    DEATH_OF_LOVED_ONE = "death_of_loved_one"
+    WORLD_TRUTH_REVEALED = "world_truth_revealed"
+    PERSONAL_IDENTITY_CRISIS = "personal_identity_crisis"
+    IRREVERSIBLE_LOSS = "irreversible_loss"
+    MORAL_AWAKENING = "moral_awakening"
+    ACCUMULATED_EVIDENCE = "accumulated_evidence"
+    RELATIONSHIP_TRANSFORMATION = "relationship_transformation"
+
+
+class GrowthStage(BaseModel):
+    """One stage in a character's growth curve."""
+    stage_number: int = 1
+    stage_name: str = ""
+    trigger_event_type: GrowthEventType = GrowthEventType.BETRAYAL_EXPERIENCED
+    trigger_event_description: str = ""
+    character_change: str = ""
+    target_chapter_range: str = ""  # e.g. "3-5" — LLM-authored estimate
+    bound_chapter: Optional[int] = None  # set during STAGE 3 binding
+
+
+class GrowthCurve(BaseModel):
+    """Character growth arc through the story."""
+    curve_description: str = ""
+    stages: list[GrowthStage] = Field(default_factory=list)
+
+
 class Character(BaseModel):
     id: str
     name: str = ""
@@ -45,6 +80,7 @@ class Character(BaseModel):
     is_core_character: bool = True
     character_type: str = "protagonist"
     relations: dict[str, RelationStatus] = Field(default_factory=dict)
+    growth_curve: Optional[GrowthCurve] = None
 
 
 class CharacterSet(BaseModel):

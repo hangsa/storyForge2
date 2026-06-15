@@ -32,10 +32,13 @@ _GLOBAL_TABOOS: list[dict] = [
     {"pattern": r"各位看官", "name": "全局-元引用", "severity": "warning"},
     {"pattern": r"书接上文", "name": "全局-元引用", "severity": "warning"},
     # Real brand names -- error
-    {"pattern": r"\b(iPhone|iPad|MacBook|Apple Watch)\b", "name": "全局-真实品牌", "severity": "error"},
+    # Chinese-aware boundary: \b is ineffective with CJK text (Unicode \w includes hanzi).
+    # Use lookbehind/lookahead that assert no adjacent ASCII word chars.
+    {"pattern": r"(?<![a-zA-Z0-9])(iPhone|iPad|MacBook|Apple Watch)(?![a-zA-Z0-9])", "name": "全局-真实品牌", "severity": "error"},
     {"pattern": r"(微信|支付宝|抖音|淘宝|百度|京东|美团|滴滴)", "name": "全局-真实品牌", "severity": "error"},
-    {"pattern": r"\b(Nike|Adidas|Starbucks|McDonald'?s?|Google|Microsoft)\b", "name": "全局-真实品牌", "severity": "error"},
+    {"pattern": r"(?<![a-zA-Z0-9])(Nike|Adidas|Starbucks|McDonald'?s?|Google|Microsoft)(?![a-zA-Z0-9])", "name": "全局-真实品牌", "severity": "error"},
     # Real platforms in-story -- error
+    # Longer alternatives must come first in alternation groups
     {"pattern": r"(起点中文网|起点|番茄小说|晋江文学城|晋江)", "name": "全局-真实平台", "severity": "error"},
 ]
 
@@ -166,21 +169,25 @@ class TabooConstraintChecker:
             window = scene_text[start:window_end]
 
             hit_count = 0
-            hit_positions = []
+            first_hit_start = None
+            first_hit_end = None
             for kw in keywords:
                 for m in re.finditer(re.escape(kw), window):
                     hit_count += 1
-                    hit_positions.append(start + m.start())
+                    if first_hit_start is None:
+                        first_hit_start = start + m.start()
+                        first_hit_end = start + m.end()
 
             if hit_count >= 3:
                 if start >= last_reported_end:
                     last_reported_end = start + max_chars
-                    match_pos = hit_positions[0] if hit_positions else start
+                    ms = first_hit_start if first_hit_start is not None else start
+                    me = first_hit_end if first_hit_end is not None else start + 10
                     violations.append(TabooViolation(
                         pattern_name=taboo["name"],
                         layer="genre",
                         severity=taboo.get("severity", "error"),
-                        matched_text=_extract_matched(scene_text, match_pos, match_pos + 10),
+                        matched_text=_extract_matched(scene_text, ms, me),
                         context=_extract_context(scene_text, start, window_end),
                     ))
 
@@ -194,17 +201,28 @@ class TabooConstraintChecker:
         if not failure_keywords:
             return []
 
-        paragraphs = [p.strip() for p in scene_text.split("\n\n") if p.strip()]
-        if not paragraphs:
+        # Split paragraphs and track original text offsets to avoid find() ambiguity
+        raw_paragraphs = scene_text.split("\n\n")
+        para_entries: list[tuple[str, int]] = []  # (text, offset_in_original)
+        offset = 0
+        for raw in raw_paragraphs:
+            stripped = raw.strip()
+            if stripped:
+                # Find this stripped text within the original raw block
+                local_offset = raw.find(stripped)
+                para_entries.append((stripped, offset + local_offset))
+            offset += len(raw) + 2  # +2 for the \n\n separator
+
+        if not para_entries:
             return []
 
         # Find all consecutive runs
         hit_runs: list[list[int]] = []
         current_run: list[int] = []
 
-        for i, para in enumerate(paragraphs):
+        for i, (para_text, _para_offset) in enumerate(para_entries):
             hit = any(
-                re.search(re.escape(kw), para)
+                re.search(re.escape(kw), para_text)
                 for kw in failure_keywords
             )
             if hit:
@@ -220,17 +238,13 @@ class TabooConstraintChecker:
 
         violations = []
         for run in hit_runs:
-            # Find position in original text
-            first_para = paragraphs[run[0]]
-            match_start = scene_text.find(first_para)
-            if match_start == -1:
-                match_start = 0
+            first_para_text, match_start = para_entries[run[0]]
             violations.append(TabooViolation(
                 pattern_name=taboo["name"],
                 layer="genre",
                 severity=taboo.get("severity", "error"),
-                matched_text=first_para[:80],
-                context=_extract_context(scene_text, match_start, match_start + len(first_para)),
+                matched_text=first_para_text[:80],
+                context=_extract_context(scene_text, match_start, match_start + len(first_para_text)),
             ))
 
         return violations

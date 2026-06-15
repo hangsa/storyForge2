@@ -67,6 +67,26 @@ class TestLayer1GlobalTaboos:
         violations = checker._check_global_taboos(text)
         assert len(violations) >= 2
 
+    def test_english_brand_in_chinese_context(self, checker):
+        """English brand names embedded in Chinese text should be detected."""
+        violations = checker._check_global_taboos(
+            "他从包里拿出iPhone看了看，又打开MacBook开始工作。"
+        )
+        assert any(v.pattern_name == "全局-真实品牌" for v in violations)
+        assert len([v for v in violations if v.pattern_name == "全局-真实品牌"]) >= 2
+
+    def test_english_brand_no_false_positive(self, checker):
+        """Words containing brand substrings (e.g., 'Nike' inside 'Niketown') should not match."""
+        violations = checker._check_global_taboos(
+            "他去了Niketown逛街。"  # Niketown is not "Nike" brand standalone
+        )
+        # \b was replaced with (?<![a-zA-Z0-9])...(?![a-zA-Z0-9])
+        # "Nike" inside "Niketown" should NOT match
+        assert not any(
+            "Nike" in v.matched_text and "Niketown" in v.context
+            for v in violations
+        )
+
 
 class TestLayer2GenreTaboos:
     @pytest.fixture

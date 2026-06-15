@@ -4,15 +4,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+_RANGE_SENTINEL = (999999, 999999)
+
+
 def _parse_target_range(range_str: str) -> tuple[int, int]:
-    """Parse '3-5' into (3, 5). Returns (0, 999) on failure."""
+    """Parse '3-5' into (3, 5). Returns sentinel on failure so malformed
+    ranges never match a real chapter number."""
+    if not range_str or not range_str.strip():
+        return _RANGE_SENTINEL
     try:
         parts = range_str.split("-")
         if len(parts) == 2:
             return int(parts[0].strip()), int(parts[1].strip())
     except (ValueError, AttributeError):
         pass
-    return 0, 999
+    return _RANGE_SENTINEL
 
 
 def compute_character_growth_context(characters: list[dict], chapter_number: int) -> str:
@@ -43,6 +49,9 @@ def compute_character_growth_context(characters: list[dict], chapter_number: int
         for stage in gc.get("stages", []):
             target_range = stage.get("target_chapter_range", "")
             start, end = _parse_target_range(target_range)
+
+            if (start, end) == _RANGE_SENTINEL:
+                continue  # malformed range — skip this stage
 
             if start <= chapter_number <= end:
                 active_stages.append(stage)

@@ -82,6 +82,9 @@ async def generate_outline(data: dict):
 
     # Accumulate chapters: merge new chapter with existing outline
     existing_outline = fm.read_json(project_id, "outline.json") or {}
+    # Migrate old single-chapter format (no "chapters" key) to list format
+    if "chapters" not in existing_outline:
+        existing_outline = {"chapters": [existing_outline]} if existing_outline else {"chapters": []}
     existing_chapters = existing_outline.get("chapters", [])
     existing_chapters = [ch for ch in existing_chapters
                          if ch.get("chapter_number") != result.get("chapter_number")]

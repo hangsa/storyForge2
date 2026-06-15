@@ -11,7 +11,7 @@ TRIGGER_KEYWORDS: dict[str, list[str]] = {
     "personal_identity_crisis": ["身份危机", "认同危机", "我是谁", "自我怀疑", "身份动摇", "身世"],
     "irreversible_loss": ["失去", "丧失", "不可逆转", "无法挽回", "永远失去", "化为乌有"],
     "moral_awakening": ["道德觉醒", "良知", "顿悟", "醒悟", "幡然", "悔悟"],
-    "accumulated_evidence": ["证据", "线索汇集", "拼图完整", "水落石出", "查出", "查明"],
+    "accumulated_evidence": ["证据", "线索汇集", "拼图完整", "查出", "查明"],
     "relationship_transformation": ["关系转变", "关系变化", "感情升级", "情感转折", "和解"],
 }
 

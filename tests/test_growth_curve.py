@@ -209,6 +209,18 @@ class TestGrowthCurveBinder:
         result = bind_growth_curve_to_outline(characters, outline)
         assert result[0]["growth_curve"] is None
 
+    def test_no_ambiguous_keywords_across_trigger_types(self):
+        """Each Chinese keyword should belong to exactly one trigger type."""
+        from backend.growth_curve.binder import TRIGGER_KEYWORDS
+        seen: dict[str, str] = {}
+        for event_type, keywords in TRIGGER_KEYWORDS.items():
+            for kw in keywords:
+                assert kw not in seen, (
+                    f"Ambiguous keyword '{kw}' found in both"
+                    f" '{seen[kw]}' and '{event_type}'"
+                )
+                seen[kw] = event_type
+
 
 class TestGrowthContext:
     def test_empty_when_no_growth_curves(self):
@@ -334,3 +346,35 @@ class TestGrowthContext:
         result = compute_character_growth_context(characters, 2)
         assert "林峰" in result
         assert "苏晓晓" in result
+
+    def test_parse_target_range_empty_string_returns_sentinel(self):
+        from backend.growth_curve.context import _parse_target_range, _RANGE_SENTINEL
+        assert _parse_target_range("") == _RANGE_SENTINEL
+
+    def test_parse_target_range_malformed_returns_sentinel(self):
+        from backend.growth_curve.context import _parse_target_range, _RANGE_SENTINEL
+        assert _parse_target_range("not-a-range") == _RANGE_SENTINEL
+        assert _parse_target_range("abc-def") == _RANGE_SENTINEL
+
+    def test_malformed_range_skipped_in_context(self):
+        from backend.growth_curve.context import compute_character_growth_context
+        characters = [
+            {
+                "name": "测试角色",
+                "growth_curve": {
+                    "curve_description": "",
+                    "stages": [
+                        {
+                            "stage_number": 1,
+                            "stage_name": "无效阶段",
+                            "target_chapter_range": "",
+                            "trigger_event_type": "betrayal_experienced",
+                            "trigger_event_description": "不会出现",
+                            "character_change": "不应该显示",
+                        }
+                    ],
+                },
+            }
+        ]
+        result = compute_character_growth_context(characters, 3)
+        assert "无效阶段" not in result

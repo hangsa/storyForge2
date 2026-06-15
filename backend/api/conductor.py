@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
 from backend.conductor.state_machine import StageStateMachine, Stage
+from backend.conductor.impact_analyzer import ImpactAnalyzer
 
 router = APIRouter(prefix="/api/conductor", tags=["conductor"])
 sm = StageStateMachine(settings.projects_dir)
@@ -106,9 +107,18 @@ async def analyze_impact(data: dict):
             },
         )
 
-    from backend.conductor.impact_analyzer import ImpactAnalyzer
-
     analyzer = ImpactAnalyzer(settings.projects_dir)
+
+    if not analyzer.project_exists(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "PROJECT_NOT_FOUND",
+                "message": f"项目 {project_id} 不存在",
+                "detail": {},
+            },
+        )
 
     if not analyzer.has_baseline(project_id):
         raise HTTPException(
@@ -190,9 +200,18 @@ async def execute_rollback(data: dict):
             },
         )
 
-    from backend.conductor.impact_analyzer import ImpactAnalyzer
-
     analyzer = ImpactAnalyzer(settings.projects_dir)
+
+    if not analyzer.project_exists(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "PROJECT_NOT_FOUND",
+                "message": f"项目 {project_id} 不存在",
+                "detail": {},
+            },
+        )
 
     if action == "confirm":
         analyzer.update_baseline(project_id)

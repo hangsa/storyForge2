@@ -130,14 +130,7 @@ class ImpactAnalyzer:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
         tmp.replace(manifest_path)
 
-        # Also save outline snapshot for content comparison
-        outline = self._read_project_json(project_id, "outline.json")
-        if outline:
-            snap_path = self._projects_dir / project_id / "baseline_outline_snapshot.json"
-            tmp2 = snap_path.with_suffix(".tmp")
-            with open(tmp2, "w", encoding="utf-8") as f:
-                json.dump(outline, f, ensure_ascii=False, indent=2)
-            tmp2.replace(snap_path)
+        self._save_outline_snapshot(project_id)
 
         logger.info("Baseline manifest created for project=%s", project_id)
         return True
@@ -158,14 +151,7 @@ class ImpactAnalyzer:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
         tmp.replace(manifest_path)
 
-        # Also update outline snapshot
-        outline = self._read_project_json(project_id, "outline.json")
-        if outline:
-            snap_path = self._projects_dir / project_id / "baseline_outline_snapshot.json"
-            tmp2 = snap_path.with_suffix(".tmp")
-            with open(tmp2, "w", encoding="utf-8") as f:
-                json.dump(outline, f, ensure_ascii=False, indent=2)
-            tmp2.replace(snap_path)
+        self._save_outline_snapshot(project_id)
 
         logger.info("Baseline manifest updated for project=%s", project_id)
 
@@ -173,10 +159,25 @@ class ImpactAnalyzer:
         """Check if baseline manifest exists."""
         return self._baseline_path(project_id).exists()
 
+    def project_exists(self, project_id: str) -> bool:
+        """Check if project directory exists."""
+        return (self._projects_dir / project_id).is_dir()
+
     # --- Internal ---
 
     def _baseline_path(self, project_id: str) -> Path:
         return self._projects_dir / project_id / "baseline_manifest.json"
+
+    def _save_outline_snapshot(self, project_id: str) -> None:
+        """Save current outline.json as baseline snapshot for content comparison."""
+        outline = self._read_project_json(project_id, "outline.json")
+        if not outline:
+            return
+        snap_path = self._projects_dir / project_id / "baseline_outline_snapshot.json"
+        tmp = snap_path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(outline, f, ensure_ascii=False, indent=2)
+        tmp.replace(snap_path)
 
     def _read_project_json(self, project_id: str, filename: str) -> Optional[dict]:
         """Read a JSON file from the project directory. Returns None on failure."""

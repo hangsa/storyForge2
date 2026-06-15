@@ -61,8 +61,12 @@ POST /api/conductor/execute-rollback
 | `story_dna.json` | 任何变更 | P0 | 全局影响，全部已完成章需重新审视 |
 | `world.json` | 任何变更 | P1 | 世界规则变更可能影响场景中的能力使用 |
 | `characters.json` | 任何变更 | P1 | 角色设定变更可能影响已完成场景中的行为一致性 |
-| `outline.json` | 删除/重排已有章 | P1 | 已完成章的大纲可能已过时 |
-| `outline.json` | 仅新增章节 | P2 | 不影响已完成内容 |
+| `outline.json` | 基线章号有缺失或顺序变化 | P1 | 已完成章的大纲可能已过时 |
+| `outline.json` | 仅新增章节（当前章号 ⊇ 基线章号） | P2 | 不影响已完成内容 |
+
+outline.json 对比需同时解析新旧 JSON 内容，提取 `chapters[].chapter_number` 列表：
+- 当前章号集合包含基线全部章号 → 纯新增 → P2
+- 基线章号有缺失 或 顺序不同 → 删除/重排 → P1
 
 ---
 
@@ -93,7 +97,6 @@ class ImpactReport:
     modified_files: list[str]
     entries: list[ImpactEntry]
     summary: dict[str, int]      # {"P0": n, "P1": n, "P2": n}
-    baseline_updated: bool
 ```
 
 ### Baseline manifest (projects/{id}/baseline_manifest.json)
@@ -134,8 +137,7 @@ Response 200:
         "affected_assets": ["world.json"]
       }
     ],
-    "summary": {"P0": 0, "P1": 1, "P2": 0},
-    "baseline_updated": false
+    "summary": {"P0": 0, "P1": 1, "P2": 0}
   }
 }
 
@@ -148,7 +150,7 @@ Response 400: NO_CHANGES_DETECTED — 所有文件 hash 与基线一致
 ```
 Request:  { project_id: string, action: "confirm" | "cancel" }
 
-confirm → 200: { error: false, detail: { status: "confirmed", message: "基线已更新" } }
+confirm → 200: { error: false, detail: { status: "confirmed", baseline_updated: true, message: "基线已更新" } }
           更新 baseline_manifest.json 为当前文件 hash
 
 cancel  → 200: { error: false, detail: { status: "cancelled", message: "请手动恢复文件..." } }
@@ -163,9 +165,7 @@ Invalid action → 400: INVALID_ACTION
 
 在 STAGE 4 首次进入时自动建立。检测方式：`baseline_manifest.json` 不存在 → 创建。
 
-触发位置：`backend/api/stage4_writing.py` 的 `get_progress` 或首次 `write_scene` 调用前。
-
-简易实现：提供一个工具函数 `ensure_baseline(project_id)`，在 `write_scene` 入口处调用（幂等）。
+触发位置：`GET /api/stage4/progress` 端点中调用 `ensure_baseline(project_id)`（幂等，文件存在即跳过）。只在加载 STAGE 4 页面时调用一次。
 
 ---
 

@@ -1,6 +1,5 @@
 """StoryForge v1.6 Phase 4b -- TabooConstraintChecker for L3 taboo constraint detection."""
 import re
-import json
 import logging
 from dataclasses import dataclass
 

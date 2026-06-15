@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Optional
 
 from backend.config import settings
-from backend.utils.file_manager import FileManager
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +48,6 @@ class ImpactAnalyzer:
 
     def __init__(self, projects_dir: Optional[Path] = None):
         self._projects_dir = Path(projects_dir) if projects_dir else settings.projects_dir
-        self._fm = FileManager(self._projects_dir)
 
     # --- Public API ---
 
@@ -133,7 +131,7 @@ class ImpactAnalyzer:
         tmp.replace(manifest_path)
 
         # Also save outline snapshot for content comparison
-        outline = self._fm.read_json(project_id, "outline.json")
+        outline = self._read_project_json(project_id, "outline.json")
         if outline:
             snap_path = self._projects_dir / project_id / "baseline_outline_snapshot.json"
             tmp2 = snap_path.with_suffix(".tmp")
@@ -161,7 +159,7 @@ class ImpactAnalyzer:
         tmp.replace(manifest_path)
 
         # Also update outline snapshot
-        outline = self._fm.read_json(project_id, "outline.json")
+        outline = self._read_project_json(project_id, "outline.json")
         if outline:
             snap_path = self._projects_dir / project_id / "baseline_outline_snapshot.json"
             tmp2 = snap_path.with_suffix(".tmp")
@@ -179,6 +177,17 @@ class ImpactAnalyzer:
 
     def _baseline_path(self, project_id: str) -> Path:
         return self._projects_dir / project_id / "baseline_manifest.json"
+
+    def _read_project_json(self, project_id: str, filename: str) -> Optional[dict]:
+        """Read a JSON file from the project directory. Returns None on failure."""
+        file_path = self._projects_dir / project_id / filename
+        if not file_path.exists():
+            return None
+        try:
+            return json.loads(file_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning("Failed to read %s/%s: %s", project_id, filename, e)
+            return None
 
     def _load_baseline(self, project_id: str) -> dict[str, str]:
         path = self._baseline_path(project_id)
@@ -235,7 +244,7 @@ class ImpactAnalyzer:
     def _classify_outline(self, project_id: str) -> list[ImpactEntry]:
         """Compare outline chapter lists to determine P1 (delete/reorder) vs P2 (add only)."""
         # Read current outline
-        current_data = self._fm.read_json(project_id, "outline.json") or {}
+        current_data = self._read_project_json(project_id, "outline.json") or {}
         current_chapters = current_data.get("chapters", [])
         current_numbers = [ch.get("chapter_number") for ch in current_chapters if ch.get("chapter_number")]
 

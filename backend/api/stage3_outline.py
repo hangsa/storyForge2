@@ -80,13 +80,27 @@ async def generate_outline(data: dict):
             detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
         )
 
-    fm.write_json(project_id, "outline.json", {"chapters": [result]})
+    # Accumulate chapters: merge new chapter with existing outline
+    existing_outline = fm.read_json(project_id, "outline.json") or {}
+    existing_chapters = existing_outline.get("chapters", [])
+    existing_chapters = [ch for ch in existing_chapters
+                         if ch.get("chapter_number") != result.get("chapter_number")]
+    existing_chapters.append(result)
+    existing_chapters.sort(key=lambda ch: ch.get("chapter_number", 0))
+    merged_outline = {"chapters": existing_chapters}
+    fm.write_json(project_id, "outline.json", merged_outline)
+
+    # Bind character growth curves to the accumulated outline
+    from backend.growth_curve.binder import bind_growth_curve_to_outline
+    characters = characters_data.get("characters", [])
+    updated_characters = bind_growth_curve_to_outline(characters, merged_outline)
+    fm.write_json(project_id, "characters.json", {"characters": updated_characters})
 
     return {
         "error": False,
         "code": "OK",
         "message": "大纲生成成功",
-        "detail": {"chapters": [result]},
+        "detail": {"chapters": merged_outline["chapters"]},
     }
 
 

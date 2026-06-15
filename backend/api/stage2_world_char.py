@@ -198,6 +198,7 @@ async def generate_character(data: dict):
         result.setdefault("voice_signature", {"speech_style": "", "thought_patterns": "", "taboos": []})
         result.setdefault("unknown_to_character", [])
         result.setdefault("relations", {})
+        result.setdefault("growth_curve", None)
 
     existing_characters.append(result)
     characters = {"characters": existing_characters}

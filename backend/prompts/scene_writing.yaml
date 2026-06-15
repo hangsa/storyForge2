@@ -80,6 +80,9 @@ user_prompt_template: |
   【当前创作阶段】
   {growth_stage_hint}
 
+  【角色成长态势】
+  {character_growth_context}
+
   【读者反馈预警】
   {reader_os_warnings}
 

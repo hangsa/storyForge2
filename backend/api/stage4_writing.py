@@ -172,6 +172,12 @@ async def write_scene(data: dict):
     l0 = L0Runtime()
     l0.set_scene_context(scene_number, scene_plan.get("goal", ""))
 
+    # Compute character growth context (v1.6 TRD 4.1)
+    from backend.growth_curve.context import compute_character_growth_context
+    character_growth_context = compute_character_growth_context(
+        ctx["characters"], chapter_number
+    )
+
     writer = WriterAgent(project_id)
     reviewer = ReviewerAgent(project_id)
     storyos = StoryOSAgent(project_id)
@@ -204,6 +210,7 @@ async def write_scene(data: dict):
             l3_context=ctx_mem.l3_context,
             l4_context=ctx_mem.l4_context,
             growth_stage_hint=ctx_mem.growth_stage_hint,
+            character_growth_context=character_growth_context,
             reader_os_warnings=reader_warnings_str,
         )
     except ValueError as e:
@@ -267,6 +274,7 @@ async def write_scene(data: dict):
                     l3_context=ctx_mem.l3_context,
                     l4_context=ctx_mem.l4_context,
                     growth_stage_hint=ctx_mem.growth_stage_hint,
+                    character_growth_context=character_growth_context,
                     reader_os_warnings=reader_warnings_str,
                 )
             except ValueError as e:

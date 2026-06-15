@@ -70,6 +70,7 @@ class WriterAgent(BaseAgent):
         l3_context: str = "",
         l4_context: str = "",
         growth_stage_hint: str = "",
+        character_growth_context: str = "",
     ) -> dict:
         core_contradiction = concept.get("story_dna", {}).get(
             "core_contradiction", {}
@@ -125,6 +126,7 @@ class WriterAgent(BaseAgent):
             "l3_context": l3_context,
             "l4_context": l4_context,
             "growth_stage_hint": growth_stage_hint,
+            "character_growth_context": character_growth_context,
         }
 
     async def write_scene(
@@ -141,6 +143,7 @@ class WriterAgent(BaseAgent):
         l3_context: str = "",
         l4_context: str = "",
         growth_stage_hint: str = "",
+        character_growth_context: str = "",
         style_template: Optional[dict] = None,
         storyos_state: Optional[dict] = None,
         reader_os_warnings: str = "",
@@ -150,6 +153,7 @@ class WriterAgent(BaseAgent):
             genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
             l2_context, l3_context, l4_context, growth_stage_hint,
+            character_growth_context,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         return await self.generate_from_template(
@@ -172,6 +176,7 @@ class WriterAgent(BaseAgent):
         l3_context: str = "",
         l4_context: str = "",
         growth_stage_hint: str = "",
+        character_growth_context: str = "",
         reader_os_warnings: str = "",
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
@@ -179,6 +184,7 @@ class WriterAgent(BaseAgent):
             genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
             l2_context, l3_context, l4_context, growth_stage_hint,
+            character_growth_context,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["retry_hints"] = retry_hints

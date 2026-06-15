@@ -173,6 +173,94 @@ class TestLayer2GenreTaboos:
         assert all(v.layer == "genre" for v in violations)
 
 
+class TestLayer3CharacterTaboos:
+    @pytest.fixture
+    def checker(self):
+        return TabooConstraintChecker()
+
+    @pytest.fixture
+    def character_taboos(self):
+        return [
+            {"name": "林峰", "taboos": ["禁止说脏话", "禁止主动求助"]},
+            {"name": "苏晓晓", "taboos": ["禁止示弱"]},
+        ]
+
+    def test_keyword_match_dirty_words(self, checker, character_taboos):
+        violations = checker._check_character_taboos(
+            "林峰骂道：'你他妈就是个混蛋，真是废物！'",
+            character_taboos,
+        )
+        assert len(violations) > 0, "Should match '他妈' and '混蛋' and '废物'"
+        pattern_names = {v.pattern_name for v in violations}
+        assert "角色-林峰-禁止说脏话" in pattern_names
+
+    def test_keyword_match_help_request(self, checker, character_taboos):
+        violations = checker._check_character_taboos(
+            "帮帮我！救命！求求你了！",
+            character_taboos,
+        )
+        pattern_names = {v.pattern_name for v in violations}
+        assert "角色-林峰-禁止主动求助" in pattern_names
+
+    def test_keyword_match_weakness(self, checker, character_taboos):
+        violations = checker._check_character_taboos(
+            "苏晓晓低声道：'我不行，放过我吧。'",
+            character_taboos,
+        )
+        pattern_names = {v.pattern_name for v in violations}
+        assert "角色-苏晓晓-禁止示弱" in pattern_names
+
+    def test_no_match_clean_speech(self, checker, character_taboos):
+        violations = checker._check_character_taboos(
+            "林峰说道：'我们走吧。'苏晓晓点了点头。",
+            character_taboos,
+        )
+        assert len(violations) == 0
+
+    def test_unknown_taboo_phrase_skipped(self, checker):
+        taboos = [{"name": "路人", "taboos": ["禁止飞行"]}]
+        violations = checker._check_character_taboos(
+            "路人飞了起来。",
+            taboos,
+        )
+        assert len(violations) == 0  # "禁止飞行" not in TABOO_KEYWORD_MAP → skip
+
+    def test_empty_character_taboos(self, checker):
+        violations = checker._check_character_taboos("任意文本。", [])
+        assert len(violations) == 0
+
+    def test_character_taboo_has_layer_and_severity(self, checker, character_taboos):
+        violations = checker._check_character_taboos(
+            "林峰：'他妈的，救救我！'",
+            character_taboos,
+        )
+        for v in violations:
+            assert v.layer == "character"
+            assert v.severity in ("error", "warning")
+
+    @pytest.mark.asyncio
+    async def test_check_async_llm_unavailable(self, checker, character_taboos):
+        """When LLM is unavailable, all keyword candidates pass through."""
+        violations = await checker._check_character_taboos_async(
+            "林峰：'他妈的！'",
+            character_taboos,
+        )
+        assert len(violations) > 0  # candidate passes through
+
+    @pytest.mark.asyncio
+    async def test_check_async_integrates_results(self, checker, character_taboos):
+        violations = await checker.check_async(
+            "作者说林峰骂道：'他妈的都是废物！'",
+            [],  # no genre taboos
+            character_taboos,
+        )
+        # L1: meta-reference from "作者说"
+        # L3: character taboo from "他妈"
+        layers = {v.layer for v in violations}
+        assert "global" in layers
+        assert "character" in layers
+
+
 class TestCheckSyncIntegration:
     @pytest.fixture
     def checker(self):

@@ -1,6 +1,7 @@
 """StoryForge v1.6 Phase 4b -- TabooConstraintChecker for L3 taboo constraint detection."""
 import re
 import logging
+import json
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,17 @@ _GLOBAL_TABOOS: list[dict] = [
     # Real platforms in-story -- error
     {"pattern": r"(起点中文网|起点|番茄小说|晋江文学城|晋江)", "name": "全局-真实平台", "severity": "error"},
 ]
+
+
+# --- Layer 3: Character taboo keyword mapping ---
+
+TABOO_KEYWORD_MAP: dict[str, list[str]] = {
+    "禁止说脏话": ["他妈", "混蛋", "废物", "找死", "该死"],
+    "禁止主动求助": ["帮忙", "救我", "求求你", "帮帮我", "拜托", "救命"],
+    "禁止示弱": ["我不行", "做不到", "放过我", "饶了我", "我输了"],
+    "禁止撒谎": ["骗", "假的", "隐瞒", "没说"],
+    "禁止背叛": ["出卖", "背叛", "投靠", "反水"],
+}
 
 
 def _extract_context(text: str, match_start: int, match_end: int) -> str:
@@ -226,17 +238,122 @@ class TabooConstraintChecker:
     async def check_async(
         self, scene_text: str, genre_taboos: list[dict], character_taboos: list[dict]
     ) -> list[TabooViolation]:
-        """Full 3-layer check. Stub -- implemented in Task 5."""
-        return self.check_sync(scene_text, genre_taboos, character_taboos)
+        """Full 3-layer check. Layers 1-2 sync + Layer 3 with LLM confirmation."""
+        if not scene_text or not scene_text.strip():
+            return []
+
+        violations = self.check_sync(scene_text, genre_taboos, character_taboos)
+        violations.extend(
+            await self._check_character_taboos_async(scene_text, character_taboos)
+        )
+        return violations
 
     def _check_character_taboos(
         self, scene_text: str, character_taboos: list[dict]
     ) -> list[TabooViolation]:
-        """Character taboo keyword matching (sync part). Stub -- implemented in Task 5."""
-        return []
+        """Character taboo keyword matching (sync, zero LLM).
+
+        Args:
+            scene_text: Scene draft text
+            character_taboos: [{"name": str, "taboos": [str, ...]}, ...]
+
+        Returns:
+            Candidate violations from keyword matching (no LLM confirmation)
+        """
+        if not character_taboos:
+            return []
+
+        violations = []
+        for char_entry in character_taboos:
+            char_name = char_entry.get("name", "未知角色")
+            taboos = char_entry.get("taboos", [])
+            if not taboos:
+                continue
+
+            for taboo_phrase in taboos:
+                keywords = TABOO_KEYWORD_MAP.get(taboo_phrase)
+                if not keywords:
+                    continue  # unknown taboo phrase → skip
+
+                for kw in keywords:
+                    for m in re.finditer(re.escape(kw), scene_text):
+                        violations.append(TabooViolation(
+                            pattern_name=f"角色-{char_name}-{taboo_phrase}",
+                            layer="character",
+                            severity="warning",
+                            matched_text=_extract_matched(scene_text, m.start(), m.end()),
+                            context=_extract_context(scene_text, m.start(), m.end()),
+                        ))
+        return violations
 
     async def _check_character_taboos_async(
         self, scene_text: str, character_taboos: list[dict]
     ) -> list[TabooViolation]:
-        """Character taboo keyword + Tier 3 LLM confirmation. Stub -- implemented in Task 5."""
-        return []
+        """Character taboo: keyword match → Tier 3 LLM confirmation.
+
+        LLM unavailable → all keyword candidates pass through (conservative).
+        """
+        # Get keyword-match candidates first
+        candidates = self._check_character_taboos(scene_text, character_taboos)
+        if not candidates:
+            return []
+
+        try:
+            from backend.llm.model_router import get_model_router, ModelUnavailableError
+
+            router = get_model_router()
+
+            # Build candidate list text
+            candidates_text = "\n".join(
+                f"[{i}] matched: \"{c.matched_text}\" | context: \"{c.context[:100]}\""
+                for i, c in enumerate(candidates)
+            )
+
+            # Use first character's name/taboo for prompt
+            char_entry = character_taboos[0] if character_taboos else {}
+            char_name = char_entry.get("name", "未知角色")
+            taboos = char_entry.get("taboos", [])
+
+            system_prompt = (
+                "你是一位网文编辑。以下是从角色禁忌关键词匹配中检测到的候选违规列表。"
+                "判断每个候选是否构成真实的禁忌违规（考虑语境：引述他人、虚构假设、讽刺反语不算违规）。"
+                "只输出一个 JSON 对象。"
+            )
+            user_prompt = (
+                f"角色: {char_name}\n"
+                f"禁忌: {', '.join(taboos)}\n\n"
+                f"候选违规列表:\n{candidates_text}\n\n"
+                '输出 JSON:\n'
+                '{"violations": [{"index": <int>, "confirmed": true|false, "reason": "<一句话>"}]}'
+            )
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            result = await router.execute(
+                agent_name="reviewer",
+                task_name="character_taboo_confirmation",
+                messages=messages,
+                json_mode=True,
+            )
+
+            content = result.get("content", "")
+            parsed = json.loads(content) if isinstance(content, str) else content
+            confirmed_indices = {
+                item["index"]
+                for item in parsed.get("violations", [])
+                if item.get("confirmed", False)
+            }
+
+            # Filter to confirmed only
+            return [
+                c for i, c in enumerate(candidates)
+                if i in confirmed_indices
+            ]
+
+        except Exception as e:
+            logger.warning("Character taboo LLM confirmation failed, passing all candidates: %s", e)
+            # Conservative: pass all candidates through
+            return candidates

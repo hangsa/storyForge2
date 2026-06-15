@@ -163,7 +163,7 @@ class ChapterReviewBuilder:
             "narrative_assets": narrative_assets,
             "narrative_guard_warnings": ng_warnings,
             "fact_guard_summary": fact_guard,
-            "writing_formula_compliance": [],
+            "writing_formula_compliance": self._check_writing_formula(chapter_number),
             "discussion_topics": [],
             "decision": None,
             "decision_feedback": None,
@@ -185,6 +185,8 @@ class ChapterReviewBuilder:
         )
         review["coherence_score"] = final_score
         review["coherence_comment"] = comment
+        # Upgrade writing formula compliance with LLM-assisted metrics
+        review["writing_formula_compliance"] = await self._check_writing_formula_async(chapter_number)
         return review
 
     def _compute_base_coherence(
@@ -313,6 +315,71 @@ class ChapterReviewBuilder:
             return f"Chapter {chapter_number} — no scene drafts found"
 
         return "\n".join(summaries)[:800]
+
+    def _collect_scene_texts(self, chapter_number: int) -> list[str]:
+        """Collect all scene draft texts for a chapter."""
+        texts = []
+        chapters_dir = self._project_dir / "chapters"
+        if not chapters_dir.exists():
+            return texts
+        for draft_file in sorted(chapters_dir.glob(f"ch{chapter_number:02d}_scene_*_draft.md")):
+            try:
+                text = draft_file.read_text(encoding="utf-8")
+                if text.strip():
+                    texts.append(text)
+            except Exception:
+                continue
+        return texts
+
+    def _check_writing_formula(self, chapter_number: int) -> list[dict]:
+        """Synchronous writing formula compliance check (deterministic only)."""
+        try:
+            from backend.style_engine.writing_formulas import WritingFormulaAnalyzer
+            from backend.style_engine.genre_template import GenreTemplate
+
+            texts = self._collect_scene_texts(chapter_number)
+            if not texts:
+                return []
+
+            formula = GenreTemplate().get_style_formula()
+            if not formula:
+                return []
+
+            analyzer = WritingFormulaAnalyzer()
+            stats = analyzer.analyze_sync(texts)
+            results = analyzer.check_compliance(stats, formula)
+            return [
+                {"metric": r.metric, "expected": r.expected, "actual": r.actual, "passed": r.passed}
+                for r in results
+            ]
+        except Exception as e:
+            logger.warning("Writing formula check failed (non-blocking): %s", e)
+            return []
+
+    async def _check_writing_formula_async(self, chapter_number: int) -> list[dict]:
+        """Async writing formula compliance check (adds LLM metrics)."""
+        try:
+            from backend.style_engine.writing_formulas import WritingFormulaAnalyzer
+            from backend.style_engine.genre_template import GenreTemplate
+
+            texts = self._collect_scene_texts(chapter_number)
+            if not texts:
+                return []
+
+            formula = GenreTemplate().get_style_formula()
+            if not formula:
+                return []
+
+            analyzer = WritingFormulaAnalyzer()
+            stats = await analyzer.analyze_async(texts)
+            results = analyzer.check_compliance(stats, formula)
+            return [
+                {"metric": r.metric, "expected": r.expected, "actual": r.actual, "passed": r.passed}
+                for r in results
+            ]
+        except Exception as e:
+            logger.warning("Writing formula async check failed (non-blocking): %s", e)
+            return []
 
     def _save_review(self, review: dict) -> None:
         """Save review to project directory."""

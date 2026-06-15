@@ -109,7 +109,7 @@ class TestChapterReviewBuilder:
         assert len(review["reader_os"]) == 7
         assert "addiction" in review["reader_os"]
         assert "narrative_assets" in review
-        assert review["writing_formula_compliance"] == []
+        assert isinstance(review["writing_formula_compliance"], list)
         assert review["discussion_topics"] == []
         assert review["decision"] is None
 
@@ -174,5 +174,5 @@ class TestChapterReviewBuilder:
         assert len(review["reader_os"]) == 7
         assert "fact_guard_summary" in review
         assert "narrative_assets" in review
-        assert review["writing_formula_compliance"] == []
+        assert isinstance(review["writing_formula_compliance"], list)
         assert review["discussion_topics"] == []

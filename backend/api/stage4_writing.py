@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 
@@ -19,6 +20,7 @@ from backend.reader_os.calculator import ReaderOS
 
 router = APIRouter(prefix="/api/stage4", tags=["stage4"])
 fm = FileManager(settings.projects_dir)
+logger = logging.getLogger(__name__)
 
 
 def _load_context(project_id: str, chapter_number: Optional[int] = None) -> dict:
@@ -376,6 +378,26 @@ async def write_scene(data: dict):
     progress["circuit_breaker_events"] = breaker_events
     fm.write_json(project_id, "progress.json", progress)
 
+    # v1.6 Phase 3a: Chapter review trigger
+    chapter_review_ready = False
+    all_scenes_done = all(
+        s.get("status") in ("completed", "force_passed")
+        for s in chapter_progress.get("scenes", [])
+    )
+    if all_scenes_done and chapter_progress.get("scenes"):
+        try:
+            from backend.conductor.chapter_review import ChapterReviewBuilder
+            builder = ChapterReviewBuilder(project_id)
+            review = await builder.build_review_async(chapter_number)
+            builder.save_review(review)
+            chapter_review_ready = True
+            logger.info(
+                "Chapter review generated for project=%s chapter=%d score=%d",
+                project_id, chapter_number, review["coherence_score"],
+            )
+        except Exception as e:
+            logger.warning("Chapter review generation failed (non-blocking): %s", e)
+
     return {
         "error": False,
         "code": "OK",
@@ -385,6 +407,7 @@ async def write_scene(data: dict):
             "status": breaker_result,
             "retry_count": attempt - 1,
             "draft_text": current_draft,
+            "chapter_review_ready": chapter_review_ready,  # v1.6 Phase 3a
             "parsed_logs": [
                 {"type": log.type, "params": log.params} for log in parsed_logs
             ],
@@ -663,4 +686,77 @@ async def advance_chapter(data: dict):
                 "key_events": summary.get("key_events", []),
             },
         },
+    }
+
+
+# --- v1.6 Phase 3a: Chapter Review API ---
+
+
+@router.get("/chapter-review")
+async def get_chapter_review(project_id: str, chapter: int):
+    """Get chapter review data. Returns 404 if not yet generated."""
+    from backend.conductor.chapter_review import ChapterReviewBuilder
+
+    builder = ChapterReviewBuilder(project_id)
+    review = builder.get_review_data(chapter)
+    if review is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "REVIEW_NOT_FOUND",
+                "message": f"Chapter {chapter} review not found",
+                "detail": {},
+            },
+        )
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"Chapter {chapter} review loaded",
+        "detail": review,
+    }
+
+
+@router.post("/chapter-review/decide")
+async def decide_chapter_review(data: dict):
+    """Author decision on chapter review.
+    Request: {project_id, chapter_number, decision: "approved"|"revise", feedback?: string}
+    """
+    project_id = data.get("project_id", "")
+    chapter_number = data.get("chapter_number", 0)
+    decision = data.get("decision", "")
+    feedback = data.get("feedback", "")
+
+    if decision not in ("approved", "revise"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "INVALID_DECISION",
+                "message": "decision must be 'approved' or 'revise'",
+                "detail": {},
+            },
+        )
+
+    from backend.conductor.chapter_review import ChapterReviewBuilder
+
+    builder = ChapterReviewBuilder(project_id)
+    ok = builder.set_decision(chapter_number, decision, feedback)
+    if not ok:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "REVIEW_NOT_FOUND",
+                "message": f"Chapter {chapter_number} review not found, cannot set decision",
+                "detail": {},
+            },
+        )
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"Decision '{decision}' recorded for chapter {chapter_number}",
+        "detail": {"status": "ok"},
     }

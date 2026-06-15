@@ -1,0 +1,362 @@
+"""StoryForge v1.6 Phase 3a — ChapterReviewBuilder + CoherenceScorer."""
+
+import json
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from backend.config import settings
+from backend.utils.file_manager import FileManager
+
+logger = logging.getLogger(__name__)
+
+
+class CoherenceScorer:
+    """
+    Scores chapter coherence: 60% rule-based + 40% Tier 3 LLM fine-tuning.
+
+    Rule part weights (each 20%, total 60%):
+    - Narrative asset health: active asset completion rate
+    - ReaderOS state avg: (addiction + satisfaction + curiosity) / 3
+    - Fact Guard pass rate: first-attempt pass / total checks
+
+    LLM part (40%): +/-10 delta + one-liner comment from Tier 3 Haiku.
+    Falls back to rule-only score on LLM failure.
+    """
+
+    MAX_DELTA = 10
+
+    def _compute_rule_score(
+        self,
+        narrative_health: float,
+        reader_os_avg: float,
+        fact_guard_pass_rate: float,
+    ) -> float:
+        return round(
+            narrative_health * 0.20
+            + reader_os_avg * 0.20
+            + fact_guard_pass_rate * 100 * 0.20
+        )
+
+    def _clamp_delta(self, delta: int) -> int:
+        return max(-self.MAX_DELTA, min(self.MAX_DELTA, delta))
+
+    def _compute_final(self, base_score: float, llm_delta: int) -> int:
+        return max(0, min(100, int(base_score + llm_delta)))
+
+    async def score(
+        self,
+        base_score: float,
+        scene_summaries: str,
+        narrative_assets_summary: str,
+    ) -> tuple[int, str]:
+        """
+        Compute final coherence score with LLM fine-tuning.
+
+        Returns (final_score, comment).
+        Falls back to rule-only score if LLM unavailable.
+        """
+        try:
+            from backend.llm.model_router import get_model_router, ModelUnavailableError
+
+            router = get_model_router()
+
+            system_prompt = (
+                "你是一位专业的小说编辑。根据章节摘要和叙事资产数据，"
+                "评估本章的连贯性。只输出一个 JSON 对象。"
+            )
+            user_prompt = (
+                f"规则基础分: {base_score:.0f}/100\n\n"
+                f"【章节场景摘要】\n{scene_summaries}\n\n"
+                f"【叙事资产数据】\n{narrative_assets_summary}\n\n"
+                "请评分（在基础分 +/-10 范围内微调），并写一句中文点评。"
+                '输出 JSON: {"delta": <int>, "comment": "<一句话点评>"}'
+            )
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            result = await router.execute(
+                agent_name="reviewer",
+                task_name="coherence_scorer",
+                messages=messages,
+                json_mode=True,
+            )
+
+            content = result.get("content", "")
+            parsed = json.loads(content) if isinstance(content, str) else content
+            delta = self._clamp_delta(int(parsed.get("delta", 0)))
+            comment = parsed.get("comment", "")
+            return self._compute_final(base_score, delta), comment
+
+        except Exception as e:
+            logger.warning("CoherenceScorer LLM unavailable, using rule score only: %s", e)
+            return int(base_score), ""
+
+
+class ChapterReviewBuilder:
+    """Assembles chapter review data from all subsystems."""
+
+    def __init__(self, project_id: str, projects_dir: Optional[Path] = None):
+        self.project_id = project_id
+        self._projects_dir = Path(projects_dir) if projects_dir else settings.projects_dir
+        self._project_dir = self._projects_dir / project_id
+        self._fm = FileManager(self._projects_dir)
+        self._scorer = CoherenceScorer()
+
+    def _all_scenes_done(self, chapter_number: int) -> bool:
+        """Check if all scenes in the chapter are completed."""
+        progress = self._fm.read_json(self.project_id, "progress.json") or {}
+        chapters = progress.get("chapters", [])
+        chapter = next(
+            (ch for ch in chapters if ch.get("chapter_number") == chapter_number),
+            None,
+        )
+        if not chapter:
+            return False
+        scenes = chapter.get("scenes", [])
+        if not scenes:
+            return False
+        return all(
+            s.get("status") in ("completed", "force_passed")
+            for s in scenes
+        )
+
+    def build_review(self, chapter_number: int) -> dict:
+        """Build complete chapter review data (synchronous, rule score only)."""
+        now = datetime.now(timezone.utc).isoformat()
+
+        # 1. ReaderOS snapshot
+        from backend.reader_os.calculator import ReaderOS
+        reader_os = ReaderOS(self.project_id, self._projects_dir)
+        genre = self._detect_genre()
+        reader_snapshot = reader_os.snapshot(chapter_number, genre)
+
+        # 2. Narrative asset summary
+        narrative_assets = self._summarize_narrative_assets()
+
+        # 3. Fact Guard summary
+        fact_guard = self._summarize_fact_guard(chapter_number)
+
+        # 4. Narrative Guard warnings
+        ng_warnings = self._collect_narrative_guard_warnings(chapter_number)
+
+        # 5. Coherence score (rule-based only)
+        rule_score = self._compute_base_coherence(reader_snapshot, narrative_assets, fact_guard)
+
+        review = {
+            "chapter_number": chapter_number,
+            "timestamp": now,
+            "coherence_score": int(rule_score),
+            "coherence_comment": "",
+            "reader_os": {
+                "addiction": reader_snapshot.get("addiction", 0),
+                "fatigue": reader_snapshot.get("fatigue", 0),
+                "curiosity": reader_snapshot.get("curiosity", 0),
+                "tension": reader_snapshot.get("tension", 0),
+                "satisfaction": reader_snapshot.get("satisfaction", 0),
+                "frustration": reader_snapshot.get("frustration", 0),
+                "discussion": reader_snapshot.get("discussion", 0),
+            },
+            "narrative_assets": narrative_assets,
+            "narrative_guard_warnings": ng_warnings,
+            "fact_guard_summary": fact_guard,
+            "writing_formula_compliance": [],
+            "discussion_topics": [],
+            "decision": None,
+            "decision_feedback": None,
+        }
+        return review
+
+    async def build_review_async(self, chapter_number: int) -> dict:
+        """Build review with async LLM coherence scoring."""
+        review = self.build_review(chapter_number)
+        rule_score = review["coherence_score"]
+
+        scene_summaries = self._build_scene_summaries(chapter_number)
+        narrative_assets_summary = json.dumps(review["narrative_assets"], ensure_ascii=False)
+
+        final_score, comment = await self._scorer.score(
+            base_score=rule_score,
+            scene_summaries=scene_summaries,
+            narrative_assets_summary=narrative_assets_summary,
+        )
+        review["coherence_score"] = final_score
+        review["coherence_comment"] = comment
+        return review
+
+    def _compute_base_coherence(
+        self,
+        reader_snapshot: dict,
+        narrative_assets: dict,
+        fact_guard: dict,
+    ) -> float:
+        """Compute rule-based base coherence (60% of final score)."""
+        total_active = sum(
+            v for k, v in narrative_assets.items()
+            if "new" in k or "escalated" in k or "planted" in k
+        )
+        total_resolved = sum(
+            v for k, v in narrative_assets.items()
+            if "resolved" in k or "fulfilled" in k or "revealed" in k
+        )
+        narrative_health = min(100, (total_resolved / max(1, total_active + total_resolved)) * 100)
+
+        reader_os_avg = (
+            reader_snapshot.get("addiction", 50)
+            + reader_snapshot.get("satisfaction", 50)
+            + reader_snapshot.get("curiosity", 50)
+        ) / 3
+
+        fg_pass_rate = fact_guard.get("pass_rate", 0.0)
+
+        return self._scorer._compute_rule_score(
+            narrative_health=narrative_health,
+            reader_os_avg=reader_os_avg,
+            fact_guard_pass_rate=fg_pass_rate,
+        )
+
+    def _detect_genre(self) -> str:
+        dna = self._fm.read_json(self.project_id, "story_dna.json") or {}
+        return dna.get("genre", "cool_novel")
+
+    def _summarize_narrative_assets(self) -> dict:
+        """Count narrative assets by status across all registries."""
+        registry_files = {
+            "conflict": "conflicts",
+            "mystery": "mysteries",
+            "twist": "twists",
+            "goal": "goals",
+            "promise": "promises",
+            "reveal": "reveals",
+            "expectation": "expectations",
+            "foreshadowing": "foreshadowing",
+        }
+
+        counts: dict[str, int] = {}
+        for reg_type, key in registry_files.items():
+            data = self._fm.read_json(self.project_id, f"storyos/{key}.json") or []
+            if isinstance(data, dict):
+                data = data.get(key, [])
+            for item in data:
+                status = item.get("status", "unknown")
+                count_key = f"{reg_type}_{status}"
+                counts[count_key] = counts.get(count_key, 0) + 1
+
+        return {
+            "new_conflicts": counts.get("conflict_active", 0),
+            "escalated_conflicts": counts.get("conflict_escalated", 0),
+            "resolved_conflicts": counts.get("conflict_resolved", 0),
+            "new_clues": counts.get("mystery_active", 0) + counts.get("foreshadowing_planted", 0),
+            "fulfilled_promises": counts.get("promise_fulfilled", 0),
+            "revealed_twists": counts.get("twist_revealed", 0) + counts.get("twist_partially_revealed", 0),
+            "fulfilled_expectations": counts.get("expectation_fulfilled", 0),
+            "planted_foreshadowing": counts.get("foreshadowing_planted", 0),
+        }
+
+    def _summarize_fact_guard(self, chapter_number: int) -> dict:
+        """Count Fact Guard pass/fail for scenes in this chapter."""
+        progress = self._fm.read_json(self.project_id, "progress.json") or {}
+        events = progress.get("circuit_breaker_events", [])
+
+        chapter_scene_numbers = set()
+        for ch in progress.get("chapters", []):
+            if ch.get("chapter_number") == chapter_number:
+                chapter_scene_numbers = {
+                    s["scene_number"] for s in ch.get("scenes", [])
+                }
+                break
+
+        chapter_events = [
+            e for e in events
+            if e.get("scene_number") in chapter_scene_numbers
+        ]
+
+        total = len(chapter_events)
+        passed = sum(1 for e in chapter_events if e.get("result") == "passed")
+        failed = total - passed
+
+        return {
+            "passed": passed,
+            "failed": failed,
+            "total": total,
+            "pass_rate": round(passed / max(1, total), 2),
+        }
+
+    def _collect_narrative_guard_warnings(self, chapter_number: int) -> list[dict]:
+        """Collect Narrative Guard warnings from scene meta files."""
+        warnings = []
+        chapters_dir = self._project_dir / "chapters"
+        if not chapters_dir.exists():
+            return warnings
+
+        for meta_file in sorted(chapters_dir.glob(f"ch{chapter_number:02d}_scene_*_meta.json")):
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                ng_warnings = meta.get("narrative_guard_warnings", [])
+                if isinstance(ng_warnings, list):
+                    warnings.extend(ng_warnings)
+            except Exception:
+                continue
+
+        return warnings
+
+    def _build_scene_summaries(self, chapter_number: int) -> str:
+        """Build ~800 char summary of chapter scenes for LLM coherence scoring."""
+        chapters_dir = self._project_dir / "chapters"
+        summaries = []
+
+        for draft_file in sorted(chapters_dir.glob(f"ch{chapter_number:02d}_scene_*_draft.md")):
+            try:
+                text = draft_file.read_text(encoding="utf-8")
+                scene_name = draft_file.stem.replace("_draft", "")
+                snippet = text[:300].replace("\n", " ")
+                summaries.append(f"[{scene_name}] {snippet}...")
+            except Exception:
+                continue
+
+        if not summaries:
+            return f"Chapter {chapter_number} — no scene drafts found"
+
+        return "\n".join(summaries)[:800]
+
+    def _save_review(self, review: dict) -> None:
+        """Save review to project directory."""
+        reviews_dir = self._project_dir / "chapter_reviews"
+        reviews_dir.mkdir(parents=True, exist_ok=True)
+        chapter = review["chapter_number"]
+        path = reviews_dir / f"ch{chapter}_review.json"
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(review, f, ensure_ascii=False, indent=2)
+        tmp.replace(path)
+
+    def get_review_data(self, chapter_number: int) -> Optional[dict]:
+        """Get review data for a chapter. Returns None if not found."""
+        path = self._project_dir / "chapter_reviews" / f"ch{chapter_number}_review.json"
+        if not path.exists():
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+    def set_decision(self, chapter_number: int, decision: str, feedback: str = "") -> bool:
+        """Set author's decision on chapter review."""
+        if decision not in ("approved", "revise"):
+            return False
+        review = self.get_review_data(chapter_number)
+        if review is None:
+            return False
+        review["decision"] = decision
+        review["decision_feedback"] = feedback
+        self._save_review(review)
+        return True
+
+    def save_review(self, review: dict) -> None:
+        """Public wrapper for saving review data."""
+        self._save_review(review)

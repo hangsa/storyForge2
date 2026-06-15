@@ -44,3 +44,32 @@ class ProgressFile(BaseModel):
     total_chapters: int = 1
     chapters: list[ChapterProgress] = []
     circuit_breaker_events: list[CircuitBreakerEvent] = []
+
+
+class NarrativeGuardWarning(BaseModel):
+    drift_type: str = ""           # "emotion_surge" / "relation_shift" / etc.
+    character: str = ""
+    severity: str = ""             # "high" / "medium" / "low"
+    description: str = ""
+
+
+class FactGuardSummary(BaseModel):
+    passed: int = 0
+    failed: int = 0
+    total: int = 0
+    pass_rate: float = 0.0
+
+
+class ChapterReviewData(BaseModel):
+    chapter_number: int
+    timestamp: str = ""
+    coherence_score: int = 0       # 0-100
+    coherence_comment: str = ""    # LLM one-liner review
+    reader_os: dict[str, float] = {}
+    narrative_assets: dict[str, int] = {}
+    narrative_guard_warnings: list[NarrativeGuardWarning] = []
+    fact_guard_summary: FactGuardSummary = FactGuardSummary()
+    writing_formula_compliance: list = []   # Placeholder for Phase 4.3
+    discussion_topics: list[str] = []       # Placeholder, to be backfilled
+    decision: Optional[str] = None          # null / "approved" / "revise"
+    decision_feedback: Optional[str] = None

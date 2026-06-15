@@ -22,6 +22,7 @@ system_prompt: |
   6. 避免与已有角色在性格、能力、定位上重叠
   7. 用中文输出，角色要有网文主角的魅力和辨识度
   8. 只输出JSON，不要输出任何其他内容
+  9. 为核心角色（protagonist, antagonist）设计成长曲线（growth_curve），包含3-5个阶段
 
 user_prompt_template: |
   故事概念：
@@ -34,6 +35,16 @@ user_prompt_template: |
 
   角色类型：{character_type}
   {existing_characters_section}
+
+  成长曲线设计（核心角色必须设计）：
+  - 每个阶段由一个关键事件触发，trigger_event_type 从以下8种类型中选择：
+    betrayal_experienced（被背叛）, death_of_loved_one（至亲死亡）,
+    world_truth_revealed（世界真相揭示）, personal_identity_crisis（身份认同危机）,
+    irreversible_loss（不可逆损失）, moral_awakening（道德觉醒）,
+    accumulated_evidence（证据累积）, relationship_transformation（关系转变）
+  - 每个阶段描述角色在该阶段的内在变化和外在表现
+  - target_chapter_range 预估该阶段发生在哪些章节（如 "3-5"）
+  - 配角可以不设计完整成长曲线，设为 null
 
   请生成一个{character_type_label}，包含完整的人格层、当前状态、声音签名和行为限制。
 
@@ -65,7 +76,20 @@ user_prompt_template: |
       "角色不知道但会影响剧情的信息1",
       "角色不知道但会影响剧情的信息2"
     ],
-    "relations": {{}}
+    "relations": {{}},
+    "growth_curve": {{
+      "curve_description": "角色成长的总体描述，如'从叛逆少年到背负责任的领袖'",
+      "stages": [
+        {{
+          "stage_number": 1,
+          "stage_name": "阶段名称（中文，如：少年意气、坠入深渊、觉醒重生）",
+          "trigger_event_type": "world_truth_revealed",
+          "trigger_event_description": "触发该阶段的具体事件描述",
+          "character_change": "角色在此阶段的内在信念/价值观/性格转变",
+          "target_chapter_range": "1-3"
+        }}
+      ]
+    }}
   }}
 
 output_format:

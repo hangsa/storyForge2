@@ -41,3 +41,8 @@ class GenreTemplate:
         """Read style_formula section from genre template. Returns {} if not configured."""
         template = self.load(template_name)
         return template.get("style_formula", {})
+
+    def get_structured_taboos(self, template_name: str = "cool_novel") -> list[dict]:
+        """Read structured taboos section from genre template. Returns [] if not configured."""
+        template = self.load(template_name)
+        return template.get("taboos", [])

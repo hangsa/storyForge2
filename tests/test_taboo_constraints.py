@@ -171,3 +171,32 @@ class TestLayer2GenreTaboos:
         keyword_taboo = [t for t in genre_taboos if t["name"] == "禁用语"]
         violations = checker._check_genre_taboos("绝望地倒吸一口凉气。", keyword_taboo)
         assert all(v.layer == "genre" for v in violations)
+
+
+class TestCheckSyncIntegration:
+    @pytest.fixture
+    def checker(self):
+        return TabooConstraintChecker()
+
+    @pytest.fixture
+    def genre_taboos(self):
+        return [
+            {"name": "禁用语", "type": "keyword", "words": ["绝望", "放弃"], "severity": "warning"},
+        ]
+
+    def test_check_sync_combines_l1_l2(self, checker, genre_taboos):
+        text = "作者说主角绝望地放弃了战斗。"
+        violations = checker.check_sync(text, genre_taboos, [])
+        # L1: "作者说" meta-reference
+        # L2: "绝望", "放弃" from keyword taboo
+        assert any(v.layer == "global" for v in violations), "Should have L1 violations"
+        assert any(v.layer == "genre" for v in violations), "Should have L2 violations"
+
+    def test_check_sync_empty_text(self, checker, genre_taboos):
+        violations = checker.check_sync("", genre_taboos, [])
+        assert len(violations) == 0
+
+    def test_check_sync_no_taboos(self, checker):
+        violations = checker.check_sync("任意文本。", [], [])
+        # L1 may still fire (global patterns)
+        assert all(v.layer == "global" for v in violations)

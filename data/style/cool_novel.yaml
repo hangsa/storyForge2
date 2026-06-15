@@ -70,6 +70,20 @@ taboo_words:
   - "倒吸一口凉气"
   - "此子不可留"
 
+# Structured taboos for L3 constraint detection (Phase 4b)
+taboos:
+  - name: "虐主"
+    type: "sliding_window"
+    keywords: ["受伤", "吐血", "被击飞", "惨叫", "虐待", "折磨", "碾压", "断臂"]
+    max_chars: 300
+    severity: error
+
+  - name: "连续失败"
+    type: "consecutive_match"
+    failure_keywords: ["失败", "输了", "不敌", "落败", "被击败", "无力", "败退"]
+    max_consecutive: 2
+    severity: error
+
 # Genre-specific trope patterns
 trope_patterns:
   - name: "逆袭打脸"

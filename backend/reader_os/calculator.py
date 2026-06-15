@@ -149,6 +149,83 @@ class ReaderOS:
         raw = max(0, avg_tension - formula["threshold"]) * formula["decay"]
         return round(raw, 1)
 
+    # --- Curiosity (好奇心) ---
+
+    def calculate_curiosity(self, chapter_number: int) -> float:
+        """好奇心: Σ(open_mysteries×weight), normalized 0-100."""
+        progress = self._fm.read_json(self.project_id, "progress.json") or {}
+        return self._calc_curiosity(progress)
+
+    # --- Tension (张力) ---
+
+    def calculate_tension(self, chapter_number: int) -> float:
+        """张力: avg(active_conflicts.intensity), 0-100."""
+        progress = self._fm.read_json(self.project_id, "progress.json") or {}
+        return self._calc_tension(progress)
+
+    # --- Satisfaction (满足感) ---
+
+    def calculate_satisfaction(self, chapter_number: int) -> float:
+        """满足感: based on chapter completion rate and coherence scores."""
+        progress = self._fm.read_json(self.project_id, "progress.json") or {}
+        return self._calc_satisfaction(chapter_number, progress)
+
+    # --- Frustration (挫败感) ---
+
+    def calculate_frustration(self, chapter_number: int, genre: str = "cool_novel") -> float:
+        """
+        挫败感: inverse of satisfaction, boosted by retry failures.
+        Formula: max(0, min(100, (100 - satisfaction)*0.7 + retry_penalty*0.3))
+        """
+        progress = self._fm.read_json(self.project_id, "progress.json") or {}
+        satisfaction = self._calc_satisfaction(chapter_number, progress)
+
+        chapters = progress.get("chapters", [])
+        relevant = [ch for ch in chapters if ch.get("chapter_number", 0) <= chapter_number]
+        total_retries = sum(
+            s.get("retry_count", 0)
+            for ch in relevant
+            for s in ch.get("scenes", [])
+        )
+        total_scenes = sum(len(ch.get("scenes", [])) for ch in relevant)
+        retry_penalty = min(100, (total_retries / max(1, total_scenes)) * 100)
+
+        raw = max(0, min(100, (100 - satisfaction) * 0.7 + retry_penalty * 0.3))
+        thresholds = self._get_thresholds(genre)
+        formula = thresholds.get("fatigue_formula", {})
+        decay = formula.get("decay", 1.0)
+        return round(raw * decay, 1)
+
+    # --- Discussion (讨论潜力) ---
+
+    def calculate_discussion(self, chapter_number: int) -> float:
+        """
+        讨论潜力: based on open mysteries, twists, and cliffhangers.
+        Formula: min(100, (open_mysteries*10 + planted_ff*8 + revealed_twists*15 + cliffhanger*30) * 0.8)
+        """
+        progress = self._fm.read_json(self.project_id, "progress.json") or {}
+        narrative_state = self._fm.read_json(self.project_id, "memory/l2/active_narrative_state.json") or {}
+
+        open_mysteries = len(narrative_state.get("open_mysteries", []))
+        planted_foreshadowings = len(narrative_state.get("planted_foreshadowings", []))
+
+        twists = self._fm.read_json(self.project_id, "storyos/twists.json") or []
+        if isinstance(twists, dict):
+            twists = twists.get("twists", [])
+        revealed_twists = sum(1 for t in twists if t.get("status") in ("revealed", "partially_revealed"))
+
+        outline = self._fm.read_json(self.project_id, "outline.json") or {}
+        chapters = outline.get("chapters", [])
+        chapter = next((ch for ch in chapters if ch.get("chapter_number") == chapter_number), None)
+        has_cliffhanger = 0
+        if chapter:
+            scenes = chapter.get("scene_plan", [])
+            if scenes and scenes[-1].get("narrative_role") == "cliffhanger":
+                has_cliffhanger = 1
+
+        raw = (open_mysteries * 10 + planted_foreshadowings * 8 + revealed_twists * 15 + has_cliffhanger * 30) * 0.8
+        return round(min(100, raw), 1)
+
     # --- Warnings ---
 
     def get_warnings(self, chapter_number: int, genre: str = "cool_novel") -> list[dict]:
@@ -195,9 +272,14 @@ class ReaderOS:
         return values
 
     def snapshot(self, chapter_number: int, genre: str = "cool_novel") -> dict:
-        """Return a complete ReaderOS snapshot for a chapter."""
+        """Return a complete ReaderOS snapshot with all 7 v1.6 metrics."""
         return {
             "addiction": self.calculate_addiction(chapter_number),
             "fatigue": self.calculate_fatigue(chapter_number, genre),
+            "curiosity": self.calculate_curiosity(chapter_number),
+            "tension": self.calculate_tension(chapter_number),
+            "satisfaction": self.calculate_satisfaction(chapter_number),
+            "frustration": self.calculate_frustration(chapter_number, genre),
+            "discussion": self.calculate_discussion(chapter_number),
             "warnings": self.get_warnings(chapter_number, genre),
         }

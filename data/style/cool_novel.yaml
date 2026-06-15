@@ -100,3 +100,22 @@ model_preferences:
   creative_core: "deepseek-chat"
   temperature: 0.9
   # Tuned for high novelty and dramatic tension
+
+# Writing formula thresholds (L2 compliance checking)
+style_formula:
+  sentence:
+    avg_length_max: 30
+    short_pct_min: 30
+    long_pct_max: 20
+  dialogue:
+    ratio_min: 0.20
+    max_consecutive_lines: 8
+  paragraph:
+    max_sentences: 5
+    max_words: 300
+  emotional_beat:
+    min_per_1k: 1.5
+  satisfaction_beat:
+    min_count: 3
+  suspense_hook:
+    required: true

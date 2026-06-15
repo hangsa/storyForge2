@@ -97,8 +97,133 @@ class TabooConstraintChecker:
     def _check_genre_taboos(
         self, scene_text: str, genre_taboos: list[dict]
     ) -> list[TabooViolation]:
-        """Genre taboo detection (YAML-driven, zero LLM). Stub -- implemented in Task 2."""
-        return []
+        """Genre taboo detection (YAML-driven, zero LLM).
+
+        Supports three types:
+        - keyword: simple keyword match against words list
+        - sliding_window: keyword density in sliding windows
+        - consecutive_match: consecutive paragraphs containing failure keywords
+        """
+        if not genre_taboos:
+            return []
+
+        violations = []
+        for taboo in genre_taboos:
+            taboo_type = taboo.get("type", "")
+            if taboo_type == "keyword":
+                violations.extend(self._check_keyword_taboo(scene_text, taboo))
+            elif taboo_type == "sliding_window":
+                violations.extend(self._check_sliding_window(scene_text, taboo))
+            elif taboo_type == "consecutive_match":
+                violations.extend(self._check_consecutive_match(scene_text, taboo))
+            # Unknown type → skip silently
+        return violations
+
+    def _check_keyword_taboo(
+        self, scene_text: str, taboo: dict
+    ) -> list[TabooViolation]:
+        words = taboo.get("words", [])
+        if not words:
+            return []
+        violations = []
+        for word in words:
+            for m in re.finditer(re.escape(word), scene_text):
+                violations.append(TabooViolation(
+                    pattern_name=taboo["name"],
+                    layer="genre",
+                    severity=taboo.get("severity", "error"),
+                    matched_text=_extract_matched(scene_text, m.start(), m.end()),
+                    context=_extract_context(scene_text, m.start(), m.end()),
+                ))
+        return violations
+
+    def _check_sliding_window(
+        self, scene_text: str, taboo: dict
+    ) -> list[TabooViolation]:
+        keywords = taboo.get("keywords", [])
+        max_chars = taboo.get("max_chars", 300)
+        if not keywords or max_chars <= 0:
+            return []
+
+        step = max(1, max_chars // 4)
+        violations = []
+        seen_windows: set[int] = set()  # deduplicate overlapping windows
+
+        for start in range(0, len(scene_text), step):
+            window_end = min(len(scene_text), start + max_chars)
+            window = scene_text[start:window_end]
+
+            hit_count = 0
+            hit_positions = []
+            for kw in keywords:
+                for m in re.finditer(re.escape(kw), window):
+                    hit_count += 1
+                    hit_positions.append(start + m.start())
+
+            if hit_count >= 3:
+                # Check if this window overlaps significantly with an already-reported one
+                window_key = start // step
+                if window_key not in seen_windows:
+                    seen_windows.add(window_key)
+                    match_pos = hit_positions[0] if hit_positions else start
+                    violations.append(TabooViolation(
+                        pattern_name=taboo["name"],
+                        layer="genre",
+                        severity=taboo.get("severity", "error"),
+                        matched_text=_extract_matched(scene_text, match_pos, match_pos + 10),
+                        context=_extract_context(scene_text, start, window_end),
+                    ))
+
+        return violations
+
+    def _check_consecutive_match(
+        self, scene_text: str, taboo: dict
+    ) -> list[TabooViolation]:
+        failure_keywords = taboo.get("failure_keywords", [])
+        max_consecutive = taboo.get("max_consecutive", 2)
+        if not failure_keywords:
+            return []
+
+        paragraphs = [p.strip() for p in scene_text.split("\n\n") if p.strip()]
+        if not paragraphs:
+            return []
+
+        # Find all consecutive runs
+        hit_runs: list[list[int]] = []
+        current_run: list[int] = []
+
+        for i, para in enumerate(paragraphs):
+            hit = any(
+                re.search(re.escape(kw), para)
+                for kw in failure_keywords
+            )
+            if hit:
+                current_run.append(i)
+            else:
+                if len(current_run) >= max_consecutive:
+                    hit_runs.append(current_run)
+                current_run = []
+
+        # Don't forget trailing run
+        if len(current_run) >= max_consecutive:
+            hit_runs.append(current_run)
+
+        violations = []
+        for run in hit_runs:
+            # Find position in original text
+            first_para = paragraphs[run[0]]
+            match_start = scene_text.find(first_para)
+            if match_start == -1:
+                match_start = 0
+            violations.append(TabooViolation(
+                pattern_name=taboo["name"],
+                layer="genre",
+                severity=taboo.get("severity", "error"),
+                matched_text=first_para[:80],
+                context=_extract_context(scene_text, match_start, match_start + len(first_para)),
+            ))
+
+        return violations
 
     async def check_async(
         self, scene_text: str, genre_taboos: list[dict], character_taboos: list[dict]

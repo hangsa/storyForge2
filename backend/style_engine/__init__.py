@@ -5,6 +5,10 @@ from backend.style_engine.writing_formulas import (
     WritingFormulaStats,
     ComplianceResult,
 )
+from backend.style_engine.taboo_constraints import (
+    TabooConstraintChecker,
+    TabooViolation,
+)
 
 __all__ = [
     "GenreTemplate",
@@ -13,4 +17,6 @@ __all__ = [
     "WritingFormulaAnalyzer",
     "WritingFormulaStats",
     "ComplianceResult",
+    "TabooConstraintChecker",
+    "TabooViolation",
 ]

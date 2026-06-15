@@ -288,6 +288,19 @@ async def write_scene(data: dict):
     # Update L0 from character state changes
     l0.update_from_logs(registry_report.character_state_updates)
 
+    # --- Style Guard (v1.6 Phase 4b) ---
+    style_violations = []
+    try:
+        from backend.style_engine.genre_template import GenreTemplate
+        genre_template = GenreTemplate().load(ctx["genre"])
+        style_violations = await reviewer.run_style_guard(
+            scene_text=current_draft,
+            genre_template=genre_template,
+            characters=ctx["characters"],
+        )
+    except Exception as e:
+        logger.warning("Style Guard failed (non-blocking): %s", e)
+
     # Save draft (chapter-aware filename to preserve cross-chapter drafts)
     chapters_dir = fm.project_path(project_id, "chapters")
     chapters_dir.mkdir(parents=True, exist_ok=True)
@@ -316,6 +329,7 @@ async def write_scene(data: dict):
             "created": registry_report.created,
             "updated": registry_report.updated,
         },
+        "style_guard_violations": style_violations,
     }
     fm.write_json(project_id, f"chapters/{meta_filename}", scene_meta)
 

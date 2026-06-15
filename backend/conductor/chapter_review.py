@@ -164,6 +164,7 @@ class ChapterReviewBuilder:
             "narrative_guard_warnings": ng_warnings,
             "fact_guard_summary": fact_guard,
             "writing_formula_compliance": self._check_writing_formula(chapter_number),
+            "style_guard_violations": self._collect_style_guard_violations(chapter_number),
             "discussion_topics": [],
             "decision": None,
             "decision_feedback": None,
@@ -296,6 +297,24 @@ class ChapterReviewBuilder:
                 continue
 
         return warnings
+
+    def _collect_style_guard_violations(self, chapter_number: int) -> list[dict]:
+        """Collect Style Guard violations from scene meta files."""
+        violations = []
+        chapters_dir = self._project_dir / "chapters"
+        if not chapters_dir.exists():
+            return violations
+
+        for meta_file in sorted(chapters_dir.glob(f"ch{chapter_number:02d}_scene_*_meta.json")):
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                sg_violations = meta.get("style_guard_violations", [])
+                if isinstance(sg_violations, list):
+                    violations.extend(sg_violations)
+            except Exception:
+                continue
+
+        return violations
 
     def _build_scene_summaries(self, chapter_number: int) -> str:
         """Build ~800 char summary of chapter scenes for LLM coherence scoring."""

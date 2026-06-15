@@ -14,14 +14,15 @@ logger = logging.getLogger(__name__)
 
 class CoherenceScorer:
     """
-    Scores chapter coherence: 60% rule-based + 40% Tier 3 LLM fine-tuning.
+    Scores chapter coherence: rule-based (60%) + Tier 3 LLM +/-10 delta fine-tuning.
 
-    Rule part weights (each 20%, total 60%):
+    Rule part weights (each 20%):
     - Narrative asset health: active asset completion rate
     - ReaderOS state avg: (addiction + satisfaction + curiosity) / 3
     - Fact Guard pass rate: first-attempt pass / total checks
 
-    LLM part (40%): +/-10 delta + one-liner comment from Tier 3 Haiku.
+    LLM part: +/-10 delta adjustment + one-liner comment from Tier 3 Haiku.
+    Final: clamp(rule_score + llm_delta, 0, 100).
     Falls back to rule-only score on LLM failure.
     """
 
@@ -195,14 +196,10 @@ class ChapterReviewBuilder:
         fact_guard: dict,
     ) -> float:
         """Compute rule-based base coherence (60% of final score)."""
-        total_active = sum(
-            v for k, v in narrative_assets.items()
-            if "new" in k or "escalated" in k or "planted" in k
-        )
-        total_resolved = sum(
-            v for k, v in narrative_assets.items()
-            if "resolved" in k or "fulfilled" in k or "revealed" in k
-        )
+        active_keys = {"new_conflicts", "escalated_conflicts", "new_clues", "planted_foreshadowing"}
+        resolved_keys = {"resolved_conflicts", "fulfilled_promises", "revealed_twists", "fulfilled_expectations"}
+        total_active = sum(v for k, v in narrative_assets.items() if k in active_keys)
+        total_resolved = sum(v for k, v in narrative_assets.items() if k in resolved_keys)
         narrative_health = min(100, (total_resolved / max(1, total_active + total_resolved)) * 100)
 
         reader_os_avg = (

@@ -114,20 +114,14 @@ class TestChapterReviewBuilder:
         result = builder.get_review_data(99)
         assert result is None
 
-    def test_save_and_load_review(self, builder, tmp_path):
-        projects_dir = tmp_path / "projects"
-        builder._projects_dir = projects_dir
-        builder._project_dir = projects_dir / "test_proj"
+    def test_save_and_load_review(self, builder):
         review = builder.build_review(3)
         builder._save_review(review)
         loaded = builder.get_review_data(3)
         assert loaded is not None
         assert loaded["chapter_number"] == 3
 
-    def test_set_decision_approved(self, builder, tmp_path):
-        projects_dir = tmp_path / "projects"
-        builder._projects_dir = projects_dir
-        builder._project_dir = projects_dir / "test_proj"
+    def test_set_decision_approved(self, builder):
         review = builder.build_review(3)
         builder._save_review(review)
         result = builder.set_decision(3, "approved")
@@ -135,10 +129,7 @@ class TestChapterReviewBuilder:
         loaded = builder.get_review_data(3)
         assert loaded["decision"] == "approved"
 
-    def test_set_decision_revise_with_feedback(self, builder, tmp_path):
-        projects_dir = tmp_path / "projects"
-        builder._projects_dir = projects_dir
-        builder._project_dir = projects_dir / "test_proj"
+    def test_set_decision_revise_with_feedback(self, builder):
         review = builder.build_review(3)
         builder._save_review(review)
         result = builder.set_decision(3, "revise", "请重写第2幕的打斗场景")
@@ -154,3 +145,23 @@ class TestChapterReviewBuilder:
     def test_set_decision_missing_review(self, builder):
         result = builder.set_decision(99, "approved")
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_build_review_async_falls_back_to_rule_score(self, builder):
+        """LLM unavailable → falls back to rule score without crashing."""
+        review = await builder.build_review_async(3)
+        assert review["chapter_number"] == 3
+        assert 0 <= review["coherence_score"] <= 100
+        # Without LLM, comment should be empty and score should equal rule score
+        assert isinstance(review["coherence_comment"], str)
+
+    @pytest.mark.asyncio
+    async def test_build_review_async_preserves_structure(self, builder):
+        """Async review has same structure as sync review."""
+        review = await builder.build_review_async(3)
+        assert "reader_os" in review
+        assert len(review["reader_os"]) == 7
+        assert "fact_guard_summary" in review
+        assert "narrative_assets" in review
+        assert review["writing_formula_compliance"] == []
+        assert review["discussion_topics"] == []

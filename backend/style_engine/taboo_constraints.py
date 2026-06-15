@@ -299,20 +299,24 @@ class TabooConstraintChecker:
             return []
 
         try:
-            from backend.llm.model_router import get_model_router, ModelUnavailableError
+            from backend.llm.model_router import get_model_router
 
             router = get_model_router()
 
             # Build candidate list text
             candidates_text = "\n".join(
-                f"[{i}] matched: \"{c.matched_text}\" | context: \"{c.context[:100]}\""
+                f"[{i}] {c.pattern_name} | matched: \"{c.matched_text}\" | context: \"{c.context[:100]}\""
                 for i, c in enumerate(candidates)
             )
 
-            # Use first character's name/taboo for prompt
-            char_entry = character_taboos[0] if character_taboos else {}
-            char_name = char_entry.get("name", "未知角色")
-            taboos = char_entry.get("taboos", [])
+            # Build all character-taboo pairs for the prompt
+            char_taboo_lines = []
+            for ce in character_taboos:
+                cn = ce.get("name", "未知角色")
+                ct = ce.get("taboos", [])
+                if ct:
+                    char_taboo_lines.append(f"  {cn}: {', '.join(ct)}")
+            all_char_taboos = "\n".join(char_taboo_lines)
 
             system_prompt = (
                 "你是一位网文编辑。以下是从角色禁忌关键词匹配中检测到的候选违规列表。"
@@ -320,8 +324,7 @@ class TabooConstraintChecker:
                 "只输出一个 JSON 对象。"
             )
             user_prompt = (
-                f"角色: {char_name}\n"
-                f"禁忌: {', '.join(taboos)}\n\n"
+                f"角色禁忌列表:\n{all_char_taboos}\n\n"
                 f"候选违规列表:\n{candidates_text}\n\n"
                 '输出 JSON:\n'
                 '{"violations": [{"index": <int>, "confirmed": true|false, "reason": "<一句话>"}]}'

@@ -203,7 +203,6 @@ class ReaderOS:
         讨论潜力: based on open mysteries, twists, and cliffhangers.
         Formula: min(100, (open_mysteries*10 + planted_ff*8 + revealed_twists*15 + cliffhanger*30) * 0.8)
         """
-        progress = self._fm.read_json(self.project_id, "progress.json") or {}
         narrative_state = self._fm.read_json(self.project_id, "memory/l2/active_narrative_state.json") or {}
 
         open_mysteries = len(narrative_state.get("open_mysteries", []))

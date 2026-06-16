@@ -33,8 +33,11 @@ class TestGetThresholds:
         data = resp.json()
         assert data["error"] is False
         assert data["detail"]["genre"] == "cool_novel"
-        assert "addiction_severe" in data["detail"]["defaults"]
-        assert "addiction_critical" in data["detail"]["defaults"]
+        defaults = data["detail"]["defaults"]
+        assert defaults["addiction_severe"] == 50
+        assert defaults["addiction_critical"] == 35
+        assert defaults["fatigue_formula"]["threshold"] == 60
+        assert defaults["fatigue_formula"]["decay"] == 1.0
 
     def test_missing_project_id(self, client):
         resp = client.get("/api/settings/thresholds", params={"project_id": ""})
@@ -60,6 +63,16 @@ class TestPutThresholds:
         assert resp2.status_code == 200
         detail = resp2.json()["detail"]
         assert detail["overrides"] == overrides
+
+    def test_rejects_invalid_override_keys(self, client, project_id):
+        resp = client.put("/api/settings/thresholds", json={
+            "project_id": project_id,
+            "overrides": {"not_a_valid_key": 100},
+        })
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["detail"]["code"] == "VALIDATION_ERROR"
+        assert "not_a_valid_key" in data["detail"]["message"]
 
     def test_missing_project_id(self, client):
         resp = client.put("/api/settings/thresholds", json={

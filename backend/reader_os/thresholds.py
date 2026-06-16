@@ -37,31 +37,55 @@ GENRE_THRESHOLDS = {
 }
 
 
+def _normalize_thresholds(thresholds: dict) -> dict:
+    """Remap YAML user-facing labels → internal severity-based keys.
+
+    YAML "addiction_critical" (higher value) → internal "addiction_severe"
+    YAML "addiction_moderate"  (lower value) → internal "addiction_critical"
+
+    Keeps original YAML keys as aliases for frontend display.
+    """
+    normalized = dict(thresholds)
+
+    yac = normalized.pop("addiction_critical", None)   # YAML: higher threshold
+    yam = normalized.pop("addiction_moderate", None)   # YAML: lower threshold
+
+    if yac is not None and yam is not None:
+        # Both keys present: clean remap
+        normalized["addiction_severe"] = yac
+        normalized["addiction_critical"] = yam
+        normalized["addiction_moderate"] = yam   # keep YAML alias
+    elif yac is not None:
+        # Only higher threshold provided: derive lower with 15-point offset
+        normalized["addiction_severe"] = yac
+        normalized["addiction_critical"] = yac - 15
+        normalized["addiction_moderate"] = yac   # keep YAML alias
+        logger.warning(
+            "addiction_critical present without addiction_moderate; "
+            "derived addiction_critical=%d from %d", yac - 15, yac
+        )
+    elif yam is not None:
+        # Only lower threshold provided
+        normalized["addiction_critical"] = yam
+        normalized["addiction_moderate"] = yam
+
+    # Prefer explicit YAML fatigue_formula; synthesize as fallback
+    if "fatigue_formula" not in normalized:
+        normalized["fatigue_formula"] = {
+            "threshold": normalized.get("fatigue_moderate", 50),
+            "decay": 1.0,
+        }
+
+    return normalized
+
+
 def _map_threshold_keys(genres: dict) -> dict[str, dict]:
-    """Emit both Chinese and pinyin keys, plus normalize to internal key names."""
+    """Emit both Chinese and pinyin keys for each normalized genre."""
     result = {}
     for name, thresholds in genres.items():
-        normalized = dict(thresholds)
-        # Remap YAML user-facing labels → internal severity-based keys
-        # for calculator.py backward compatibility.
-        # YAML "addiction_critical" (50) → internal "addiction_severe"
-        # YAML "addiction_moderate" (35) → internal "addiction_critical"
-        yac = normalized.pop("addiction_critical", None)
-        yam = normalized.pop("addiction_moderate", None)
-        if yac is not None:
-            normalized["addiction_severe"] = yac
-            normalized["addiction_critical"] = yac  # keep YAML key name as alias
-        if yam is not None:
-            normalized["addiction_critical"] = yam
-            normalized["addiction_moderate"] = yam
-        if "fatigue_formula" not in normalized:
-            normalized["fatigue_formula"] = {
-                "threshold": normalized.get("fatigue_moderate", 50),
-                "decay": 1.0,
-            }
-
-        pinyin = GENRE_NAME_MAPPING.get(name)
+        normalized = _normalize_thresholds(thresholds)
         result[name] = normalized
+        pinyin = GENRE_NAME_MAPPING.get(name)
         if pinyin:
             result[pinyin] = normalized
     return result
@@ -72,6 +96,7 @@ def load_genre_thresholds() -> dict[str, dict]:
 
     Falls back to hardcoded GENRE_THRESHOLDS if file is missing or invalid.
     Keys are emitted in both Chinese and pinyin forms via GENRE_NAME_MAPPING.
+    Always includes a "generic" fallback key.
     """
     config_path = Path("config/genre_thresholds.yaml")
     try:
@@ -80,7 +105,10 @@ def load_genre_thresholds() -> dict[str, dict]:
                 data = yaml.safe_load(f)
             genres = data.get("genres", {}) if data else {}
             if genres:
-                return _map_threshold_keys(genres)
+                result = _map_threshold_keys(genres)
+                if "generic" not in result:
+                    result["generic"] = dict(GENRE_THRESHOLDS["generic"])
+                return result
     except Exception:
         logger.warning("Failed to load genre_thresholds.yaml, using defaults")
 

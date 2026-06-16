@@ -23,10 +23,16 @@ async def get_thresholds(project_id: str = Query(...)):
     project = fm.read_json(project_id, "project.json") or {}
     genre = project.get("genre", "cool_novel")
     all_defaults = load_genre_thresholds()
-    defaults = all_defaults.get(genre, all_defaults.get("cool_novel", {}))
+
+    defaults = all_defaults.get(genre)
+    fallback_genre = None
+    if defaults is None:
+        fallback_genre = "cool_novel"
+        defaults = all_defaults.get("generic", all_defaults.get("cool_novel", {}))
+
     overrides = project.get("genre_thresholds") or {}
 
-    return {
+    response = {
         "error": False, "code": "OK", "message": "",
         "detail": {
             "genre": genre,
@@ -34,6 +40,9 @@ async def get_thresholds(project_id: str = Query(...)):
             "overrides": overrides,
         },
     }
+    if fallback_genre:
+        response["detail"]["fallback_genre"] = fallback_genre
+    return response
 
 
 @router.put("/thresholds")
@@ -47,6 +56,17 @@ async def update_thresholds(data: dict):
 
     overrides = data.get("overrides", {})
     project = fm.read_json(project_id, "project.json") or {}
+    genre = project.get("genre", "cool_novel")
+    all_defaults = load_genre_thresholds()
+    valid_keys = all_defaults.get(genre, all_defaults.get("cool_novel", {})).keys()
+    invalid = set(overrides.keys()) - set(valid_keys)
+    if invalid:
+        raise HTTPException(status_code=400, detail={
+            "error": True, "code": "VALIDATION_ERROR",
+            "message": f"无效的阈值键: {', '.join(sorted(invalid))}",
+            "detail": {"valid_keys": sorted(valid_keys)},
+        })
+
     project["genre_thresholds"] = overrides
     fm.write_json(project_id, "project.json", project)
 

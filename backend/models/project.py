@@ -22,7 +22,7 @@ class Project(BaseModel):
     initial_intent: InitialIntent = Field(default_factory=InitialIntent)
     current_stage: str = "INIT"
     stage_history: list[StageTransition] = []
-    genre_thresholds: Optional[dict[str, int]] = None
+    genre_thresholds: Optional[dict] = None
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 

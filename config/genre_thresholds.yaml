@@ -1,6 +1,15 @@
 # StoryForge v1.6 — 体裁差异化阈值默认值
 # 每个指标定义三个阈值级别：critical（严重）、high（高度）、moderate（中度）
 # 项目创建时按体裁自动填充到 project.json，用户可在设置中覆盖。
+#
+# fatigue_formula: 疲劳度计算公式参数
+#   threshold — 近3章平均张力超过此值开始产生疲劳
+#   decay     — 疲劳衰减系数（越高疲劳越快）
+#
+# addiction 命名说明（用户界面 vs 内部）：
+#   YAML "addiction_critical" (50) → 内部 "addiction_severe"（严重警告线）
+#   YAML "addiction_moderate" (35) → 内部 "addiction_critical"（临界警告线）
+#   两个 YAML 键必须同时存在，否则归一化使用默认偏移量。
 
 genres:
   爽文:
@@ -10,6 +19,9 @@ genres:
     frustration_moderate: 45
     fatigue_moderate: 55
     fatigue_low: 40
+    fatigue_formula:
+      threshold: 60
+      decay: 1.0
     curiosity_moderate: 35
     curiosity_low: 20
     tension_moderate: 55
@@ -26,6 +38,9 @@ genres:
     frustration_moderate: 65
     fatigue_moderate: 40
     fatigue_low: 30
+    fatigue_formula:
+      threshold: 50
+      decay: 1.5
     curiosity_moderate: 20
     curiosity_low: 10
     tension_moderate: 70
@@ -42,6 +57,9 @@ genres:
     frustration_moderate: 50
     fatigue_moderate: 60
     fatigue_low: 45
+    fatigue_formula:
+      threshold: 55
+      decay: 1.2
     curiosity_moderate: 30
     curiosity_low: 15
     tension_moderate: 60
@@ -58,6 +76,9 @@ genres:
     frustration_moderate: 55
     fatigue_moderate: 55
     fatigue_low: 40
+    fatigue_formula:
+      threshold: 65
+      decay: 1.0
     curiosity_moderate: 25
     curiosity_low: 12
     tension_moderate: 65
@@ -74,6 +95,9 @@ genres:
     frustration_moderate: 55
     fatigue_moderate: 50
     fatigue_low: 38
+    fatigue_formula:
+      threshold: 60
+      decay: 1.0
     curiosity_moderate: 25
     curiosity_low: 12
     tension_moderate: 60

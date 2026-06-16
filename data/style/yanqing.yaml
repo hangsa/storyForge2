@@ -1,0 +1,125 @@
+# 言情 (Yanqing) Genre Template
+# Romance-focused narrative with emotional depth and relationship dynamics.
+
+name: yanqing
+description: >
+  言情体裁——以爱情关系为核心，围绕人物之间的情感纠葛、
+  心理变化和关系发展展开的浪漫小说类型。适用于古言、现言、
+  校园、都市等子类型。
+
+pacing:
+  min_beats_per_1k: 0.8
+  escalation_interval: 6
+  action_ratio: 0.15
+  max_consecutive_non_action: 6
+  chapter_words:
+    min: 2000
+    max: 5000
+  scene_words:
+    min: 400
+    max: 1800
+
+tone: >
+  细腻温柔，情感真挚。注重人物的内心世界和情感变化。
+  关系的每一步发展都需要充分的铺垫和心理描写。
+  语言要有温度，场景要有氛围。甜度与虐度要有节奏交替。
+
+style_rules:
+  - "每章至少有一个情感互动场景（对话/独处/心理活动）"
+  - "关系转折必须有充分的铺垫（至少3章的伏笔）"
+  - "内心独白占比不低于15%，展现角色的情感挣扎"
+  - "环境和氛围描写要服务于情感基调（雨/阳光/月色/季节）"
+  - "配角和主角的关系线要有独立发展"
+  - "对话要体现人物关系的微妙变化（措辞/语气/沉默）"
+  - "避免玛丽苏/杰克苏——角色要有真实缺陷"
+
+writing_formula:
+  sentence:
+    short_ratio: 0.30
+    medium_ratio: 0.50
+    long_ratio: 0.20
+  dialogue:
+    max_consecutive_lines: 12
+    action_beat_interval: 8
+    tag_variety: "very_high"
+  paragraph:
+    max_sentences: 5
+    max_words_per_paragraph: 250
+
+taboo_words:
+  - "无所谓"
+  - "随便吧"
+  - "爱怎样怎样"
+  # Toxic relationship patterns
+  - "我离不开你"
+  - "没有你我活不下去"
+  # Breaking immersion
+  - "工具人"
+  - "备胎"
+
+taboos:
+  - name: "情感虐待"
+    type: "sliding_window"
+    keywords: ["冷暴力", "精神控制", "PUA", "贬低", "羞辱", "操控", "威胁", "利用感情"]
+    max_chars: 350
+    severity: error
+
+  - name: "强行推进关系"
+    type: "consecutive_match"
+    failure_keywords: ["一见钟情", "爱得死去活来", "非他不嫁", "非她不娶", "此生只爱", "一眼万年"]
+    max_consecutive: 1
+    severity: warning
+
+  - name: "狗血过度"
+    type: "sliding_window"
+    keywords: ["失忆", "车祸", "绝症", "替身", "契约婚姻", "不告而别", "带球跑", "灰姑娘"]
+    max_chars: 500
+    severity: warning
+
+trope_patterns:
+  - name: "初见邂逅"
+    description: "主角间的命运般的初次相遇"
+    min_interval: 1
+  - name: "误会与和解"
+    description: "因误解产生矛盾而后关系修复"
+    min_interval: 5
+  - name: "第三者介入"
+    description: "第三方角色对关系的考验"
+    max_per_volume: 2
+  - name: "关系升级"
+    description: "从暧昧到确认/从恋人到更深层次关系"
+    min_interval: 10
+  - name: "外力阻挠"
+    description: "家庭/社会/命运对关系的阻碍"
+    min_interval: 8
+
+reader_targets:
+  curiosity_base: 0.45
+  tension_peak: 0.65
+  satisfaction_min: 0.60
+  frustration_max: 0.40
+  fatigue_warning: 0.35
+  addiction_target: 0.75
+  discussion_potential_min: 0.55
+
+model_preferences:
+  creative_core: "deepseek-chat"
+  temperature: 0.85
+
+style_formula:
+  sentence:
+    avg_length_max: 32
+    short_pct_min: 25
+    long_pct_max: 22
+  dialogue:
+    ratio_min: 0.25
+    max_consecutive_lines: 12
+  paragraph:
+    max_sentences: 5
+    max_words: 250
+  emotional_beat:
+    min_per_1k: 1.2
+  satisfaction_beat:
+    min_count: 2
+  suspense_hook:
+    required: false

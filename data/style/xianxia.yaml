@@ -1,0 +1,129 @@
+# 仙侠 (Xianxia) Genre Template
+# Cultivation-focused narrative with Dao comprehension and realm breakthroughs.
+
+name: xianxia
+description: >
+  仙侠体裁——以修真练气、境界突破为核心，融合道家思想、法宝仙术、
+  宗门争斗和天地大劫的古典仙侠小说类型。
+
+# Narrative pacing configuration
+pacing:
+  min_beats_per_1k: 1.2
+  escalation_interval: 5
+  action_ratio: 0.35
+  max_consecutive_non_action: 3
+  chapter_words:
+    min: 3000
+    max: 7000
+  scene_words:
+    min: 600
+    max: 2500
+
+# Tone and style rules
+tone: >
+  飘逸出尘，意境深远。修炼不仅是力量的增长，更是心境的提升。
+  道法自然，因果循环。主角在求道之路上经历劫难，领悟天道。
+  语言要求有古韵和仙气，避免过于口语化。
+
+style_rules:
+  - "境界突破必须描写天地异象，层次越高异象越壮观"
+  - "法宝和功法要有意境化的名称和来历"
+  - "修炼过程要穿插对天道法则的感悟"
+  - "战斗场景需描写术法神通的变化和克制关系"
+  - "每章至少有一段意境化描写（山水/天道/心魔）"
+  - "对话需体现修道者的气度和智慧，忌粗俗"
+  - "因果报应要在叙事中体现，不可随意杀戮"
+
+writing_formula:
+  sentence:
+    short_ratio: 0.30
+    medium_ratio: 0.45
+    long_ratio: 0.25
+  dialogue:
+    max_consecutive_lines: 10
+    action_beat_interval: 6
+    tag_variety: "medium"
+  paragraph:
+    max_sentences: 6
+    max_words_per_paragraph: 350
+
+taboo_words:
+  - "无聊"
+  - "没意思"
+  - "算了不修了"
+  - "太麻烦了"
+  # Modern slang that breaks immersion
+  - "牛逼"
+  - "卧槽"
+  - "666"
+  - "OK"
+  # Anti-Daoist concepts
+  - "没有因果"
+  - "随便杀人"
+
+taboos:
+  - name: "修为倒退"
+    type: "sliding_window"
+    keywords: ["修为跌落", "境界倒退", "功力尽失", "废了修为", "修为被废", "道基受损"]
+    max_chars: 400
+    severity: warning
+
+  - name: "心境崩坏"
+    type: "sliding_window"
+    keywords: ["心魔失控", "走火入魔", "道心破碎", "执念成魔", "堕入魔道"]
+    max_chars: 300
+    severity: error
+
+  - name: "过度杀戮"
+    type: "consecutive_match"
+    failure_keywords: ["斩杀", "灭杀", "屠尽", "灭门", "血洗", "屠戮"]
+    max_consecutive: 3
+    severity: warning
+
+trope_patterns:
+  - name: "境界突破"
+    description: "主角突破修炼瓶颈，引发天地异象"
+    min_interval: 3
+  - name: "秘境机缘"
+    description: "探索上古秘境或遗迹获得传承"
+    max_per_volume: 2
+  - name: "宗门大比"
+    description: "宗门内部或门派之间的比武大会"
+    min_interval: 8
+  - name: "天地大劫"
+    description: "天道轮回引发的大规模劫难"
+    max_per_volume: 1
+  - name: "因果了结"
+    description: "前世的因果或恩怨在今生清算"
+    min_interval: 10
+
+reader_targets:
+  curiosity_base: 0.5
+  tension_peak: 0.75
+  satisfaction_min: 0.55
+  frustration_max: 0.25
+  fatigue_warning: 0.35
+  addiction_target: 0.65
+  discussion_potential_min: 0.5
+
+model_preferences:
+  creative_core: "deepseek-chat"
+  temperature: 0.85
+
+style_formula:
+  sentence:
+    avg_length_max: 35
+    short_pct_min: 25
+    long_pct_max: 25
+  dialogue:
+    ratio_min: 0.15
+    max_consecutive_lines: 10
+  paragraph:
+    max_sentences: 6
+    max_words: 350
+  emotional_beat:
+    min_per_1k: 1.0
+  satisfaction_beat:
+    min_count: 2
+  suspense_hook:
+    required: true

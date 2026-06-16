@@ -1,0 +1,123 @@
+# 都市 (Dushi) Genre Template
+# Urban/modern-life narrative — realistic settings, workplace, campus, city life.
+
+name: dushi
+description: >
+  都市体裁——以现代城市生活为背景，围绕职场、校园、商业、家庭等
+  现实题材展开的小说类型。适用于职场商战、校园青春、都市异能、
+  重生逆袭等子类型。
+
+pacing:
+  min_beats_per_1k: 1.0
+  escalation_interval: 5
+  action_ratio: 0.20
+  max_consecutive_non_action: 5
+  chapter_words:
+    min: 2500
+    max: 5000
+  scene_words:
+    min: 400
+    max: 1800
+
+tone: >
+  真实亲切，贴近生活。时代感强，能反映当下社会的热点和痛点。
+  角色要真实立体，动机要能引发共鸣。幽默和温情作为调节剂，
+  避免过度说教和理想化。
+
+style_rules:
+  - "时代背景要有真实细节（手机/APP/热搜/社交方式）"
+  - "职场/商战描写要有行业真实感，不能过于儿戏"
+  - "角色关系要有现实的复杂性（利益/人情/道德）"
+  - "冲突要源于现实矛盾（阶级/价值观/信息差）"
+  - "爽点要建立在聪明和努力之上，不能全靠运气"
+  - "对话要有生活气息，符合角色的年龄和身份"
+  - "避免过度使用网络流行语导致快速过时"
+
+writing_formula:
+  sentence:
+    short_ratio: 0.35
+    medium_ratio: 0.50
+    long_ratio: 0.15
+  dialogue:
+    max_consecutive_lines: 10
+    action_beat_interval: 6
+    tag_variety: "high"
+  paragraph:
+    max_sentences: 5
+    max_words_per_paragraph: 280
+
+taboo_words:
+  - "无聊的生活"
+  - "平凡就好"
+  - "算了不争了"
+  # Outdated slang
+  - "给力"
+  - "神马都是浮云"
+  - "蓝瘦香菇"
+  # Toxic social values
+  - "穷人活该"
+  - "有钱就是大爷"
+
+taboos:
+  - name: "不劳而获"
+    type: "sliding_window"
+    keywords: ["天降横财", "彩票中奖", "意外继承", "不劳而获", "运气爆棚", "躺赢"]
+    max_chars: 250
+    severity: warning
+
+  - name: "社会达尔文"
+    type: "sliding_window"
+    keywords: ["弱肉强食", "丛林法则", "优胜劣汰", "适者生存", "强者通吃"]
+    max_chars: 200
+    severity: warning
+
+  - name: "无脑打脸"
+    type: "consecutive_match"
+    failure_keywords: ["当众打脸", "啪啪打脸", "脸都肿了", "脸被打肿", "所有人都惊呆了"]
+    max_consecutive: 2
+    severity: error
+
+trope_patterns:
+  - name: "商业博弈"
+    description: "商场上的计谋对抗和利益争夺"
+    min_interval: 3
+  - name: "身份反转"
+    description: "角色真实身份或实力被揭示"
+    min_interval: 5
+  - name: "人际危机"
+    description: "朋友/恋人/亲人关系出现重大危机"
+    min_interval: 6
+  - name: "社会事件"
+    description: "与当下社会热点相关的事件"
+    max_per_volume: 2
+
+reader_targets:
+  curiosity_base: 0.50
+  tension_peak: 0.70
+  satisfaction_min: 0.60
+  frustration_max: 0.30
+  fatigue_warning: 0.40
+  addiction_target: 0.65
+  discussion_potential_min: 0.50
+
+model_preferences:
+  creative_core: "deepseek-chat"
+  temperature: 0.85
+
+style_formula:
+  sentence:
+    avg_length_max: 30
+    short_pct_min: 28
+    long_pct_max: 18
+  dialogue:
+    ratio_min: 0.22
+    max_consecutive_lines: 10
+  paragraph:
+    max_sentences: 5
+    max_words: 280
+  emotional_beat:
+    min_per_1k: 0.8
+  satisfaction_beat:
+    min_count: 2
+  suspense_hook:
+    required: true

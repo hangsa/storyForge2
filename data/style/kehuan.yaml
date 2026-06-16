@@ -1,0 +1,126 @@
+# 科幻 (Kehuan) Genre Template
+# Science fiction — technology constraints, worldbuilding rigor, hard/soft sci-fi balance.
+
+name: kehuan
+description: >
+  科幻体裁——以科学假设和技术想象为驱动，探索未来世界、
+  外星文明、人工智能和人类命运的幻想小说类型。适用于硬科幻、
+  太空歌剧、赛博朋克、末日废土等子类型。
+
+pacing:
+  min_beats_per_1k: 0.9
+  escalation_interval: 5
+  action_ratio: 0.30
+  max_consecutive_non_action: 4
+  chapter_words:
+    min: 2500
+    max: 6000
+  scene_words:
+    min: 500
+    max: 2200
+
+tone: >
+  理性克制，格局宏大。科学设定要有内部自洽性，技术描写要有
+  可信度。对人性和社会的探讨要深刻，不回避伦理困境。
+  描写的冷静与想象的宏大形成张力。
+
+style_rules:
+  - "科学设定必须前后一致，不能出现逻辑矛盾"
+  - "技术描写要有层次——先现象，再原理，后影响"
+  - "世界观展示要融入叙事，避免大段说明书式文字"
+  - "角色决策要基于科学理性，不能凭感情用事"
+  - "每章至少有一处体现科技与人性关系的思考"
+  - "未来社会的政治/经济/文化要有可信的演化逻辑"
+  - "硬科幻元素要准确，软科幻可以模糊但必须自洽"
+
+writing_formula:
+  sentence:
+    short_ratio: 0.30
+    medium_ratio: 0.45
+    long_ratio: 0.25
+  dialogue:
+    max_consecutive_lines: 8
+    action_beat_interval: 5
+    tag_variety: "medium"
+  paragraph:
+    max_sentences: 6
+    max_words_per_paragraph: 320
+
+taboo_words:
+  - "魔法"
+  - "神仙"
+  - "诅咒"
+  - "灵魂出窍"
+  # Anti-science
+  - "不讲科学"
+  - "无法解释"
+  - "超越科学"
+  # Lazy exposition
+  - "就像魔法一样"
+
+taboos:
+  - name: "科技万能"
+    type: "sliding_window"
+    keywords: ["万能科技", "无所不能", "解决一切", "科技无敌", "心想事成", "完全控制"]
+    max_chars: 300
+    severity: warning
+
+  - name: "逻辑矛盾"
+    type: "sliding_window"
+    keywords: ["违背物理定律", "凭空出现", "莫名其妙", "说变就变", "突然失效", "时而有效"]
+    max_chars: 250
+    severity: error
+
+  - name: "冗长说教"
+    type: "consecutive_match"
+    failure_keywords: ["众所周知", "根据物理定律", "从科学角度", "理论上来讲", "根据相对论", "量子力学告诉我们"]
+    max_consecutive: 3
+    severity: warning
+
+trope_patterns:
+  - name: "技术突破"
+    description: "关键科学难题被攻克或新技术诞生"
+    min_interval: 3
+  - name: "首次接触"
+    description: "人类与外星文明/新物种的首次接触"
+    max_per_volume: 1
+  - name: "伦理困境"
+    description: "科技发展引发的人性/道德/社会问题"
+    min_interval: 4
+  - name: "系统危机"
+    description: "技术故障或系统失控引发连锁危机"
+    min_interval: 5
+  - name: "文明抉择"
+    description: "人类文明面临根本性的命运选择"
+    max_per_volume: 1
+
+reader_targets:
+  curiosity_base: 0.65
+  tension_peak: 0.75
+  satisfaction_min: 0.50
+  frustration_max: 0.30
+  fatigue_warning: 0.35
+  addiction_target: 0.60
+  discussion_potential_min: 0.65
+
+model_preferences:
+  creative_core: "deepseek-chat"
+  temperature: 0.80
+
+style_formula:
+  sentence:
+    avg_length_max: 35
+    short_pct_min: 22
+    long_pct_max: 28
+  dialogue:
+    ratio_min: 0.15
+    max_consecutive_lines: 8
+  paragraph:
+    max_sentences: 6
+    max_words: 320
+  emotional_beat:
+    min_per_1k: 0.7
+  satisfaction_beat:
+    min_count: 1
+  suspense_hook:
+    required: true

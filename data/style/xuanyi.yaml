@@ -1,0 +1,123 @@
+# 悬疑 (Xuanyi) Genre Template
+# Mystery/thriller narrative with suspense pacing, clue structures, and twist reveals.
+
+name: xuanyi
+description: >
+  悬疑体裁——以谜团驱动叙事，通过线索铺设、推理推进和
+  反转揭露构建紧张气氛的推理/惊悚小说类型。适用于刑侦、
+  灵异、心理惊悚、社会派等子类型。
+
+pacing:
+  min_beats_per_1k: 1.0
+  escalation_interval: 3
+  action_ratio: 0.25
+  max_consecutive_non_action: 4
+  chapter_words:
+    min: 2500
+    max: 5000
+  scene_words:
+    min: 400
+    max: 1800
+
+tone: >
+  紧张压抑，疑云密布。每个场景都应埋藏线索或引导读者产生疑问。
+  信息释放要有层次——先呈现现象，再揭示部分真相，最后反转。
+  描写要冷静克制，让读者自己拼图。气氛渲染重于人物抒情。
+
+style_rules:
+  - "每章至少埋设一个新线索或加深一个已有谜团"
+  - "线索分为真假两类，假线索要有合理的误导逻辑"
+  - "反转前必须有伏笔（至少在前3章中出现）"
+  - "每章结尾要有小悬念（新发现/新疑问/新危险）"
+  - "角色动机要复杂，不能有纯粹的恶人"
+  - "环境描写要营造不安感（天气/光影/声音/气味）"
+  - "信息量要逐步释放，不可一次性全部揭示"
+
+writing_formula:
+  sentence:
+    short_ratio: 0.40
+    medium_ratio: 0.40
+    long_ratio: 0.20
+  dialogue:
+    max_consecutive_lines: 8
+    action_beat_interval: 5
+    tag_variety: "high"
+  paragraph:
+    max_sentences: 4
+    max_words_per_paragraph: 250
+
+taboo_words:
+  - "太简单了"
+  - "显而易见"
+  - "不用查了"
+  - "随便猜"
+  # Meta violations
+  - "作者说"
+  - "读者们"
+
+taboos:
+  - name: "提前揭底"
+    type: "sliding_window"
+    keywords: ["原来如此", "真相大白", "一切都明了", "凶手就是", "幕后黑手", "水落石出", "真相浮出水面"]
+    max_chars: 200
+    severity: error
+
+  - name: "无铺垫反转"
+    type: "consecutive_match"
+    failure_keywords: ["突然发现", "竟然", "没想到", "出乎意料", "不可思议", "难以置信"]
+    max_consecutive: 2
+    severity: warning
+
+  - name: "主角降智"
+    type: "sliding_window"
+    keywords: ["没注意", "忽略了", "忘记检查", "想不明白", "不知所措", "毫无头绪"]
+    max_chars: 300
+    severity: warning
+
+trope_patterns:
+  - name: "新线索发现"
+    description: "发现关键物证或人证推进调查"
+    min_interval: 1
+  - name: "嫌疑人反转"
+    description: "原本的嫌疑人被排除或新嫌疑人浮出"
+    min_interval: 3
+  - name: "个人危机"
+    description: "主角自身陷入危险或成为目标"
+    min_interval: 5
+  - name: "大反转"
+    description: "颠覆之前全部推理的重大反转"
+    max_per_volume: 2
+  - name: "终极对决"
+    description: "与最终反派的智力或武力对决"
+    max_per_volume: 1
+
+reader_targets:
+  curiosity_base: 0.70
+  tension_peak: 0.85
+  satisfaction_min: 0.50
+  frustration_max: 0.35
+  fatigue_warning: 0.30
+  addiction_target: 0.80
+  discussion_potential_min: 0.60
+
+model_preferences:
+  creative_core: "deepseek-chat"
+  temperature: 0.75
+
+style_formula:
+  sentence:
+    avg_length_max: 28
+    short_pct_min: 35
+    long_pct_max: 22
+  dialogue:
+    ratio_min: 0.18
+    max_consecutive_lines: 8
+  paragraph:
+    max_sentences: 4
+    max_words: 250
+  emotional_beat:
+    min_per_1k: 0.8
+  satisfaction_beat:
+    min_count: 1
+  suspense_hook:
+    required: true

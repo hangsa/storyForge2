@@ -424,7 +424,11 @@ class TestMultiChapterE2E:
         assert export_data["error"] is False
         detail = export_data["detail"]
         assert detail["total_chars"] > 0
-        assert detail["file_path"] == f"projects/{proj_id}/exports/novel.md"
+        from datetime import date
+        import re
+        safe_title = re.sub(r"[^\w一-鿿\-]", "_", "测试小说").strip("_") or "novel"
+        today = date.today().strftime("%Y%m%d")
+        assert detail["file_path"] == f"projects/{proj_id}/exports/{safe_title}_{today}.md"
 
         # SF_LOG should be stripped from export
         assert "SF_LOG" not in detail["preview"]

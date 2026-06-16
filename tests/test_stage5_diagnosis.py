@@ -68,14 +68,14 @@ class TestTimelineDetection:
         ]))
 
         # Chapter 1: character arrives at location A
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch1_scene_001_draft.md",
             '林峰站在城西烂尾楼的废墟上。\n'
             '<!-- SF_LOG character_emotion char="林峰" emotion="愤怒" -->\n'
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="城西烂尾楼" -->\n'
         )
 
         # Chapter 2: character at location B, from="未知" (no proper transition)
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch2_scene_002_draft.md",
             '林峰回到家中，疲惫地坐在沙发上。\n'
             '<!-- SF_LOG character_emotion char="林峰" emotion="疲惫" -->\n'
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="家中" -->\n'
@@ -101,10 +101,10 @@ class TestTimelineDetection:
             ]},
         ]))
 
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch1_scene_001_draft.md",
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="城西烂尾楼" -->\n'
         )
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch2_scene_002_draft.md",
             '<!-- SF_LOG character_location_change char="林峰" from="城西烂尾楼" to="家中" -->\n'
         )
 
@@ -125,12 +125,12 @@ class TestTimelineDetection:
             ]},
         ]))
 
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch1_scene_001_draft.md",
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="实验室" -->\n'
             '<!-- SF_LOG character_location_change char="苏晓晓" from="未知" to="咖啡馆" -->\n'
         )
         # 林峰: from="未知" (jump), 苏晓晓: proper from
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch2_scene_002_draft.md",
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="医院" -->\n'
             '<!-- SF_LOG character_location_change char="苏晓晓" from="咖啡馆" to="医院" -->\n'
         )
@@ -154,10 +154,10 @@ class TestTimelineDetection:
             ]},
         ]))
 
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch1_scene_001_draft.md",
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="实验室" -->\n'
         )
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch1_scene_002_draft.md",
             '<!-- SF_LOG character_location_change char="林峰" from="实验室" to="办公室" -->\n'
         )
 
@@ -482,11 +482,11 @@ class TestDiagnosisIntegration:
         ]))
 
         # Issue 1: Location jump — character at A in ch1, at B in ch2 with from="未知"
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch1_scene_001_draft.md",
             '<!-- SF_LOG character_emotion char="林峰" emotion="愤怒" -->\n'
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="实验室" -->\n'
         )
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch2_scene_002_draft.md",
             '<!-- SF_LOG character_emotion char="林峰" emotion="紧张" -->\n'
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="废弃工厂" -->\n'
         )

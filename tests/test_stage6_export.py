@@ -74,7 +74,7 @@ class TestSFLogStripping:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md",
             '林峰站在废墟上。\n'
             '<!-- SF_LOG character_emotion char="林峰" emotion="愤怒" -->\n'
             '<!-- SF_LOG character_location_change char="林峰" from="未知" to="城西烂尾楼" -->\n'
@@ -82,7 +82,7 @@ class TestSFLogStripping:
         )
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         assert "SF_LOG" not in text
         assert "林峰站在废墟上" in text
@@ -96,13 +96,13 @@ class TestSFLogStripping:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md",
             '林峰站在废墟上。\n'
             '<!-- SF_LOG character_emotion char="林峰" emotion="愤怒" -->\n'
         )
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": False, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": False, "add_toc": False, "include_title_page": False})
 
         assert "SF_LOG" in text
         assert "character_emotion" in text
@@ -115,7 +115,7 @@ class TestSFLogStripping:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md",
             '开始文本。\n'
             '<!-- SF_LOG registry_create type="conflict"\n'
             '  data=\'{"owner":"林峰","target":"师父","type":"betrayal"}\' -->\n'
@@ -123,7 +123,7 @@ class TestSFLogStripping:
         )
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         assert "SF_LOG" not in text
         assert "开始文本" in text
@@ -145,12 +145,12 @@ class TestTOCGeneration:
                 {"scene_number": 3, "status": "completed", "coherence_score": 88},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "第一章场景一内容。")
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md", "第一章场景二内容。")
-        _write_md(projects_dir, "proj_test", "chapters/scene_003_draft.md", "第二章场景一内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "第一章场景一内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_002_draft.md", "第一章场景二内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch02_scene_003_draft.md", "第二章场景一内容。")
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": True, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": True, "include_title_page": False})
 
         assert "# 目录" in text
         assert "第1章" in text
@@ -163,10 +163,10 @@ class TestTOCGeneration:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "内容。")
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         assert "# 目录" not in text
 
@@ -182,10 +182,10 @@ class TestTitlePage:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "内容。")
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": True})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": True})
 
         assert "# 星辰大海" in text
         assert "StoryForge" in text
@@ -197,10 +197,10 @@ class TestTitlePage:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "内容。")
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         assert "# 星辰大海" not in text
 
@@ -211,10 +211,10 @@ class TestTitlePage:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "内容。")
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": True})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": True})
 
         assert "未命名作品" in text
 
@@ -236,12 +236,12 @@ class TestChapterOrdering:
                 {"scene_number": 2, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "第一章")
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md", "第二章")
-        _write_md(projects_dir, "proj_test", "chapters/scene_003_draft.md", "第三章")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "第一章")
+        _write_md(projects_dir, "proj_test", "chapters/ch02_scene_002_draft.md", "第二章")
+        _write_md(projects_dir, "proj_test", "chapters/ch03_scene_003_draft.md", "第三章")
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         pos1 = text.index("第一章")
         pos2 = text.index("第二章")
@@ -259,13 +259,13 @@ class TestChapterOrdering:
                 {"scene_number": 4, "status": "skipped", "coherence_score": 0},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "已完成场景")
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md", "失败场景")
-        _write_md(projects_dir, "proj_test", "chapters/scene_003_draft.md", "强制通过场景")
-        _write_md(projects_dir, "proj_test", "chapters/scene_004_draft.md", "跳过场景")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "已完成场景")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_002_draft.md", "失败场景")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_003_draft.md", "强制通过场景")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_004_draft.md", "跳过场景")
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         assert "已完成场景" in text
         assert "强制通过场景" in text
@@ -283,11 +283,11 @@ class TestChapterOrdering:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_000_draft.md", "第零章")
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "第一章")
+        _write_md(projects_dir, "proj_test", "chapters/ch00_scene_000_draft.md", "第零章")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "第一章")
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         assert "第一章" in text
         assert "第零章" not in text
@@ -304,7 +304,7 @@ class TestFileOutput:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "小说内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "小说内容。")
 
         exporter = NovelExporter("proj_test", projects_dir)
         exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
@@ -321,7 +321,7 @@ class TestFileOutput:
                 {"scene_number": 1, "status": "completed", "coherence_score": 85},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md", "内容。")
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md", "内容。")
 
         exports_dir = projects_dir / "proj_test" / "exports"
         assert not exports_dir.exists()
@@ -343,7 +343,7 @@ class TestEdgeCases:
         _write_json(projects_dir, "proj_test", "progress.json", _make_progress([]))
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         assert text == ""
 
@@ -357,7 +357,7 @@ class TestEdgeCases:
         ]))
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": False, "include_title_page": False})
 
         assert text == ""
 
@@ -373,18 +373,18 @@ class TestEdgeCases:
                 {"scene_number": 3, "status": "completed", "coherence_score": 90},
             ]},
         ]))
-        _write_md(projects_dir, "proj_test", "chapters/scene_001_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_001_draft.md",
             '龙族觉醒。\n<!-- SF_LOG character_emotion char="龙啸" emotion="愤怒" -->\n'
         )
-        _write_md(projects_dir, "proj_test", "chapters/scene_002_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch01_scene_002_draft.md",
             '力量爆发。\n<!-- SF_LOG conflict_escalate id="cf_001" new_intensity="critical" -->\n'
         )
-        _write_md(projects_dir, "proj_test", "chapters/scene_003_draft.md",
+        _write_md(projects_dir, "proj_test", "chapters/ch02_scene_003_draft.md",
             '决战开始。\n'
         )
 
         exporter = NovelExporter("proj_test", projects_dir)
-        text = exporter.export({"strip_sf_logs": True, "add_toc": True, "include_title_page": True})
+        text, _filename = exporter.export({"strip_sf_logs": True, "add_toc": True, "include_title_page": True})
 
         # Title page
         assert "# 龙族崛起" in text

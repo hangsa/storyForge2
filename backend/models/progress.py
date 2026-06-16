@@ -74,7 +74,7 @@ class ChapterReviewData(BaseModel):
     narrative_assets: dict[str, int] = {}
     narrative_guard_warnings: list[NarrativeGuardWarning] = []
     fact_guard_summary: FactGuardSummary = FactGuardSummary()
-    writing_formula_compliance: list = []   # Placeholder for Phase 4.3
-    discussion_topics: list[str] = []       # Placeholder, to be backfilled
+    writing_formula_compliance: list = []
+    discussion_topics: list[str] = []
     decision: Optional[str] = None          # null / "approved" / "revise"
     decision_feedback: Optional[str] = None

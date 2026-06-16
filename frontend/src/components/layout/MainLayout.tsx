@@ -12,6 +12,8 @@ const STAGE_FROM_PATH: Record<string, string> = {
   stage5: "STAGE5",
   stage6: "STAGE6",
   style: "STYLE",
+  settings: "SETTINGS",
+  review: "REVIEW",
 };
 
 const STAGE_TO_PATH: Record<string, string> = {
@@ -22,6 +24,8 @@ const STAGE_TO_PATH: Record<string, string> = {
   STAGE5: "stage5",
   STAGE6: "stage6",
   STYLE: "style",
+  SETTINGS: "settings",
+  REVIEW: "review",
 };
 
 export default function MainLayout() {

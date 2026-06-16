@@ -267,6 +267,59 @@ export interface DiagnosisReport {
   summary: { p0_count: number; p1_count: number; p2_count: number };
 }
 
+// --- v1.6 Settings types ---
+
+export interface GenreThresholds {
+  genre: string;
+  defaults: Record<string, number | { threshold: number; decay: number }>;
+  overrides: Record<string, any>;
+  fallback_genre?: string;
+}
+
+export interface ModelTierConfig {
+  description: string;
+  models: Array<{ id: string; provider: string; cost_per_1k_input: number; cost_per_1k_output: number; max_tokens: number }>;
+  default: string | null;
+  retry_on_failure: boolean;
+  max_retries: number;
+  fallback: string | null;
+}
+
+export interface ModelConfig {
+  tiers: Record<string, ModelTierConfig>;
+  agent_mapping: Record<string, Record<string, { tier: string; model?: string; fallback?: string }>>;
+}
+
+// --- v1.6 Chapter Review types ---
+
+export interface ChapterReviewData {
+  chapter_number: number;
+  timestamp: string;
+  coherence_score: number;
+  coherence_comment: string;
+  reader_os: {
+    addiction: number;
+    fatigue: number;
+    curiosity: number;
+    tension: number;
+    satisfaction: number;
+    frustration: number;
+    discussion: number;
+  };
+  narrative_assets: Record<string, number>;
+  narrative_guard_warnings: Array<{ drift_type: string; character: string; severity?: string; description?: string }>;
+  fact_guard_summary: { passed: number; failed: number; total: number; pass_rate: number };
+  writing_formula_compliance: Array<{ metric: string; expected: any; actual: any; passed: boolean }>;
+  style_guard_violations: Array<Record<string, any>>;
+  discussion_topics: string[];
+  decision: "approved" | "revise" | null;
+  decision_feedback: string | null;
+}
+
+export interface ChapterReviewList {
+  chapters: number[];
+}
+
 // --- API functions ---
 
 export const api = {
@@ -370,6 +423,31 @@ export const api = {
   // Style Extractor
   extractStyle: (projectId: string, referenceText: string) =>
     request<Record<string, unknown>>("POST", "/style/extract", { project_id: projectId, reference_text: referenceText }),
+
+  // v1.6 Settings
+  getThresholds: (projectId: string) =>
+    request<GenreThresholds>("GET", `/settings/thresholds?project_id=${encodeURIComponent(projectId)}`),
+
+  updateThresholds: (projectId: string, overrides: Record<string, any>) =>
+    request<{ status: string }>("PUT", "/settings/thresholds", { project_id: projectId, overrides }),
+
+  getModelConfig: () =>
+    request<ModelConfig>("GET", "/settings/model-config"),
+
+  reloadConfig: () =>
+    request<{ status: string }>("POST", "/settings/reload-config"),
+
+  // v1.6 Chapter Review
+  listChapterReviews: (projectId: string) =>
+    request<ChapterReviewList>("GET", `/stage4/chapter-reviews?project_id=${encodeURIComponent(projectId)}`),
+
+  getChapterReview: (projectId: string, chapter: number) =>
+    request<ChapterReviewData>("GET", `/stage4/chapter-review?project_id=${encodeURIComponent(projectId)}&chapter=${chapter}`),
+
+  setChapterDecision: (projectId: string, chapterNumber: number, decision: "approved" | "revise", feedback?: string) =>
+    request<{ status: string }>("POST", "/stage4/chapter-review/decide", {
+      project_id: projectId, chapter_number: chapterNumber, decision, feedback: feedback || "",
+    }),
 };
 
 export { ApiError };

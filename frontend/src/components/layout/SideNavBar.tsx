@@ -69,13 +69,14 @@ export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps
         {[
           { label: "灵感库", icon: "draw" },
           { label: "风格沙盒", icon: "palette", stage: "STYLE" },
+          { label: "章节审查", icon: "rate_review", stage: "REVIEW" },
           { label: "资产中心", icon: "database" },
         ].map((item) => {
           if ("stage" in item) {
             return (
               <button
                 key={item.label}
-                onClick={() => onNavigate(item.stage)}
+                onClick={() => onNavigate(item.stage!)}
                 className={`w-full text-left font-body-ui px-3 py-2 rounded transition-colors flex items-center gap-2 ${
                   currentStage === item.stage
                     ? "bg-primary-container/10 border-l-2 border-primary-container text-primary-container"
@@ -102,7 +103,14 @@ export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps
 
       {/* Settings */}
       <div className="px-4">
-        <button className="w-full text-left font-body-ui text-system-log hover:text-primary hover:bg-surface-container px-3 py-2 rounded transition-colors flex items-center gap-2">
+        <button
+          onClick={() => onNavigate("SETTINGS")}
+          className={`w-full text-left font-body-ui px-3 py-2 rounded transition-colors flex items-center gap-2 ${
+            currentStage === "SETTINGS"
+              ? "bg-primary-container/10 border-l-2 border-primary-container text-primary-container"
+              : "text-system-log hover:text-primary hover:bg-surface-container"
+          }`}
+        >
           <span className="material-symbols-outlined text-lg">settings</span>
           设置
         </button>

@@ -110,7 +110,9 @@ class TestChapterReviewBuilder:
         assert "addiction" in review["reader_os"]
         assert "narrative_assets" in review
         assert isinstance(review["writing_formula_compliance"], list)
-        assert review["discussion_topics"] == []
+        assert isinstance(review["discussion_topics"], list)
+        assert all(isinstance(t, str) for t in review["discussion_topics"])
+        assert 2 <= len(review["discussion_topics"]) <= 3
         assert review["decision"] is None
 
     def test_build_review_fact_guard_summary(self, builder):
@@ -175,4 +177,5 @@ class TestChapterReviewBuilder:
         assert "fact_guard_summary" in review
         assert "narrative_assets" in review
         assert isinstance(review["writing_formula_compliance"], list)
-        assert review["discussion_topics"] == []
+        assert all(isinstance(t, str) for t in review["discussion_topics"])
+        assert 2 <= len(review["discussion_topics"]) <= 3

@@ -146,6 +146,9 @@ class ChapterReviewBuilder:
         # 5. Coherence score (rule-based only)
         rule_score = self._compute_base_coherence(reader_snapshot, narrative_assets, fact_guard)
 
+        # 6. Writing formula compliance (extracted to reuse for discussion topics)
+        formula_compliance = self._check_writing_formula(chapter_number)
+
         review = {
             "chapter_number": chapter_number,
             "timestamp": now,
@@ -163,9 +166,11 @@ class ChapterReviewBuilder:
             "narrative_assets": narrative_assets,
             "narrative_guard_warnings": ng_warnings,
             "fact_guard_summary": fact_guard,
-            "writing_formula_compliance": self._check_writing_formula(chapter_number),
+            "writing_formula_compliance": formula_compliance,
             "style_guard_violations": self._collect_style_guard_violations(chapter_number),
-            "discussion_topics": [],
+            "discussion_topics": self._derive_discussion_topics(
+                reader_snapshot, ng_warnings, fact_guard, formula_compliance,
+            ),
             "decision": None,
             "decision_feedback": None,
         }
@@ -349,6 +354,54 @@ class ChapterReviewBuilder:
             except Exception:
                 continue
         return texts
+
+    def _derive_discussion_topics(
+        self,
+        reader_snapshot: dict,
+        ng_warnings: list,
+        fact_guard: dict,
+        formula_compliance: list,
+    ) -> list[str]:
+        """Derive 2-3 narrative discussion questions from review data (zero LLM)."""
+        topics: list[str] = []
+
+        discussion_score = reader_snapshot.get("discussion", 0)
+        if discussion_score < 40:
+            topics.append("本章讨论潜力偏低，是否存在悬念过早揭示或冲突解决过快？")
+
+        seen_drift_types: set[tuple[str, str]] = set()
+        for w in ng_warnings:
+            drift_type = w.get("drift_type", "")
+            character = w.get("character", "")
+            if not drift_type or not character:
+                continue
+            key = (drift_type, character)
+            if key in seen_drift_types:
+                continue
+            seen_drift_types.add(key)
+            if drift_type == "emotion_surge":
+                topics.append(f"{character}的情绪转折是否铺垫充分？是否存在内在逻辑断层？")
+            elif drift_type == "relation_shift":
+                topics.append(f"{character}的关系变化是否过于突兀？需要哪些前文呼应以增强说服力？")
+            elif drift_type == "knowledge_leak":
+                topics.append(f"{character}的信息获取方式是否合理？知识泄露可能削弱悬念张力。")
+
+        for item in formula_compliance:
+            metric = item.get("metric", "")
+            if "sentence" in metric:
+                topics.append("本章句式结构单一，是否需要调整长短句比例以改善阅读节奏？")
+                break
+
+        fail_count = fact_guard.get("failed", 0) if fact_guard else 0
+        if fail_count > 0:
+            topics.append(f"事实守卫发现 {fail_count} 项一致性问题，是否需要在上一章或后续补充修正？")
+
+        if len(topics) < 2:
+            topics.append("本章的叙事节奏是否与整体故事曲线匹配？")
+        if len(topics) < 2:
+            topics.append("主要角色的行为决策是否与其性格设定一致？")
+
+        return topics[:3]
 
     def _check_writing_formula(self, chapter_number: int) -> list[dict]:
         """Synchronous writing formula compliance check (deterministic only)."""

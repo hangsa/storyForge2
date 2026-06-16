@@ -718,6 +718,33 @@ async def advance_chapter(data: dict):
 # --- v1.6 Phase 3a: Chapter Review API ---
 
 
+@router.get("/chapter-reviews")
+async def list_chapter_reviews(project_id: str):
+    """List all available chapter reviews for a project."""
+    from pathlib import Path
+
+    reviews_dir = Path(settings.projects_dir) / project_id / "chapter_reviews"
+    if not reviews_dir.exists():
+        return {
+            "error": False, "code": "OK", "message": "",
+            "detail": {"chapters": []},
+        }
+
+    chapter_numbers = []
+    for review_file in sorted(reviews_dir.glob("ch*_review.json")):
+        try:
+            stem = review_file.stem
+            num_str = stem.replace("ch", "").replace("_review", "")
+            chapter_numbers.append(int(num_str))
+        except ValueError:
+            continue
+
+    return {
+        "error": False, "code": "OK", "message": "",
+        "detail": {"chapters": sorted(chapter_numbers)},
+    }
+
+
 @router.get("/chapter-review")
 async def get_chapter_review(project_id: str, chapter: int):
     """Get chapter review data. Returns 404 if not yet generated."""

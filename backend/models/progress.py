@@ -13,6 +13,11 @@ class SceneProgress(BaseModel):
 class ReaderOSSnapshot(BaseModel):
     addiction: float = 0.0
     fatigue: float = 0.0
+    curiosity: float = 0.0
+    tension: float = 0.0
+    satisfaction: float = 0.0
+    frustration: float = 0.0
+    discussion: float = 0.0
     warnings: list[dict] = []
 
 

@@ -61,6 +61,10 @@ class NovelExporter:
                 ch_num = int(match.group(1))
                 scene_num = int(match.group(2))
 
+                # Only include completed or force-passed scenes
+                if ch_num not in chapter_scenes or scene_num not in chapter_scenes[ch_num]:
+                    continue
+
                 text = draft_file.read_text(encoding="utf-8")
 
                 if strip_logs:

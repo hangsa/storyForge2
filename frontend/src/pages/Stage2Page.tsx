@@ -19,6 +19,28 @@ const TYPE_STYLES: Record<string, string> = {
   mentor: "bg-surface-container-low text-system-log border-system-log/30",
 };
 
+const GROWTH_EVENT_LABELS: Record<string, string> = {
+  betrayal_experienced: "经历背叛",
+  death_of_loved_one: "至亲离世",
+  world_truth_revealed: "世界真相揭露",
+  personal_identity_crisis: "身份认同危机",
+  irreversible_loss: "不可逆的失去",
+  moral_awakening: "道德觉醒",
+  accumulated_evidence: "证据积累",
+  relationship_transformation: "关系转变",
+};
+
+const GROWTH_EVENT_STYLES: Record<string, string> = {
+  betrayal_experienced: "bg-error/10 text-error border-error/30",
+  death_of_loved_one: "bg-surface-container-low text-system-log border-outline-variant",
+  world_truth_revealed: "bg-primary-container/20 text-primary-container border-primary-container/30",
+  personal_identity_crisis: "bg-warning/10 text-warning-p1 border-warning-p1/30",
+  irreversible_loss: "bg-error-container/20 text-on-error-container border-error-container/30",
+  moral_awakening: "bg-tertiary-container/20 text-tertiary-container border-tertiary-container/30",
+  accumulated_evidence: "bg-primary-container/10 text-primary border-primary/30",
+  relationship_transformation: "bg-secondary-container/20 text-secondary-container border-secondary-container/30",
+};
+
 function CharacterDetail({ character }: { character: Character }) {
   const safe = {
     ...character,
@@ -45,6 +67,7 @@ function CharacterDetail({ character }: { character: Character }) {
     },
     unknown_to_character: character.unknown_to_character || [],
     relations: character.relations || {},
+    growth_curve: character.growth_curve || null,
   };
 
   return (
@@ -223,6 +246,73 @@ function CharacterDetail({ character }: { character: Character }) {
                 }`}>
                   {rel.status}
                 </span>
+              </div>
+            ))}
+          </div>
+        </GlassPanel>
+      )}
+
+      {/* Growth Curve */}
+      {safe.growth_curve && safe.growth_curve.stages && safe.growth_curve.stages.length > 0 && (
+        <GlassPanel className="lg:col-span-2">
+          <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
+            成长曲线
+          </h2>
+
+          <div className="p-4 bg-surface-container rounded-lg mb-6 border-l-2 border-primary-container">
+            <p className="font-body-narrative text-primary text-sm leading-relaxed">
+              {safe.growth_curve.curve_description}
+            </p>
+          </div>
+
+          <div className="relative">
+            {safe.growth_curve.stages.map((stage, i) => (
+              <div key={i} className="flex gap-4 pb-6 last:pb-0">
+                <div className="flex flex-col items-center shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center font-label-mono text-sm text-surface-container-low shrink-0">
+                    {stage.stage_number}
+                  </div>
+                  {i < safe.growth_curve!.stages.length - 1 && (
+                    <div className="w-px flex-1 bg-outline-variant mt-1 min-h-[20px]" />
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0 pb-1">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <h3 className="font-label-mono text-primary-container text-sm">
+                      {stage.stage_name}
+                    </h3>
+                    <span className={`text-xs px-2 py-0.5 rounded font-label-mono border ${GROWTH_EVENT_STYLES[stage.trigger_event_type] || "bg-surface-container text-system-log border-surface-container-low"}`}>
+                      {GROWTH_EVENT_LABELS[stage.trigger_event_type] || stage.trigger_event_type}
+                    </span>
+                  </div>
+
+                  <div className="mb-2">
+                    <span className="font-label-mono text-system-log text-xs">触发事件</span>
+                    <p className="font-body-narrative text-primary text-sm mt-0.5 leading-relaxed">
+                      {stage.trigger_event_description}
+                    </p>
+                  </div>
+
+                  <div className="mb-2">
+                    <span className="font-label-mono text-system-log text-xs">角色转变</span>
+                    <p className="font-body-narrative text-primary text-sm mt-0.5 leading-relaxed">
+                      {stage.character_change}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <span className="font-label-mono text-system-log text-xs">
+                      目标章节: {stage.target_chapter_range || "未定"}
+                    </span>
+                    {stage.bound_chapter !== null && stage.bound_chapter !== undefined && (
+                      <span className="font-label-mono text-tertiary-container text-xs flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">link</span>
+                        已绑定: 第{stage.bound_chapter}章
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>

@@ -70,6 +70,7 @@ export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps
           { label: "灵感库", icon: "draw" },
           { label: "风格沙盒", icon: "palette", stage: "STYLE" },
           { label: "章节审查", icon: "rate_review", stage: "REVIEW" },
+          { label: "影响分析", icon: "find_in_page", stage: "IMPACT" },
           { label: "资产中心", icon: "database" },
         ].map((item) => {
           if ("stage" in item) {

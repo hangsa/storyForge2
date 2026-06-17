@@ -13,6 +13,7 @@ const Stage6Page = lazy(() => import("./pages/Stage6Page"));
 const StyleSandboxPage = lazy(() => import("./pages/StyleSandboxPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ChapterReviewPage = lazy(() => import("./pages/ChapterReviewPage"));
+const ImpactAnalysisPage = lazy(() => import("./pages/ImpactAnalysisPage"));
 
 function StageWrapper({ children, name }: { children: React.ReactNode; name: string }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -124,6 +125,16 @@ function App() {
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="review">
                 <ChapterReviewPage />
+              </StageWrapper>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/project/:projectId/impact"
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <StageWrapper name="impact">
+                <ImpactAnalysisPage />
               </StageWrapper>
             </Suspense>
           }

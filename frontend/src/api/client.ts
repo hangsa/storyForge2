@@ -129,6 +129,31 @@ export interface World {
   core_rules: string[];
 }
 
+export type GrowthEventType =
+  | "betrayal_experienced"
+  | "death_of_loved_one"
+  | "world_truth_revealed"
+  | "personal_identity_crisis"
+  | "irreversible_loss"
+  | "moral_awakening"
+  | "accumulated_evidence"
+  | "relationship_transformation";
+
+export interface GrowthStage {
+  stage_number: number;
+  stage_name: string;
+  trigger_event_type: GrowthEventType;
+  trigger_event_description: string;
+  character_change: string;
+  target_chapter_range: string;
+  bound_chapter: number | null;
+}
+
+export interface GrowthCurve {
+  curve_description: string;
+  stages: GrowthStage[];
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -154,6 +179,7 @@ export interface Character {
   };
   unknown_to_character: string[];
   relations: Record<string, { status: string; history: Array<Record<string, unknown>>; last_update_chapter: number }>;
+  growth_curve: GrowthCurve | null;
 }
 
 export interface CharacterSet {
@@ -323,6 +349,28 @@ export interface ChapterReviewList {
   chapters: number[];
 }
 
+// --- v1.6 Impact Analysis / Rollback types ---
+
+export interface ImpactEntry {
+  chapter_number: number;
+  scene_numbers: number[];
+  priority: "P0" | "P1" | "P2";
+  reason: string;
+  affected_assets: string[];
+}
+
+export interface ImpactReport {
+  project_id: string;
+  modified_files: string[];
+  entries: ImpactEntry[];
+  summary: { P0: number; P1: number; P2: number };
+}
+
+export interface RollbackResult {
+  status: "confirmed" | "cancelled";
+  baseline_updated: boolean;
+}
+
 // --- API functions ---
 
 export const api = {
@@ -450,6 +498,17 @@ export const api = {
   setChapterDecision: (projectId: string, chapterNumber: number, decision: "approved" | "revise", feedback?: string) =>
     request<{ status: string }>("POST", "/stage4/chapter-review/decide", {
       project_id: projectId, chapter_number: chapterNumber, decision, feedback: feedback || "",
+    }),
+
+  // v1.6 Impact Analysis / Rollback
+  analyzeImpact: (projectId: string, modifiedFiles?: string[]) =>
+    request<ImpactReport>("POST", "/conductor/analyze-impact", {
+      project_id: projectId, modified_files: modifiedFiles,
+    }),
+
+  executeRollback: (projectId: string, action: "confirm" | "cancel") =>
+    request<RollbackResult>("POST", "/conductor/execute-rollback", {
+      project_id: projectId, action,
     }),
 };
 

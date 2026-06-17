@@ -121,6 +121,33 @@ async def get_scene_draft(project_id: str, chapter_number: int = 1, scene_number
     }
 
 
+@router.put("/scene-draft")
+async def update_scene_draft(data: dict):
+    """Save manually edited scene draft text to disk."""
+    project_id = data.get("project_id", "")
+    chapter_number = data.get("chapter_number", 1)
+    scene_number = data.get("scene_number", 1)
+    draft_text = data.get("draft_text", "")
+
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    draft_filename = f"ch{chapter_number:02d}_scene_{scene_number:03d}_draft.md"
+    chapters_dir = fm.project_path(project_id, "chapters")
+    draft_path = chapters_dir / draft_filename
+    draft_path.write_text(draft_text, encoding="utf-8")
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "草稿已保存",
+        "detail": {"chapter_number": chapter_number, "scene_number": scene_number},
+    }
+
+
 @router.post("/write-scene")
 async def write_scene(data: dict):
     project_id = data.get("project_id", "")

@@ -30,6 +30,9 @@ export default function Stage4Page() {
   const [progress, setProgress] = useState<ProgressFile | null>(null);
   const [showCircuitBreaker, setShowCircuitBreaker] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [editingDraft, setEditingDraft] = useState(false);
+  const [draftEditValue, setDraftEditValue] = useState("");
+  const [savingDraft, setSavingDraft] = useState(false);
 
   const loadProgress = useCallback(async () => {
     if (!projectId) return;
@@ -100,6 +103,34 @@ export default function Stage4Page() {
     setChapterNum(chapter);
     setSceneNum(1);
     loadDraft(projectId, chapter, 1);
+  };
+
+  const handleDraftEditStart = () => {
+    setDraftEditValue(state.draftText || "");
+    setEditingDraft(true);
+  };
+
+  const handleDraftEditSave = async () => {
+    if (!projectId) return;
+    setSavingDraft(true);
+    try {
+      await api.updateSceneDraft({
+        project_id: projectId,
+        chapter_number: chapterNum,
+        scene_number: sceneNum,
+        draft_text: draftEditValue,
+      });
+      setEditingDraft(false);
+      loadDraft(projectId, chapterNum, sceneNum);
+    } catch {
+      // silent fail
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const handleDraftEditCancel = () => {
+    setEditingDraft(false);
   };
 
   const handleAdvance = async () => {
@@ -256,34 +287,75 @@ export default function Stage4Page() {
               <h2 className="font-label-mono text-system-log uppercase tracking-wider">
                 草稿文本
               </h2>
-              {state.coherenceScore > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="font-label-mono text-system-log text-xs">连贯性</span>
-                  <div className="w-16 h-2 bg-surface-container rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        state.coherenceScore >= 80
-                          ? "bg-green-500"
-                          : state.coherenceScore >= 60
-                            ? "bg-amber-500"
-                            : "bg-red-500"
-                      }`}
-                      style={{ width: `${state.coherenceScore}%` }}
-                    />
+              <div className="flex items-center gap-3">
+                {state.coherenceScore > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-label-mono text-system-log text-xs">连贯性</span>
+                    <div className="w-16 h-2 bg-surface-container rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          state.coherenceScore >= 80
+                            ? "bg-green-500"
+                            : state.coherenceScore >= 60
+                              ? "bg-amber-500"
+                              : "bg-red-500"
+                        }`}
+                        style={{ width: `${state.coherenceScore}%` }}
+                      />
+                    </div>
+                    <span className="font-label-mono text-sm text-primary">{state.coherenceScore}%</span>
                   </div>
-                  <span className="font-label-mono text-sm text-primary">{state.coherenceScore}%</span>
-                </div>
-              )}
+                )}
+                {state.draftText && !editingDraft && (
+                  <button
+                    onClick={handleDraftEditStart}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs bg-surface-container text-system-log
+                               rounded hover:bg-surface-container-low transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">edit</span>
+                    编辑
+                  </button>
+                )}
+              </div>
             </div>
 
             {state.draftText ? (
-              <div className="prose prose-invert prose-sm max-w-none text-sm text-primary leading-relaxed
-                              [&_code]:text-xs [&_code]:bg-surface-container [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded
-                              [&_code]:text-system-log [&_code]:font-mono [&_code]:before:content-none [&_code]:after:content-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {state.draftText}
-                </ReactMarkdown>
-              </div>
+              editingDraft ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={draftEditValue}
+                    onChange={(e) => setDraftEditValue(e.target.value)}
+                    className="w-full h-96 bg-surface-container-low border border-outline-variant rounded-lg p-4
+                               font-body-narrative text-primary text-sm leading-relaxed resize-y
+                               focus:outline-none focus:border-primary-container"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleDraftEditSave}
+                      disabled={savingDraft}
+                      className="px-4 py-2 bg-primary-container text-surface-container-low font-body-ui text-sm
+                                 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+                    >
+                      {savingDraft ? "保存中..." : "保存"}
+                    </button>
+                    <button
+                      onClick={handleDraftEditCancel}
+                      className="px-4 py-2 bg-surface-container text-system-log font-body-ui text-sm
+                                 rounded-lg hover:bg-surface-container-low transition-colors"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="prose prose-invert prose-sm max-w-none text-sm text-primary leading-relaxed
+                                [&_code]:text-xs [&_code]:bg-surface-container [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded
+                                [&_code]:text-system-log [&_code]:font-mono [&_code]:before:content-none [&_code]:after:content-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {state.draftText}
+                  </ReactMarkdown>
+                </div>
+              )
             ) : (
               <div className="text-center py-12">
                 <span className="material-symbols-outlined text-4xl text-system-log/30 mb-3 block">

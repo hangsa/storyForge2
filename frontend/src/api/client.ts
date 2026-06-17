@@ -449,6 +449,11 @@ export const api = {
       "GET", `/stage4/scene-draft?project_id=${projectId}&chapter_number=${chapterNumber}&scene_number=${sceneNumber}`
     ),
 
+  updateSceneDraft: (data: { project_id: string; chapter_number: number; scene_number: number; draft_text: string }) =>
+    request<{ chapter_number: number; scene_number: number }>(
+      "PUT", "/stage4/scene-draft", data
+    ),
+
   advanceChapter: (projectId: string) =>
     request<{ status: string; from_chapter: number; to_chapter: number; reader_os_snapshot: Record<string, unknown>; l2_summary: Record<string, unknown> }>(
       "POST", "/stage4/advance-chapter", { project_id: projectId }

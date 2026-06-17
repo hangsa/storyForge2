@@ -12,6 +12,9 @@ export default function Stage3Page() {
   const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedScene, setExpandedScene] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Load existing outline on mount
   useEffect(() => {
@@ -34,6 +37,43 @@ export default function Stage3Page() {
       setLoading(false);
     }
   }, [projectId]);
+
+  const handleEditStart = (field: string, value: string) => {
+    setEditingField(field);
+    setEditValue(value || "");
+  };
+
+  const handleOutlineEditSave = async () => {
+    if (!outline || !editingField || !projectId) return;
+    const parts = editingField.split(":");
+    const updated = structuredClone(outline);
+
+    if (parts[0] === "chapter" && parts.length === 3) {
+      const chapterNum = parseInt(parts[1]);
+      const chapter = updated.chapters.find(c => c.chapter_number === chapterNum);
+      if (chapter && parts[2] === "title") {
+        chapter.title = editValue;
+      }
+    } else if (parts[0] === "scene" && parts.length === 4) {
+      const chapterNum = parseInt(parts[1]);
+      const sceneNum = parseInt(parts[2]);
+      const field = parts[3] as "goal" | "conflict" | "emotional_arc" | "beat_type";
+      const chapter = updated.chapters.find(c => c.chapter_number === chapterNum);
+      const scene = chapter?.scene_plan.find(s => s.scene_number === sceneNum);
+      if (scene) {
+        scene[field] = editValue;
+      }
+    }
+
+    setOutline(updated);
+    setEditingField(null);
+    setSaving(true);
+    try {
+      await api.updateOutline(projectId, updated);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleAdvance = async () => {
     if (!projectId) return;
@@ -115,7 +155,24 @@ export default function Stage3Page() {
                     {chapter.chapter_number}
                   </span>
                 </div>
-                <h2 className="font-display-md text-primary">{chapter.title}</h2>
+                {editingField === `chapter:${chapter.chapter_number}:title` ? (
+                  <div className="flex gap-2 items-center">
+                    <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                      className="flex-1 input-underline text-lg font-display" autoFocus
+                      onKeyDown={(e) => e.key === "Enter" && handleOutlineEditSave()} />
+                    <button onClick={handleOutlineEditSave} disabled={saving}
+                      className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                      {saving ? "保存中..." : "保存"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-display-md text-primary">{chapter.title || "未命名"}</h2>
+                    <button onClick={() => handleEditStart(`chapter:${chapter.chapter_number}:title`, chapter.title)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                      <span className="material-symbols-outlined text-sm">edit</span>
+                    </button>
+                  </div>
+                )}
                 <span className="font-label-mono text-system-log text-xs">
                   {chapter.scene_plan.length} 个场景
                 </span>
@@ -151,25 +208,99 @@ export default function Stage3Page() {
                           </div>
                         </div>
 
-                        {/* Beat type & emotional arc */}
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs px-1.5 py-0.5 bg-surface-container rounded text-system-log font-body-ui">
-                            {scene.beat_type}
-                          </span>
-                        </div>
-                        <p className="font-body-ui text-system-log text-xs mb-2">
-                          情绪弧线: {scene.emotional_arc}
-                        </p>
+                        {/* Beat type */}
+                        {editingField === `scene:${chapter.chapter_number}:${scene.scene_number}:beat_type` ? (
+                          <div className="flex gap-2 items-center mb-2">
+                            <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                              className="flex-1 input-underline text-xs" autoFocus
+                              onKeyDown={(e) => e.key === "Enter" && handleOutlineEditSave()} />
+                            <button onClick={handleOutlineEditSave} disabled={saving}
+                              className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                              {saving ? "..." : "保存"}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xs px-1.5 py-0.5 bg-surface-container rounded text-system-log font-body-ui">
+                              {scene.beat_type || "未设置"}
+                            </span>
+                            <button onClick={() => handleEditStart(`scene:${chapter.chapter_number}:${scene.scene_number}:beat_type`, scene.beat_type)}
+                              className="text-tertiary-container hover:text-primary-container">
+                              <span className="material-symbols-outlined text-xs">edit</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Emotional arc */}
+                        {editingField === `scene:${chapter.chapter_number}:${scene.scene_number}:emotional_arc` ? (
+                          <div className="flex gap-2 items-center mb-2">
+                            <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                              className="flex-1 input-underline text-xs" autoFocus
+                              onKeyDown={(e) => e.key === "Enter" && handleOutlineEditSave()} />
+                            <button onClick={handleOutlineEditSave} disabled={saving}
+                              className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                              {saving ? "..." : "保存"}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 mb-2">
+                            <p className="font-body-ui text-system-log text-xs">
+                              情绪弧线: {scene.emotional_arc || "未设置"}
+                            </p>
+                            <button onClick={() => handleEditStart(`scene:${chapter.chapter_number}:${scene.scene_number}:emotional_arc`, scene.emotional_arc)}
+                              className="text-tertiary-container hover:text-primary-container">
+                              <span className="material-symbols-outlined text-xs">edit</span>
+                            </button>
+                          </div>
+                        )}
 
                         {/* Goal */}
-                        <p className="font-body-narrative text-primary text-sm mb-1 line-clamp-2">
-                          <span className="font-label-mono text-system-log text-xs">目标: </span>
-                          {scene.goal}
-                        </p>
-                        <p className="font-body-narrative text-primary text-sm line-clamp-2">
-                          <span className="font-label-mono text-system-log text-xs">冲突: </span>
-                          {scene.conflict}
-                        </p>
+                        {editingField === `scene:${chapter.chapter_number}:${scene.scene_number}:goal` ? (
+                          <div className="flex gap-2 items-center mb-1">
+                            <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                              className="flex-1 input-underline text-sm" autoFocus
+                              onKeyDown={(e) => e.key === "Enter" && handleOutlineEditSave()} />
+                            <button onClick={handleOutlineEditSave} disabled={saving}
+                              className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                              {saving ? "..." : "保存"}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-1 mb-1">
+                            <p className="font-body-narrative text-primary text-sm line-clamp-2 flex-1">
+                              <span className="font-label-mono text-system-log text-xs">目标: </span>
+                              {scene.goal || "未设置"}
+                            </p>
+                            <button onClick={() => handleEditStart(`scene:${chapter.chapter_number}:${scene.scene_number}:goal`, scene.goal)}
+                              className="text-tertiary-container hover:text-primary-container shrink-0">
+                              <span className="material-symbols-outlined text-xs">edit</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Conflict */}
+                        {editingField === `scene:${chapter.chapter_number}:${scene.scene_number}:conflict` ? (
+                          <div className="flex gap-2 items-center">
+                            <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                              className="flex-1 input-underline text-sm" autoFocus
+                              onKeyDown={(e) => e.key === "Enter" && handleOutlineEditSave()} />
+                            <button onClick={handleOutlineEditSave} disabled={saving}
+                              className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                              {saving ? "..." : "保存"}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-1">
+                            <p className="font-body-narrative text-primary text-sm line-clamp-2 flex-1">
+                              <span className="font-label-mono text-system-log text-xs">冲突: </span>
+                              {scene.conflict || "未设置"}
+                            </p>
+                            <button onClick={() => handleEditStart(`scene:${chapter.chapter_number}:${scene.scene_number}:conflict`, scene.conflict)}
+                              className="text-tertiary-container hover:text-primary-container shrink-0">
+                              <span className="material-symbols-outlined text-xs">edit</span>
+                            </button>
+                          </div>
+                        )}
                       </button>
 
                       {/* Expanded details */}

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api, { World, Character, CharacterSet } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
+import { setNestedValue } from "../utils/nested";
 
 type Tab = "world" | "character";
 
@@ -41,30 +42,44 @@ const GROWTH_EVENT_STYLES: Record<string, string> = {
   relationship_transformation: "bg-secondary-container/20 text-secondary-container border-secondary-container/30",
 };
 
-function CharacterDetail({ character }: { character: Character }) {
+function CharacterDetail({ character, onCharacterUpdate, saving }: {
+  character: Character;
+  onCharacterUpdate: (updated: Character) => void;
+  saving: boolean;
+}) {
+  const [charEditingField, setCharEditingField] = useState<string | null>(null);
+  const [charEditValue, setCharEditValue] = useState("");
+
+  const handleCharEditStart = (field: string, value: string) => {
+    setCharEditingField(field);
+    setCharEditValue(value || "");
+  };
+
+  const handleCharEditSave = () => {
+    if (!charEditingField) return;
+    const updated = setNestedValue(character, charEditingField, charEditValue) as Character;
+    setCharEditingField(null);
+    onCharacterUpdate(updated);
+  };
+
+  const personality = Object.assign(
+    { core_traits: [] as string[], beliefs: [] as string[], desires: [] as string[], fears: [] as string[], values: [] as string[] },
+    character.personality,
+  );
+  const currentState = Object.assign(
+    { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] as string[] },
+    character.current_state,
+  );
+  const voiceSignature = Object.assign(
+    { speech_style: "", thought_patterns: "", taboos: [] as string[] },
+    character.voice_signature,
+  );
+
   const safe = {
     ...character,
-    personality: {
-      core_traits: [] as string[],
-      beliefs: [] as string[],
-      desires: [] as string[],
-      fears: [] as string[],
-      values: [] as string[],
-      ...(character.personality || {}),
-    },
-    current_state: {
-      location: "",
-      physical_condition: "normal",
-      emotional: "neutral",
-      known_secrets: [] as string[],
-      ...(character.current_state || {}),
-    },
-    voice_signature: {
-      speech_style: "",
-      thought_patterns: "",
-      taboos: [] as string[],
-      ...(character.voice_signature || {}),
-    },
+    personality,
+    current_state: currentState,
+    voice_signature: voiceSignature,
     unknown_to_character: character.unknown_to_character || [],
     relations: character.relations || {},
     growth_curve: character.growth_curve || null,
@@ -81,7 +96,24 @@ function CharacterDetail({ character }: { character: Character }) {
             </span>
           </div>
           <div>
-            <h2 className="font-display-lg text-primary-container">{safe.name}</h2>
+            {charEditingField === "name" ? (
+              <div className="flex gap-2 items-center">
+                <input value={charEditValue} onChange={(e) => setCharEditValue(e.target.value)}
+                  className="flex-1 input-underline text-xl font-display" autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && handleCharEditSave()} />
+                <button onClick={handleCharEditSave} disabled={saving}
+                  className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                  {saving ? "保存中..." : "保存"}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h2 className="font-display-lg text-primary-container">{safe.name || "未命名"}</h2>
+                <button onClick={() => handleCharEditStart("name", safe.name)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                  <span className="material-symbols-outlined text-sm">edit</span>
+                </button>
+              </div>
+            )}
             <div className="flex gap-2 mt-1">
               {safe.is_core_character && (
                 <span className="text-xs px-2 py-0.5 bg-primary-container/20 text-primary-container rounded font-label-mono">
@@ -135,24 +167,33 @@ function CharacterDetail({ character }: { character: Character }) {
           当前状态
         </h2>
         <div className="space-y-3">
-          <div className="p-3 bg-surface-container rounded">
-            <span className="font-label-mono text-system-log text-xs">位置</span>
-            <p className="font-body-narrative text-primary text-sm mt-1">
-              {safe.current_state.location}
-            </p>
-          </div>
-          <div className="p-3 bg-surface-container rounded">
-            <span className="font-label-mono text-system-log text-xs">身体状况</span>
-            <p className="font-body-narrative text-primary text-sm mt-1">
-              {safe.current_state.physical_condition}
-            </p>
-          </div>
-          <div className="p-3 bg-surface-container rounded">
-            <span className="font-label-mono text-system-log text-xs">情绪状态</span>
-            <p className="font-body-narrative text-primary text-sm mt-1">
-              {safe.current_state.emotional}
-            </p>
-          </div>
+          {[
+            { field: "current_state.location", label: "位置", value: safe.current_state.location },
+            { field: "current_state.physical_condition", label: "身体状况", value: safe.current_state.physical_condition },
+            { field: "current_state.emotional", label: "情绪状态", value: safe.current_state.emotional },
+          ].map(({ field, label, value }) => (
+            <div key={field} className="p-3 bg-surface-container rounded">
+              <div className="flex items-center justify-between">
+                <span className="font-label-mono text-system-log text-xs">{label}</span>
+                <button onClick={() => handleCharEditStart(field, value)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                  <span className="material-symbols-outlined text-sm">edit</span>
+                </button>
+              </div>
+              {charEditingField === field ? (
+                <div className="flex gap-2 mt-1">
+                  <input value={charEditValue} onChange={(e) => setCharEditValue(e.target.value)}
+                    className="flex-1 input-underline text-sm" autoFocus
+                    onKeyDown={(e) => e.key === "Enter" && handleCharEditSave()} />
+                  <button onClick={handleCharEditSave} disabled={saving}
+                    className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                    {saving ? "保存中..." : "保存"}
+                  </button>
+                </div>
+              ) : (
+                <p className="font-body-narrative text-primary text-sm mt-1">{value || <span className="text-system-log/40">待填写</span>}</p>
+              )}
+            </div>
+          ))}
           {safe.current_state.known_secrets.length > 0 && (
             <div>
               <span className="font-label-mono text-system-log text-xs">已知秘密</span>
@@ -177,18 +218,32 @@ function CharacterDetail({ character }: { character: Character }) {
           声音签名
         </h2>
         <div className="space-y-3">
-          <div className="p-3 bg-surface-container rounded">
-            <span className="font-label-mono text-system-log text-xs">语言风格</span>
-            <p className="font-body-narrative text-primary text-sm mt-1">
-              {safe.voice_signature.speech_style}
-            </p>
-          </div>
-          <div className="p-3 bg-surface-container rounded">
-            <span className="font-label-mono text-system-log text-xs">思维模式</span>
-            <p className="font-body-narrative text-primary text-sm mt-1">
-              {safe.voice_signature.thought_patterns}
-            </p>
-          </div>
+          {[
+            { field: "voice_signature.speech_style", label: "语言风格", value: safe.voice_signature.speech_style },
+            { field: "voice_signature.thought_patterns", label: "思维模式", value: safe.voice_signature.thought_patterns },
+          ].map(({ field, label, value }) => (
+            <div key={field} className="p-3 bg-surface-container rounded">
+              <div className="flex items-center justify-between">
+                <span className="font-label-mono text-system-log text-xs">{label}</span>
+                <button onClick={() => handleCharEditStart(field, value)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                  <span className="material-symbols-outlined text-sm">edit</span>
+                </button>
+              </div>
+              {charEditingField === field ? (
+                <div className="flex gap-2 mt-1">
+                  <input value={charEditValue} onChange={(e) => setCharEditValue(e.target.value)}
+                    className="flex-1 input-underline text-sm" autoFocus
+                    onKeyDown={(e) => e.key === "Enter" && handleCharEditSave()} />
+                  <button onClick={handleCharEditSave} disabled={saving}
+                    className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                    {saving ? "保存中..." : "保存"}
+                  </button>
+                </div>
+              ) : (
+                <p className="font-body-narrative text-primary text-sm mt-1">{value || <span className="text-system-log/40">待填写</span>}</p>
+              )}
+            </div>
+          ))}
           {safe.voice_signature.taboos.length > 0 && (
             <div>
               <span className="font-label-mono text-system-log text-xs">行为禁忌</span>
@@ -335,6 +390,9 @@ export default function Stage2Page() {
   const [generatingType, setGeneratingType] = useState("");
   const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [saving, setSaving] = useState(false);
 
   // Load existing data on mount
   useEffect(() => {
@@ -356,6 +414,41 @@ export default function Stage2Page() {
       }
     } catch { /* no existing characters yet */ }
   }, [projectId]);
+
+  const handleEditStart = (field: string, value: string) => {
+    setEditingField(field);
+    setEditValue(value || "");
+  };
+
+  const handleWorldEditSave = async () => {
+    if (!world || !editingField || !projectId) return;
+    const updated = setNestedValue(world, editingField, editValue);
+    setWorld(updated);
+    setEditingField(null);
+    setSaving(true);
+    try {
+      await api.updateWorld(projectId, updated);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCharacterSave = async (updatedChar: Character) => {
+    if (!projectId) return;
+    const updatedCharacters = characters.map(c =>
+      c.id === updatedChar.id ? updatedChar : c
+    );
+    setCharacters(updatedCharacters);
+    setSaving(true);
+    try {
+      await api.updateCharacter(projectId, {
+        characters: updatedCharacters,
+        current: updatedCharacters[selectedIndex] || updatedChar,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleGenerateWorld = useCallback(async () => {
     if (!projectId) return;
@@ -446,7 +539,7 @@ export default function Stage2Page() {
         {tabs.map(({ key, label, icon }) => (
           <button
             key={key}
-            onClick={() => setActiveTab(key)}
+            onClick={() => { setActiveTab(key); setEditingField(null); setEditValue(""); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-md font-body-ui text-sm transition-colors ${
               activeTab === key
                 ? "bg-primary-container text-surface-container-low"
@@ -498,12 +591,46 @@ export default function Stage2Page() {
                   </h2>
                   <div className="space-y-4">
                     <div>
-                      <span className="font-label-mono text-system-log text-xs">时代背景</span>
-                      <p className="font-body-narrative text-primary text-sm mt-1">{world.era}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-system-log text-xs">时代背景</span>
+                        <button onClick={() => handleEditStart("era", world.era)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                        </button>
+                      </div>
+                      {editingField === "era" ? (
+                        <div className="flex gap-2 mt-1">
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            className="flex-1 input-underline text-sm" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
+                          <button onClick={handleWorldEditSave} disabled={saving}
+                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                            {saving ? "保存中..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="font-body-narrative text-primary text-sm mt-1">{world.era || <span className="text-system-log/40">待填写</span>}</p>
+                      )}
                     </div>
                     <div>
-                      <span className="font-label-mono text-system-log text-xs">地理环境</span>
-                      <p className="font-body-narrative text-primary text-sm mt-1">{world.geography}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-system-log text-xs">地理环境</span>
+                        <button onClick={() => handleEditStart("geography", world.geography)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                        </button>
+                      </div>
+                      {editingField === "geography" ? (
+                        <div className="flex gap-2 mt-1">
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            className="flex-1 input-underline text-sm" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
+                          <button onClick={handleWorldEditSave} disabled={saving}
+                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                            {saving ? "保存中..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="font-body-narrative text-primary text-sm mt-1">{world.geography || <span className="text-system-log/40">待填写</span>}</p>
+                      )}
                     </div>
                   </div>
                 </GlassPanel>
@@ -515,16 +642,46 @@ export default function Stage2Page() {
                   </h2>
                   <div className="space-y-4">
                     <div>
-                      <span className="font-label-mono text-system-log text-xs">体系名称</span>
-                      <p className="font-body-narrative text-primary text-sm mt-1">
-                        {world.power_system.name}
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-system-log text-xs">体系名称</span>
+                        <button onClick={() => handleEditStart("power_system.name", world.power_system.name)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                        </button>
+                      </div>
+                      {editingField === "power_system.name" ? (
+                        <div className="flex gap-2 mt-1">
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            className="flex-1 input-underline text-sm" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
+                          <button onClick={handleWorldEditSave} disabled={saving}
+                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                            {saving ? "保存中..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="font-body-narrative text-primary text-sm mt-1">{world.power_system.name || <span className="text-system-log/40">待填写</span>}</p>
+                      )}
                     </div>
                     <div>
-                      <span className="font-label-mono text-system-log text-xs">描述</span>
-                      <p className="font-body-narrative text-primary text-sm mt-1">
-                        {world.power_system.description}
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-system-log text-xs">描述</span>
+                        <button onClick={() => handleEditStart("power_system.description", world.power_system.description)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                        </button>
+                      </div>
+                      {editingField === "power_system.description" ? (
+                        <div className="flex gap-2 mt-1">
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            className="flex-1 input-underline text-sm" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
+                          <button onClick={handleWorldEditSave} disabled={saving}
+                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                            {saving ? "保存中..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="font-body-narrative text-primary text-sm mt-1">{world.power_system.description || <span className="text-system-log/40">待填写</span>}</p>
+                      )}
                     </div>
                     {world.power_system.stages.length > 0 && (
                       <div>
@@ -541,14 +698,27 @@ export default function Stage2Page() {
                         </div>
                       </div>
                     )}
-                    {world.power_system.cost_system && (
-                      <div>
+                    <div>
+                      <div className="flex items-center justify-between">
                         <span className="font-label-mono text-system-log text-xs">代价系统</span>
-                        <p className="font-body-narrative text-primary text-sm mt-1">
-                          {world.power_system.cost_system}
-                        </p>
+                        <button onClick={() => handleEditStart("power_system.cost_system", world.power_system.cost_system || "")} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                        </button>
                       </div>
-                    )}
+                      {editingField === "power_system.cost_system" ? (
+                        <div className="flex gap-2 mt-1">
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            className="flex-1 input-underline text-sm" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
+                          <button onClick={handleWorldEditSave} disabled={saving}
+                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                            {saving ? "保存中..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="font-body-narrative text-primary text-sm mt-1">{world.power_system.cost_system || <span className="text-system-log/40">待填写</span>}</p>
+                      )}
+                    </div>
                   </div>
                 </GlassPanel>
 
@@ -705,7 +875,7 @@ export default function Stage2Page() {
               </div>
 
               {/* Selected character detail */}
-              {selectedCharacter && <CharacterDetail character={selectedCharacter} />}
+              {selectedCharacter && <CharacterDetail key={selectedCharacter.id} character={selectedCharacter} onCharacterUpdate={handleCharacterSave} saving={saving} />}
             </>
           )}
         </div>

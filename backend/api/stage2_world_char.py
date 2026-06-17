@@ -37,7 +37,10 @@ async def get_character(project_id: str = Query(...), character_index: int = Que
 
     # Migrate old-format characters.json (single object → {characters: [...]})
     if isinstance(data, dict) and "characters" not in data:
-        data = {"characters": [data]}
+        if data:
+            data = {"characters": [data]}
+        else:
+            data = {"characters": []}
         fm.write_json(project_id, "characters.json", data)
 
     characters = (data or {}).get("characters", [])
@@ -164,7 +167,10 @@ async def generate_character(data: dict):
     # Load existing characters for context (with old-format migration)
     existing = fm.read_json(project_id, "characters.json") or {}
     if isinstance(existing, dict) and "characters" not in existing:
-        existing = {"characters": [existing]}
+        if existing:
+            existing = {"characters": [existing]}
+        else:
+            existing = {"characters": []}
         fm.write_json(project_id, "characters.json", existing)
     existing_characters = existing.get("characters", [])
 

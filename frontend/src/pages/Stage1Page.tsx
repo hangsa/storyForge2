@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
+import { setNestedValue } from "../utils/nested";
 
 export default function Stage1Page() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -49,12 +50,22 @@ export default function Stage1Page() {
 
   const handleEditSave = async () => {
     if (!concept || !editingField || !projectId) return;
-    const updated = { ...concept, [editingField]: editValue };
-    setConcept(updated);
+
+    let updatedConcept = concept;
+    let updatedStoryDna = storyDna;
+
+    if (editingField.includes(".")) {
+      updatedStoryDna = setNestedValue(storyDna!, editingField, editValue) as StoryDNA;
+      setStoryDna(updatedStoryDna);
+    } else {
+      updatedConcept = { ...concept, [editingField]: editValue };
+      setConcept(updatedConcept);
+    }
+
     setEditingField(null);
     setSaving(true);
     try {
-      await api.updateConcept(projectId, updated, storyDna!);
+      await api.updateConcept(projectId, updatedConcept, updatedStoryDna!);
     } catch {
       // save failed, but local state is already updated
     } finally {
@@ -178,22 +189,82 @@ export default function Stage1Page() {
             {storyDna && (
               <div className="space-y-5">
                 <div>
-                  <h3 className="font-label-mono text-system-log text-xs mb-2">核心矛盾</h3>
-                  <p className="font-body-narrative text-primary text-sm leading-relaxed">
-                    {storyDna.core_contradiction.statement}
-                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-label-mono text-system-log text-xs">核心矛盾</h3>
+                    <button
+                      onClick={() => handleEditStart("core_contradiction.statement", storyDna.core_contradiction.statement)}
+                      className="font-body-ui text-xs text-tertiary-container hover:text-primary-container"
+                    >
+                      <span className="material-symbols-outlined text-sm">edit</span>
+                    </button>
+                  </div>
+                  {editingField === "core_contradiction.statement" ? (
+                    <div className="flex gap-2">
+                      <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                        className="flex-1 input-underline text-sm" autoFocus
+                        onKeyDown={(e) => e.key === "Enter" && handleEditSave()} />
+                      <button onClick={handleEditSave} disabled={saving}
+                        className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                        {saving ? "保存中..." : "保存"}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="font-body-narrative text-primary text-sm leading-relaxed">
+                      {storyDna.core_contradiction.statement || <span className="text-system-log/40">待填写</span>}
+                    </p>
+                  )}
                   <div className="flex gap-4 mt-2">
                     <div className="flex-1 p-3 bg-surface-container rounded">
-                      <span className="font-label-mono text-system-log text-xs">立场 A</span>
-                      <p className="font-body-ui text-primary text-sm mt-1">
-                        {storyDna.core_contradiction.side_a}
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-system-log text-xs">立场 A</span>
+                        <button
+                          onClick={() => handleEditStart("core_contradiction.side_a", storyDna.core_contradiction.side_a)}
+                          className="font-body-ui text-xs text-tertiary-container hover:text-primary-container"
+                        >
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                        </button>
+                      </div>
+                      {editingField === "core_contradiction.side_a" ? (
+                        <div className="flex gap-2 mt-1">
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            className="flex-1 input-underline text-sm" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleEditSave()} />
+                          <button onClick={handleEditSave} disabled={saving}
+                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                            {saving ? "保存中..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="font-body-ui text-primary text-sm mt-1">
+                          {storyDna.core_contradiction.side_a || <span className="text-system-log/40">待填写</span>}
+                        </p>
+                      )}
                     </div>
                     <div className="flex-1 p-3 bg-surface-container rounded">
-                      <span className="font-label-mono text-system-log text-xs">立场 B</span>
-                      <p className="font-body-ui text-primary text-sm mt-1">
-                        {storyDna.core_contradiction.side_b}
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-system-log text-xs">立场 B</span>
+                        <button
+                          onClick={() => handleEditStart("core_contradiction.side_b", storyDna.core_contradiction.side_b)}
+                          className="font-body-ui text-xs text-tertiary-container hover:text-primary-container"
+                        >
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                        </button>
+                      </div>
+                      {editingField === "core_contradiction.side_b" ? (
+                        <div className="flex gap-2 mt-1">
+                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                            className="flex-1 input-underline text-sm" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleEditSave()} />
+                          <button onClick={handleEditSave} disabled={saving}
+                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                            {saving ? "保存中..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="font-body-ui text-primary text-sm mt-1">
+                          {storyDna.core_contradiction.side_b || <span className="text-system-log/40">待填写</span>}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

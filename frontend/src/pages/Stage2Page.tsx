@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import api, { World, Character, CharacterSet } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 import { setNestedValue } from "../utils/nested";
+import TagEditor from "../components/shared/TagEditor";
 
 type Tab = "world" | "character";
 
@@ -393,6 +394,8 @@ export default function Stage2Page() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [factionEditingKey, setFactionEditingKey] = useState<string | null>(null);
+  const [factionEditValue, setFactionEditValue] = useState("");
 
   // Load existing data on mount
   useEffect(() => {
@@ -431,6 +434,61 @@ export default function Stage2Page() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleArrayChange = (path: string, newItems: string[]) => {
+    if (!world || !projectId) return;
+    const updated = structuredClone(world);
+    const keys = path.split(".");
+    let target: any = updated;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (target[keys[i]] === undefined || target[keys[i]] === null) return;
+      target = target[keys[i]];
+    }
+    target[keys[keys.length - 1]] = newItems;
+    setWorld(updated);
+    api.updateWorld(projectId, updated).catch(() => {});
+  };
+
+  const handleFactionEditStart = (key: string, value: string) => {
+    setFactionEditingKey(key);
+    setFactionEditValue(value || "");
+  };
+
+  const handleFactionEditSave = async () => {
+    if (!world || !factionEditingKey || !projectId) return;
+    const [indexStr, field] = factionEditingKey.split(":");
+    const index = parseInt(indexStr);
+    const updated = structuredClone(world);
+    (updated.factions[index] as any)[field] = factionEditValue;
+    setWorld(updated);
+    setFactionEditingKey(null);
+    setSaving(true);
+    try {
+      await api.updateWorld(projectId, updated);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddFaction = async () => {
+    if (!world || !projectId) return;
+    const newFaction = { name: "新势力", type: "", goal: "", relations: "" };
+    const updated = structuredClone(world);
+    updated.factions = [...updated.factions, newFaction];
+    setWorld(updated);
+    setFactionEditingKey(`${updated.factions.length - 1}:name`);
+    setFactionEditValue("新势力");
+    api.updateWorld(projectId, updated).catch(() => {});
+  };
+
+  const handleRemoveFaction = async (index: number) => {
+    if (!world || !projectId) return;
+    setFactionEditingKey(null);
+    const updated = structuredClone(world);
+    updated.factions = updated.factions.filter((_, i) => i !== index);
+    setWorld(updated);
+    api.updateWorld(projectId, updated).catch(() => {});
   };
 
   const handleCharacterSave = async (updatedChar: Character) => {
@@ -683,21 +741,26 @@ export default function Stage2Page() {
                         <p className="font-body-narrative text-primary text-sm mt-1">{world.power_system.description || <span className="text-system-log/40">待填写</span>}</p>
                       )}
                     </div>
-                    {world.power_system.stages.length > 0 && (
-                      <div>
-                        <span className="font-label-mono text-system-log text-xs">阶段划分</span>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {world.power_system.stages.map((s, i) => (
-                            <span
-                              key={i}
-                              className="px-2 py-1 bg-surface-container rounded text-xs font-body-ui text-primary"
-                            >
-                              {s}
-                            </span>
-                          ))}
-                        </div>
+                    <div className="mt-4">
+                      <span className="font-label-mono text-system-log text-xs">阶段划分</span>
+                      <div className="mt-1">
+                        <TagEditor
+                          items={world.power_system.stages}
+                          onItemsChange={(newItems) => handleArrayChange("power_system.stages", newItems)}
+                          saving={saving}
+                        />
                       </div>
-                    )}
+                    </div>
+                    <div className="mt-4">
+                      <span className="font-label-mono text-system-log text-xs">体系规则</span>
+                      <div className="mt-1">
+                        <TagEditor
+                          items={world.power_system.core_rules || []}
+                          onItemsChange={(newItems) => handleArrayChange("power_system.core_rules", newItems)}
+                          saving={saving}
+                        />
+                      </div>
+                    </div>
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="font-label-mono text-system-log text-xs">代价系统</span>
@@ -727,16 +790,11 @@ export default function Stage2Page() {
                   <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
                     世界规则
                   </h2>
-                  <div className="space-y-2">
-                    {world.core_rules.map((rule, i) => (
-                      <div key={i} className="flex items-start gap-2 p-2 bg-surface-container rounded">
-                        <span className="material-symbols-outlined text-sm text-system-log mt-0.5">
-                          check_circle
-                        </span>
-                        <p className="font-body-narrative text-primary text-sm">{rule}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <TagEditor
+                    items={world.core_rules}
+                    onItemsChange={(newItems) => handleArrayChange("core_rules", newItems)}
+                    saving={saving}
+                  />
                 </GlassPanel>
 
                 {/* Ceilings */}
@@ -744,40 +802,137 @@ export default function Stage2Page() {
                   <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
                     力量上限
                   </h2>
-                  <div className="space-y-2">
-                    {world.power_system.ceilings.map((c, i) => (
-                      <div key={i} className="flex items-start gap-2 p-2 bg-surface-container rounded">
-                        <span className="material-symbols-outlined text-sm text-system-log mt-0.5">
-                          block
-                        </span>
-                        <p className="font-body-narrative text-primary text-sm">{c}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <TagEditor
+                    items={world.power_system.ceilings}
+                    onItemsChange={(newItems) => handleArrayChange("power_system.ceilings", newItems)}
+                    saving={saving}
+                  />
                 </GlassPanel>
 
                 {/* Factions */}
-                {world.factions.length > 0 && (
-                  <GlassPanel className="lg:col-span-2">
-                    <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
+                <GlassPanel className="lg:col-span-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-label-mono text-system-log uppercase tracking-wider">
                       势力分布
                     </h2>
+                    <button
+                      onClick={handleAddFaction}
+                      disabled={saving}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs border border-dashed
+                                 border-system-log/30 rounded text-system-log/50
+                                 hover:text-primary-container hover:border-primary-container/50
+                                 transition-colors disabled:opacity-30"
+                    >
+                      <span className="material-symbols-outlined text-sm">add</span>
+                      添加势力
+                    </button>
+                  </div>
+                  {world.factions.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {world.factions.map((f, i) => (
-                        <div key={i} className="p-3 bg-surface-container rounded">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-label-mono text-primary text-sm">{f.name}</span>
-                            <span className="text-xs px-2 py-0.5 bg-surface-container-low rounded text-system-log font-body-ui">
-                              {f.type}
-                            </span>
+                        <div key={i} className="p-3 bg-surface-container rounded relative">
+                          <button
+                            onClick={() => handleRemoveFaction(i)}
+                            disabled={saving}
+                            className="absolute top-2 right-2 text-system-log/30 hover:text-error
+                                       transition-colors disabled:opacity-30"
+                          >
+                            <span className="material-symbols-outlined text-sm">close</span>
+                          </button>
+
+                          {/* Name */}
+                          <div className="flex items-center justify-between mb-2 pr-6">
+                            {factionEditingKey === `${i}:name` ? (
+                              <div className="flex gap-2 items-center">
+                                <input value={factionEditValue} onChange={(e) => setFactionEditValue(e.target.value)}
+                                  className="flex-1 input-underline text-sm" autoFocus
+                                  onKeyDown={(e) => e.key === "Enter" && handleFactionEditSave()} />
+                                <button onClick={handleFactionEditSave} disabled={saving}
+                                  className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                                  {saving ? "..." : "保存"}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="font-label-mono text-primary text-sm">{f.name || "未命名"}</span>
+                                <button onClick={() => handleFactionEditStart(`${i}:name`, f.name)}
+                                  className="text-tertiary-container hover:text-primary-container">
+                                  <span className="material-symbols-outlined text-xs">edit</span>
+                                </button>
+                              </div>
+                            )}
+                            {/* Type */}
+                            {factionEditingKey === `${i}:type` ? (
+                              <div className="flex gap-2 items-center">
+                                <input value={factionEditValue} onChange={(e) => setFactionEditValue(e.target.value)}
+                                  className="w-20 input-underline text-xs" autoFocus
+                                  onKeyDown={(e) => e.key === "Enter" && handleFactionEditSave()} />
+                                <button onClick={handleFactionEditSave} disabled={saving}
+                                  className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                                  {saving ? "..." : "保存"}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs px-2 py-0.5 bg-surface-container-low rounded text-system-log font-body-ui">
+                                  {f.type || "未设置"}
+                                </span>
+                                <button onClick={() => handleFactionEditStart(`${i}:type`, f.type)}
+                                  className="text-tertiary-container hover:text-primary-container">
+                                  <span className="material-symbols-outlined text-xs">edit</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
-                          <p className="font-body-narrative text-primary text-xs mb-2">{f.goal}</p>
-                          <p className="font-body-ui text-system-log text-xs">{f.relations}</p>
+
+                          {/* Goal */}
+                          {factionEditingKey === `${i}:goal` ? (
+                            <div className="flex gap-2 items-center mb-2">
+                              <input value={factionEditValue} onChange={(e) => setFactionEditValue(e.target.value)}
+                                className="flex-1 input-underline text-xs" autoFocus
+                                onKeyDown={(e) => e.key === "Enter" && handleFactionEditSave()} />
+                              <button onClick={handleFactionEditSave} disabled={saving}
+                                className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                                {saving ? "..." : "保存"}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-1 mb-2">
+                              <p className="font-body-narrative text-primary text-xs flex-1">{f.goal || "未设置"}</p>
+                              <button onClick={() => handleFactionEditStart(`${i}:goal`, f.goal)}
+                                className="text-tertiary-container hover:text-primary-container shrink-0">
+                                <span className="material-symbols-outlined text-xs">edit</span>
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Relations */}
+                          {factionEditingKey === `${i}:relations` ? (
+                            <div className="flex gap-2 items-center">
+                              <input value={factionEditValue} onChange={(e) => setFactionEditValue(e.target.value)}
+                                className="flex-1 input-underline text-xs" autoFocus
+                                onKeyDown={(e) => e.key === "Enter" && handleFactionEditSave()} />
+                              <button onClick={handleFactionEditSave} disabled={saving}
+                                className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                                {saving ? "..." : "保存"}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-1">
+                              <p className="font-body-ui text-system-log text-xs flex-1">{f.relations || "未设置"}</p>
+                              <button onClick={() => handleFactionEditStart(`${i}:relations`, f.relations)}
+                                className="text-tertiary-container hover:text-primary-container shrink-0">
+                                <span className="material-symbols-outlined text-xs">edit</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
-                  </GlassPanel>
-                )}
+                  ) : (
+                    <p className="font-body-ui text-system-log/40 text-sm text-center py-4">暂无势力</p>
+                  )}
+                </GlassPanel>
               </div>
             </>
           )}

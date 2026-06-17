@@ -342,12 +342,16 @@ class ModelRouter:
                     provider = self._create_provider_for_model(model_info)
                     system_prompt, user_prompt = self._extract_prompts(messages)
 
+                    # Remove max_tokens from kwargs to avoid duplicate keyword error
+                    # (it is already explicitly set from model config above)
+                    generate_kwargs = {k: v for k, v in kwargs.items()
+                                       if k != "max_tokens"}
                     response = await provider.generate(
                         system_prompt=system_prompt,
                         user_prompt=user_prompt,
                         json_mode=json_mode,
                         max_tokens=model_info.get("max_tokens", 8192),
-                        **kwargs,
+                        **generate_kwargs,
                     )
 
                     cost = self._compute_cost(

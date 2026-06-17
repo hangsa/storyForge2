@@ -47,12 +47,15 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
 
   // FastAPI wraps HTTPException detail: {"detail": {"error": true, "code": "X", ...}}
-  const errorPayload = (json.detail as Record<string, unknown>) || json;
-  if (errorPayload.error) {
+  const detailObj = json.detail as Record<string, unknown> | undefined;
+  const topError = json.error;
+  const nestedError = detailObj && typeof detailObj === "object" ? detailObj.error : undefined;
+  if (topError || nestedError) {
+    const payload = nestedError ? detailObj! : json;
     throw new ApiError(
-      (errorPayload.code as string) || "UNKNOWN",
-      (errorPayload.message as string) || "未知错误",
-      (errorPayload.detail as Record<string, unknown>) || {}
+      (payload.code as string) || "UNKNOWN",
+      (payload.message as string) || "未知错误",
+      (payload.detail as Record<string, unknown>) || {}
     );
   }
 

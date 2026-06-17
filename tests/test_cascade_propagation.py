@@ -62,9 +62,10 @@ class TestCascadeRules:
         targets = RegistryTransactionManager.CASCADE_RULES[CascadeTrigger.TWIST_REVEALED]
         assert ("expectation", "ready_to_fulfill") in targets
 
-    def test_reveal_revealed_triggers_conflict(self):
+    def test_reveal_revealed_triggers_conflict_and_expectation(self):
         targets = RegistryTransactionManager.CASCADE_RULES[CascadeTrigger.REVEAL_REVEALED]
         assert ("conflict", "escalated") in targets
+        assert ("expectation", "fulfilled") in targets
 
     def test_promise_fulfilled_triggers_expectation(self):
         targets = RegistryTransactionManager.CASCADE_RULES[CascadeTrigger.PROMISE_FULFILLED]
@@ -198,3 +199,92 @@ class TestAtomicCommit:
         items = txn._read_registry(storyos_dir, "mystery")
         updated = next((i for i in items if i["id"] == "mys_001"), None)
         assert updated["status"] == "active"
+
+
+class TestCascadeIntegration:
+    """Integration tests: RegistryManager.update_asset_status end-to-end."""
+
+    def test_mystery_revealed_cascades_to_reveal_conflict_expectation(self, tmp_project):
+        """Mystery→revealed triggers Reveal→revealed, which triggers both
+        Conflict→escalated AND Expectation→fulfilled (transitive chain)."""
+        from backend.story_os.registries import RegistryManager
+        pid = "proj_test"
+        _write_registry(tmp_project, pid, "mystery", [
+            {"id": "mys_001", "status": "active"},
+        ])
+        _write_registry(tmp_project, pid, "reveal", [
+            {"id": "rev_001", "status": "planned", "related_mystery": "mys_001"},
+        ])
+        _write_registry(tmp_project, pid, "conflict", [
+            {"id": "cf_001", "status": "active", "related_reveal": "rev_001"},
+        ])
+        _write_registry(tmp_project, pid, "expectation", [
+            {"id": "exp_001", "status": "accumulating", "related_reveal": "rev_001"},
+        ])
+        rm = RegistryManager(pid, projects_dir=tmp_project)
+        result = rm.update_asset_status("mystery", "mys_001", "revealed")
+        assert result.success is True
+        # Mystery should be revealed
+        mystery = rm.get_by_id("mystery", "mys_001")
+        assert mystery["status"] == "revealed"
+        # Reveal should be revealed (cascade step)
+        reveal = rm.get_by_id("reveal", "rev_001")
+        assert reveal is not None
+        assert reveal["status"] == "revealed"
+        # Conflict should be escalated (sub-cascade from REVEAL_REVEALED)
+        conflict = rm.get_by_id("conflict", "cf_001")
+        assert conflict is not None
+        assert conflict["status"] == "escalated"
+        # Expectation should be fulfilled (sub-cascade from REVEAL_REVEALED)
+        expectation = rm.get_by_id("expectation", "exp_001")
+        assert expectation is not None
+        assert expectation["status"] == "fulfilled"
+
+    def test_conflict_resolved_returns_orphaned_mysteries(self, tmp_project):
+        """When conflict resolves, orphaned mysteries are reported."""
+        from backend.story_os.registries import RegistryManager
+        pid = "proj_test"
+        _write_registry(tmp_project, pid, "conflict", [
+            {"id": "cf_001", "status": "active"},
+        ])
+        _write_registry(tmp_project, pid, "mystery", [
+            {"id": "mys_001", "status": "active", "related_conflict": "cf_001"},
+            {"id": "mys_002", "status": "revealed", "related_conflict": "cf_001"},
+        ])
+        rm = RegistryManager(pid, projects_dir=tmp_project)
+        result = rm.update_asset_status("conflict", "cf_001", "resolved")
+        assert result.success is True
+        assert "mys_001" in result.orphaned_mysteries
+        assert "mys_002" not in result.orphaned_mysteries
+        # Conflict status should be updated
+        conflict = rm.get_by_id("conflict", "cf_001")
+        assert conflict["status"] == "resolved"
+
+    def test_twist_reveal_handler_triggers_cascade(self, tmp_project):
+        """When StoryOSAgent processes twist_reveal SF_LOG, cascade executes
+        and expectation is transitioned to ready_to_fulfill."""
+        from backend.story_os.registries import RegistryManager
+        from backend.agents.storyos_agent import StoryOSAgent, ParsedLog
+        pid = "proj_test"
+        _write_registry(tmp_project, pid, "twist", [
+            {"id": "tw_001", "status": "planned", "related_mystery": "mys_001"},
+        ])
+        _write_registry(tmp_project, pid, "expectation", [
+            {"id": "exp_001", "status": "accumulating", "related_twist": "tw_001"},
+        ])
+        rm = RegistryManager(pid, projects_dir=tmp_project)
+        agent = StoryOSAgent(pid, projects_dir=tmp_project, registry_manager=rm)
+        report = agent.update_registries([
+            ParsedLog(type="twist_reveal", params={"id": "tw_001", "trigger": "测试触发"})
+        ])
+        # Twist status updated (by update_asset_status)
+        twist = rm.get_by_id("twist", "tw_001")
+        assert twist is not None
+        assert twist["status"] == "revealed"
+        # Expectation cascaded to ready_to_fulfill
+        expectation = rm.get_by_id("expectation", "exp_001")
+        assert expectation is not None
+        assert expectation["status"] == "ready_to_fulfill"
+        # Cascade reported
+        assert any("twist:tw_001" in entry for entry in report.cascade_executed), \
+            f"Expected cascade_executed to mention twist:tw_001, got {report.cascade_executed}"

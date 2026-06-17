@@ -207,7 +207,9 @@ async def write_scene(data: dict):
 
     writer = WriterAgent(project_id)
     reviewer = ReviewerAgent(project_id)
-    storyos = StoryOSAgent(project_id)
+    from backend.story_os.registries import RegistryManager
+    registry_mgr = RegistryManager(project_id)
+    storyos = StoryOSAgent(project_id, registry_manager=registry_mgr)
     breaker = CircuitBreaker()
     reader_os = ReaderOS(project_id)
 
@@ -363,6 +365,7 @@ async def write_scene(data: dict):
         "registry_updates": {
             "created": registry_report.created,
             "updated": registry_report.updated,
+            "cascade_executed": registry_report.cascade_executed,
         },
         "style_guard_violations": style_violations,
     }
@@ -471,6 +474,7 @@ async def write_scene(data: dict):
             "registry_updates": {
                 "created": registry_report.created,
                 "updated": registry_report.updated,
+                "cascade_executed": registry_report.cascade_executed,
             },
             "l0_snapshot": {
                 "scene": scene_number,

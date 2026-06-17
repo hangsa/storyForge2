@@ -378,3 +378,228 @@ class TestGrowthContext:
         ]
         result = compute_character_growth_context(characters, 3)
         assert "无效阶段" not in result
+
+
+class TestAutoGenerator:
+    """Tests for auto_generate_growth_curves — deterministic curve creation."""
+
+    def _make_outline(self, chapters_data: list[dict]) -> dict:
+        return {"chapters": chapters_data}
+
+    def _make_char(self, name: str, is_core: bool = True, growth_curve=None) -> dict:
+        char = {"name": name, "is_core_character": is_core}
+        if growth_curve is not None:
+            char["growth_curve"] = growth_curve
+        return char
+
+    def test_core_character_without_curve_gets_one(self):
+        from backend.growth_curve.auto_generator import auto_generate_growth_curves
+        outline = self._make_outline([
+            {
+                "chapter_number": 1,
+                "scene_plan": [{
+                    "scene_number": 1,
+                    "registry_changes": {
+                        "created": [
+                            {"type": "conflict", "id_pattern": "cf_01",
+                             "description": "主角遭遇背叛陷入危机"},
+                        ],
+                        "updated": [],
+                    },
+                }],
+            },
+            {
+                "chapter_number": 3,
+                "scene_plan": [{
+                    "scene_number": 1,
+                    "registry_changes": {
+                        "created": [
+                            {"type": "reveal", "id_pattern": "rev_01",
+                             "description": "揭示世界真相震惊众人"},
+                        ],
+                        "updated": [],
+                    },
+                }],
+            },
+            {
+                "chapter_number": 5,
+                "scene_plan": [{
+                    "scene_number": 1,
+                    "registry_changes": {
+                        "created": [
+                            {"type": "twist", "id_pattern": "tw_01",
+                             "description": "至亲牺牲阵亡战场"},
+                        ],
+                        "updated": [],
+                    },
+                }],
+            },
+        ])
+        characters = [self._make_char("林峰", is_core=True)]
+        result = auto_generate_growth_curves(characters, outline)
+        gc = result[0].get("growth_curve")
+        assert gc is not None
+        assert 3 <= len(gc["stages"]) <= 5
+        # Verify stage structure
+        for stage in gc["stages"]:
+            assert "stage_number" in stage
+            assert "stage_name" in stage
+            assert stage["stage_name"] != ""
+            assert "trigger_event_type" in stage
+            assert stage["trigger_event_type"] in (
+                "betrayal_experienced", "death_of_loved_one",
+                "world_truth_revealed", "personal_identity_crisis",
+                "irreversible_loss", "moral_awakening",
+                "accumulated_evidence", "relationship_transformation",
+            )
+            assert "character_change" in stage
+            assert stage["character_change"] == ""
+            assert "bound_chapter" in stage
+            assert stage["bound_chapter"] is None
+
+    def test_character_with_existing_curve_unchanged(self):
+        from backend.growth_curve.auto_generator import auto_generate_growth_curves
+        existing_curve = {
+            "curve_description": "手工编写",
+            "stages": [{"stage_number": 1, "stage_name": "自定义阶段",
+                        "trigger_event_type": "moral_awakening",
+                        "trigger_event_description": "", "character_change": "",
+                        "target_chapter_range": "1-2", "bound_chapter": None}],
+        }
+        outline = self._make_outline([
+            {"chapter_number": 1, "scene_plan": [{
+                "scene_number": 1,
+                "registry_changes": {
+                    "created": [{"type": "conflict", "description": "背叛"}],
+                    "updated": [],
+                },
+            }]},
+        ])
+        characters = [self._make_char("林峰", is_core=True, growth_curve=existing_curve)]
+        result = auto_generate_growth_curves(characters, outline)
+        assert result[0]["growth_curve"] == existing_curve
+
+    def test_non_core_character_skipped(self):
+        from backend.growth_curve.auto_generator import auto_generate_growth_curves
+        outline = self._make_outline([
+            {"chapter_number": 1, "scene_plan": [{
+                "scene_number": 1,
+                "registry_changes": {
+                    "created": [{"type": "conflict", "description": "遭遇背叛"}],
+                    "updated": [],
+                },
+            }]},
+        ])
+        characters = [self._make_char("路人", is_core=False)]
+        result = auto_generate_growth_curves(characters, outline)
+        assert result[0].get("growth_curve") is None
+
+    def test_empty_outline_returns_unchanged(self):
+        from backend.growth_curve.auto_generator import auto_generate_growth_curves
+        characters = [self._make_char("林峰", is_core=True)]
+        result = auto_generate_growth_curves(characters, {"chapters": []})
+        assert result[0].get("growth_curve") is None
+
+    def test_outline_with_no_matching_events_returns_unchanged(self):
+        from backend.growth_curve.auto_generator import auto_generate_growth_curves
+        outline = self._make_outline([
+            {"chapter_number": 1, "scene_plan": [{
+                "scene_number": 1,
+                "registry_changes": {
+                    "created": [{"type": "goal", "description": "完成任务"}],
+                    "updated": [],
+                },
+            }]},
+        ])
+        characters = [self._make_char("林峰", is_core=True)]
+        result = auto_generate_growth_curves(characters, outline)
+        assert result[0].get("growth_curve") is None
+
+    def test_stages_are_ordered_by_chapter_appearance(self):
+        from backend.growth_curve.auto_generator import auto_generate_growth_curves
+        outline = self._make_outline([
+            {"chapter_number": 3, "scene_plan": [{
+                "scene_number": 1,
+                "registry_changes": {
+                    "created": [{"type": "reveal", "description": "揭示世界真相"}],
+                    "updated": [],
+                },
+            }]},
+            {"chapter_number": 1, "scene_plan": [{
+                "scene_number": 1,
+                "registry_changes": {
+                    "created": [{"type": "conflict", "description": "遭遇背叛"}],
+                    "updated": [],
+                },
+            }]},
+        ])
+        characters = [self._make_char("林峰", is_core=True)]
+        result = auto_generate_growth_curves(characters, outline)
+        stages = result[0]["growth_curve"]["stages"]
+        # First stage should match chapter 1 (betrayal), second should match chapter 3 (truth)
+        assert stages[0]["trigger_event_type"] == "betrayal_experienced"
+        assert stages[1]["trigger_event_type"] == "world_truth_revealed"
+
+    def test_multiple_characters_mixed_curves(self):
+        from backend.growth_curve.auto_generator import auto_generate_growth_curves
+        existing_curve = {
+            "curve_description": "已有",
+            "stages": [{"stage_number": 1, "stage_name": "已有阶段",
+                        "trigger_event_type": "moral_awakening",
+                        "trigger_event_description": "", "character_change": "",
+                        "target_chapter_range": "1-2", "bound_chapter": None}],
+        }
+        outline = self._make_outline([
+            {"chapter_number": 1, "scene_plan": [{
+                "scene_number": 1,
+                "registry_changes": {
+                    "created": [{"type": "conflict", "description": "身份危机动摇自我"}],
+                    "updated": [],
+                },
+            }]},
+            {"chapter_number": 2, "scene_plan": [{
+                "scene_number": 1,
+                "registry_changes": {
+                    "created": [{"type": "reveal", "description": "道德觉醒幡然醒悟"}],
+                    "updated": [],
+                },
+            }]},
+        ])
+        characters = [
+            self._make_char("主角", is_core=True),  # no curve → auto-generate
+            self._make_char("配角A", is_core=True, growth_curve=existing_curve),  # has curve → unchanged
+            self._make_char("路人", is_core=False),  # not core → skipped
+        ]
+        result = auto_generate_growth_curves(characters, outline)
+        # 主角 gets auto-generated curve
+        assert result[0].get("growth_curve") is not None
+        assert len(result[0]["growth_curve"]["stages"]) >= 2
+        # 配角A keeps existing curve
+        assert result[1]["growth_curve"] == existing_curve
+        # 路人 stays None
+        assert result[2].get("growth_curve") is None
+
+    def test_target_chapter_range_spans_occurrences(self):
+        from backend.growth_curve.auto_generator import auto_generate_growth_curves
+        outline = self._make_outline([
+            {"chapter_number": 2, "scene_plan": [{
+                "scene_number": 1,
+                "registry_changes": {
+                    "created": [{"type": "conflict", "description": "遭遇背叛"}],
+                    "updated": [],
+                },
+            }]},
+            {"chapter_number": 4, "scene_plan": [{
+                "scene_number": 2,
+                "registry_changes": {
+                    "created": [{"type": "conflict", "description": "再次背叛"}],
+                    "updated": [],
+                },
+            }]},
+        ])
+        characters = [self._make_char("林峰", is_core=True)]
+        result = auto_generate_growth_curves(characters, outline)
+        stages = result[0]["growth_curve"]["stages"]
+        # Single event type (betrayal) spanning chapters 2-4
+        assert len(stages) == 1
+        assert stages[0]["target_chapter_range"] == "2-4"

@@ -349,6 +349,24 @@ export interface ChapterReviewList {
   chapters: number[];
 }
 
+export interface RegistryAsset {
+  id: string;
+  status: string;
+  description?: string;
+  owner?: string;
+  target?: string;
+  intensity?: string;
+  type?: string;
+  created_chapter?: number;
+  [key: string]: unknown;
+}
+
+export interface RegistryResponse {
+  type: string;
+  count: number;
+  items: RegistryAsset[];
+}
+
 // --- v1.6 Impact Analysis / Rollback types ---
 
 export interface ImpactEntry {
@@ -460,7 +478,7 @@ export const api = {
     ),
 
   getRegistry: (projectId: string, registryType: string) =>
-    request<Array<Record<string, unknown>>>("GET", `/storyos/${registryType}?project_id=${projectId}`),
+    request<RegistryResponse>("GET", `/storyos/${registryType}?project_id=${projectId}`),
 
   // STAGE 5 — Diagnosis
   runDiagnosis: (projectId: string) =>

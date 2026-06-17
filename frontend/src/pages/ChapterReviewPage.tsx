@@ -4,16 +4,8 @@ import api, { ChapterReviewData, ApiError } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 import ProgressBar from "../components/shared/ProgressBar";
 import NarrativeChip from "../components/shared/NarrativeChip";
-
-const READER_OS_METRICS: Array<{ key: string; label: string; good: boolean }> = [
-  { key: "addiction", label: "上瘾度", good: true },
-  { key: "curiosity", label: "好奇心", good: true },
-  { key: "tension", label: "紧张感", good: true },
-  { key: "satisfaction", label: "满足感", good: true },
-  { key: "discussion", label: "讨论潜力", good: true },
-  { key: "fatigue", label: "疲劳度", good: false },
-  { key: "frustration", label: "挫败感", good: false },
-];
+import ReaderOSGauges from "../components/shared/ReaderOSGauges";
+import WritingFormulaTable from "../components/shared/WritingFormulaTable";
 
 export default function ChapterReviewPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -169,22 +161,7 @@ export default function ChapterReviewPage() {
           </GlassPanel>
 
           {/* ReaderOS Gauges */}
-          <GlassPanel>
-            <h3 className="text-sm font-medium text-white mb-3">读者状态指标</h3>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-              {READER_OS_METRICS.map(({ key, label, good }) => {
-                const val = (review.reader_os as Record<string, number>)[key] ?? 0;
-                return (
-                  <ProgressBar
-                    key={key}
-                    label={label}
-                    value={val}
-                    color={good ? "primary" : "warning"}
-                  />
-                );
-              })}
-            </div>
-          </GlassPanel>
+          <ReaderOSGauges readerOS={review.reader_os} />
 
           {/* Fact Guard Summary */}
           <GlassPanel>
@@ -240,47 +217,7 @@ export default function ChapterReviewPage() {
           </GlassPanel>
 
           {/* Writing Formula Compliance */}
-          {review.writing_formula_compliance.length > 0 && (
-            <GlassPanel>
-              <h3 className="text-sm font-medium text-white mb-3">写作公式合规</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-left text-system-log/50 border-b border-outline-variant">
-                      <th className="pb-2 pr-4 font-medium">指标</th>
-                      <th className="pb-2 pr-4 font-medium">期望值</th>
-                      <th className="pb-2 pr-4 font-medium">实际值</th>
-                      <th className="pb-2 font-medium">状态</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {review.writing_formula_compliance.map((item, i) => (
-                      <tr key={i} className="border-b border-system-log/10">
-                        <td className="py-2 pr-4 text-system-log/80">{item.metric}</td>
-                        <td className="py-2 pr-4 text-system-log/50 font-mono">
-                          {typeof item.expected === "object"
-                            ? JSON.stringify(item.expected)
-                            : String(item.expected)}
-                        </td>
-                        <td className="py-2 pr-4 text-system-log/50 font-mono">
-                          {typeof item.actual === "object"
-                            ? JSON.stringify(item.actual)
-                            : String(item.actual)}
-                        </td>
-                        <td className="py-2">
-                          <span
-                            className={`text-xs ${item.passed ? "text-emerald-400" : "text-red-400"}`}
-                          >
-                            {item.passed ? "通过" : "未通过"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </GlassPanel>
-          )}
+          <WritingFormulaTable compliance={review.writing_formula_compliance} />
 
           {/* Style Guard Violations */}
           {review.style_guard_violations.length > 0 && (

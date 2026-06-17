@@ -31,16 +31,19 @@ class RegistryUpdateReport:
     updated: list[str] = field(default_factory=list)
     character_state_updates: dict = field(default_factory=dict)
     unregistered_new: list[str] = field(default_factory=list)
+    cascade_executed: list[str] = field(default_factory=list)
 
 
 class StoryOSAgent:
     """Zero LLM — all SF_LOG parsing and registry updates are deterministic regex ops."""
 
-    def __init__(self, project_id: str, projects_dir: Optional[Path] = None):
+    def __init__(self, project_id: str, projects_dir: Optional[Path] = None,
+                 registry_manager=None):
         self.project_id = project_id
         self.projects_dir = Path(projects_dir) if projects_dir else settings.projects_dir
         self._project_dir = self.projects_dir / project_id
         self._registries_dir = self._project_dir / "storyos"
+        self._registry_manager = registry_manager
 
     def parse_sf_logs(self, text: str) -> list[ParsedLog]:
         results: list[ParsedLog] = []
@@ -230,6 +233,17 @@ class StoryOSAgent:
 
                 self._write_registry("conflicts.json", conflicts)
                 report.updated.append(f"conflict:{conflict_id}")
+                if self._registry_manager:
+                    result = self._registry_manager.update_asset_status(
+                        "conflict", conflict_id, "escalated"
+                    )
+                    if result.steps_executed:
+                        steps = len(result.steps_executed)
+                        report.cascade_executed.append(f"conflict:{conflict_id} -> {steps} steps")
+                    if result.orphaned_mysteries:
+                        report.cascade_executed.append(
+                            f"conflict:{conflict_id} orphaned_mysteries:{result.orphaned_mysteries}"
+                        )
                 return
 
     def _handle_mystery_clue(
@@ -280,10 +294,19 @@ class StoryOSAgent:
             if not isinstance(twist, dict):
                 continue
             if twist.get("id") == twist_id:
-                twist["status"] = "revealed"
                 twist["reveal_trigger"] = trigger
                 self._write_registry("twists.json", twists)
                 report.updated.append(f"twist:{twist_id}")
+                if self._registry_manager:
+                    result = self._registry_manager.update_asset_status(
+                        "twist", twist_id, "revealed"
+                    )
+                    if result.steps_executed:
+                        steps = len(result.steps_executed)
+                        report.cascade_executed.append(f"twist:{twist_id} -> {steps} steps")
+                else:
+                    twist["status"] = "revealed"
+                    self._write_registry("twists.json", twists)
                 return
 
     def _handle_expectation_fulfill(
@@ -309,6 +332,13 @@ class StoryOSAgent:
                 exp["fulfill_trigger"] = trigger
                 self._write_registry("expectations.json", expectations)
                 report.updated.append(f"expectation:{expectation_id}")
+                if self._registry_manager:
+                    result = self._registry_manager.update_asset_status(
+                        "expectation", expectation_id, "fulfilled"
+                    )
+                    if result.steps_executed:
+                        steps = len(result.steps_executed)
+                        report.cascade_executed.append(f"expectation:{expectation_id} -> {steps} steps")
                 return
 
     def _handle_goal_milestone(

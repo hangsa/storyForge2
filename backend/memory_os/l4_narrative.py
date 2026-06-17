@@ -218,6 +218,12 @@ class L4NarrativeMemory:
             parts.append("\n".join(role_lines))
             token_estimate += len(parts[-1]) // 2
 
+        # 5. Actionable hints
+        hints = self._build_actionable_hints(patterns)
+        if hints:
+            parts.append(hints)
+            token_estimate += len(hints) // 2
+
         # Enforce token budget
         result = "\n\n".join(parts)
         max_chars = max_tokens * 2  # rough: 1 token ≈ 2 chars for Chinese
@@ -232,3 +238,34 @@ class L4NarrativeMemory:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         tmp.replace(path)
+
+    def _build_actionable_hints(self, patterns: dict) -> str:
+        """Generate actionable writing hints from narrative state gaps."""
+        hints: list[str] = []
+        state = patterns.get("narrative_state", {})
+
+        open_mysteries = state.get("open_mysteries", [])
+        if open_mysteries:
+            hints.append(f"  💡 未解谜团({len(open_mysteries)}个): 考虑在本章提供线索推进谜团揭示")
+
+        unresolved = state.get("unresolved_conflicts", [])
+        if unresolved:
+            hints.append(f"  💡 未解决冲突({len(unresolved)}个): 考虑升级冲突或触发转折")
+
+        pending = state.get("pending_promises", [])
+        if pending:
+            hints.append(f"  💡 待兑现承诺({len(pending)}个): 考虑在本章兑现或推进承诺进展")
+
+        unrevealed = state.get("unrevealed_twists", [])
+        if unrevealed:
+            hints.append(f"  💡 未揭示转折({len(unrevealed)}个): 考虑铺设伏笔为转折做准备")
+
+        fs_health = patterns.get("foreshadowing_health", {})
+        stale = fs_health.get("stale_without_clues", [])
+        if stale:
+            hints.append(f"  ⚠ 长期无线索伏笔({len(stale)}个): 建议尽快添加线索或揭示伏笔")
+
+        if not hints:
+            return ""
+
+        return "【写作建议】\n" + "\n".join(hints)

@@ -152,7 +152,17 @@ class RegistryManager:
         if trigger is None:
             # No cascade needed — simple status update
             self.update(asset_type, asset_id, {"status": new_status})
-            return CascadeResult(success=True)
+            # Check for orphaned mysteries on conflict resolution
+            orphaned: list[str] = []
+            if asset_type == "conflict" and new_status == "resolved":
+                orphaned = self._transaction_mgr.check_orphaned_mysteries(
+                    self.project_id, asset_id
+                )
+                if orphaned:
+                    logger.warning(
+                        "Conflict %s resolved, orphaned mysteries: %s", asset_id, orphaned
+                    )
+            return CascadeResult(success=True, orphaned_mysteries=orphaned)
 
         # Execute cascade propagation first (atomic with its own rollback)
         result = self._transaction_mgr.propagate(
@@ -182,16 +192,9 @@ class RegistryManager:
         特殊处理：Conflict → resolved 不触发标准级联链，
         而是触发孤儿 Mystery 检查（警告，不阻断）。
         """
-        # Conflict → resolved: orphan check, no cascade
+        # Conflict → resolved: no cascade, orphan check handled by caller
         if asset_type == "conflict" and new_status == "resolved":
-            orphaned = self._transaction_mgr.check_orphaned_mysteries(
-                self.project_id, asset_id
-            )
-            if orphaned:
-                logger.warning(
-                    "Conflict %s resolved, orphaned mysteries: %s", asset_id, orphaned
-                )
-            return None  # 不触发级联
+            return None
 
         # Mystery → revealed
         if asset_type == "mystery" and new_status == "revealed" and old_status != "revealed":

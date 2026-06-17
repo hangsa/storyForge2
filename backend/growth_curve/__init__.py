@@ -1,2 +1,3 @@
+from backend.growth_curve.auto_generator import auto_generate_growth_curves
 from backend.growth_curve.binder import bind_growth_curve_to_outline
 from backend.growth_curve.context import compute_character_growth_context

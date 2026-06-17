@@ -93,9 +93,11 @@ async def generate_outline(data: dict):
     merged_outline = {"chapters": existing_chapters}
     fm.write_json(project_id, "outline.json", merged_outline)
 
-    # Bind character growth curves to the accumulated outline
+    # Auto-generate growth curves for characters without them, then bind to outline
+    from backend.growth_curve.auto_generator import auto_generate_growth_curves
     from backend.growth_curve.binder import bind_growth_curve_to_outline
     characters = characters_data.get("characters", [])
+    characters = auto_generate_growth_curves(characters, merged_outline)
     updated_characters = bind_growth_curve_to_outline(characters, merged_outline)
     fm.write_json(project_id, "characters.json", {"characters": updated_characters})
 

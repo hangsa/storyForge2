@@ -49,6 +49,7 @@ class CascadeResult:
     cycle_detected: bool = False
     cycle_path: list[str] = field(default_factory=list)
     conflict_details: list[str] = field(default_factory=list)
+    orphaned_mysteries: list[str] = field(default_factory=list)
 
 
 # --- RegistryTransactionManager ---
@@ -76,6 +77,7 @@ class RegistryTransactionManager:
         ],
         CascadeTrigger.REVEAL_REVEALED: [
             ("conflict", "escalated"),
+            ("expectation", "fulfilled"),
         ],
         CascadeTrigger.PROMISE_FULFILLED: [
             ("expectation", "fulfilled"),
@@ -186,10 +188,6 @@ class RegistryTransactionManager:
         if executed:
             try:
                 self._atomic_commit(storyos_dir, executed)
-                self._log_cascade(
-                    storyos_dir, trigger, source_asset_type, source_asset_id,
-                    executed, blocked, cycle_detected,
-                )
             except Exception as e:
                 logger.error("Cascade atomic commit failed: %s", e)
                 return CascadeResult(

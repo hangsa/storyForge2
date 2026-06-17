@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import api, { World, Character, CharacterSet } from "../api/client";
+import api, { World, Character, CharacterSet, GrowthEventType } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 import { setNestedValue } from "../utils/nested";
 import TagEditor from "../components/shared/TagEditor";
@@ -50,6 +50,8 @@ function CharacterDetail({ character, onCharacterUpdate, saving }: {
 }) {
   const [charEditingField, setCharEditingField] = useState<string | null>(null);
   const [charEditValue, setCharEditValue] = useState("");
+  const [stageEditKey, setStageEditKey] = useState<string | null>(null);
+  const [stageEditValue, setStageEditValue] = useState("");
 
   const handleCharEditStart = (field: string, value: string) => {
     setCharEditingField(field);
@@ -60,6 +62,56 @@ function CharacterDetail({ character, onCharacterUpdate, saving }: {
     if (!charEditingField) return;
     const updated = setNestedValue(character, charEditingField, charEditValue) as Character;
     setCharEditingField(null);
+    onCharacterUpdate(updated);
+  };
+
+  const handleStageEditStart = (index: number, field: string, value: string) => {
+    setStageEditKey(`${index}:${field}`);
+    setStageEditValue(value || "");
+  };
+
+  const handleStageEditSave = () => {
+    if (!stageEditKey) return;
+    if (stageEditKey === "curve_desc") {
+      const updated = structuredClone(character) as Character;
+      if (!updated.growth_curve) updated.growth_curve = { curve_description: "", stages: [] };
+      updated.growth_curve.curve_description = stageEditValue;
+      setStageEditKey(null);
+      onCharacterUpdate(updated);
+      return;
+    }
+    const [indexStr, field] = stageEditKey.split(":");
+    const index = parseInt(indexStr);
+    const updated = structuredClone(character) as Character;
+    if (!updated.growth_curve) return;
+    (updated.growth_curve.stages[index] as unknown as Record<string, unknown>)[field] = stageEditValue;
+    setStageEditKey(null);
+    onCharacterUpdate(updated);
+  };
+
+  const handleAddStage = () => {
+    const updated = structuredClone(character) as Character;
+    if (!updated.growth_curve) updated.growth_curve = { curve_description: "", stages: [] };
+    const nextNum = updated.growth_curve.stages.length + 1;
+    updated.growth_curve.stages.push({
+      stage_number: nextNum,
+      stage_name: `阶段 ${nextNum}`,
+      trigger_event_type: "accumulated_evidence" as GrowthEventType,
+      trigger_event_description: "",
+      character_change: "",
+      target_chapter_range: "",
+      bound_chapter: null,
+    });
+    onCharacterUpdate(updated);
+  };
+
+  const handleRemoveStage = (index: number) => {
+    setStageEditKey(null);
+    const updated = structuredClone(character) as Character;
+    if (!updated.growth_curve) return;
+    updated.growth_curve.stages = updated.growth_curve.stages
+      .filter((_, i) => i !== index)
+      .map((s, i) => ({ ...s, stage_number: i + 1 }));
     onCharacterUpdate(updated);
   };
 
@@ -309,71 +361,262 @@ function CharacterDetail({ character, onCharacterUpdate, saving }: {
       )}
 
       {/* Growth Curve */}
-      {safe.growth_curve && safe.growth_curve.stages && safe.growth_curve.stages.length > 0 && (
-        <GlassPanel className="lg:col-span-2">
-          <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
+      <GlassPanel className="lg:col-span-2">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-label-mono text-system-log uppercase tracking-wider">
             成长曲线
           </h2>
+          <button
+            onClick={handleAddStage}
+            disabled={saving}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs border border-dashed
+                       border-system-log/30 rounded text-system-log/50
+                       hover:text-primary-container hover:border-primary-container/50
+                       transition-colors disabled:opacity-30"
+          >
+            <span className="material-symbols-outlined text-sm">add</span>
+            添加阶段
+          </button>
+        </div>
 
-          <div className="p-4 bg-surface-container rounded-lg mb-6 border-l-2 border-primary-container">
-            <p className="font-body-narrative text-primary text-sm leading-relaxed">
-              {safe.growth_curve.curve_description}
-            </p>
+        {/* Curve description */}
+        {stageEditKey === "curve_desc" ? (
+          <div className="mb-6 space-y-2">
+            <textarea
+              value={stageEditValue}
+              onChange={(e) => setStageEditValue(e.target.value)}
+              className="w-full bg-surface-container-low border border-outline-variant rounded-lg p-3
+                         font-body-narrative text-primary text-sm leading-relaxed resize-y
+                         focus:outline-none focus:border-primary-container"
+              rows={3}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={handleStageEditSave} disabled={saving}
+                className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                {saving ? "保存中..." : "保存"}
+              </button>
+              <button onClick={() => setStageEditKey(null)}
+                className="px-3 py-1.5 bg-surface-container text-system-log rounded text-sm">
+                取消
+              </button>
+            </div>
           </div>
+        ) : (
+          <div className="p-4 bg-surface-container rounded-lg mb-6 border-l-2 border-primary-container">
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-body-narrative text-primary text-sm leading-relaxed flex-1">
+                {safe.growth_curve?.curve_description || <span className="text-system-log/40">曲线描述</span>}
+              </p>
+              <button
+                onClick={() => {
+                  setStageEditKey("curve_desc");
+                  setStageEditValue(safe.growth_curve?.curve_description || "");
+                }}
+                className="font-body-ui text-xs text-tertiary-container hover:text-primary-container shrink-0"
+              >
+                <span className="material-symbols-outlined text-sm">edit</span>
+              </button>
+            </div>
+          </div>
+        )}
 
+        {/* Stages timeline */}
+        {safe.growth_curve && safe.growth_curve.stages && safe.growth_curve.stages.length > 0 ? (
           <div className="relative">
-            {safe.growth_curve.stages.map((stage, i) => (
-              <div key={i} className="flex gap-4 pb-6 last:pb-0">
-                <div className="flex flex-col items-center shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center font-label-mono text-sm text-surface-container-low shrink-0">
-                    {stage.stage_number}
-                  </div>
-                  {i < safe.growth_curve!.stages.length - 1 && (
-                    <div className="w-px flex-1 bg-outline-variant mt-1 min-h-[20px]" />
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0 pb-1">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <h3 className="font-label-mono text-primary-container text-sm">
-                      {stage.stage_name}
-                    </h3>
-                    <span className={`text-xs px-2 py-0.5 rounded font-label-mono border ${GROWTH_EVENT_STYLES[stage.trigger_event_type] || "bg-surface-container text-system-log border-surface-container-low"}`}>
-                      {GROWTH_EVENT_LABELS[stage.trigger_event_type] || stage.trigger_event_type}
-                    </span>
-                  </div>
-
-                  <div className="mb-2">
-                    <span className="font-label-mono text-system-log text-xs">触发事件</span>
-                    <p className="font-body-narrative text-primary text-sm mt-0.5 leading-relaxed">
-                      {stage.trigger_event_description}
-                    </p>
-                  </div>
-
-                  <div className="mb-2">
-                    <span className="font-label-mono text-system-log text-xs">角色转变</span>
-                    <p className="font-body-narrative text-primary text-sm mt-0.5 leading-relaxed">
-                      {stage.character_change}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <span className="font-label-mono text-system-log text-xs">
-                      目标章节: {stage.target_chapter_range || "未定"}
-                    </span>
-                    {stage.bound_chapter !== null && stage.bound_chapter !== undefined && (
-                      <span className="font-label-mono text-tertiary-container text-xs flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">link</span>
-                        已绑定: 第{stage.bound_chapter}章
-                      </span>
+            {safe.growth_curve.stages.map((stage, i) => {
+              const isEditing = stageEditKey !== null && stageEditKey.startsWith(`${i}:`);
+              const editField = isEditing ? stageEditKey!.split(":")[1] : null;
+              return (
+                <div key={i} className="flex gap-4 pb-6 last:pb-0">
+                  <div className="flex flex-col items-center shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center font-label-mono text-sm text-surface-container-low shrink-0">
+                      {stage.stage_number}
+                    </div>
+                    {i < safe.growth_curve!.stages.length - 1 && (
+                      <div className="w-px flex-1 bg-outline-variant mt-1 min-h-[20px]" />
                     )}
                   </div>
+
+                  <div className="flex-1 min-w-0 pb-1">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {/* Stage name */}
+                      {editField === "stage_name" ? (
+                        <div className="flex gap-2 items-center">
+                          <input value={stageEditValue} onChange={(e) => setStageEditValue(e.target.value)}
+                            className="w-32 input-underline text-sm" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleStageEditSave()} />
+                          <button onClick={handleStageEditSave} disabled={saving}
+                            className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                            {saving ? "..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <h3 className="font-label-mono text-primary-container text-sm">
+                            {stage.stage_name}
+                          </h3>
+                          <button onClick={() => handleStageEditStart(i, "stage_name", stage.stage_name)}
+                            className="text-tertiary-container hover:text-primary-container">
+                            <span className="material-symbols-outlined text-xs">edit</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Trigger event type */}
+                      {editField === "trigger_event_type" ? (
+                        <div className="flex gap-2 items-center">
+                          <select
+                            value={stageEditValue}
+                            onChange={(e) => setStageEditValue(e.target.value)}
+                            className="bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                       text-xs font-label-mono text-primary focus:outline-none focus:border-primary-container"
+                            autoFocus
+                          >
+                            {Object.entries(GROWTH_EVENT_LABELS).map(([val, label]) => (
+                              <option key={val} value={val}>{label}</option>
+                            ))}
+                          </select>
+                          <button onClick={handleStageEditSave} disabled={saving}
+                            className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                            {saving ? "..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className={`text-xs px-2 py-0.5 rounded font-label-mono border ${GROWTH_EVENT_STYLES[stage.trigger_event_type] || "bg-surface-container text-system-log border-surface-container-low"}`}>
+                            {GROWTH_EVENT_LABELS[stage.trigger_event_type] || stage.trigger_event_type}
+                          </span>
+                          <button onClick={() => handleStageEditStart(i, "trigger_event_type", stage.trigger_event_type)}
+                            className="text-tertiary-container hover:text-primary-container">
+                            <span className="material-symbols-outlined text-xs">edit</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Remove stage */}
+                      <button
+                        onClick={() => handleRemoveStage(i)}
+                        disabled={saving}
+                        className="ml-auto text-system-log/30 hover:text-error transition-colors disabled:opacity-30"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                    </div>
+
+                    {/* Trigger event description */}
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-system-log text-xs">触发事件</span>
+                        {!isEditing && (
+                          <button onClick={() => handleStageEditStart(i, "trigger_event_description", stage.trigger_event_description)}
+                            className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                            <span className="material-symbols-outlined text-xs">edit</span>
+                          </button>
+                        )}
+                      </div>
+                      {editField === "trigger_event_description" ? (
+                        <div className="space-y-2 mt-1">
+                          <textarea value={stageEditValue} onChange={(e) => setStageEditValue(e.target.value)}
+                            className="w-full bg-surface-container-low border border-outline-variant rounded p-2
+                                       font-body-narrative text-primary text-sm leading-relaxed resize-y
+                                       focus:outline-none focus:border-primary-container"
+                            rows={2} autoFocus />
+                          <div className="flex gap-2">
+                            <button onClick={handleStageEditSave} disabled={saving}
+                              className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                              {saving ? "..." : "保存"}
+                            </button>
+                            <button onClick={() => setStageEditKey(null)}
+                              className="px-2 py-0.5 bg-surface-container text-system-log rounded text-xs">取消</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="font-body-narrative text-primary text-sm mt-0.5 leading-relaxed">
+                          {stage.trigger_event_description || <span className="text-system-log/40">待填写</span>}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Character change */}
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-label-mono text-system-log text-xs">角色转变</span>
+                        {!isEditing && (
+                          <button onClick={() => handleStageEditStart(i, "character_change", stage.character_change)}
+                            className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                            <span className="material-symbols-outlined text-xs">edit</span>
+                          </button>
+                        )}
+                      </div>
+                      {editField === "character_change" ? (
+                        <div className="space-y-2 mt-1">
+                          <textarea value={stageEditValue} onChange={(e) => setStageEditValue(e.target.value)}
+                            className="w-full bg-surface-container-low border border-outline-variant rounded p-2
+                                       font-body-narrative text-primary text-sm leading-relaxed resize-y
+                                       focus:outline-none focus:border-primary-container"
+                            rows={2} autoFocus />
+                          <div className="flex gap-2">
+                            <button onClick={handleStageEditSave} disabled={saving}
+                              className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                              {saving ? "..." : "保存"}
+                            </button>
+                            <button onClick={() => setStageEditKey(null)}
+                              className="px-2 py-0.5 bg-surface-container text-system-log rounded text-xs">取消</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="font-body-narrative text-primary text-sm mt-0.5 leading-relaxed">
+                          {stage.character_change || <span className="text-system-log/40">待填写</span>}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Target chapter range */}
+                    <div className="flex items-center gap-4">
+                      {editField === "target_chapter_range" ? (
+                        <div className="flex gap-2 items-center">
+                          <span className="font-label-mono text-system-log text-xs">目标章节:</span>
+                          <input value={stageEditValue} onChange={(e) => setStageEditValue(e.target.value)}
+                            className="w-24 input-underline text-xs" autoFocus
+                            onKeyDown={(e) => e.key === "Enter" && handleStageEditSave()} />
+                          <button onClick={handleStageEditSave} disabled={saving}
+                            className="px-2 py-0.5 bg-primary-container text-surface-container-low rounded text-xs">
+                            {saving ? "..." : "保存"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="font-label-mono text-system-log text-xs">
+                            目标章节: {stage.target_chapter_range || "未定"}
+                          </span>
+                          <button onClick={() => handleStageEditStart(i, "target_chapter_range", stage.target_chapter_range)}
+                            className="text-tertiary-container hover:text-primary-container">
+                            <span className="material-symbols-outlined text-xs">edit</span>
+                          </button>
+                        </div>
+                      )}
+                      {stage.bound_chapter !== null && stage.bound_chapter !== undefined && (
+                        <span className="font-label-mono text-tertiary-container text-xs flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">link</span>
+                          已绑定: 第{stage.bound_chapter}章
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-        </GlassPanel>
-      )}
+        ) : (
+          <div className="text-center py-8">
+            <span className="material-symbols-outlined text-3xl text-system-log/20 mb-2 block">
+              timeline
+            </span>
+            <p className="font-body-ui text-system-log/50 text-xs">暂无成长阶段，点击上方按钮添加</p>
+          </div>
+        )}
+      </GlassPanel>
     </div>
   );
 }
@@ -493,6 +736,7 @@ export default function Stage2Page() {
 
   const handleCharacterSave = async (updatedChar: Character) => {
     if (!projectId) return;
+    const previousCharacters = characters;
     const updatedCharacters = characters.map(c =>
       c.id === updatedChar.id ? updatedChar : c
     );
@@ -503,6 +747,9 @@ export default function Stage2Page() {
         characters: updatedCharacters,
         current: updatedCharacters[selectedIndex] || updatedChar,
       });
+    } catch (e) {
+      setCharacters(previousCharacters);
+      setError(e instanceof Error ? e.message : "角色保存失败");
     } finally {
       setSaving(false);
     }

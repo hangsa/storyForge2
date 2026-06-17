@@ -2,12 +2,14 @@
 import hashlib
 import json
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 from backend.config import settings
+from backend.utils.regex_patterns import SF_LOG_PATTERN, PARAM_PATTERN
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,10 @@ class ImpactAnalyzer:
             modified.append(fname)
             file_entries = self._classify(project_id, fname)
             entries.extend(file_entries)
+
+        # SF_LOG scanning: populate scene_numbers for setting changes
+        sf_log_entries = self._scan_sf_logs_for_changes(project_id, modified)
+        entries.extend(sf_log_entries)
 
         summary = {
             "P0": sum(1 for e in entries if e.priority == ImpactPriority.P0_MUST_REWRITE),
@@ -304,3 +310,168 @@ class ImpactAnalyzer:
             reason=f"outline.json 仅新增章节（新增章号: {sorted(added)}），不影响已完成内容",
             affected_assets=["outline.json"],
         )]
+
+    # --- SF_LOG Scanning for scene-level impact ---
+
+    def _scan_sf_logs_for_changes(
+        self, project_id: str, modified_files: list[str]
+    ) -> list[ImpactEntry]:
+        """Scan chapter drafts for SF_LOG tags referencing changed assets.
+
+        Populates ImpactEntry.scene_numbers with specific scene numbers
+        where changed assets are referenced in SF_LOG tags.
+        """
+        entries: list[ImpactEntry] = []
+        chapters_dir = self._projects_dir / project_id / "chapters"
+        if not chapters_dir.exists():
+            return entries
+
+        draft_files = sorted(chapters_dir.glob("ch*_scene_*_draft.md"))
+        if not draft_files:
+            return entries
+
+        if "characters.json" in modified_files:
+            entries.extend(self._scan_character_sf_logs(project_id, draft_files))
+
+        if "world.json" in modified_files:
+            entries.extend(self._scan_world_sf_logs(draft_files))
+
+        if "outline.json" in modified_files:
+            entries.extend(self._scan_outline_sf_logs(draft_files))
+
+        return entries
+
+    @staticmethod
+    def _parse_chapter_scene_from_draft(draft_file: Path) -> tuple[int, int]:
+        """Parse chapter and scene numbers from draft filename: chX_scene_Y_draft.md."""
+        name = draft_file.stem
+        parts = name.split("_")
+        ch_num = int(parts[0][2:]) if parts[0].startswith("ch") else 0
+        sc_num = int(parts[2]) if len(parts) > 2 else 0
+        return ch_num, sc_num
+
+    def _scan_character_sf_logs(
+        self, project_id: str, draft_files: list[Path]
+    ) -> list[ImpactEntry]:
+        """Scan drafts for SF_LOG tags mentioning character names from characters.json."""
+        char_data = self._read_project_json(project_id, "characters.json")
+        if not char_data:
+            return []
+
+        characters = (
+            char_data if isinstance(char_data, list)
+            else char_data.get("characters", [])
+        )
+        char_names = {c.get("name", "") for c in characters if c.get("name")}
+        if not char_names:
+            return []
+
+        character_log_types = {
+            "character_emotion", "character_relation_change",
+            "character_location_change", "character_physical_change",
+        }
+        affected: dict[int, set[int]] = defaultdict(set)
+
+        for draft_file in draft_files:
+            ch_num, sc_num = self._parse_chapter_scene_from_draft(draft_file)
+            try:
+                text = draft_file.read_text(encoding="utf-8")
+            except Exception:
+                continue
+
+            for match in SF_LOG_PATTERN.finditer(text):
+                log_type = match.group(1)
+                if log_type not in character_log_types:
+                    continue
+                params_str = match.group(2)
+                for key, value in PARAM_PATTERN.findall(params_str):
+                    if key in ("char", "char_a", "char_b"):
+                        if len(value) >= 2 and value[0] in ('"', "'") and value[-1] == value[0]:
+                            value = value[1:-1]
+                        if value in char_names:
+                            affected[ch_num].add(sc_num)
+                            break
+
+        return self._build_chapter_entries(
+            affected, "characters.json",
+            "characters.json 已变更，第{ch}章包含角色相关SF_LOG标签",
+            "characters.json 已变更，但未在已完成章节中发现角色相关SF_LOG标签",
+        )
+
+    def _scan_world_sf_logs(self, draft_files: list[Path]) -> list[ImpactEntry]:
+        """Scan drafts for world-related SF_LOG tags (registry_create cost/power_system, knowledge_gain)."""
+        affected: dict[int, set[int]] = defaultdict(set)
+
+        for draft_file in draft_files:
+            ch_num, sc_num = self._parse_chapter_scene_from_draft(draft_file)
+            try:
+                text = draft_file.read_text(encoding="utf-8")
+            except Exception:
+                continue
+
+            for match in SF_LOG_PATTERN.finditer(text):
+                log_type = match.group(1)
+                if log_type == "knowledge_gain":
+                    affected[ch_num].add(sc_num)
+                elif log_type == "registry_create":
+                    params_str = match.group(2)
+                    for key, value in PARAM_PATTERN.findall(params_str):
+                        if key == "type":
+                            if len(value) >= 2 and value[0] in ('"', "'") and value[-1] == value[0]:
+                                value = value[1:-1]
+                            if value in ("cost", "power_system"):
+                                affected[ch_num].add(sc_num)
+                                break
+
+        return self._build_chapter_entries(
+            affected, "world.json",
+            "world.json 已变更，第{ch}章包含世界规则相关SF_LOG标签",
+            "world.json 已变更，但未在已完成章节中发现世界规则相关SF_LOG标签",
+        )
+
+    def _scan_outline_sf_logs(self, draft_files: list[Path]) -> list[ImpactEntry]:
+        """Flag all completed chapter scenes as affected by outline change."""
+        reason = "outline.json 已变更，结构变化可能影响所有已完成场景"
+        affected: dict[int, set[int]] = defaultdict(set)
+        for draft_file in draft_files:
+            ch_num, sc_num = self._parse_chapter_scene_from_draft(draft_file)
+            if ch_num and sc_num:
+                affected[ch_num].add(sc_num)
+
+        entries: list[ImpactEntry] = []
+        for ch_num in sorted(affected):
+            entries.append(ImpactEntry(
+                chapter_number=ch_num,
+                scene_numbers=sorted(affected[ch_num]),
+                priority=ImpactPriority.P1_SUGGEST_REVIEW,
+                reason=reason,
+                affected_assets=["outline.json"],
+            ))
+        return entries or [
+            ImpactEntry(chapter_number=0, scene_numbers=[],
+                        priority=ImpactPriority.P1_SUGGEST_REVIEW,
+                        reason=reason, affected_assets=["outline.json"]),
+        ]
+
+    @staticmethod
+    def _build_chapter_entries(
+        affected: dict[int, set[int]],
+        asset: str,
+        found_template: str,
+        not_found_reason: str,
+    ) -> list[ImpactEntry]:
+        """Build ImpactEntry list from affected chapter→scenes mapping."""
+        entries: list[ImpactEntry] = []
+        for ch_num in sorted(affected):
+            entries.append(ImpactEntry(
+                chapter_number=ch_num,
+                scene_numbers=sorted(affected[ch_num]),
+                priority=ImpactPriority.P1_SUGGEST_REVIEW,
+                reason=found_template.format(ch=ch_num),
+                affected_assets=[asset],
+            ))
+        return entries or [
+            ImpactEntry(chapter_number=0, scene_numbers=[],
+                        priority=ImpactPriority.P1_SUGGEST_REVIEW,
+                        reason=not_found_reason, affected_assets=[asset]),
+        ]

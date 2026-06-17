@@ -213,3 +213,160 @@ class TestImpactAnalyzer:
         assert analyzer.has_baseline("test_proj") is False
         analyzer.ensure_baseline("test_proj")
         assert analyzer.has_baseline("test_proj") is True
+
+
+class TestSFLogScanning:
+    """Tests for _scan_sf_logs_for_changes — scene-level impact via SF_LOG tags."""
+
+    @pytest.fixture
+    def analyzer(self, tmp_path):
+        projects_dir = tmp_path / "projects"
+        return ImpactAnalyzer(projects_dir=projects_dir)
+
+    @pytest.fixture
+    def project_with_drafts(self, tmp_path):
+        projects_dir = tmp_path / "projects"
+        proj_dir = projects_dir / "test_proj"
+        chapters_dir = proj_dir / "chapters"
+        chapters_dir.mkdir(parents=True)
+
+        # Write setup files
+        files = {
+            "story_dna.json": {"genre": "cool_novel"},
+            "world.json": {"power_system": "test"},
+            "characters.json": [
+                {"id": "c1", "name": "林峰", "is_core_character": True},
+                {"id": "c2", "name": "苏晓晓", "is_core_character": True},
+            ],
+            "outline.json": {"chapters": [
+                {"chapter_number": 1}, {"chapter_number": 2},
+            ]},
+        }
+        for fname, content in files.items():
+            (proj_dir / fname).write_text(
+                json.dumps(content, ensure_ascii=False), encoding="utf-8")
+
+        return projects_dir, proj_dir, chapters_dir
+
+    def _write_baseline(self, proj_dir):
+        import hashlib
+        manifest = {}
+        for fname in ["story_dna.json", "world.json", "characters.json", "outline.json"]:
+            content = (proj_dir / fname).read_text(encoding="utf-8")
+            manifest[fname] = hashlib.sha256(content.encode()).hexdigest()
+        (proj_dir / "baseline_manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def test_characters_change_scans_sf_logs(self, analyzer, project_with_drafts):
+        projects_dir, proj_dir, chapters_dir = project_with_drafts
+        self._write_baseline(proj_dir)
+
+        # Write a chapter draft with character SF_LOG tags
+        draft = chapters_dir / "ch1_scene_1_draft.md"
+        draft.write_text(
+            '<!-- SF_LOG character_emotion char="林峰" emotion="愤怒" -->\n'
+            '<!-- SF_LOG character_location_change char="苏晓晓" from="家" to="战场" -->\n'
+            '一些正文内容。\n',
+            encoding="utf-8",
+        )
+        draft2 = chapters_dir / "ch2_scene_1_draft.md"
+        draft2.write_text(
+            '<!-- SF_LOG character_emotion char="林峰" emotion="冷静" -->\n'
+            '更多正文。\n',
+            encoding="utf-8",
+        )
+
+        # Modify characters.json to trigger change detection
+        data = json.loads((proj_dir / "characters.json").read_text(encoding="utf-8"))
+        data.append({"id": "c3", "name": "新角色"})
+        (proj_dir / "characters.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        report = analyzer.analyze("test_proj", modified_files=["characters.json"])
+        # Should have SF_LOG scan entries with specific scene numbers
+        sf_entries = [e for e in report.entries if e.chapter_number != 0]
+        assert len(sf_entries) > 0
+        # Chapter 1 should have both scenes mentioned
+        ch1_entry = next((e for e in sf_entries if e.chapter_number == 1), None)
+        assert ch1_entry is not None
+        assert 1 in ch1_entry.scene_numbers
+
+    def test_characters_change_no_matching_sf_logs(self, analyzer, project_with_drafts):
+        projects_dir, proj_dir, chapters_dir = project_with_drafts
+        self._write_baseline(proj_dir)
+
+        # Write a draft that doesn't mention any character names
+        draft = chapters_dir / "ch1_scene_1_draft.md"
+        draft.write_text(
+            '<!-- SF_LOG character_emotion char="路人甲" emotion="开心" -->\n',
+            encoding="utf-8",
+        )
+
+        data = json.loads((proj_dir / "characters.json").read_text(encoding="utf-8"))
+        data.append({"id": "c3", "name": "新角色"})
+        (proj_dir / "characters.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        report = analyzer.analyze("test_proj", modified_files=["characters.json"])
+        # Should have a fallback entry with chapter_number=0
+        fallback = [e for e in report.entries if e.chapter_number == 0
+                    and "characters.json" in e.affected_assets]
+        assert len(fallback) >= 1
+
+    def test_world_change_scans_sf_logs(self, analyzer, project_with_drafts):
+        projects_dir, proj_dir, chapters_dir = project_with_drafts
+        self._write_baseline(proj_dir)
+
+        draft = chapters_dir / "ch1_scene_1_draft.md"
+        draft.write_text(
+            '<!-- SF_LOG knowledge_gain char="林峰" content="世界真相" source="古书" -->\n'
+            '<!-- SF_LOG registry_create type="cost" data=\'{"amount":"大量"}\' -->\n',
+            encoding="utf-8",
+        )
+
+        data = json.loads((proj_dir / "world.json").read_text(encoding="utf-8"))
+        data["power_system"] = "modified"
+        (proj_dir / "world.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        report = analyzer.analyze("test_proj", modified_files=["world.json"])
+        sf_entries = [e for e in report.entries if e.chapter_number != 0]
+        assert len(sf_entries) > 0
+        ch1_entry = next((e for e in sf_entries if e.chapter_number == 1), None)
+        assert ch1_entry is not None
+        assert "world.json" in ch1_entry.affected_assets
+
+    def test_outline_change_flags_all_scenes(self, analyzer, project_with_drafts):
+        projects_dir, proj_dir, chapters_dir = project_with_drafts
+        self._write_baseline(proj_dir)
+
+        draft1 = chapters_dir / "ch1_scene_1_draft.md"
+        draft1.write_text("第一章内容", encoding="utf-8")
+        draft2 = chapters_dir / "ch2_scene_1_draft.md"
+        draft2.write_text("第二章内容", encoding="utf-8")
+
+        data = json.loads((proj_dir / "outline.json").read_text(encoding="utf-8"))
+        data["chapters"].append({"chapter_number": 3})
+        (proj_dir / "outline.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        report = analyzer.analyze("test_proj", modified_files=["outline.json"])
+        sf_entries = [e for e in report.entries if e.chapter_number != 0
+                      and "outline.json" in e.affected_assets]
+        # Should flag both chapters 1 and 2
+        chapters_found = {e.chapter_number for e in sf_entries}
+        assert 1 in chapters_found
+        assert 2 in chapters_found
+
+    def test_no_drafts_returns_empty(self, analyzer, project_with_drafts):
+        projects_dir, proj_dir, chapters_dir = project_with_drafts
+        self._write_baseline(proj_dir)
+
+        data = json.loads((proj_dir / "characters.json").read_text(encoding="utf-8"))
+        data.append({"id": "c3", "name": "新角色"})
+        (proj_dir / "characters.json").write_text(
+            json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+        report = analyzer.analyze("test_proj", modified_files=["characters.json"])
+        # No drafts exist — scan returns empty (no crash)
+        assert isinstance(report.entries, list)

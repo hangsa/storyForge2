@@ -2,10 +2,12 @@ import { useState, useCallback, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import api, { ParsedLog, CheckResult, ProgressFile } from "../api/client";
+import api, { ParsedLog, CheckResult, ProgressFile, ChapterReviewData } from "../api/client";
 import { useStage4Writing } from "../hooks/useStage4Writing";
 import GlassPanel from "../components/shared/GlassPanel";
 import ChapterProgress from "../components/stage4/ChapterProgress";
+import ReaderOSGauges from "../components/shared/ReaderOSGauges";
+import WritingFormulaTable from "../components/shared/WritingFormulaTable";
 
 const LOG_TYPE_LABELS: Record<string, string> = {
   character_relation_change: "角色关系",
@@ -33,6 +35,8 @@ export default function Stage4Page() {
   const [editingDraft, setEditingDraft] = useState(false);
   const [draftEditValue, setDraftEditValue] = useState("");
   const [savingDraft, setSavingDraft] = useState(false);
+  const [reviewData, setReviewData] = useState<ChapterReviewData | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
 
   const loadProgress = useCallback(async () => {
     if (!projectId) return;
@@ -48,6 +52,17 @@ export default function Stage4Page() {
   useEffect(() => {
     loadProgress();
   }, [loadProgress]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    setReviewLoading(true);
+    api.getChapterReview(projectId, chapterNum)
+      .then((data) => { if (!cancelled) setReviewData(data); })
+      .catch(() => { if (!cancelled) setReviewData(null); })
+      .finally(() => { if (!cancelled) setReviewLoading(false); });
+    return () => { cancelled = true; };
+  }, [projectId, chapterNum]);
 
   const handleWrite = async () => {
     if (!projectId) return;
@@ -402,6 +417,21 @@ export default function Stage4Page() {
               </button>
             </div>
           </GlassPanel>
+
+          {/* Chapter Review Data */}
+          {reviewData && !reviewLoading && (
+            <>
+              <ReaderOSGauges
+                readerOS={reviewData.reader_os as Record<string, number>}
+                warnings={reviewData.narrative_guard_warnings.map((w) => ({
+                  level: "warning",
+                  metric: w.drift_type,
+                  hint: w.description || "",
+                }))}
+              />
+              <WritingFormulaTable compliance={reviewData.writing_formula_compliance} />
+            </>
+          )}
 
           <GlassPanel>
             <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">

@@ -79,7 +79,8 @@ class MemoryCoordinator:
         # L1 — per-request, scan disk for recent scenes
         ctx.l1_context = self._safe_get("L1", lambda: self._assemble_l1(chapter_number))
 
-        # L4 — narrative pattern awareness (read first, no side effects)
+        # L4 — narrative pattern awareness (sync first to reflect cascade changes)
+        self._safe_get("L4", lambda: self._sync_l4(chapter_number))
         ctx.l4_context = self._safe_get("L4", lambda: self._assemble_l4())
 
         # L2 — chapter summaries + active narrative state

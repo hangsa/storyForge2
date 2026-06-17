@@ -289,6 +289,17 @@ class L3ColdMemory:
                 f"{snippet}"
             )
 
+        # Append chapter source summary
+        chapters_seen: dict[int, int] = {}
+        for hit in hits:
+            ch = hit.chapter_number
+            chapters_seen[ch] = chapters_seen.get(ch, 0) + 1
+        sorted_chapters = sorted(chapters_seen.keys())
+        chapter_hits = ", ".join(
+            f"第{ch}章({chapters_seen[ch]}条)" for ch in sorted_chapters
+        )
+        lines.append(f"\n来源章节: {chapter_hits}")
+
         result = "\n".join(lines)
         # Enforce max context chars
         if len(result) > MAX_CONTEXT_CHARS:

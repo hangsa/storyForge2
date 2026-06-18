@@ -15,6 +15,8 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ChapterReviewPage = lazy(() => import("./pages/ChapterReviewPage"));
 const ImpactAnalysisPage = lazy(() => import("./pages/ImpactAnalysisPage"));
 const StoryOSPage = lazy(() => import("./pages/StoryOSPage"));
+const CreativeCanvasPage = lazy(() => import("./pages/CreativeCanvasPage"));
+const BranchSimulationPage = lazy(() => import("./pages/BranchSimulationPage"));
 
 function StageWrapper({ children, name }: { children: React.ReactNode; name: string }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -146,6 +148,26 @@ function App() {
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="storyos">
                 <StoryOSPage />
+              </StageWrapper>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/project/:projectId/stage1/canvas"
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <StageWrapper name="stage1-canvas">
+                <CreativeCanvasPage />
+              </StageWrapper>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/project/:projectId/stage3/branches"
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <StageWrapper name="stage3-branches">
+                <BranchSimulationPage />
               </StageWrapper>
             </Suspense>
           }

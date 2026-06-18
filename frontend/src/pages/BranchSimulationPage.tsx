@@ -26,28 +26,30 @@ export default function BranchSimulationPage() {
   }, [loadHistory]);
 
   return (
-    <div className="h-[calc(100vh-112px)] -m-6 flex flex-col">
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 mb-3 px-6 pt-6">
-        <button
-          onClick={() => navigate(`/project/${projectId}/stage3`)}
-          className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
-                     hover:text-primary hover:bg-surface-container transition-colors"
-        >
-          <span className="material-symbols-outlined text-sm align-middle mr-1">list_alt</span>
-          大纲视图
-        </button>
-        <button
-          className="px-4 py-2 font-body-ui text-sm rounded-lg
-                     bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
-        >
-          <span className="material-symbols-outlined text-sm align-middle mr-1">call_split</span>
-          分支模拟
-        </button>
+    <div className="h-[calc(100vh-112px)] flex flex-col">
+      {/* Tab bar — same position as Stage3Page (parent p-6 + pt-8) */}
+      <div className="max-w-5xl mx-auto w-full pt-8 pb-3">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigate(`/project/${projectId}/stage3`)}
+            className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
+                       hover:text-primary hover:bg-surface-container transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm align-middle mr-1">list_alt</span>
+            大纲视图
+          </button>
+          <button
+            className="px-4 py-2 font-body-ui text-sm rounded-lg
+                       bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
+          >
+            <span className="material-symbols-outlined text-sm align-middle mr-1">call_split</span>
+            分支模拟
+          </button>
+        </div>
       </div>
 
-      {/* Two-column layout */}
-      <div className="flex-1 flex gap-0 overflow-hidden px-6 pb-6">
+      {/* Two-column layout — full-width via negative horizontal+bottom margins */}
+      <div className="flex-1 flex gap-0 overflow-hidden -mx-6 -mb-6 min-h-0">
         {/* Left column: input + history */}
         <div className="w-[380px] shrink-0 border-r border-outline-variant/30 pr-4 flex flex-col gap-4 overflow-y-auto">
           <SimulateForm

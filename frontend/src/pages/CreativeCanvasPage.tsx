@@ -47,63 +47,67 @@ export default function CreativeCanvasPage() {
   }, []);
 
   return (
-    <div className="h-[calc(100vh-112px)] -m-6 relative">
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 mb-3 px-0">
-        <button
-          onClick={() => navigate(`/project/${projectId}/stage1`)}
-          className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
-                     hover:text-primary hover:bg-surface-container transition-colors"
-        >
-          <span className="material-symbols-outlined text-sm align-middle mr-1">bolt</span>
-          快速生成
-        </button>
-        <button
-          className="px-4 py-2 font-body-ui text-sm rounded-lg
-                     bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
-        >
-          <span className="material-symbols-outlined text-sm align-middle mr-1">account_tree</span>
-          创意画布
-        </button>
+    <div className="h-[calc(100vh-112px)] flex flex-col">
+      {/* Tab bar — same position as Stage1Page (parent p-6 + pt-8) */}
+      <div className="max-w-5xl mx-auto w-full pt-8 pb-3">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigate(`/project/${projectId}/stage1`)}
+            className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
+                       hover:text-primary hover:bg-surface-container transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm align-middle mr-1">bolt</span>
+            快速生成
+          </button>
+          <button
+            className="px-4 py-2 font-body-ui text-sm rounded-lg
+                       bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
+          >
+            <span className="material-symbols-outlined text-sm align-middle mr-1">account_tree</span>
+            创意画布
+          </button>
+        </div>
       </div>
 
-      {/* Main content */}
-      <div className="relative h-[calc(100%-48px)] bg-surface-container-low/30 rounded-lg border border-outline-variant/30 overflow-hidden">
-        {status === "empty" || (isCanvasEmpty && status !== "initialized") ? (
-          <CanvasEmptyState
-            onInit={initCanvas}
-            loading={status === "loading"}
-            error={error}
-          />
-        ) : (
-          <>
-            <CanvasToolbar
-              nodeCount={Object.keys(nodes).length}
-              onReset={resetCanvas}
-              onFitView={handleFitView}
+      {/* Canvas area — full-width via negative horizontal+bottom margins */}
+      <div className="flex-1 -mx-6 -mb-6 min-h-0">
+        <div className="relative h-full bg-surface-container-low/30 rounded-lg border border-outline-variant/30 overflow-hidden">
+          {status === "empty" || (isCanvasEmpty && status !== "initialized") ? (
+            <CanvasEmptyState
+              onInit={initCanvas}
+              loading={status === "loading"}
+              error={error}
             />
-            <WhatIfTree
-              nodes={nodes}
-              edges={edges}
-              selectedNodeId={selectedNodeId}
-              selectedPath={selectedPath}
-              onNodeClick={(nodeId) => {
-                selectNode(nodeId);
-                if (!noveltyScores[nodeId]) evaluateNode(nodeId);
-              }}
-              onFitViewReady={(fn) => { fitViewRef.current = fn; }}
-            />
-          </>
-        )}
+          ) : (
+            <>
+              <CanvasToolbar
+                nodeCount={Object.keys(nodes).length}
+                onReset={resetCanvas}
+                onFitView={handleFitView}
+              />
+              <WhatIfTree
+                nodes={nodes}
+                edges={edges}
+                selectedNodeId={selectedNodeId}
+                selectedPath={selectedPath}
+                onNodeClick={(nodeId) => {
+                  selectNode(nodeId);
+                  if (!noveltyScores[nodeId]) evaluateNode(nodeId);
+                }}
+                onFitViewReady={(fn) => { fitViewRef.current = fn; }}
+              />
+            </>
+          )}
 
-        {/* Loading overlay */}
-        {status === "loading" && !isCanvasEmpty && (
-          <div className="absolute inset-0 bg-canvas-bg/60 flex items-center justify-center z-20">
-            <span className="material-symbols-outlined text-3xl text-primary-container animate-spin">
-              progress_activity
-            </span>
-          </div>
-        )}
+          {/* Loading overlay */}
+          {status === "loading" && !isCanvasEmpty && (
+            <div className="absolute inset-0 bg-canvas-bg/60 flex items-center justify-center z-20">
+              <span className="material-symbols-outlined text-3xl text-primary-container animate-spin">
+                progress_activity
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Bottom drawer */}

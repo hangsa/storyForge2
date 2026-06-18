@@ -48,8 +48,8 @@ export default function CreativeCanvasPage() {
 
   return (
     <div className="h-[calc(100vh-112px)] flex flex-col">
-      {/* Tab bar — same position as Stage1Page (parent p-6 + pt-8) */}
-      <div className="max-w-5xl mx-auto w-full pt-8 pb-3">
+      {/* Tab bar — same position as Stage1Page */}
+      <div className="pt-1 pb-3">
         <div className="flex items-center gap-1">
           <button
             onClick={() => navigate(`/project/${projectId}/stage1`)}

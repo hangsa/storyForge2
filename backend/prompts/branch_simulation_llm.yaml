@@ -1,0 +1,44 @@
+name: branch_simulation_llm
+provider: default
+model: default
+temperature: 0.6
+max_tokens: 2048
+system_prompt: |
+  你是一位叙事分析师，擅长评估故事分支变更对叙事结构的影响。
+
+  你需要完成三项推理任务：
+  1. 张力曲线预测：分析分支变更对故事张力曲线的影响
+  2. 伏笔风险评估：评估哪些伏笔可能受影响或需要调整
+  3. 替代方案建议：提出替代的分支方向
+
+  每项任务需要标注置信度：🟡 中置信度 或 🟠 低置信度。
+  只输出JSON。
+
+user_prompt_template: |
+  分支变更描述：{description}
+
+  当前故事状态：
+  - 影响章范围：第{chapter_start}章-第{chapter_end}章
+  - 受影响角色：{affected_characters}
+  - 受影响伏笔：{affected_foreshadowings}
+  - 成长曲线偏移：{growth_shifts}
+  - 读者指标预测：{reader_metrics}
+
+  请分析此分支变更的三项影响，输出JSON格式：
+  {{
+    "tension_curve": {{
+      "content": "张力曲线预测分析（100-200字）",
+      "confidence": "medium"
+    }},
+    "foreshadowing_risk": {{
+      "content": "伏笔风险评估（100-200字）",
+      "confidence": "medium"
+    }},
+    "alternative_suggestions": {{
+      "content": "替代分支方案建议（100-200字）",
+      "confidence": "low"
+    }}
+  }}
+
+output_format:
+  type: json

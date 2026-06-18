@@ -87,6 +87,7 @@ agent_mapping:
   # v1.7 新增 — CreativeOS agents
   creative_director:
     creative_brainstorming:    { tier: tier_1, model: default }
+    whatif_expansion:          { tier: tier_1, model: default }
     whatif_direction:          { tier: tier_1, model: default }
     mutation:                  { tier: tier_1, model: default }
     path_evaluation:           { tier: tier_1, model: default }

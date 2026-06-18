@@ -11,7 +11,7 @@ Implement Phase 2 frontend: Creative Canvas interactive WhatIf tree (React Flow)
 ```
 frontend/src/
 ├── api/
-│   └── client.ts                    # +12 TS interfaces, +10 API methods
+│   └── client.ts                    # +12 TS interfaces, +7 API methods
 ├── components/
 │   ├── creative-canvas/
 │   │   ├── WhatIfTree.tsx           # @xyflow/react node tree (core)

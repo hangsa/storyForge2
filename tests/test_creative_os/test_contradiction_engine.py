@@ -1,9 +1,12 @@
 """Tests for Contradiction Engine -- deterministic scoring + template detection."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from backend.creative_os.contradiction_engine import ContradictionEngine
-from backend.models.creative_os import ContradictionTemplate
+from backend.models.creative_os import (ContradictionTemplate,
+                                         ContradictionExpansion)
 
 
 @pytest.fixture
@@ -66,3 +69,36 @@ class TestDeterministicScoring:
         text = "能力与限制永恒消逝身份秘密目标代价力量即弱点"
         score = engine.score_depth(text)
         assert 0 <= score <= 100
+
+
+class TestContradictionEngineLLM:
+
+    @pytest.mark.asyncio
+    async def test_expand_calls_router(self):
+        from unittest.mock import AsyncMock
+        router = MagicMock()
+        router.execute = AsyncMock(return_value={
+            "content": '{"element_a": "能力", "element_b": "限制", '
+                       '"core_tension": "核心张力描述", '
+                       '"character_implications": ["影响1", "影响2"], '
+                       '"plot_implications": ["情节1", "情节2"], '
+                       '"thematic_depth": "主题深度"}',
+            "usage": {"input": 400, "output": 300},
+            "model": "deepseek-v4-pro",
+            "tier": "tier_1",
+        })
+        engine = ContradictionEngine(model_router=router)
+        result = await engine.expand(
+            ContradictionTemplate.ABILITY_VS_LIMIT, "测试上下文"
+        )
+        assert isinstance(result, ContradictionExpansion)
+        assert result.template == ContradictionTemplate.ABILITY_VS_LIMIT
+        assert result.core_tension == "核心张力描述"
+        assert len(result.character_implications) == 2
+        assert result.tokens_used == 700
+
+    @pytest.mark.asyncio
+    async def test_expand_without_router_raises(self):
+        engine = ContradictionEngine(model_router=None)
+        with pytest.raises(NotImplementedError):
+            await engine.expand(ContradictionTemplate.ABILITY_VS_LIMIT)

@@ -93,6 +93,24 @@ export default function Stage1Page() {
 
   return (
     <div className="max-w-5xl mx-auto py-8 space-y-6">
+      {/* v1.7 tab toggle: Quick / Creative Canvas */}
+      <div className="flex items-center gap-1">
+        <button
+          className="px-4 py-2 font-body-ui text-sm rounded-lg
+                     bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
+        >
+          <span className="material-symbols-outlined text-sm align-middle mr-1">bolt</span>
+          快速生成
+        </button>
+        <button
+          onClick={() => navigate(`/project/${projectId}/stage1/canvas`)}
+          className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
+                     hover:text-primary hover:bg-surface-container transition-colors"
+        >
+          <span className="material-symbols-outlined text-sm align-middle mr-1">account_tree</span>
+          创意画布
+        </button>
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold text-primary-container">概念讨论</h1>

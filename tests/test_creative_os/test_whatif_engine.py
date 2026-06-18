@@ -73,3 +73,55 @@ class TestWhatIfNodeStructure:
         )
         assert engine._router is mock_router
         assert engine._novelty_evaluator is mock_novelty
+
+
+class TestWhatIfEngineLLM:
+
+    @pytest.mark.asyncio
+    async def test_expand_node_calls_router(self):
+        from unittest.mock import AsyncMock
+        router = MagicMock()
+        router.execute = AsyncMock(return_value={
+            "content": '[{"content": "子节点1", "dimension": "角色动机", '
+                       '"novelty_score": 75, "trope_tags": ["废柴逆袭"]}, '
+                       '{"content": "子节点2", "dimension": "世界观规则", '
+                       '"novelty_score": 80, "trope_tags": ["末法时代"]}, '
+                       '{"content": "子节点3", "dimension": "情节方向", '
+                       '"novelty_score": 70, "trope_tags": ["绝境求生"]}, '
+                       '{"content": "子节点4", "dimension": "读者体验", '
+                       '"novelty_score": 85, "trope_tags": ["身份反转"]}]',
+            "usage": {"input": 500, "output": 300},
+            "model": "deepseek-v4-pro",
+            "tier": "tier_1",
+        })
+        engine = WhatIfEngine(model_router=router)
+        root = engine.generate_root("测试前提")
+        children = await engine.expand_node(root)
+        assert len(children) == 4
+        assert children[0].depth == 1
+        assert children[0].parent_id == root.id
+        assert root.is_expanded is True
+        assert len(root.children_ids) == 4
+
+    @pytest.mark.asyncio
+    async def test_expand_node_without_router_raises(self):
+        engine = WhatIfEngine(model_router=None)
+        root = engine.generate_root("测试前提")
+        with pytest.raises(NotImplementedError):
+            await engine.expand_node(root)
+
+    @pytest.mark.asyncio
+    async def test_expand_at_max_depth_returns_empty(self):
+        from unittest.mock import AsyncMock
+        router = MagicMock()
+        router.execute = AsyncMock(return_value={
+            "content": '[]',
+            "usage": {"input": 100, "output": 10},
+            "model": "deepseek-v4-pro",
+            "tier": "tier_1",
+        })
+        engine = WhatIfEngine(model_router=router)
+        root = engine.generate_root("前提")
+        root.depth = WhatIfEngine.MAX_DEPTH
+        children = await engine.expand_node(root)
+        assert len(children) == 0

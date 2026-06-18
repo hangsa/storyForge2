@@ -621,6 +621,29 @@ export const api = {
     request<RollbackResult>("POST", "/conductor/execute-rollback", {
       project_id: projectId, action,
     }),
+
+  // --- v1.7 Creative Canvas ---
+  getCanvasState: (projectId: string) =>
+    request<CanvasStateData>("GET", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/state`),
+
+  initCanvas: (projectId: string, premise: string) =>
+    request<CanvasStateData>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/init`, { premise }),
+
+  expandNode: (projectId: string, nodeId: string) =>
+    request<CanvasExpandResponse>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/expand`, { node_id: nodeId }),
+
+  evaluateNode: (projectId: string, nodeId: string) =>
+    request<NoveltyScoreDetail>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/evaluate`, { node_id: nodeId }),
+
+  selectPath: (projectId: string, pathNodeIds: string[]) =>
+    request<CanvasSelectResponse>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/select`, { path_node_ids: pathNodeIds }),
+
+  // --- v1.7 Branch Simulation ---
+  runSimulation: (projectId: string, description: string) =>
+    request<BranchSimulationReport>("POST", `/v1/projects/${encodeURIComponent(projectId)}/branches/simulate`, { description }),
+
+  getSimulationHistory: (projectId: string) =>
+    request<SimulationHistoryItem[]>("GET", `/v1/projects/${encodeURIComponent(projectId)}/branches/history`),
 };
 
 export { ApiError };

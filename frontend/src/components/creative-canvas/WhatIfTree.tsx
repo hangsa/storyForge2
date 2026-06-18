@@ -20,6 +20,7 @@ interface WhatIfTreeProps {
   selectedNodeId: string | null;
   selectedPath: string[];
   onNodeClick: (nodeId: string) => void;
+  onNodeExpand?: (nodeId: string) => void;
   onFitViewReady?: (fitView: () => void) => void;
 }
 
@@ -38,6 +39,7 @@ function WhatIfTreeInner({
   selectedNodeId,
   selectedPath,
   onNodeClick,
+  onNodeExpand,
   onFitViewReady,
 }: WhatIfTreeProps) {
   const rootId = Object.values(nodes).find((n) => n.depth === 0)?.id || "";
@@ -94,6 +96,8 @@ function WhatIfTreeInner({
             isSelected: cn.id === selectedNodeId,
             isPath: selectedPath.includes(cn.id),
             isLeaf: cn.children_ids.length === 0,
+            isExpanded: cn.is_expanded,
+            onExpand: () => onNodeExpand?.(cn.id),
           } satisfies CanvasNodeData,
         });
       });
@@ -124,12 +128,20 @@ function WhatIfTreeInner({
     [onNodeClick]
   );
 
+  const handleNodeDoubleClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      onNodeExpand?.(node.id);
+    },
+    [onNodeExpand]
+  );
+
   return (
     <div className="w-full h-full">
       <ReactFlow
         nodes={initialNodes}
         edges={initialEdges}
         onNodeClick={handleNodeClick}
+        onNodeDoubleClick={handleNodeDoubleClick}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.3 }}

@@ -102,6 +102,10 @@ export default function CreativeCanvasPage() {
                   selectNode(nodeId);
                   if (!noveltyScores[nodeId]) evaluateNode(nodeId);
                 }}
+                onNodeExpand={(nodeId) => {
+                  selectNode(nodeId);
+                  expandNode(nodeId);
+                }}
                 onFitViewReady={(fn) => { fitViewRef.current = fn; }}
               />
             </>

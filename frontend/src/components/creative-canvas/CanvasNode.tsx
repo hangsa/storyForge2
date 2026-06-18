@@ -25,6 +25,8 @@ export interface CanvasNodeData {
   isSelected: boolean;
   isPath: boolean;
   isLeaf: boolean;
+  isExpanded: boolean;
+  onExpand: () => void;
 }
 
 export default function CanvasNode({ data, selected }: NodeProps) {
@@ -76,15 +78,29 @@ export default function CanvasNode({ data, selected }: NodeProps) {
           {displayContent}
         </p>
 
-        {/* Depth indicator */}
-        <div className="flex items-center gap-1 mt-1.5">
-          <span className="font-label-mono text-xs text-system-log/50">
-            L{d.depth}
-          </span>
-          {d.isPath && (
-            <span className="material-symbols-outlined text-xs text-system-log">
-              check_circle
+        {/* Depth indicator + expand action */}
+        <div className="flex items-center justify-between mt-1.5">
+          <div className="flex items-center gap-1">
+            <span className="font-label-mono text-xs text-system-log/50">
+              L{d.depth}
             </span>
+            {d.isPath && (
+              <span className="material-symbols-outlined text-xs text-system-log">
+                check_circle
+              </span>
+            )}
+          </div>
+          {d.isLeaf && !d.isExpanded && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                d.onExpand();
+              }}
+              className="text-xs px-1.5 py-0.5 rounded-full bg-primary-container/20 text-primary-container
+                         hover:bg-primary-container/40 transition-colors font-label-mono"
+            >
+              + 展开
+            </button>
           )}
         </div>
       </div>

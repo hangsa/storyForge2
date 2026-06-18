@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from backend.creative_os.genre_fusion_engine import GENRE_GRAPH, GenreFusionEngine
+from backend.models.creative_os import FusionAnalysis
 
 
 ALL_GENRES = sorted(GENRE_GRAPH.keys())
@@ -80,3 +81,35 @@ class TestEngineInit:
         engine = GenreFusionEngine(model_router=mock_router)
         assert engine._router is mock_router
         assert len(engine.COMPATIBILITY_MATRIX) > 0
+
+
+class TestGenreFusionEngineLLM:
+
+    @pytest.mark.asyncio
+    async def test_analyze_fusion_calls_router(self):
+        from unittest.mock import AsyncMock
+        router = MagicMock()
+        router.execute = AsyncMock(return_value={
+            "content": '{"narrative_rhythm": "节奏建议", '
+                       '"character_archetype": "角色建议", '
+                       '"conflict_type": "冲突建议", '
+                       '"world_rules": "世界观建议", '
+                       '"emotion_curve": "情感建议", '
+                       '"caution_areas": ["风险1", "风险2"]}',
+            "usage": {"input": 600, "output": 400},
+            "model": "deepseek-v4-pro",
+            "tier": "tier_1",
+        })
+        engine = GenreFusionEngine(model_router=router)
+        result = await engine.analyze_fusion("修仙", "科幻", "测试前提")
+        assert isinstance(result, FusionAnalysis)
+        assert result.genre_a == "修仙"
+        assert result.genre_b == "科幻"
+        assert len(result.fusion_points) == 5
+        assert len(result.caution_areas) == 2
+
+    @pytest.mark.asyncio
+    async def test_analyze_fusion_without_router_raises(self):
+        engine = GenreFusionEngine(model_router=None)
+        with pytest.raises(NotImplementedError):
+            await engine.analyze_fusion("修仙", "科幻")

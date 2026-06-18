@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
 from backend.models.branch_simulation import BranchSimulationReport, LLMInference
 
 logger = logging.getLogger(__name__)
@@ -75,22 +77,8 @@ class BranchSimulator:
                     name = c.get("name", "")
                     if name and name in description:
                         characters.append(name)
-            except Exception:
-                pass
-
-        # Extract foreshadowing IDs from StoryOS mystery registry
-        foreshadowings: list[str] = []
-        mystery_path = project_dir / "storyos" / "mystery.json"
-        if mystery_path.exists():
-            try:
-                mystery_data = json.loads(mystery_path.read_text(encoding="utf-8"))
-                mysteries = mystery_data if isinstance(mystery_data, list) else mystery_data.get("mysteries", [])
-                for m in mysteries:
-                    fid = m.get("id", "")
-                    if fid:
-                        foreshadowings.append(fid)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to load characters.json from %s: %s", chars_path, e)
 
         # Determine chapter range from outline
         chapter_start, chapter_end = 1, 1
@@ -104,14 +92,61 @@ class BranchSimulator:
                     if nums:
                         chapter_start = min(nums)
                         chapter_end = max(nums)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to load outline.json from %s: %s", outline_path, e)
+
+        # Extract foreshadowing IDs from StoryOS mystery registry, filtering
+        # to only those affected by the branch description.
+        foreshadowings: list[str] = []
+        mystery_path = project_dir / "storyos" / "mystery.json"
+        if mystery_path.exists():
+            try:
+                mystery_data = json.loads(mystery_path.read_text(encoding="utf-8"))
+                mysteries = mystery_data if isinstance(mystery_data, list) else mystery_data.get("mysteries", [])
+                for m in mysteries:
+                    fid = m.get("id", "")
+                    if not fid:
+                        continue
+                    # Collect searchable keywords from the mystery record
+                    keywords: list[str] = []
+                    for field in ("title", "description", "related_chapter"):
+                        val = m.get(field, "")
+                        if isinstance(val, str) and val:
+                            keywords.append(val)
+                    # Include this mystery if any keyword appears in the branch description
+                    if any(kw in description for kw in keywords):
+                        foreshadowings.append(fid)
+            except Exception as e:
+                logger.warning("Failed to load mystery.json from %s: %s", mystery_path, e)
+
+        # Compute growth_curve shifts from characters.json
+        growth_shifts: dict[str, int] = {}
+        if chars_path.exists():
+            try:
+                chars_data = json.loads(chars_path.read_text(encoding="utf-8"))
+                chars_list = chars_data if isinstance(chars_data, list) else chars_data.get("characters", [])
+                for c in chars_list:
+                    name = c.get("name", "")
+                    growth_curve = c.get("growth_curve")
+                    if not name or not growth_curve:
+                        continue
+                    stages = growth_curve.get("stages", [])
+                    for stage in stages:
+                        orig_ch = stage.get("chapter_number")
+                        if isinstance(orig_ch, (int, float)) and orig_ch > 0:
+                            midpoint = (chapter_start + chapter_end) / 2
+                            offset = int(round(orig_ch - midpoint))
+                            if offset != 0:
+                                growth_shifts[name] = offset
+                                break
+            except Exception as e:
+                logger.warning("Failed to read growth_curve from %s: %s", chars_path, e)
 
         return {
             "chapter_range": (chapter_start, chapter_end),
             "characters": characters,
             "foreshadowings": foreshadowings,
-            "growth_shifts": {},
+            "growth_shifts": growth_shifts,
             "reader_metrics": self._estimate_reader_metrics(description, characters),
         }
 
@@ -141,28 +176,44 @@ class BranchSimulator:
         growth_str = json.dumps(det["growth_shifts"], ensure_ascii=False) if det["growth_shifts"] else "（无偏移）"
         metrics_str = json.dumps(det["reader_metrics"], ensure_ascii=False) if det["reader_metrics"] else "（无预测）"
 
-        system_prompt = (
-            "你是一位叙事分析师，擅长评估故事分支变更对叙事结构的影响。\n\n"
-            "你需要完成三项推理任务：\n"
-            "1. 张力曲线预测：分析分支变更对故事张力曲线的影响\n"
-            "2. 伏笔风险评估：评估哪些伏笔可能受影响或需要调整\n"
-            "3. 替代方案建议：提出替代的分支方向\n\n"
-            "每项任务需要标注置信度：medium 或 low。只输出JSON。"
-        )
-
-        user_prompt = (
-            f"分支变更描述：{description}\n\n"
-            f"当前故事状态：\n"
-            f"- 影响章范围：第{chapter_start}章-第{chapter_end}章\n"
-            f"- 受影响角色：{chars_str}\n"
-            f"- 受影响伏笔：{foreshadowings_str}\n"
-            f"- 成长曲线偏移：{growth_str}\n"
-            f"- 读者指标预测：{metrics_str}\n\n"
-            "请分析此分支变更的三项影响，输出JSON格式：\n"
-            '{"tension_curve": {"content": "...", "confidence": "medium"}, '
-            '"foreshadowing_risk": {"content": "...", "confidence": "medium"}, '
-            '"alternative_suggestions": {"content": "...", "confidence": "low"}}'
-        )
+        prompt_path = Path(__file__).parent.parent / "prompts" / "branch_simulation_llm.yaml"
+        try:
+            with open(prompt_path, encoding="utf-8") as f:
+                prompt_config = yaml.safe_load(f)
+            system_prompt = prompt_config["system_prompt"].strip()
+            user_prompt_template = prompt_config["user_prompt_template"].strip()
+            user_prompt = user_prompt_template.format(
+                description=description,
+                chapter_start=chapter_start,
+                chapter_end=chapter_end,
+                affected_characters=chars_str,
+                affected_foreshadowings=foreshadowings_str,
+                growth_shifts=growth_str,
+                reader_metrics=metrics_str,
+            )
+        except Exception as e:
+            logger.warning("Failed to load branch simulation LLM prompts from %s, using fallback: %s", prompt_path, e)
+            system_prompt = (
+                "你是一位叙事分析师，擅长评估故事分支变更对叙事结构的影响。\n\n"
+                "你需要完成三项推理任务：\n"
+                "1. 张力曲线预测：分析分支变更对故事张力曲线的影响\n"
+                "2. 伏笔风险评估：评估哪些伏笔可能受影响或需要调整\n"
+                "3. 替代方案建议：提出替代的分支方向\n\n"
+                "每项任务需要标注置信度：medium 或 low。只输出JSON。"
+            )
+            user_prompt = (
+                f"分支变更描述：{description}\n\n"
+                f"当前故事状态：\n"
+                f"- 影响章范围：第{chapter_start}章-第{chapter_end}章\n"
+                f"- 受影响角色：{chars_str}\n"
+                f"- 受影响伏笔：{foreshadowings_str}\n"
+                f"- 成长曲线偏移：{growth_str}\n"
+                f"- 读者指标预测：{metrics_str}\n\n"
+                "请分析此分支变更的三项影响，输出JSON格式：\n"
+                '{"tension_curve": {"content": "...", "confidence": "medium"}, '
+                '"foreshadowing_risk": {"content": "...", "confidence": "medium"}, '
+                '"alternative_suggestions": {"content": "...", "confidence": "low"}}'
+            )
 
         try:
             result = await self._router.execute(
@@ -266,6 +317,6 @@ class BranchSimulator:
                     "description": data.get("branch_point_description", ""),
                     "created_at": data.get("created_at", ""),
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to read simulation report %s: %s", f, e)
         return results

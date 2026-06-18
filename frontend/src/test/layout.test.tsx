@@ -5,6 +5,7 @@ import SideNavBar from "../components/layout/SideNavBar";
 import CircuitBreaker from "../components/shared/CircuitBreaker";
 import SFLogFeed from "../components/shared/SFLogFeed";
 import StageErrorBoundary from "../components/shared/StageErrorBoundary";
+import type { ParsedLog } from "../api/client";
 
 describe("TopHeader", () => {
   it("renders StoryForge branding", () => {
@@ -183,14 +184,16 @@ describe("SFLogFeed", () => {
   });
 
   it("renders log entries with Chinese labels", () => {
-    const logs = [
+    const logs: ParsedLog[] = [
       {
         type: "conflict_escalate",
         params: { id: "cf_001", new_intensity: "critical" },
+        raw_text: "",
       },
       {
         type: "knowledge_gain",
         params: { char: "林峰", content: "秘密联络记录" },
+        raw_text: "",
       },
     ];
     render(<SFLogFeed logs={logs} />);
@@ -199,16 +202,17 @@ describe("SFLogFeed", () => {
   });
 
   it("falls back to raw type for unknown log types", () => {
-    const logs = [{ type: "custom_event", params: { key: "val" } }];
+    const logs: ParsedLog[] = [{ type: "custom_event", params: { key: "val" }, raw_text: "" }];
     render(<SFLogFeed logs={logs} />);
     expect(screen.getByText("custom_event")).toBeInTheDocument();
   });
 
   it("shows up to 3 params per log entry", () => {
-    const logs = [
+    const logs: ParsedLog[] = [
       {
         type: "character_emotion",
         params: { a: "1", b: "2", c: "3", d: "4" },
+        raw_text: "",
       },
     ];
     render(<SFLogFeed logs={logs} />);

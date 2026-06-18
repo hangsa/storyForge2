@@ -29,7 +29,7 @@ export default function StyleSandboxPage() {
     setSaved(false);
     try {
       const r = await api.extractStyle(projectId, referenceText);
-      setResult(r);
+      setResult(r as unknown as ExtractedStyleResult);
       setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "分析失败");

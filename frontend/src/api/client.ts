@@ -389,6 +389,94 @@ export interface RollbackResult {
   baseline_updated: boolean;
 }
 
+// --- v1.7 Creative Canvas types ---
+
+export interface CanvasNode {
+  id: string;
+  depth: number;
+  parent_id: string | null;
+  content: string;
+  dimension: string;
+  novelty_score: number;
+  trope_tags: string[];
+  saturation_warning: string | null;
+  children_ids: string[];
+  is_expanded: boolean;
+}
+
+export interface CanvasEdge {
+  from: string;
+  to: string;
+}
+
+export interface CanvasStateData {
+  root_node_id: string | null;
+  nodes: Record<string, CanvasNode>;
+  edges: CanvasEdge[];
+  selected_path: string[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CanvasNodeDict {
+  [nodeId: string]: CanvasNode;
+}
+
+export interface NoveltyScoreDetail {
+  total: number;
+  market_saturation_score: number;
+  trope_similarity_score: number;
+  contradiction_depth_score: number;
+  discussion_potential_score: number;
+  grade: string;
+}
+
+export interface CanvasExpandResponse {
+  nodes: CanvasNodeDict;
+  scores: Record<string, NoveltyScoreDetail>;
+  suggestion: string;
+}
+
+export interface CanvasInitRequest {
+  premise: string;
+}
+
+export interface CanvasSelectResponse {
+  selected_path: string[];
+  evaluation: string;
+}
+
+// --- v1.7 Branch Simulation types ---
+
+export interface LLMInferenceItem {
+  content: string;
+  confidence: "medium" | "low";
+}
+
+export interface BranchSimulationReport {
+  branch_point_description: string;
+  affected_chapter_range: [number, number];
+  affected_characters: string[];
+  affected_foreshadowings: string[];
+  growth_curve_shifts: Record<string, number>;
+  reader_metrics_projection: Record<string, string>;
+  tension_curve_projection: LLMInferenceItem | null;
+  foreshadowing_risk_assessment: LLMInferenceItem | null;
+  alternative_suggestions: LLMInferenceItem | null;
+  created_at: string;
+  tokens_used_total: number;
+}
+
+export interface SimulationRequest {
+  description: string;
+}
+
+export interface SimulationHistoryItem {
+  id: string;
+  description: string;
+  created_at: string;
+}
+
 // --- API functions ---
 
 export const api = {

@@ -109,6 +109,24 @@ export default function Stage3Page() {
 
   return (
     <div className="max-w-5xl mx-auto py-8 space-y-6">
+      {/* v1.7 tab toggle: Outline / Branch Simulation */}
+      <div className="flex items-center gap-1">
+        <button
+          className="px-4 py-2 font-body-ui text-sm rounded-lg
+                     bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
+        >
+          <span className="material-symbols-outlined text-sm align-middle mr-1">list_alt</span>
+          大纲视图
+        </button>
+        <button
+          onClick={() => navigate(`/project/${projectId}/stage3/branches`)}
+          className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
+                     hover:text-primary hover:bg-surface-container transition-colors"
+        >
+          <span className="material-symbols-outlined text-sm align-middle mr-1">call_split</span>
+          分支模拟
+        </button>
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold text-primary-container">情节头脑风暴</h1>

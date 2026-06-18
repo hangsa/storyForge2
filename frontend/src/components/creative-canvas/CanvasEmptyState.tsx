@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface CanvasEmptyStateProps {
   onInit: (premise: string) => void;
@@ -9,6 +9,11 @@ interface CanvasEmptyStateProps {
 
 export default function CanvasEmptyState({ onInit, loading, error, defaultPremise }: CanvasEmptyStateProps) {
   const [premise, setPremise] = useState(defaultPremise || "");
+
+  // Sync premise when concept is loaded after initial render
+  useEffect(() => {
+    if (defaultPremise) setPremise(defaultPremise);
+  }, [defaultPremise]);
 
   const handleSubmit = () => {
     const trimmed = premise.trim();

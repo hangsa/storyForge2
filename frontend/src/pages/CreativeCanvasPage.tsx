@@ -1,5 +1,6 @@
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import api from "../api/client";
 import useCreativeCanvas from "../hooks/useCreativeCanvas";
 import WhatIfTree from "../components/creative-canvas/WhatIfTree";
 import CanvasToolbar from "../components/creative-canvas/CanvasToolbar";
@@ -28,10 +29,16 @@ export default function CreativeCanvasPage() {
     resetCanvas,
   } = useCreativeCanvas(projectId);
 
-  // Load existing canvas on mount
+  // Load existing concept premise for canvas seeding
+  const [conceptPremise, setConceptPremise] = useState("");
+
   useEffect(() => {
     loadCanvas();
-  }, [loadCanvas]);
+    if (!projectId) return;
+    api.getConcept(projectId).then((data) => {
+      if (data?.concept?.premise) setConceptPremise(data.concept.premise);
+    }).catch(() => {});
+  }, [loadCanvas, projectId]);
 
   const selectedNode = selectedNodeId ? nodes[selectedNodeId] : null;
   const selectedNodeScore = selectedNodeId ? noveltyScores[selectedNodeId] || null : null;
@@ -77,6 +84,7 @@ export default function CreativeCanvasPage() {
               onInit={initCanvas}
               loading={status === "loading"}
               error={error}
+              defaultPremise={conceptPremise}
             />
           ) : (
             <>

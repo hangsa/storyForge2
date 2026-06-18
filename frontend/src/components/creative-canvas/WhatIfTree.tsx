@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
@@ -31,7 +32,7 @@ const DIMENSION_COLORS: Record<string, string> = {
 
 const nodeTypes = { canvasNode: CanvasNodeComponent };
 
-export default function WhatIfTree({
+function WhatIfTreeInner({
   nodes,
   edges,
   selectedNodeId,
@@ -154,5 +155,13 @@ export default function WhatIfTree({
         />
       </ReactFlow>
     </div>
+  );
+}
+
+export default function WhatIfTree(props: WhatIfTreeProps) {
+  return (
+    <ReactFlowProvider>
+      <WhatIfTreeInner {...props} />
+    </ReactFlowProvider>
   );
 }

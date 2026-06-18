@@ -4,7 +4,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from backend.creative_os.genre_fusion_engine import GenreFusionEngine
+from backend.creative_os.genre_fusion_engine import GENRE_GRAPH, GenreFusionEngine
+
+
+ALL_GENRES = sorted(GENRE_GRAPH.keys())
 
 
 @pytest.fixture
@@ -31,9 +34,12 @@ class TestCompatibilityMatrix:
         assert result == "低"
 
     def test_get_compatibility_symmetric(self, engine):
-        a_to_b = engine.get_compatibility("修仙", "都市")
-        b_to_a = engine.get_compatibility("都市", "修仙")
-        assert a_to_b == b_to_a
+        for a in ALL_GENRES:
+            for b in ALL_GENRES:
+                if a >= b:
+                    continue
+                assert engine.get_compatibility(a, b) == engine.get_compatibility(b, a), \
+                    f"Compatibility asymmetric: {a} ↔ {b}"
 
 
 class TestBFSDistance:
@@ -50,9 +56,13 @@ class TestBFSDistance:
         assert dist >= 1
 
     def test_bfs_symmetric(self, engine):
-        d1 = engine.compute_distance("修仙", "科幻")
-        d2 = engine.compute_distance("科幻", "修仙")
-        assert d1 == d2
+        for a in ALL_GENRES:
+            for b in ALL_GENRES:
+                if a >= b:
+                    continue
+                d1 = engine.compute_distance(a, b)
+                d2 = engine.compute_distance(b, a)
+                assert d1 == d2, f"BFS asymmetric: {a} ↔ {b} ({d1} vs {d2})"
 
 
 class TestDistanceBonus:

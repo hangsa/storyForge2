@@ -101,6 +101,9 @@ class IdeaPool:
         self._save()
 
     def promote(self, idea_id: str) -> None:
+        # TODO(Phase 2): promote should increase a priority field and/or
+        # move the idea into the active StoryDNA context. Currently just
+        # sets status="active" (already the default for new ideas).
         self.update(idea_id, status="active")
 
     def archive(self, idea_id: str) -> None:

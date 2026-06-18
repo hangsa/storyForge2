@@ -29,6 +29,8 @@ class NoveltyEvaluator:
         self._embedder = embedder
 
     def evaluate(self, content: str) -> NoveltyScore:
+        # TODO(Phase 2): extract trope tags via Tier 3 LLM (trope_extraction.yaml)
+        # and populate saturation_warnings / blue_ocean_tags on NoveltyScore.
         tags: list[str] = []  # LLM extraction deferred to Prompt availability
         mkt_score = self._calc_market_saturation(tags)
 
@@ -48,6 +50,8 @@ class NoveltyEvaluator:
 
         grade = self._compute_grade(total)
 
+        # TODO(Phase 2): populate saturation_warnings and blue_ocean_tags from
+        # LLM-extracted tags + TropePool saturation analysis.
         return NoveltyScore(
             total=round(total, 1),
             market_saturation_score=round(mkt_score, 1),
@@ -70,6 +74,8 @@ class NoveltyEvaluator:
     def _calc_market_saturation(self, tags: list[str]) -> float:
         if not tags:
             return 50.0
+        # TODO(Phase 2): apply Trope.novelty_penalty_weight to down-weight
+        # high-penalty tropes in the saturation calculation.
         avg_sat = self._trope_pool.get_saturation_by_tags(tags)
         return round((1.0 - avg_sat) * 100, 1)
 

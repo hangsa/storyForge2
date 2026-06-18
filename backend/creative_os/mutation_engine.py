@@ -1,7 +1,6 @@
 """Mutation Engine — 套路变异器 (Tier 1 LLM)."""
 
 import logging
-from typing import Optional
 
 from backend.models.creative_os import MutationOp, MutationResult, Trope
 

@@ -1,7 +1,6 @@
 """Contradiction Engine — 矛盾设定生成器 (LLM 展开 + 确定性评分)."""
 
 import logging
-from typing import Optional
 
 from backend.models.creative_os import ContradictionTemplate, ContradictionExpansion
 

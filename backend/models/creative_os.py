@@ -36,7 +36,7 @@ class Trope:
     market_saturation: float
     sub_tropes: list[str] = field(default_factory=list)
     common_combinations: list[str] = field(default_factory=list)
-    novelty_penalty_weight: float = 1.0
+    novelty_penalty_weight: float = 1.0  # TODO(Phase 2): apply in NoveltyEvaluator scoring
 
 
 class MutationOp(str, Enum):

@@ -1,7 +1,6 @@
 """WhatIf Engine — 连续发散器 (递归树 + 懒惰加载 + Tier 分档)."""
 
 import logging
-from typing import Optional
 
 from backend.models.creative_os import WhatIfNode
 

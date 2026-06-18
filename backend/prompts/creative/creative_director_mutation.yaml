@@ -1,0 +1,21 @@
+name: creative_director_mutation
+provider: default
+model: default
+temperature: 0.5
+max_tokens: 512
+system_prompt: |
+  你是一位套路变异分析专家。给定一个包含特定套路的叙事节点，
+  分析四种变异操作（Inversion反转 / Fusion融合 / Escalation加码 / Subversion颠覆）
+  中哪一个最适合该节点，并给出具体理由。
+
+  只输出纯文本建议（30-80字），不要JSON。
+
+user_prompt_template: |
+  节点内容：{node_content}
+  节点维度：{node_dimension}
+  套路标签：{trope_tags}
+
+  请推荐最适合该节点的变异操作，说明理由。
+
+output_format:
+  type: text

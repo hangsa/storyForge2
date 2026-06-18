@@ -1,9 +1,10 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  useReactFlow,
   type Node,
   type Edge,
 } from "@xyflow/react";
@@ -18,6 +19,7 @@ interface WhatIfTreeProps {
   selectedNodeId: string | null;
   selectedPath: string[];
   onNodeClick: (nodeId: string) => void;
+  onFitViewReady?: (fitView: () => void) => void;
 }
 
 const DIMENSION_COLORS: Record<string, string> = {
@@ -35,8 +37,25 @@ export default function WhatIfTree({
   selectedNodeId,
   selectedPath,
   onNodeClick,
+  onFitViewReady,
 }: WhatIfTreeProps) {
   const rootId = Object.values(nodes).find((n) => n.depth === 0)?.id || "";
+  const { fitView } = useReactFlow();
+  const nodeCountRef = useRef(Object.keys(nodes).length);
+
+  // Expose fitView to parent for toolbar button
+  useEffect(() => {
+    onFitViewReady?.(() => fitView({ padding: 0.3 }));
+  }, [fitView, onFitViewReady]);
+
+  // Auto-fit when nodes are added (expand operation)
+  useEffect(() => {
+    const currentCount = Object.keys(nodes).length;
+    if (currentCount > nodeCountRef.current && currentCount > 1) {
+      setTimeout(() => fitView({ padding: 0.3 }), 100);
+    }
+    nodeCountRef.current = currentCount;
+  }, [nodes, fitView]);
 
   // Build tree layout with positions using level-order grouping
   const initialNodes: Node[] = useMemo(() => {

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 interface CanvasEmptyStateProps {
   onInit: (premise: string) => void;
   loading: boolean;
@@ -6,6 +8,13 @@ interface CanvasEmptyStateProps {
 }
 
 export default function CanvasEmptyState({ onInit, loading, error, defaultPremise }: CanvasEmptyStateProps) {
+  const [premise, setPremise] = useState(defaultPremise || "");
+
+  const handleSubmit = () => {
+    const trimmed = premise.trim();
+    if (trimmed) onInit(trimmed);
+  };
+
   return (
     <div className="flex items-center justify-center h-full">
       <div className="max-w-lg w-full mx-auto text-center px-6">
@@ -20,26 +29,20 @@ export default function CanvasEmptyState({ onInit, loading, error, defaultPremis
         <div className="space-y-3">
           <div className="flex gap-2">
             <input
-              id="premise-input"
               type="text"
-              defaultValue={defaultPremise || ""}
+              value={premise}
+              onChange={(e) => setPremise(e.target.value)}
               placeholder="输入故事前提，例如：一个关于永生者寻找死亡方法的故事"
               className="flex-1 bg-surface-container border border-outline-variant rounded-lg px-3 py-2.5
                          font-body-ui text-primary text-sm placeholder:text-system-log/40
                          focus:outline-none focus:ring-2 focus:ring-primary-container/50"
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const input = e.currentTarget.value.trim();
-                  if (input) onInit(input);
-                }
+                if (e.key === "Enter") handleSubmit();
               }}
             />
             <button
-              onClick={() => {
-                const input = (document.getElementById("premise-input") as HTMLInputElement)?.value.trim();
-                if (input) onInit(input);
-              }}
-              disabled={loading}
+              onClick={handleSubmit}
+              disabled={!premise.trim() || loading}
               className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
                          rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 whitespace-nowrap"
             >

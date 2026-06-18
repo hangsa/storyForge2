@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import useCreativeCanvas from "../hooks/useCreativeCanvas";
 import WhatIfTree from "../components/creative-canvas/WhatIfTree";
@@ -41,6 +41,11 @@ export default function CreativeCanvasPage() {
 
   const isCanvasEmpty = Object.keys(nodes).length === 0;
 
+  const fitViewRef = useRef<(() => void) | null>(null);
+  const handleFitView = useCallback(() => {
+    fitViewRef.current?.();
+  }, []);
+
   return (
     <div className="h-[calc(100vh-112px)] -m-6 relative">
       {/* Tab bar */}
@@ -75,9 +80,7 @@ export default function CreativeCanvasPage() {
             <CanvasToolbar
               nodeCount={Object.keys(nodes).length}
               onReset={resetCanvas}
-              onFitView={() => {
-                // React Flow manages fitView internally via fitView prop
-              }}
+              onFitView={handleFitView}
             />
             <WhatIfTree
               nodes={nodes}
@@ -88,6 +91,7 @@ export default function CreativeCanvasPage() {
                 selectNode(nodeId);
                 if (!noveltyScores[nodeId]) evaluateNode(nodeId);
               }}
+              onFitViewReady={(fn) => { fitViewRef.current = fn; }}
             />
           </>
         )}

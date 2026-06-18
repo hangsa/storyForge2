@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import api, {
   CanvasNode,
   CanvasEdge,
@@ -144,18 +144,19 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     }
   }, [projectId]);
 
+  // Keep a ref in sync so selectPath can read latest nodes without setState abuse
+  const nodesRef = useRef(state.nodes);
+  useEffect(() => { nodesRef.current = state.nodes; }, [state.nodes]);
+
   const selectPath = useCallback(async (leafNodeId: string) => {
     if (!projectId) return;
     const pathIds: string[] = [];
     let current: string | null = leafNodeId;
-    setState((s) => {
-      const nodes = s.nodes;
-      while (current && nodes[current]) {
-        pathIds.unshift(current);
-        current = nodes[current].parent_id;
-      }
-      return s;
-    });
+    const nodes = nodesRef.current;
+    while (current && nodes[current]) {
+      pathIds.unshift(current);
+      current = nodes[current].parent_id;
+    }
     if (pathIds.length === 0) return;
     try {
       const result: CanvasSelectResponse = await api.selectPath(projectId, pathIds);

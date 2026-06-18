@@ -45,7 +45,7 @@ export default function MainLayout() {
 
   const [projectName, setProjectName] = useState("");
 
-  const pathStage = location.pathname.split("/").pop() || "";
+  const pathStage = match?.params["*"] || "";
   const currentStage = STAGE_FROM_PATH[pathStage] || "INIT";
 
   useEffect(() => {

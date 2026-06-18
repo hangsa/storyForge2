@@ -3,10 +3,33 @@ interface SideNavBarProps {
   onNavigate: (stage: string) => void;
 }
 
-const STAGES = [
-  { key: "STAGE1", label: "概念讨论", icon: "lightbulb" },
+interface StageItem {
+  key: string;
+  label: string;
+  icon: string;
+  subItems?: { key: string; label: string; icon: string; path: string }[];
+}
+
+const STAGES: StageItem[] = [
+  {
+    key: "STAGE1",
+    label: "概念讨论",
+    icon: "lightbulb",
+    subItems: [
+      { key: "STAGE1", label: "快速生成", icon: "bolt", path: "stage1" },
+      { key: "STAGE1_CANVAS", label: "创意画布", icon: "account_tree", path: "stage1/canvas" },
+    ],
+  },
   { key: "STAGE2", label: "世界观+角色", icon: "public" },
-  { key: "STAGE3", label: "情节头脑风暴", icon: "account_tree" },
+  {
+    key: "STAGE3",
+    label: "情节头脑风暴",
+    icon: "account_tree",
+    subItems: [
+      { key: "STAGE3", label: "大纲视图", icon: "list_alt", path: "stage3" },
+      { key: "STAGE3_BRANCHES", label: "分支模拟", icon: "call_split", path: "stage3/branches" },
+    ],
+  },
   { key: "STAGE4", label: "写作中心", icon: "edit_note" },
   { key: "STAGE5", label: "全书诊断", icon: "clinical_notes" },
   { key: "STAGE6", label: "导出中心", icon: "download" },
@@ -39,22 +62,47 @@ export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps
           叙事阶段
         </div>
         {STAGES.map((stage) => {
-          const isActive = currentStage === stage.key;
+          const isMainActive = currentStage === stage.key;
+          const hasSubItems = stage.subItems && stage.subItems.length > 0;
+          const isSubActive = hasSubItems && stage.subItems!.some(
+            (sub) => currentStage === sub.key
+          );
+
           return (
-            <button
-              key={stage.key}
-              onClick={() => onNavigate(stage.key)}
-              className={`w-full text-left font-body-ui px-3 py-2 rounded transition-colors flex items-center gap-2 mb-1 ${
-                isActive
-                  ? "bg-primary-container/10 border-l-2 border-primary-container text-primary-container"
-                  : "text-system-log hover:bg-surface-container hover:text-primary"
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">
-                {stage.icon}
-              </span>
-              {stage.label}
-            </button>
+            <div key={stage.key} className="mb-1">
+              {/* Main item */}
+              <button
+                onClick={() => onNavigate(stage.key)}
+                className={`w-full text-left font-body-ui px-3 py-2 rounded transition-colors flex items-center gap-2 ${
+                  isMainActive || isSubActive
+                    ? "bg-primary-container/10 border-l-2 border-primary-container text-primary-container"
+                    : "text-system-log hover:bg-surface-container hover:text-primary"
+                }`}
+              >
+                <span className="material-symbols-outlined text-lg">{stage.icon}</span>
+                {stage.label}
+              </button>
+
+              {/* Sub-items (indented) */}
+              {hasSubItems && (
+                <div className="ml-4 mt-0.5 space-y-0.5">
+                  {stage.subItems!.map((sub) => (
+                    <button
+                      key={sub.key}
+                      onClick={() => onNavigate(sub.key)}
+                      className={`w-full text-left font-body-ui text-sm px-3 py-1.5 rounded transition-colors flex items-center gap-2 ${
+                        currentStage === sub.key
+                          ? "bg-primary-container/5 text-primary-container"
+                          : "text-system-log/70 hover:text-primary hover:bg-surface-container"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">{sub.icon}</span>
+                      {sub.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

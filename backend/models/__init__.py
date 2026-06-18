@@ -37,6 +37,9 @@ from backend.models.creative_os import (
     WhatIfNode,
     FusionAnalysis,
 )
+from backend.models.branch_simulation import (
+    LLMInference, BranchSimulationReport,
+)
 
 __all__ = [
     "Project", "Concept", "StoryDNA", "ConceptAndDNA", "InitialIntent", "StageTransition",
@@ -58,4 +61,5 @@ __all__ = [
     "NoveltyScore",
     "WhatIfNode",
     "FusionAnalysis",
+    "LLMInference", "BranchSimulationReport",
 ]

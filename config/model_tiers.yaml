@@ -1,4 +1,4 @@
-# StoryForge v1.6 — Agent LLM 配置
+# StoryForge v1.7 — Agent LLM 配置
 # 层级 (Tier) 定义模型池，Agent 映射声明每个任务使用哪个 Tier 的哪个模型。
 # 热重载：POST /api/settings/reload-config 或 SIGHUP 信号。
 
@@ -59,6 +59,9 @@ agent_mapping:
     world_generation:          { tier: tier_1, model: default }
     character_generation:      { tier: tier_1, model: default }
     outline_generation:        { tier: tier_1, model: default }
+    creative_brainstorming:    { tier: tier_1, model: default }
+    whatif_expansion:          { tier: tier_1, model: default }
+    novelty_evaluation:        { tier: tier_2, model: default }
 
   writer:
     scene_writing:             { tier: tier_1, model: deepseek-v4-pro, fallback: claude-opus-4 }
@@ -80,3 +83,16 @@ agent_mapping:
     chapter_summary:           { tier: tier_3, model: default }
     l1_reextraction:           { tier: tier_3, model: default }
     style_extraction:          { tier: tier_3, model: default }
+
+  # v1.7 新增 — CreativeOS agents
+  creative_director:
+    creative_brainstorming:    { tier: tier_1, model: default }
+    whatif_direction:          { tier: tier_1, model: default }
+    mutation:                  { tier: tier_1, model: default }
+    path_evaluation:           { tier: tier_1, model: default }
+    fusion_analysis:           { tier: tier_1, model: default }
+    trope_extraction:          { tier: tier_3, model: default }
+
+  character_designer:
+    growth_discussion:         { tier: tier_1, model: default }
+    arc_analysis:              { tier: tier_2, model: default }

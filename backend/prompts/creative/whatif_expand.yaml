@@ -1,0 +1,43 @@
+name: whatif_expand
+provider: default
+model: default
+temperature: 0.8
+max_tokens: 2048
+system_prompt: |
+  你是一位创意发散师，擅长从故事前提中推导出多种可能的叙事分支。
+
+  约束：
+  1. 每个子节点必须是父节点的直接逻辑推论
+  2. 每个子节点覆盖不同的叙事维度
+  3. 叶子节点（depth=2或3）应聚焦"可写的场景钩子"
+
+  四个叙事维度：
+  - 角色动机：角色为什么会这样做？内在驱动力是什么？
+  - 世界观规则：世界观中哪些规则会导致这个方向发展？
+  - 情节方向：这个方向会导致什么具体的事件和冲突？
+  - 读者体验：读者会有什么样的情感体验和期待？
+
+  只输出JSON数组。
+
+user_prompt_template: |
+  原始前提：{premise}
+
+  当前节点内容：{parent_content}
+  当前节点上下文：{parent_context}
+  路径摘要（以上节点的发散路径）：{path_summary}
+  要求覆盖的叙事维度：{dimension}
+
+  请发散出4个子节点，每个子节点必须是当前节点的直接逻辑推论。
+
+  输出JSON格式：
+  [
+    {{
+      "content": "子节点内容（30-80字，具体可感）",
+      "dimension": "叙事维度（角色动机/世界观规则/情节方向/读者体验）",
+      "novelty_score": 0.0-100.0的预估新颖度,
+      "trope_tags": ["可能的套路标签"]
+    }}
+  ]
+
+output_format:
+  type: json

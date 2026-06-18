@@ -1,0 +1,23 @@
+name: trope_extraction
+provider: default
+model: default
+temperature: 0.3
+max_tokens: 512
+system_prompt: |
+  你是一位网文套路分析师。给定一段创意思考文本，提取其中蕴含的套路标签。
+
+  标签应为2-6字的中文短语，如：废柴逆袭、重生复仇、灵气复苏、身份秘密、双生力量等。
+
+  只输出JSON数组。
+
+user_prompt_template: |
+  文本内容：
+  {content}
+
+  请提取其中的套路标签，输出JSON格式：
+  {{
+    "trope_tags": ["标签1", "标签2", ...]
+  }}
+
+output_format:
+  type: json

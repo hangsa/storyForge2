@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage
+from backend.conductor.branch_simulator import BranchSimulator
 from backend.agents.planner import PlannerAgent
 
 router = APIRouter(prefix="/api/stage3", tags=["stage3"])
@@ -127,4 +128,117 @@ async def update_outline(data: dict):
         "code": "OK",
         "message": "大纲已更新",
         "detail": outline_data,
+    }
+
+
+# --- Branch Simulation Endpoints (v1.7 Phase 2) ---
+
+branch_router = APIRouter(
+    prefix="/api/v1/projects/{project_id}/branches",
+    tags=["branches"],
+)
+
+
+def _get_fm() -> FileManager:
+    """Return a FileManager using the current settings.projects_dir.
+
+    Lazily evaluated so that tests can change settings.projects_dir at
+    runtime and the API picks up the new path.
+    """
+    return FileManager(settings.projects_dir)
+
+
+@branch_router.post("/simulate")
+async def simulate_branch(project_id: str, data: dict):
+    description = data.get("description", "")
+    if not description:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "VALIDATION_ERROR",
+                "message": "description 不能为空",
+                "detail": {},
+            },
+        )
+
+    if not _get_fm().project_exists(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "PROJECT_NOT_FOUND",
+                "message": f"项目 {project_id} 不存在",
+                "detail": {},
+            },
+        )
+
+    simulator = BranchSimulator(
+        projects_dir=settings.projects_dir,
+    )
+
+    report = await simulator.simulate(project_id, description)
+    simulator.save_report(project_id, report)
+
+    response_data = {
+        "branch_point_description": report.branch_point_description,
+        "affected_chapter_range": list(report.affected_chapter_range),
+        "affected_characters": report.affected_characters,
+        "affected_foreshadowings": report.affected_foreshadowings,
+        "growth_curve_shifts": report.growth_curve_shifts,
+        "reader_metrics_projection": report.reader_metrics_projection,
+        "tension_curve_projection": None,
+        "foreshadowing_risk_assessment": None,
+        "alternative_suggestions": None,
+        "created_at": report.created_at,
+        "tokens_used_total": report.tokens_used_total,
+    }
+
+    if report.tension_curve_projection:
+        response_data["tension_curve_projection"] = {
+            "content": report.tension_curve_projection.content,
+            "confidence": report.tension_curve_projection.confidence,
+        }
+    if report.foreshadowing_risk_assessment:
+        response_data["foreshadowing_risk_assessment"] = {
+            "content": report.foreshadowing_risk_assessment.content,
+            "confidence": report.foreshadowing_risk_assessment.confidence,
+        }
+    if report.alternative_suggestions:
+        response_data["alternative_suggestions"] = {
+            "content": report.alternative_suggestions.content,
+            "confidence": report.alternative_suggestions.confidence,
+        }
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "分支模拟完成",
+        "detail": response_data,
+    }
+
+
+@branch_router.get("/history")
+async def list_branch_history(project_id: str):
+    if not _get_fm().project_exists(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "PROJECT_NOT_FOUND",
+                "message": f"项目 {project_id} 不存在",
+                "detail": {},
+            },
+        )
+
+    simulator = BranchSimulator(
+        projects_dir=settings.projects_dir,
+    )
+    history = simulator.list_history(project_id)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": history,
     }

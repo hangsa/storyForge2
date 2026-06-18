@@ -29,6 +29,7 @@ app.include_router(stage5_diagnosis.router)
 app.include_router(stage6_export.router)
 app.include_router(style_extractor.router)
 app.include_router(settings_api.router)
+app.include_router(stage3_outline.branch_router)
 
 
 @app.exception_handler(Exception)

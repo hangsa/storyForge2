@@ -1,0 +1,120 @@
+import { useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import useCreativeCanvas from "../hooks/useCreativeCanvas";
+import WhatIfTree from "../components/creative-canvas/WhatIfTree";
+import CanvasToolbar from "../components/creative-canvas/CanvasToolbar";
+import CanvasEmptyState from "../components/creative-canvas/CanvasEmptyState";
+import NodeDetailPanel from "../components/creative-canvas/NodeDetailPanel";
+
+export default function CreativeCanvasPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
+
+  const {
+    status,
+    nodes,
+    edges,
+    selectedNodeId,
+    selectedPath,
+    noveltyScores,
+    suggestion,
+    error,
+    loadCanvas,
+    initCanvas,
+    expandNode,
+    selectNode,
+    evaluateNode,
+    selectPath,
+    resetCanvas,
+  } = useCreativeCanvas(projectId);
+
+  // Load existing canvas on mount
+  useEffect(() => {
+    loadCanvas();
+  }, [loadCanvas]);
+
+  const selectedNode = selectedNodeId ? nodes[selectedNodeId] : null;
+  const selectedNodeScore = selectedNodeId ? noveltyScores[selectedNodeId] || null : null;
+  const isPathEndpoint = selectedNodeId
+    ? selectedPath.length > 0 && selectedPath[selectedPath.length - 1] === selectedNodeId
+    : false;
+
+  const isCanvasEmpty = Object.keys(nodes).length === 0;
+
+  return (
+    <div className="h-[calc(100vh-112px)] -m-6 relative">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 mb-3 px-0">
+        <button
+          onClick={() => navigate(`/project/${projectId}/stage1`)}
+          className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
+                     hover:text-primary hover:bg-surface-container transition-colors"
+        >
+          <span className="material-symbols-outlined text-sm align-middle mr-1">bolt</span>
+          快速生成
+        </button>
+        <button
+          className="px-4 py-2 font-body-ui text-sm rounded-lg
+                     bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
+        >
+          <span className="material-symbols-outlined text-sm align-middle mr-1">account_tree</span>
+          创意画布
+        </button>
+      </div>
+
+      {/* Main content */}
+      <div className="relative h-[calc(100%-48px)] bg-surface-container-low/30 rounded-lg border border-outline-variant/30 overflow-hidden">
+        {status === "empty" || (isCanvasEmpty && status !== "initialized") ? (
+          <CanvasEmptyState
+            onInit={initCanvas}
+            loading={status === "loading"}
+            error={error}
+          />
+        ) : (
+          <>
+            <CanvasToolbar
+              nodeCount={Object.keys(nodes).length}
+              onReset={resetCanvas}
+              onFitView={() => {
+                // React Flow manages fitView internally via fitView prop
+              }}
+            />
+            <WhatIfTree
+              nodes={nodes}
+              edges={edges}
+              selectedNodeId={selectedNodeId}
+              selectedPath={selectedPath}
+              onNodeClick={(nodeId) => {
+                selectNode(nodeId);
+                if (!noveltyScores[nodeId]) evaluateNode(nodeId);
+              }}
+            />
+          </>
+        )}
+
+        {/* Loading overlay */}
+        {status === "loading" && !isCanvasEmpty && (
+          <div className="absolute inset-0 bg-canvas-bg/60 flex items-center justify-center z-20">
+            <span className="material-symbols-outlined text-3xl text-primary-container animate-spin">
+              progress_activity
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom drawer */}
+      {selectedNode && (
+        <NodeDetailPanel
+          node={selectedNode}
+          noveltyScore={selectedNodeScore}
+          suggestion={suggestion}
+          isPathEndpoint={isPathEndpoint}
+          onExpand={() => expandNode(selectedNode.id)}
+          onEvaluate={() => evaluateNode(selectedNode.id)}
+          onSelectPath={() => selectPath(selectedNode.id)}
+          onClose={() => selectNode(null)}
+        />
+      )}
+    </div>
+  );
+}

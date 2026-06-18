@@ -522,8 +522,8 @@ export const api = {
   updateCharacter: (projectId: string, characterData: CharacterSet) =>
     request<void>("PUT", "/stage2/character", { project_id: projectId, characters: characterData.characters }),
 
-  generateOutline: (projectId: string) =>
-    request<Outline>("POST", "/stage3/generate", { project_id: projectId }),
+  generateOutline: (projectId: string, chapterNumber?: number) =>
+    request<Outline>("POST", "/stage3/generate", { project_id: projectId, chapter_number: chapterNumber ?? 1 }),
 
   getOutline: (projectId: string) =>
     request<Outline>("GET", `/stage3/outline?project_id=${encodeURIComponent(projectId)}`),

@@ -24,19 +24,22 @@ export default function Stage3Page() {
       .catch(() => {});
   }, [projectId]);
 
-  const handleGenerate = useCallback(async () => {
+  const nextChapterNumber = outline ? outline.chapters.length + 1 : 1;
+
+  const handleGenerate = useCallback(async (chapterNumber?: number) => {
     if (!projectId) return;
     setLoading(true);
     setError(null);
     try {
-      const result = await api.generateOutline(projectId);
+      const chapterNum = chapterNumber ?? nextChapterNumber;
+      const result = await api.generateOutline(projectId, chapterNum);
       setOutline(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "大纲生成失败");
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, nextChapterNumber]);
 
   const handleEditStart = (field: string, value: string) => {
     setEditingField(field);
@@ -135,16 +138,25 @@ export default function Stage3Page() {
           <h1 className="text-4xl font-bold text-primary-container">情节头脑风暴</h1>
           <p className="font-body-ui text-system-log mt-1">
             规划章节结构与场景节奏，设计叙事弧线
+            {outline && outline.chapters.length > 0 && (
+              <span className="ml-2 text-primary-container">
+                已生成 {outline.chapters.length} 章
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={handleGenerate}
+            onClick={() => handleGenerate()}
             disabled={loading}
             className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
                        rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
           >
-            {loading ? "生成中..." : outline ? "重新生成" : "生成大纲"}
+            {loading
+              ? `正在生成第${nextChapterNumber}章...`
+              : outline
+                ? `生成第${nextChapterNumber}章`
+                : "生成大纲"}
           </button>
           {canAdvance && (
             <button

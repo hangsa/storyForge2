@@ -20,6 +20,11 @@ export default function NoveltyRadar({ scores }: NoveltyRadarProps) {
     { axis: "讨论潜力", value: scores.discussion_potential_score, fullMark: 100 },
   ];
 
+  // Color band by total score: red <40, yellow 40-80, green >80
+  const total = scores.total;
+  const stroke = total >= 80 ? "#22c55e" : total < 40 ? "#ef4444" : "#7c3aed";
+  const fill = total >= 80 ? "#22c55e" : total < 40 ? "#ef4444" : "#7c3aed";
+
   return (
     <div className="w-full h-[240px]">
       <ResponsiveContainer width="100%" height="100%">
@@ -35,43 +40,29 @@ export default function NoveltyRadar({ scores }: NoveltyRadarProps) {
             axisLine={false}
             tickCount={4}
           />
-          {/* Red ocean warning zone */}
-          <Radar
-            name="redOcean"
-            dataKey={() => 40}
-            fill="#ef4444"
-            fillOpacity={0.08}
-            stroke="none"
-            legendType="none"
-          />
-          {/* Blue ocean indicator zone */}
-          <Radar
-            name="blueOcean"
-            dataKey={() => 80}
-            fill="#22c55e"
-            fillOpacity={0.06}
-            stroke="none"
-            legendType="none"
-          />
           <Radar
             name="新颖度"
             dataKey="value"
-            stroke="#7c3aed"
+            stroke={stroke}
             strokeWidth={2}
-            fill="#7c3aed"
-            fillOpacity={0.2}
+            fill={fill}
+            fillOpacity={0.25}
           />
         </RadarChart>
       </ResponsiveContainer>
 
-      {/* Legend */}
+      {/* Threshold legend */}
       <div className="flex items-center justify-center gap-4 mt-1">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/40" />
+          <div className="w-3 h-3 rounded-full bg-red-500/30 border border-red-500/60" />
           <span className="font-label-mono text-xs text-system-log">红海 (&lt;40)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-green-500/20 border border-green-500/40" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500/30 border border-yellow-500/60" />
+          <span className="font-label-mono text-xs text-system-log">中等 (40-80)</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-green-500/30 border border-green-500/60" />
           <span className="font-label-mono text-xs text-system-log">蓝海 (&gt;80)</span>
         </div>
       </div>

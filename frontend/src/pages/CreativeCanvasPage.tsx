@@ -166,7 +166,10 @@ export default function CreativeCanvasPage() {
         nodeCount={Object.keys(nodes).length}
         loading={resetting}
         onConfirm={handleResetConfirm}
-        onCancel={() => setResetDialogOpen(false)}
+        onCancel={() => {
+          setResetDialogOpen(false);
+          setResetting(false);
+        }}
       />
     </div>
   );

@@ -21,6 +21,7 @@ interface WhatIfTreeProps {
   selectedPath: string[];
   positions: Record<string, { x: number; y: number }>;
   failedNodes: Record<string, { nodeId: string; message: string; attemptedAt: string }>;
+  loadingNodes?: Record<string, true>;
   onNodeClick: (nodeId: string) => void;
   onNodeExpand?: (nodeId: string) => void;
   onPositionChange?: (nodeId: string, x: number, y: number) => void;
@@ -44,6 +45,7 @@ function WhatIfTreeInner({
   selectedPath,
   positions,
   failedNodes,
+  loadingNodes = {},
   onNodeClick,
   onNodeExpand,
   onPositionChange,
@@ -184,22 +186,33 @@ function WhatIfTreeInner({
           className="!bg-surface-container-low !border-outline-variant !rounded-lg"
         />
       </ReactFlow>
-      {Object.values(failedNodes).length > 0 && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-error/20 border border-error rounded-lg px-3 py-2 flex items-center gap-2">
-          <span className="material-symbols-outlined text-error text-base">error</span>
-          <span className="font-body-ui text-error text-xs">
-            {Object.keys(failedNodes).length} 个节点扩展失败
-          </span>
-          <button
-            onClick={() => {
-              Object.keys(failedNodes).forEach((id) => onRetry?.(id));
-            }}
-            className="text-xs px-2 py-0.5 rounded bg-error text-surface-container-low hover:opacity-90"
-          >
-            重试全部
-          </button>
-        </div>
-      )}
+      {(() => {
+        const failedCount = Object.keys(failedNodes).length;
+        const isLoading = Object.keys(loadingNodes).length > 0;
+        return (
+          failedCount > 0 && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-error/20 border border-error rounded-lg px-3 py-2 flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-error text-base">error</span>
+              <span className="font-body-ui text-error text-xs">
+                {failedCount} 个节点扩展失败
+              </span>
+              <button
+                onClick={() => {
+                  Object.keys(failedNodes).forEach((id) => onRetry?.(id));
+                }}
+                disabled={isLoading}
+                className="text-xs px-2 py-0.5 rounded bg-error text-surface-container-low hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? "重试中..." : "重试全部"}
+              </button>
+            </div>
+          )
+        );
+      })()}
     </div>
   );
 }

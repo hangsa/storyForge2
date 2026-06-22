@@ -541,7 +541,6 @@ async def select_path(project_id: str, data: dict):
     # Persist selected path
     canvas["selected_path"] = list(path_node_ids)
     canvas["updated_at"] = datetime.utcnow().isoformat()
-    _write_canvas(project_id, canvas)
 
     # Get path evaluation from CreativeDirector
     evaluation = ""
@@ -557,6 +556,20 @@ async def select_path(project_id: str, data: dict):
         logger.warning("CreativeDirector.evaluate_path failed: %s", exc)
         evaluation = ""
 
+    # Persist evaluation keyed by path hash, bounding to last 20 entries
+    path_hash = "::".join(path_node_ids)
+    evaluations = canvas.setdefault("evaluations", {})
+    evaluations[path_hash] = {
+        "evaluation": evaluation,
+        "evaluated_at": datetime.utcnow().isoformat(),
+    }
+    if len(evaluations) > 20:
+        sorted_keys = sorted(evaluations, key=lambda k: evaluations[k]["evaluated_at"])
+        for k in sorted_keys[: len(evaluations) - 20]:
+            del evaluations[k]
+
+    _write_canvas(project_id, canvas)
+
     return {
         "error": False,
         "code": "OK",
@@ -564,6 +577,7 @@ async def select_path(project_id: str, data: dict):
         "detail": {
             "selected_path": path_node_ids,
             "evaluation": evaluation,
+            "evaluated_at": evaluations[path_hash]["evaluated_at"],
         },
     }
 

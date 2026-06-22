@@ -273,21 +273,37 @@ async def expand_node(project_id: str, data: dict):
         engine = WhatIfEngine()
 
     try:
-        # Build ancestor chain (root → ... → parent) for narrative continuity
+        # Build ancestor chain (root → ... → parent) for narrative continuity.
+        # Cap hops at MAX_ANCESTOR_HOPS to prevent infinite loops on cyclic state.
         ancestor_contents: list[str] = []
-        cursor = node
-        while cursor.parent_id:
-            parent_dict = canvas["nodes"].get(cursor.parent_id)
-            if not parent_dict:
-                break
-            ancestor_contents.insert(0, parent_dict.get("content", ""))
-            cursor = WhatIfNode(
-                id=parent_dict["id"],
-                depth=parent_dict["depth"],
-                parent_id=parent_dict.get("parent_id"),
-                content=parent_dict.get("content", ""),
-                dimension=parent_dict.get("dimension", ""),
+        MAX_ANCESTOR_HOPS = 16
+        try:
+            cursor = node
+            hops = 0
+            while cursor.parent_id and hops < MAX_ANCESTOR_HOPS:
+                parent_dict = canvas["nodes"].get(cursor.parent_id)
+                if not parent_dict:
+                    break
+                ancestor_contents.insert(0, parent_dict.get("content", ""))
+                cursor = WhatIfNode(
+                    id=parent_dict["id"],
+                    depth=parent_dict["depth"],
+                    parent_id=parent_dict.get("parent_id"),
+                    content=parent_dict.get("content", ""),
+                    dimension=parent_dict.get("dimension", ""),
+                )
+                hops += 1
+            if hops >= MAX_ANCESTOR_HOPS:
+                logger.warning(
+                    "Ancestor walk hit hop cap %d for node %s; truncating chain",
+                    MAX_ANCESTOR_HOPS, node_id,
+                )
+        except (KeyError, TypeError) as exc:
+            logger.warning(
+                "Canvas state corrupt while building ancestor chain for %s: %s",
+                node_id, exc,
             )
+            ancestor_contents = []
         children = await engine.expand_node(node, ancestor_contents=ancestor_contents)
     except NotImplementedError:
         logger.info("WhatIfEngine.expand_node not available (no LLM backend)")

@@ -1,13 +1,14 @@
 """Creative Canvas API — WhatIf tree management endpoints.
 
 Provides thin orchestration endpoints for the Creative Canvas frontend:
-- GET  /state    — Read canvas_state.json
-- POST /init     — Initialize canvas with root node via WhatIfEngine
-- POST /expand   — Expand a node via WhatIfEngine + NoveltyEvaluator + CreativeDirector
-- POST /mutate   — Placeholder for mutation operations
-- POST /merge    — Placeholder for node merging
-- POST /evaluate — Re-score a node with NoveltyEvaluator
-- POST /select   — Update selected_path and get CreativeDirector path evaluation
+- GET    /state  — Read canvas_state.json
+- POST   /init   — Initialize canvas with root node via WhatIfEngine
+- POST   /expand — Expand a node via WhatIfEngine + NoveltyEvaluator + CreativeDirector
+- POST   /mutate — Placeholder for mutation operations
+- POST   /merge  — Placeholder for node merging
+- POST   /evaluate — Re-score a node with NoveltyEvaluator
+- POST   /select — Update selected_path and get CreativeDirector path evaluation
+- DELETE /state  — Reset the canvas (delete canvas_state.json)
 """
 
 import json
@@ -120,6 +121,15 @@ def _compute_depth_distribution(nodes: dict) -> dict:
         d = str(node.get("depth", 0))
         dist[d] = dist.get(d, 0) + 1
     return dist
+
+
+def _delete_canvas(project_id: str) -> bool:
+    """Delete canvas_state.json for a project. Returns True if deleted."""
+    path = _get_canvas_path(project_id)
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -554,5 +564,26 @@ async def select_path(project_id: str, data: dict):
         "detail": {
             "selected_path": path_node_ids,
             "evaluation": evaluation,
+        },
+    }
+
+
+@router.delete("/state")
+async def delete_canvas(project_id: str):
+    """Reset the canvas: delete canvas_state.json. Idempotent.
+
+    Returns the empty skeleton, same shape as GET /state when uninitialized.
+    """
+    _ensure_project(project_id)
+    _delete_canvas(project_id)
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "画布已重置",
+        "detail": {
+            "root_node_id": None,
+            "nodes": {},
+            "edges": [],
+            "selected_path": [],
         },
     }

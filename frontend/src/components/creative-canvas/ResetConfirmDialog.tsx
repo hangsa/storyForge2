@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 interface ResetConfirmDialogProps {
   open: boolean;
   nodeCount: number;
@@ -15,17 +17,37 @@ export default function ResetConfirmDialog({
 }: ResetConfirmDialogProps) {
   if (!open) return null;
 
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !loading) onCancel();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [open, loading, onCancel]);
+
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-surface-container-low border border-error/30 rounded-lg max-w-md w-full mx-4 overflow-hidden">
+    <div
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading) onCancel();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-confirm-title"
+        className="bg-surface-container-low border border-error/30 rounded-lg max-w-md w-full mx-4 overflow-hidden"
+      >
         <div className="px-4 py-3 flex items-center justify-between border-b border-outline-variant">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-error">restart_alt</span>
-            <span className="font-label-mono text-error">重置画布</span>
+            <span id="reset-confirm-title" className="font-label-mono text-error">重置画布</span>
           </div>
           <button
             onClick={onCancel}
             disabled={loading}
+            aria-label="关闭"
             className="text-system-log hover:text-primary disabled:opacity-30"
           >
             <span className="material-symbols-outlined">close</span>

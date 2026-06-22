@@ -27,9 +27,23 @@ export default function CanvasEmptyState({ onInit, loading, error, defaultPremis
           account_tree
         </span>
         <h2 className="font-display text-2xl text-primary-container mb-2">创意画布</h2>
-        <p className="font-body-ui text-system-log mb-6 leading-relaxed">
-          通过 WhatIf 树形结构可视化探索故事的不同发展方向。输入故事前提，开始构建创意分支。
+        <p className="font-body-ui text-system-log mb-3 leading-relaxed">
+          通过 WhatIf 树形结构可视化探索故事的不同发展方向。
         </p>
+        <div className="flex items-center justify-center gap-4 mb-6 text-xs font-label-mono text-system-log/70">
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">touch_app</span>
+            单击查看
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">double_arrow</span>
+            双击展开
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">analytics</span>
+            抽屉评分
+          </span>
+        </div>
 
         <div className="space-y-3">
           <div className="flex gap-2">

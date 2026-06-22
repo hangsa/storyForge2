@@ -273,7 +273,22 @@ async def expand_node(project_id: str, data: dict):
         engine = WhatIfEngine()
 
     try:
-        children = await engine.expand_node(node)
+        # Build ancestor chain (root → ... → parent) for narrative continuity
+        ancestor_contents: list[str] = []
+        cursor = node
+        while cursor.parent_id:
+            parent_dict = canvas["nodes"].get(cursor.parent_id)
+            if not parent_dict:
+                break
+            ancestor_contents.insert(0, parent_dict.get("content", ""))
+            cursor = WhatIfNode(
+                id=parent_dict["id"],
+                depth=parent_dict["depth"],
+                parent_id=parent_dict.get("parent_id"),
+                content=parent_dict.get("content", ""),
+                dimension=parent_dict.get("dimension", ""),
+            )
+        children = await engine.expand_node(node, ancestor_contents=ancestor_contents)
     except NotImplementedError:
         logger.info("WhatIfEngine.expand_node not available (no LLM backend)")
         children = []

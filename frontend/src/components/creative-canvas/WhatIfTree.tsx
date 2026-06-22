@@ -19,8 +19,12 @@ interface WhatIfTreeProps {
   edges: CanvasEdgeData[];
   selectedNodeId: string | null;
   selectedPath: string[];
+  positions: Record<string, { x: number; y: number }>;
+  failedNodes: Record<string, { nodeId: string; message: string; attemptedAt: string }>;
   onNodeClick: (nodeId: string) => void;
   onNodeExpand?: (nodeId: string) => void;
+  onPositionChange?: (nodeId: string, x: number, y: number) => void;
+  onRetry?: (nodeId: string) => void;
   onFitViewReady?: (fitView: () => void) => void;
 }
 
@@ -38,8 +42,12 @@ function WhatIfTreeInner({
   edges,
   selectedNodeId,
   selectedPath,
+  positions,
+  failedNodes,
   onNodeClick,
   onNodeExpand,
+  onPositionChange,
+  onRetry,
   onFitViewReady,
 }: WhatIfTreeProps) {
   const rootId = Object.values(nodes).find((n) => n.depth === 0)?.id || "";
@@ -79,13 +87,15 @@ function WhatIfTreeInner({
       const startX = -totalWidth / 2;
       levelNodes.forEach((cn, i) => {
         const isRoot = cn.id === rootId;
+        const savedPosition = positions[cn.id];
+        const computedPosition = {
+          x: startX + i * H_GAP,
+          y: depth * V_GAP,
+        };
         result.push({
           id: cn.id,
           type: "canvasNode",
-          position: {
-            x: startX + i * H_GAP,
-            y: depth * V_GAP,
-          },
+          position: savedPosition ?? computedPosition,
           data: {
             label: cn.id,
             content: cn.content,
@@ -104,7 +114,7 @@ function WhatIfTreeInner({
     }
 
     return result;
-  }, [nodes, selectedNodeId, selectedPath, rootId]);
+  }, [nodes, selectedNodeId, selectedPath, rootId, positions]);
 
   const initialEdges: Edge[] = useMemo(() => {
     return edges.map((e) => ({
@@ -135,6 +145,13 @@ function WhatIfTreeInner({
     [onNodeExpand]
   );
 
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent, node: Node) => {
+      onPositionChange?.(node.id, node.position.x, node.position.y);
+    },
+    [onPositionChange]
+  );
+
   return (
     <div className="w-full h-full">
       <ReactFlow
@@ -142,6 +159,7 @@ function WhatIfTreeInner({
         edges={initialEdges}
         onNodeClick={handleNodeClick}
         onNodeDoubleClick={handleNodeDoubleClick}
+        onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.3 }}
@@ -166,6 +184,22 @@ function WhatIfTreeInner({
           className="!bg-surface-container-low !border-outline-variant !rounded-lg"
         />
       </ReactFlow>
+      {Object.values(failedNodes).length > 0 && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-error/20 border border-error rounded-lg px-3 py-2 flex items-center gap-2">
+          <span className="material-symbols-outlined text-error text-base">error</span>
+          <span className="font-body-ui text-error text-xs">
+            {Object.keys(failedNodes).length} 个节点扩展失败
+          </span>
+          <button
+            onClick={() => {
+              Object.keys(failedNodes).forEach((id) => onRetry?.(id));
+            }}
+            className="text-xs px-2 py-0.5 rounded bg-error text-surface-container-low hover:opacity-90"
+          >
+            重试全部
+          </button>
+        </div>
+      )}
     </div>
   );
 }

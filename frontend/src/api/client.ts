@@ -641,6 +641,21 @@ export const api = {
   selectPath: (projectId: string, pathNodeIds: string[]) =>
     request<CanvasSelectResponse>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/select`, { path_node_ids: pathNodeIds }),
 
+  resetCanvas: (projectId: string) =>
+    request<{
+      root_node_id: string | null;
+      nodes: Record<string, never>;
+      edges: never[];
+      selected_path: never[];
+    }>("DELETE", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/state`),
+
+  getMutationSuggestion: (projectId: string, nodeId: string) =>
+    request<{ recommendation: string }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/mutate`,
+      { node_id: nodeId }
+    ),
+
   // --- v1.7 Branch Simulation ---
   runSimulation: (projectId: string, description: string) =>
     request<BranchSimulationReport>("POST", `/v1/projects/${encodeURIComponent(projectId)}/branches/simulate`, { description }),

@@ -10,6 +10,22 @@ import api, {
 
 type CanvasStatus = "empty" | "initialized" | "loading";
 
+interface PositionMap {
+  [nodeId: string]: { x: number; y: number };
+}
+
+interface FailedNode {
+  nodeId: string;
+  message: string;
+  attemptedAt: string;
+}
+
+interface MutationSuggestionState {
+  nodeId: string;
+  recommendation: string;
+  loading: boolean;
+}
+
 interface CanvasState {
   status: CanvasStatus;
   rootNodeId: string | null;
@@ -20,6 +36,9 @@ interface CanvasState {
   noveltyScores: Record<string, NoveltyScoreDetail>;
   suggestion: string;
   error: string | null;
+  positions: PositionMap;
+  failedNodes: Record<string, FailedNode>;
+  mutationSuggestion: MutationSuggestionState | null;
 }
 
 const initialState: CanvasState = {
@@ -32,6 +51,9 @@ const initialState: CanvasState = {
   noveltyScores: {},
   suggestion: "",
   error: null,
+  positions: {},
+  failedNodes: {},
+  mutationSuggestion: null,
 };
 
 export default function useCreativeCanvas(projectId: string | undefined) {
@@ -52,6 +74,9 @@ export default function useCreativeCanvas(projectId: string | undefined) {
           noveltyScores: {},
           suggestion: "",
           error: null,
+          positions: {},
+          failedNodes: {},
+          mutationSuggestion: null,
         });
       }
     } catch {
@@ -74,6 +99,9 @@ export default function useCreativeCanvas(projectId: string | undefined) {
         noveltyScores: {},
         suggestion: "",
         error: null,
+        positions: {},
+        failedNodes: {},
+        mutationSuggestion: null,
       });
     } catch (e) {
       setState((s) => ({
@@ -86,7 +114,12 @@ export default function useCreativeCanvas(projectId: string | undefined) {
 
   const expandNode = useCallback(async (nodeId: string) => {
     if (!projectId) return;
-    setState((s) => ({ ...s, status: "loading", error: null }));
+    setState((s) => ({
+      ...s,
+      status: "loading",
+      error: null,
+      failedNodes: { ...s.failedNodes, [nodeId]: undefined as unknown as FailedNode },
+    }));
     try {
       const result: CanvasExpandResponse = await api.expandNode(projectId, nodeId);
       setState((s) => {
@@ -109,26 +142,39 @@ export default function useCreativeCanvas(projectId: string | undefined) {
             mergedEdges.push(ne);
           }
         }
+        const { [nodeId]: _removed, ...remainingFailed } = s.failedNodes;
         return {
           ...s,
           status: "initialized",
           nodes: updatedNodes,
           edges: mergedEdges,
           noveltyScores: { ...s.noveltyScores, ...result.scores },
-          suggestion: result.suggestion || "",
+          suggestion: result.suggestion || s.suggestion,
+          failedNodes: remainingFailed,
         };
       });
     } catch (e) {
       setState((s) => ({
         ...s,
         status: "initialized",
-        error: e instanceof Error ? e.message : "节点扩展失败",
+        failedNodes: {
+          ...s.failedNodes,
+          [nodeId]: {
+            nodeId,
+            message: e instanceof Error ? e.message : "节点扩展失败",
+            attemptedAt: new Date().toISOString(),
+          },
+        },
       }));
     }
   }, [projectId]);
 
   const selectNode = useCallback((nodeId: string | null) => {
-    setState((s) => ({ ...s, selectedNodeId: nodeId }));
+    setState((s) => ({
+      ...s,
+      selectedNodeId: nodeId,
+      mutationSuggestion: null,
+    }));
   }, []);
 
   const evaluateNode = useCallback(async (nodeId: string) => {
@@ -144,7 +190,6 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     }
   }, [projectId]);
 
-  // Keep a ref in sync so selectPath can read latest nodes without setState abuse
   const nodesRef = useRef(state.nodes);
   useEffect(() => { nodesRef.current = state.nodes; }, [state.nodes]);
 
@@ -164,6 +209,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
         ...s,
         selectedPath: result.selected_path,
         suggestion: result.evaluation || s.suggestion,
+        selectedNodeId: null,
       }));
     } catch (e) {
       setState((s) => ({
@@ -173,9 +219,54 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     }
   }, [projectId]);
 
-  const resetCanvas = useCallback(() => {
+  const resetCanvas = useCallback(async () => {
+    if (!projectId) return;
     setState(initialState);
+    try {
+      await api.resetCanvas(projectId);
+    } catch {
+      // Reset is best-effort — local state already cleared
+    }
+  }, [projectId]);
+
+  const retryExpand = useCallback((nodeId: string) => {
+    expandNode(nodeId);
+  }, [expandNode]);
+
+  const updatePosition = useCallback((nodeId: string, x: number, y: number) => {
+    setState((s) => ({
+      ...s,
+      positions: { ...s.positions, [nodeId]: { x, y } },
+    }));
   }, []);
+
+  const getMutationSuggestion = useCallback(async (nodeId: string) => {
+    if (!projectId) return;
+    setState((s) => ({
+      ...s,
+      mutationSuggestion: { nodeId, recommendation: "", loading: true },
+    }));
+    try {
+      const result = await api.getMutationSuggestion(projectId, nodeId);
+      setState((s) => ({
+        ...s,
+        mutationSuggestion: {
+          nodeId,
+          recommendation: result.recommendation || "暂无变异建议",
+          loading: false,
+        },
+      }));
+    } catch (e) {
+      setState((s) => ({
+        ...s,
+        mutationSuggestion: {
+          nodeId,
+          recommendation: e instanceof Error ? e.message : "获取变异建议失败",
+          loading: false,
+        },
+      }));
+    }
+  }, [projectId]);
 
   return {
     ...state,
@@ -186,5 +277,8 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     evaluateNode,
     selectPath,
     resetCanvas,
+    retryExpand,
+    updatePosition,
+    getMutationSuggestion,
   };
 }

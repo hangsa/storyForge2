@@ -483,6 +483,9 @@ export const api = {
   listProjects: () =>
     request<ProjectSummary[]>("GET", "/project/list"),
 
+  deleteProject: (projectId: string) =>
+    request<{ project_id: string }>("DELETE", `/project/${encodeURIComponent(projectId)}`),
+
   createProject: (data: { intent: string; genre: string; min_words: number; title?: string }) =>
     request<Project>("POST", "/project/create", data),
 

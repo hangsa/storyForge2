@@ -88,6 +88,27 @@ async def create_project(data: dict):
     }
 
 
+@router.delete("/{project_id}")
+async def delete_project(project_id: str):
+    if not fm.project_exists(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "PROJECT_NOT_FOUND",
+                "message": f"项目 {project_id} 不存在",
+                "detail": {},
+            },
+        )
+    fm.delete_project(project_id)
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "项目已删除",
+        "detail": {"project_id": project_id},
+    }
+
+
 @router.get("/{project_id}/status")
 async def get_project_status(project_id: str):
     data = fm.read_json(project_id, "project.json")

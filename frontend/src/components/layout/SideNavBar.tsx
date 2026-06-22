@@ -48,9 +48,9 @@ export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps
           className="w-full text-left font-body-ui text-primary hover:bg-surface-container px-3 py-2 rounded transition-colors flex items-center gap-2"
         >
           <span className="material-symbols-outlined text-lg text-system-log">
-            dashboard
+            folder_open
           </span>
-          仪表板
+          项目中心
         </button>
       </div>
 

@@ -45,6 +45,8 @@ export default function ProjectListPage() {
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("cool_novel");
   const [minWords, setMinWords] = useState(4000);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -92,13 +94,27 @@ export default function ProjectListPage() {
     }
   };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.deleteProject(deleteTarget.id);
+      setProjects((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除失败");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-canvas-bg">
       {/* Header */}
       <header className="border-b border-outline-variant bg-surface-container-low/50">
         <div className="max-w-5xl mx-auto px-6 py-6 flex items-center justify-between">
           <div>
-            <h1 className="font-display-lg text-primary-container">StoryForge</h1>
+            <h1 className="font-display-lg text-primary-container">项目中心</h1>
             <p className="font-body-ui text-system-log mt-1">
               AI 驱动的创意叙事操作系统
             </p>
@@ -150,13 +166,13 @@ export default function ProjectListPage() {
             {projects.map((p) => (
               <GlassPanel
                 key={p.id}
-                className="cursor-pointer hover:border-primary-container/30 transition-colors group"
+                className="hover:border-primary-container/30 transition-colors group relative"
               >
                 <button
                   onClick={() => navigate(`/project/${p.id}/stage1`)}
-                  className="w-full text-left"
+                  className="w-full text-left cursor-pointer"
                 >
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start justify-between mb-3 pr-8">
                     <h3 className="font-headline-md text-primary group-hover:text-primary-container transition-colors">
                       {p.title}
                     </h3>
@@ -177,6 +193,17 @@ export default function ProjectListPage() {
                       </>
                     )}
                   </div>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(p);
+                  }}
+                  className="absolute top-3 right-3 p-1.5 rounded text-system-log/50 hover:text-red-400
+                             hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                  title="删除项目"
+                >
+                  <span className="material-symbols-outlined text-base">delete</span>
                 </button>
               </GlassPanel>
             ))}
@@ -328,6 +355,53 @@ export default function ProjectListPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-surface-container-low border border-error/30 rounded-lg max-w-md w-full mx-4 overflow-hidden">
+            <div className="px-4 py-3 flex items-center justify-between border-b border-outline-variant">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-error">delete</span>
+                <span className="font-label-mono text-error">删除项目</span>
+              </div>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="text-system-log hover:text-primary disabled:opacity-30"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="font-body-narrative text-primary text-sm leading-relaxed">
+                确定要删除项目 <span className="font-display text-error">{deleteTarget.title}</span> 吗？
+              </p>
+              <p className="font-body-ui text-system-log text-xs">
+                所有概念、大纲、章节、模拟记录将被永久清除，此操作不可撤销。
+              </p>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleting}
+                  className="px-4 py-2 bg-surface-container text-system-log text-sm
+                             rounded-lg hover:bg-surface-container-low transition-colors disabled:opacity-40"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={deleting}
+                  className="px-4 py-2 bg-error text-surface-container-low text-sm
+                             rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+                >
+                  {deleting ? "删除中..." : "确认删除"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

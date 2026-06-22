@@ -1,14 +1,17 @@
 import type { CanvasNode, NoveltyScoreDetail } from "../../api/client";
 import NoveltyRadar from "./NoveltyRadar";
+import MutationSuggestion from "./MutationSuggestion";
 
 interface NodeDetailPanelProps {
   node: CanvasNode | null;
   noveltyScore: NoveltyScoreDetail | null;
   suggestion: string;
   isPathEndpoint: boolean;
+  mutationSuggestion: { nodeId: string; recommendation: string; loading: boolean } | null;
   onExpand: () => void;
   onEvaluate: () => void;
   onSelectPath: () => void;
+  onGetMutation: () => void;
   onClose: () => void;
 }
 
@@ -17,9 +20,11 @@ export default function NodeDetailPanel({
   noveltyScore,
   suggestion,
   isPathEndpoint,
+  mutationSuggestion,
   onExpand,
   onEvaluate,
   onSelectPath,
+  onGetMutation,
   onClose,
 }: NodeDetailPanelProps) {
   if (!node) return null;
@@ -128,6 +133,13 @@ export default function NodeDetailPanel({
               </p>
             </div>
           )}
+
+          <MutationSuggestion
+            loading={mutationSuggestion?.nodeId === node.id && mutationSuggestion.loading}
+            recommendation={
+              mutationSuggestion?.nodeId === node.id ? mutationSuggestion.recommendation : ""
+            }
+          />
         </div>
 
         {/* Right: radar + actions */}
@@ -169,15 +181,17 @@ export default function NodeDetailPanel({
               重新评估
             </button>
             <button
-              disabled
-              title="变异功能将在 Phase 3 开放"
-              className="flex-1 px-3 py-2 bg-surface-container text-system-log/50 font-body-ui
-                         rounded-lg opacity-50 cursor-not-allowed text-sm"
+              onClick={onGetMutation}
+              disabled={mutationSuggestion?.nodeId === node.id && mutationSuggestion.loading}
+              className="flex-1 px-3 py-2 bg-tertiary-container text-surface-container-low font-body-ui
+                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 text-sm"
             >
               <span className="material-symbols-outlined text-sm align-middle mr-1">
                 transform
               </span>
-              变异
+              {mutationSuggestion?.nodeId === node.id && mutationSuggestion.loading
+                ? "分析中..."
+                : "获取变异建议"}
             </button>
             {!isPathEndpoint && node.children_ids.length === 0 && (
               <button

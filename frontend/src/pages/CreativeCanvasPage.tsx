@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/client";
 import useCreativeCanvas from "../hooks/useCreativeCanvas";
@@ -6,6 +6,7 @@ import WhatIfTree from "../components/creative-canvas/WhatIfTree";
 import CanvasToolbar from "../components/creative-canvas/CanvasToolbar";
 import CanvasEmptyState from "../components/creative-canvas/CanvasEmptyState";
 import NodeDetailPanel from "../components/creative-canvas/NodeDetailPanel";
+import ResetConfirmDialog from "../components/creative-canvas/ResetConfirmDialog";
 
 export default function CreativeCanvasPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -20,6 +21,9 @@ export default function CreativeCanvasPage() {
     noveltyScores,
     suggestion,
     error,
+    positions,
+    failedNodes,
+    mutationSuggestion,
     loadCanvas,
     initCanvas,
     expandNode,
@@ -27,10 +31,15 @@ export default function CreativeCanvasPage() {
     evaluateNode,
     selectPath,
     resetCanvas,
+    retryExpand,
+    updatePosition,
+    getMutationSuggestion,
   } = useCreativeCanvas(projectId);
 
   // Load existing concept premise for canvas seeding
   const [conceptPremise, setConceptPremise] = useState("");
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     loadCanvas();
@@ -52,6 +61,16 @@ export default function CreativeCanvasPage() {
   const handleFitView = useCallback(() => {
     fitViewRef.current?.();
   }, []);
+
+  const handleResetConfirm = async () => {
+    setResetting(true);
+    try {
+      await resetCanvas();
+      setResetDialogOpen(false);
+    } finally {
+      setResetting(false);
+    }
+  };
 
   return (
     <div className="h-[calc(100vh-112px)] flex flex-col">
@@ -90,7 +109,7 @@ export default function CreativeCanvasPage() {
             <>
               <CanvasToolbar
                 nodeCount={Object.keys(nodes).length}
-                onReset={resetCanvas}
+                onRequestReset={() => setResetDialogOpen(true)}
                 onFitView={handleFitView}
               />
               <WhatIfTree
@@ -98,6 +117,8 @@ export default function CreativeCanvasPage() {
                 edges={edges}
                 selectedNodeId={selectedNodeId}
                 selectedPath={selectedPath}
+                positions={positions}
+                failedNodes={failedNodes}
                 onNodeClick={(nodeId) => {
                   selectNode(nodeId);
                   if (!noveltyScores[nodeId]) evaluateNode(nodeId);
@@ -106,6 +127,8 @@ export default function CreativeCanvasPage() {
                   selectNode(nodeId);
                   expandNode(nodeId);
                 }}
+                onPositionChange={updatePosition}
+                onRetry={retryExpand}
                 onFitViewReady={(fn) => { fitViewRef.current = fn; }}
               />
             </>
@@ -129,12 +152,22 @@ export default function CreativeCanvasPage() {
           noveltyScore={selectedNodeScore}
           suggestion={suggestion}
           isPathEndpoint={isPathEndpoint}
+          mutationSuggestion={mutationSuggestion}
           onExpand={() => expandNode(selectedNode.id)}
           onEvaluate={() => evaluateNode(selectedNode.id)}
           onSelectPath={() => selectPath(selectedNode.id)}
+          onGetMutation={() => getMutationSuggestion(selectedNode.id)}
           onClose={() => selectNode(null)}
         />
       )}
+
+      <ResetConfirmDialog
+        open={resetDialogOpen}
+        nodeCount={Object.keys(nodes).length}
+        loading={resetting}
+        onConfirm={handleResetConfirm}
+        onCancel={() => setResetDialogOpen(false)}
+      />
     </div>
   );
 }

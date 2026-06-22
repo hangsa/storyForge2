@@ -7,7 +7,12 @@ export default function MutationSuggestion({ loading, recommendation }: Mutation
   if (!loading && !recommendation) return null;
 
   return (
-    <div className="p-3 bg-tertiary-container/10 border border-tertiary-container/30 rounded-lg">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy={loading}
+      className="p-3 bg-tertiary-container/10 border border-tertiary-container/30 rounded-lg"
+    >
       <div className="flex items-center gap-1.5 mb-1">
         <span className="material-symbols-outlined text-tertiary-container text-sm">
           transform

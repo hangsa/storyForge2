@@ -20,6 +20,8 @@ interface FailedNode {
   attemptedAt: string;
 }
 
+type LoadingNodes = Record<string, true>;
+
 interface MutationSuggestionState {
   nodeId: string;
   recommendation: string;
@@ -38,6 +40,7 @@ interface CanvasState {
   error: string | null;
   positions: PositionMap;
   failedNodes: Record<string, FailedNode>;
+  loadingNodes: LoadingNodes;
   mutationSuggestion: MutationSuggestionState | null;
 }
 
@@ -53,6 +56,7 @@ const initialState: CanvasState = {
   error: null,
   positions: {},
   failedNodes: {},
+  loadingNodes: {},
   mutationSuggestion: null,
 };
 
@@ -76,6 +80,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
           error: null,
           positions: {},
           failedNodes: {},
+          loadingNodes: {},
           mutationSuggestion: null,
         });
       }
@@ -101,6 +106,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
         error: null,
         positions: {},
         failedNodes: {},
+        loadingNodes: {},
         mutationSuggestion: null,
       });
     } catch (e) {
@@ -118,7 +124,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
       ...s,
       status: "loading",
       error: null,
-      failedNodes: { ...s.failedNodes, [nodeId]: undefined as unknown as FailedNode },
+      loadingNodes: { ...s.loadingNodes, [nodeId]: true },
     }));
     try {
       const result: CanvasExpandResponse = await api.expandNode(projectId, nodeId);
@@ -142,7 +148,10 @@ export default function useCreativeCanvas(projectId: string | undefined) {
             mergedEdges.push(ne);
           }
         }
-        const { [nodeId]: _removed, ...remainingFailed } = s.failedNodes;
+        const remainingFailed = { ...s.failedNodes };
+        delete remainingFailed[nodeId];
+        const remainingLoading = { ...s.loadingNodes };
+        delete remainingLoading[nodeId];
         return {
           ...s,
           status: "initialized",
@@ -151,21 +160,27 @@ export default function useCreativeCanvas(projectId: string | undefined) {
           noveltyScores: { ...s.noveltyScores, ...result.scores },
           suggestion: result.suggestion || s.suggestion,
           failedNodes: remainingFailed,
+          loadingNodes: remainingLoading,
         };
       });
     } catch (e) {
-      setState((s) => ({
-        ...s,
-        status: "initialized",
-        failedNodes: {
-          ...s.failedNodes,
-          [nodeId]: {
-            nodeId,
-            message: e instanceof Error ? e.message : "节点扩展失败",
-            attemptedAt: new Date().toISOString(),
+      setState((s) => {
+        const remainingLoading = { ...s.loadingNodes };
+        delete remainingLoading[nodeId];
+        return {
+          ...s,
+          status: "initialized",
+          loadingNodes: remainingLoading,
+          failedNodes: {
+            ...s.failedNodes,
+            [nodeId]: {
+              nodeId,
+              message: e instanceof Error ? e.message : "节点扩展失败",
+              attemptedAt: new Date().toISOString(),
+            },
           },
-        },
-      }));
+        };
+      });
     }
   }, [projectId]);
 
@@ -224,8 +239,12 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     setState(initialState);
     try {
       await api.resetCanvas(projectId);
-    } catch {
-      // Reset is best-effort — local state already cleared
+    } catch (e) {
+      // Local state cleared, but server still has stale data — surface error so UI can show
+      setState((s) => ({
+        ...s,
+        error: e instanceof Error ? e.message : "重置画布失败（本地已清空，服务器仍有数据）",
+      }));
     }
   }, [projectId]);
 
@@ -248,23 +267,30 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     }));
     try {
       const result = await api.getMutationSuggestion(projectId, nodeId);
-      setState((s) => ({
-        ...s,
-        mutationSuggestion: {
-          nodeId,
-          recommendation: result.recommendation || "暂无变异建议",
-          loading: false,
-        },
-      }));
+      setState((s) => {
+        // Guard against stale responses: if user already moved on, drop this update
+        if (s.mutationSuggestion?.nodeId !== nodeId) return s;
+        return {
+          ...s,
+          mutationSuggestion: {
+            nodeId,
+            recommendation: result.recommendation || "暂无变异建议",
+            loading: false,
+          },
+        };
+      });
     } catch (e) {
-      setState((s) => ({
-        ...s,
-        mutationSuggestion: {
-          nodeId,
-          recommendation: e instanceof Error ? e.message : "获取变异建议失败",
-          loading: false,
-        },
-      }));
+      setState((s) => {
+        if (s.mutationSuggestion?.nodeId !== nodeId) return s;
+        return {
+          ...s,
+          mutationSuggestion: {
+            nodeId,
+            recommendation: e instanceof Error ? e.message : "获取变异建议失败",
+            loading: false,
+          },
+        };
+      });
     }
   }, [projectId]);
 

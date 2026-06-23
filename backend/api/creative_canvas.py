@@ -346,10 +346,13 @@ async def init_canvas(project_id: str, data: dict):
 
     now = datetime.utcnow().isoformat()
     canvas = {
+        "schema_version": 2,
         "root_node_id": root_node.id,
         "nodes": {root_node.id: _node_to_dict(root_node)},
         "edges": [],
         "selected_path": [root_node.id],
+        "branch_choices": {},
+        "evaluations": {},
         "created_at": now,
         "updated_at": now,
     }

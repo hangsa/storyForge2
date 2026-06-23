@@ -90,18 +90,23 @@ class NoveltyScore:
     blue_ocean_tags: list[str] = field(default_factory=list)
 
 
+BRANCH_STATUS_ACTIVE = "active"
+BRANCH_STATUS_DIMMED = "dimmed"
+BRANCH_STATUSES = {BRANCH_STATUS_ACTIVE, BRANCH_STATUS_DIMMED}
+
+
 @dataclass
 class WhatIfNode:
     id: str
     depth: int
     parent_id: Optional[str]
     content: str
-    dimension: str
     novelty_score: float = 0.0
     trope_tags: list[str] = field(default_factory=list)
     saturation_warning: Optional[str] = None
     children_ids: list[str] = field(default_factory=list)
     is_expanded: bool = False
+    branch_status: str = BRANCH_STATUS_ACTIVE
 
 
 @dataclass

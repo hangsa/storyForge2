@@ -416,6 +416,17 @@ async def expand_node(project_id: str, data: dict):
 
     node = _dict_to_node(canvas["nodes"][node_id])
 
+    if node.branch_status != BRANCH_STATUS_ACTIVE:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "DIMMED_NODE_CANNOT_EXPAND",
+                "message": f"节点 {node_id} 已被弃选，无法展开",
+                "detail": {},
+            },
+        )
+
     # --- Step 1: expand via WhatIfEngine --------------------------------
     from backend.creative_os.whatif_engine import WhatIfEngine
 
@@ -712,7 +723,7 @@ async def select_path(project_id: str, data: dict):
             },
         )
 
-    # Validate every node ID exists
+    # Validate every node ID exists AND is active
     for nid in path_node_ids:
         if nid not in canvas["nodes"]:
             raise HTTPException(
@@ -721,6 +732,16 @@ async def select_path(project_id: str, data: dict):
                     "error": True,
                     "code": "NODE_NOT_FOUND",
                     "message": f"节点 {nid} 不存在",
+                    "detail": {},
+                },
+            )
+        if canvas["nodes"][nid].get("branch_status") != BRANCH_STATUS_ACTIVE:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": True,
+                    "code": "DIMMED_NODE_IN_PATH",
+                    "message": f"路径包含未选节点 {nid}",
                     "detail": {},
                 },
             )

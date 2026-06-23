@@ -118,3 +118,20 @@ def test_valid_canvas_passes_validation():
         "selected_path": ["a", "b"],
     }
     _validate_canvas_invariants(canvas)  # should not raise
+
+
+def test_dimmed_expanded_node_exempt_from_invariant_1():
+    """A dimmed+expanded node doesn't need branch_choices — it's off the
+    active path and its children are all dimmed (invariant 5)."""
+    canvas = {
+        "root_node_id": "a",
+        "nodes": {
+            "a": _node("a", children=["b", "c"], expanded=True),
+            "b": _node("b", parent="a", status="active", expanded=True),
+            "c": _node("c", parent="a", status="dimmed", expanded=True),
+            "d": _node("d", parent="c", status="dimmed"),
+        },
+        "branch_choices": {"a": "b"},  # c is dimmed, no entry needed
+        "selected_path": ["a", "b"],
+    }
+    _validate_canvas_invariants(canvas)  # should not raise

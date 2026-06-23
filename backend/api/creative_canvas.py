@@ -52,8 +52,9 @@ def _get_canvas_path(project_id: str) -> Path:
 def _read_canvas(project_id: str) -> Optional[dict]:
     """Read canvas_state.json. Returns None if not initialized.
 
-    Migrates v1 → v2 transparently. Migrated state is written back atomically
-    only when at least one mutation occurs; reads alone are non-mutating.
+    Migrates v1 → v2 transparently. When a v1 file is encountered, the
+    migrated v2 form is written back atomically so subsequent reads skip
+    the migration step.
     """
     path = _get_canvas_path(project_id)
     if not path.exists():
@@ -244,12 +245,16 @@ def _validate_canvas_invariants(canvas: dict) -> None:
             f"Invariant 6 violated: root {root_id} must be active"
         )
 
-    # Invariant 1: expanded nodes have branch_choices
+    # Invariant 1: expanded active nodes have branch_choices.
+    #    Dimmed+expanded nodes don't need one — they're off the active path
+    #    and their children are all dimmed (invariant 5).
     for nid, node in nodes.items():
-        if node.get("is_expanded") and node.get("children_ids"):
+        if (node.get("is_expanded")
+                and node.get("children_ids")
+                and node.get("branch_status") == BRANCH_STATUS_ACTIVE):
             if nid not in branch_choices:
                 raise CanvasInvariantError(
-                    f"Invariant 1 violated: expanded node {nid} "
+                    f"Invariant 1 violated: expanded active node {nid} "
                     f"missing from branch_choices"
                 )
 
@@ -900,15 +905,18 @@ async def choose_branch(project_id: str, data: dict):
     # 1. Update branch_choices
     branch_choices[parent_id] = chosen_id
 
-    # 2. Mark all sibling children of parent as dimmed
+    # 2. Mark all sibling children of parent as dimmed.
+    #    Note: we keep `is_expanded` as-is per spec ("children 保留").
+    #    The frontend's branch_status !== "active" guard already blocks
+    #    expanding dimmed nodes, so the children stay visible-but-inert.
     dimmed_ids = set()
     for sibling_id in parent_node.get("children_ids", []):
         if sibling_id != chosen_id:
             nodes[sibling_id]["branch_status"] = BRANCH_STATUS_DIMMED
-            nodes[sibling_id]["is_expanded"] = False
             dimmed_ids.add(sibling_id)
 
-    # 3. Cascade: dimmed siblings' descendants also become dimmed
+    # 3. Cascade: dimmed siblings' descendants also become dimmed.
+    #    Invariant 5: a dimmed node's children must all be dimmed.
     def _collect_descendants(node_id: str) -> set[str]:
         result = set()
         stack = [node_id]
@@ -927,7 +935,6 @@ async def choose_branch(project_id: str, data: dict):
     for dimmed_id in dimmed_ids:
         for desc_id in _collect_descendants(dimmed_id):
             nodes[desc_id]["branch_status"] = BRANCH_STATUS_DIMMED
-            nodes[desc_id]["is_expanded"] = False
 
     # 4. Activate the chosen child
     nodes[chosen_id]["branch_status"] = BRANCH_STATUS_ACTIVE

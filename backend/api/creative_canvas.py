@@ -192,6 +192,25 @@ class CanvasInvariantError(Exception):
     """Raised when canvas_state.json violates one of the 6 invariants."""
 
 
+def _compute_selected_path(nodes: dict, branch_choices: dict,
+                           root_id: str) -> list[str]:
+    """Walk branch_choices from root, returning the active linear chain.
+
+    Stops when no branch_choices entry exists for the current node, or when
+    the chosen child is missing from the parent's children_ids (defensive).
+    """
+    path = [root_id]
+    cursor = root_id
+    while cursor in branch_choices:
+        nxt = branch_choices[cursor]
+        parent_node = nodes.get(cursor, {})
+        if nxt not in parent_node.get("children_ids", []):
+            break
+        path.append(nxt)
+        cursor = nxt
+    return path
+
+
 def _validate_canvas_invariants(canvas: dict) -> None:
     """Enforce the 6 branching invariants. Raises CanvasInvariantError on violation.
 
@@ -746,6 +765,180 @@ async def select_path(project_id: str, data: dict):
             "selected_path": path_node_ids,
             "evaluation": evaluation,
             "evaluated_at": evaluations[path_hash]["evaluated_at"],
+        },
+    }
+
+
+@router.post("/choose-branch")
+async def choose_branch(project_id: str, data: dict):
+    """Switch the active branch under a parent node.
+
+    Request body:
+        {"parent_node_id": "wi_001_00", "chosen_child_id": "wi_001_02"}
+
+    Effect:
+        - Updates branch_choices[parent_node_id] = chosen_child_id
+        - Sets chosen_child_id.branch_status = "active"
+        - Sets parent's other children to "dimmed" (including the previous active)
+        - Cascades dimmed status to all descendants of the now-dimmed siblings
+        - Removes branch_choices entries below the new active that pointed into
+          the now-dimmed subtree
+        - Recomputes selected_path
+    """
+    _ensure_project(project_id)
+
+    parent_id = data.get("parent_node_id", "")
+    chosen_id = data.get("chosen_child_id", "")
+    if not parent_id or not chosen_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "VALIDATION_ERROR",
+                "message": "parent_node_id 和 chosen_child_id 都不能为空",
+                "detail": {},
+            },
+        )
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+    nodes = canvas.get("nodes", {})
+
+    if parent_id not in nodes:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "NODE_NOT_FOUND",
+                "message": f"节点 {parent_id} 不存在",
+                "detail": {},
+            },
+        )
+
+    parent_node = nodes[parent_id]
+
+    if chosen_id not in parent_node.get("children_ids", []):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "INVALID_CHILD",
+                "message": f"节点 {chosen_id} 不是 {parent_id} 的子节点",
+                "detail": {},
+            },
+        )
+
+    if not parent_node.get("is_expanded"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "PARENT_NOT_EXPANDED",
+                "message": f"节点 {parent_id} 尚未展开，无法选择分支",
+                "detail": {},
+            },
+        )
+
+    branch_choices = canvas.setdefault("branch_choices", {})
+    previous_active_id = branch_choices.get(parent_id)
+
+    # 1. Update branch_choices
+    branch_choices[parent_id] = chosen_id
+
+    # 2. Mark all sibling children of parent as dimmed
+    dimmed_ids = set()
+    for sibling_id in parent_node.get("children_ids", []):
+        if sibling_id != chosen_id:
+            nodes[sibling_id]["branch_status"] = "dimmed"
+            nodes[sibling_id]["is_expanded"] = False
+            dimmed_ids.add(sibling_id)
+
+    # 3. Cascade: dimmed siblings' descendants also become dimmed
+    def _collect_descendants(node_id: str) -> set[str]:
+        result = set()
+        stack = [node_id]
+        while stack:
+            cur = stack.pop()
+            cur_node = nodes.get(cur, {})
+            for child_id in cur_node.get("children_ids", []):
+                if child_id not in result:
+                    result.add(child_id)
+                    stack.append(child_id)
+        return result
+
+    if previous_active_id and previous_active_id != chosen_id:
+        dimmed_ids.add(previous_active_id)
+
+    for dimmed_id in dimmed_ids:
+        for desc_id in _collect_descendants(dimmed_id):
+            nodes[desc_id]["branch_status"] = "dimmed"
+            nodes[desc_id]["is_expanded"] = False
+
+    # 4. Activate the chosen child
+    nodes[chosen_id]["branch_status"] = "active"
+
+    # 5. Drop branch_choices that pointed into the now-dimmed subtree
+    to_drop = []
+    for pid, cid in list(branch_choices.items()):
+        if pid == parent_id:
+            continue
+        cur = cid
+        visited = set()
+        drop = False
+        while cur and cur not in visited:
+            visited.add(cur)
+            cur_node = nodes.get(cur, {})
+            if cur_node.get("branch_status") == "dimmed":
+                drop = True
+                break
+            cur = cur_node.get("parent_id")
+        if drop:
+            to_drop.append(pid)
+    for pid in to_drop:
+        del branch_choices[pid]
+
+    # 6. Recompute selected_path
+    canvas["selected_path"] = _compute_selected_path(
+        nodes, branch_choices, canvas["root_node_id"]
+    )
+    canvas["updated_at"] = datetime.utcnow().isoformat()
+
+    # 7. Validate invariants before write
+    try:
+        _validate_canvas_invariants(canvas)
+    except CanvasInvariantError as exc:
+        logger.error("Canvas invariants failed after choose-branch: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": True,
+                "code": "INVARIANT_VIOLATION",
+                "message": str(exc),
+                "detail": {},
+            },
+        )
+
+    _write_canvas(project_id, canvas)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": {
+            "selected_path": canvas["selected_path"],
+            "branch_choices": canvas["branch_choices"],
+            "chosen_node": nodes[chosen_id],
+            "dimmed_count": len(dimmed_ids),
         },
     }
 

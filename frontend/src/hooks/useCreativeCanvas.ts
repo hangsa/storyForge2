@@ -35,6 +35,7 @@ interface CanvasState {
   edges: CanvasEdge[];
   selectedNodeId: string | null;
   selectedPath: string[];
+  branchChoices: Record<string, string>;
   noveltyScores: Record<string, NoveltyScoreDetail>;
   suggestion: string;
   error: string | null;
@@ -51,6 +52,7 @@ const initialState: CanvasState = {
   edges: [],
   selectedNodeId: null,
   selectedPath: [],
+  branchChoices: {},
   noveltyScores: {},
   suggestion: "",
   error: null,
@@ -75,6 +77,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
           edges: data.edges,
           selectedNodeId: null,
           selectedPath: data.selected_path || [],
+          branchChoices: data.branch_choices || {},
           noveltyScores: {},
           suggestion: "",
           error: null,
@@ -101,6 +104,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
         edges: data.edges,
         selectedNodeId: null,
         selectedPath: data.selected_path || [],
+        branchChoices: data.branch_choices || {},
         noveltyScores: {},
         suggestion: "",
         error: null,
@@ -248,6 +252,30 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     }
   }, [projectId]);
 
+  const chooseBranch = useCallback(
+    async (parentNodeId: string, chosenChildId: string) => {
+      if (!projectId) return;
+      try {
+        const result = await api.chooseBranch(projectId, parentNodeId, chosenChildId);
+        setState((s) => ({
+          ...s,
+          selectedPath: result.selected_path,
+          branchChoices: result.branch_choices,
+        }));
+        // Re-read full canvas to get updated branch_status for dimmed siblings/descendants
+        await loadCanvas();
+        setState((s) => ({ ...s, error: null }));
+      } catch (e) {
+        setState((s) => ({
+          ...s,
+          error: e instanceof Error ? e.message : "选择分支失败",
+        }));
+        throw e;
+      }
+    },
+    [projectId, loadCanvas],
+  );
+
   const retryExpand = useCallback((nodeId: string) => {
     expandNode(nodeId);
   }, [expandNode]);
@@ -303,6 +331,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     evaluateNode,
     selectPath,
     resetCanvas,
+    chooseBranch,
     retryExpand,
     updatePosition,
     getMutationSuggestion,

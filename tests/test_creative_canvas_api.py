@@ -88,7 +88,8 @@ class TestCanvasInitEndpoint:
             mock_instance = MagicMock()
             mock_instance.generate_root.return_value = MagicMock(
                 id="wi_001_00", depth=0, parent_id=None,
-                content="new root", dimension="角色动机",
+                content="new root",
+                branch_status="active",
                 novelty_score=0, trope_tags=[], is_expanded=False,
                 children_ids=[], saturation_warning=None,
             )

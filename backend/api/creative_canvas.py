@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
-from backend.models.creative_os import WhatIfNode, NoveltyScore, BRANCH_STATUS_ACTIVE
+from backend.models.creative_os import WhatIfNode, NoveltyScore, BRANCH_STATUS_ACTIVE, BRANCH_STATUS_DIMMED
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ def _migrate_v1_to_v2(canvas: dict) -> dict:
 
     for nid, node in canvas.get("nodes", {}).items():
         new_node = {k: v for k, v in node.items() if k != "dimension"}
-        new_node["branch_status"] = "active"
+        new_node["branch_status"] = BRANCH_STATUS_ACTIVE
         migrated["nodes"][nid] = new_node
 
     # Rebuild branch_choices: walk selected_path as parent->child pairs.
@@ -239,7 +239,7 @@ def _validate_canvas_invariants(canvas: dict) -> None:
 
     # Invariant 6: root is active
     root_node = nodes.get(root_id, {})
-    if root_node.get("branch_status") != "active":
+    if root_node.get("branch_status") != BRANCH_STATUS_ACTIVE:
         raise CanvasInvariantError(
             f"Invariant 6 violated: root {root_id} must be active"
         )
@@ -280,18 +280,18 @@ def _validate_canvas_invariants(canvas: dict) -> None:
 
     # Invariant 3: selected_path nodes all active
     for nid in selected_path:
-        if nodes.get(nid, {}).get("branch_status") != "active":
+        if nodes.get(nid, {}).get("branch_status") != BRANCH_STATUS_ACTIVE:
             raise CanvasInvariantError(
                 f"Invariant 3 violated: {nid} on selected_path is dimmed (not active)"
             )
 
     # Invariant 5: dimmed nodes have all-dimmed descendants
-    dimmed_set = {nid for nid, n in nodes.items() if n.get("branch_status") == "dimmed"}
+    dimmed_set = {nid for nid, n in nodes.items() if n.get("branch_status") == BRANCH_STATUS_DIMMED}
     for dimmed_id in dimmed_set:
         dimmed_node = nodes[dimmed_id]
         for child_id in dimmed_node.get("children_ids", []):
             child = nodes.get(child_id, {})
-            if child.get("branch_status") != "dimmed":
+            if child.get("branch_status") != BRANCH_STATUS_DIMMED:
                 raise CanvasInvariantError(
                     f"Invariant 5 violated: {child_id} (child of dimmed "
                     f"{dimmed_id}) is not dimmed"
@@ -470,7 +470,6 @@ async def expand_node(project_id: str, data: dict):
                     depth=parent_dict["depth"],
                     parent_id=parent_dict.get("parent_id"),
                     content=parent_dict.get("content", ""),
-                    dimension=parent_dict.get("dimension", ""),
                 )
                 hops += 1
             if hops >= MAX_ANCESTOR_HOPS:
@@ -548,8 +547,9 @@ async def expand_node(project_id: str, data: dict):
         canvas_stats = {
             "total_nodes": len(canvas["nodes"]),
             "depth_distribution": _compute_depth_distribution(canvas["nodes"]),
-            "dimensions_covered": list(
-                {n.get("dimension", "") for n in canvas["nodes"].values() if n.get("dimension")}
+            "active_count": sum(
+                1 for n in canvas["nodes"].values()
+                if n.get("branch_status") == BRANCH_STATUS_ACTIVE
             ),
             "max_score": max(
                 (n.get("novelty_score", 0) for n in canvas["nodes"].values()),
@@ -904,7 +904,7 @@ async def choose_branch(project_id: str, data: dict):
     dimmed_ids = set()
     for sibling_id in parent_node.get("children_ids", []):
         if sibling_id != chosen_id:
-            nodes[sibling_id]["branch_status"] = "dimmed"
+            nodes[sibling_id]["branch_status"] = BRANCH_STATUS_DIMMED
             nodes[sibling_id]["is_expanded"] = False
             dimmed_ids.add(sibling_id)
 
@@ -926,11 +926,11 @@ async def choose_branch(project_id: str, data: dict):
 
     for dimmed_id in dimmed_ids:
         for desc_id in _collect_descendants(dimmed_id):
-            nodes[desc_id]["branch_status"] = "dimmed"
+            nodes[desc_id]["branch_status"] = BRANCH_STATUS_DIMMED
             nodes[desc_id]["is_expanded"] = False
 
     # 4. Activate the chosen child
-    nodes[chosen_id]["branch_status"] = "active"
+    nodes[chosen_id]["branch_status"] = BRANCH_STATUS_ACTIVE
 
     # 5. Drop branch_choices that pointed into the now-dimmed subtree
     to_drop = []
@@ -943,7 +943,7 @@ async def choose_branch(project_id: str, data: dict):
         while cur and cur not in visited:
             visited.add(cur)
             cur_node = nodes.get(cur, {})
-            if cur_node.get("branch_status") == "dimmed":
+            if cur_node.get("branch_status") == BRANCH_STATUS_DIMMED:
                 drop = True
                 break
             cur = cur_node.get("parent_id")

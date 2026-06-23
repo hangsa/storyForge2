@@ -518,6 +518,17 @@ async def expand_node(project_id: str, data: dict):
         canvas["nodes"][child.id] = _node_to_dict(child)
     canvas["nodes"][node_id] = _node_to_dict(node)
 
+    # Set the chosen child for this expansion (the first child becomes active
+    # until the user picks another via /choose-branch).
+    branch_choices = canvas.setdefault("branch_choices", {})
+    if node_id not in branch_choices and children:
+        branch_choices[node_id] = children[0].id
+
+    # Recompute selected_path
+    canvas["selected_path"] = _compute_selected_path(
+        canvas["nodes"], branch_choices, canvas["root_node_id"]
+    )
+
     # --- Step 4: get suggestion from CreativeDirector --------------------
     suggestion = ""
     try:

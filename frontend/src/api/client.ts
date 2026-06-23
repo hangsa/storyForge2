@@ -389,6 +389,8 @@ export interface RollbackResult {
   baseline_updated: boolean;
 }
 
+export type BranchStatus = "active" | "dimmed";
+
 // --- v1.7 Creative Canvas types ---
 
 export interface CanvasNode {
@@ -396,12 +398,12 @@ export interface CanvasNode {
   depth: number;
   parent_id: string | null;
   content: string;
-  dimension: string;
   novelty_score: number;
   trope_tags: string[];
   saturation_warning: string | null;
   children_ids: string[];
   is_expanded: boolean;
+  branch_status: BranchStatus;
 }
 
 export interface CanvasEdge {
@@ -410,10 +412,12 @@ export interface CanvasEdge {
 }
 
 export interface CanvasStateData {
+  schema_version?: number;
   root_node_id: string | null;
   nodes: Record<string, CanvasNode>;
   edges: CanvasEdge[];
   selected_path: string[];
+  branch_choices?: Record<string, string>;
   created_at?: string;
   updated_at?: string;
 }

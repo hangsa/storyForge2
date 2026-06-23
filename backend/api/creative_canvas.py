@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
-from backend.models.creative_os import WhatIfNode, NoveltyScore
+from backend.models.creative_os import WhatIfNode, NoveltyScore, BRANCH_STATUS_ACTIVE
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def _dict_to_node(d: dict) -> WhatIfNode:
         saturation_warning=d.get("saturation_warning"),
         children_ids=list(d.get("children_ids", [])),
         is_expanded=d.get("is_expanded", False),
-        branch_status=d.get("branch_status", "active"),
+        branch_status=d.get("branch_status", BRANCH_STATUS_ACTIVE),
     )
 
 

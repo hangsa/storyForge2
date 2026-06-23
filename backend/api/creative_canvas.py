@@ -188,6 +188,87 @@ def _migrate_v1_to_v2(canvas: dict) -> dict:
     return migrated
 
 
+class CanvasInvariantError(Exception):
+    """Raised when canvas_state.json violates one of the 6 invariants."""
+
+
+def _validate_canvas_invariants(canvas: dict) -> None:
+    """Enforce the 6 branching invariants. Raises CanvasInvariantError on violation.
+
+    Invariants:
+        1. Every expanded node has a branch_choices entry.
+        2. selected_path is a valid linear chain.
+        3. selected_path nodes are all branch_status="active".
+        4. branch_choices values point to real children.
+        5. dimmed nodes' descendants are all dimmed.
+        6. root_node is active.
+    """
+    nodes = canvas.get("nodes", {})
+    branch_choices = canvas.get("branch_choices", {})
+    selected_path = canvas.get("selected_path", [])
+    root_id = canvas.get("root_node_id")
+
+    # Invariant 6: root is active
+    root_node = nodes.get(root_id, {})
+    if root_node.get("branch_status") != "active":
+        raise CanvasInvariantError(
+            f"Invariant 6 violated: root {root_id} must be active"
+        )
+
+    # Invariant 1: expanded nodes have branch_choices
+    for nid, node in nodes.items():
+        if node.get("is_expanded") and node.get("children_ids"):
+            if nid not in branch_choices:
+                raise CanvasInvariantError(
+                    f"Invariant 1 violated: expanded node {nid} "
+                    f"missing from branch_choices"
+                )
+
+    # Invariant 4: branch_choices point to real children
+    for parent_id, child_id in branch_choices.items():
+        parent_node = nodes.get(parent_id, {})
+        if child_id not in parent_node.get("children_ids", []):
+            raise CanvasInvariantError(
+                f"Invariant 4 violated: {parent_id}'s chosen child "
+                f"{child_id} is not in children_ids"
+            )
+
+    # Invariant 2: selected_path is linear chain
+    if not selected_path:
+        raise CanvasInvariantError("Invariant 2 violated: empty selected_path (not a linear chain)")
+    if selected_path[0] != root_id:
+        raise CanvasInvariantError(
+            f"Invariant 2 violated: selected_path starts with "
+            f"{selected_path[0]}, expected {root_id} (not a linear chain)"
+        )
+    for i in range(len(selected_path) - 1):
+        cur, nxt = selected_path[i], selected_path[i + 1]
+        cur_node = nodes.get(cur, {})
+        if nxt not in cur_node.get("children_ids", []):
+            raise CanvasInvariantError(
+                f"Invariant 2 violated: {nxt} not in {cur}'s children (not a linear chain)"
+            )
+
+    # Invariant 3: selected_path nodes all active
+    for nid in selected_path:
+        if nodes.get(nid, {}).get("branch_status") != "active":
+            raise CanvasInvariantError(
+                f"Invariant 3 violated: {nid} on selected_path is dimmed (not active)"
+            )
+
+    # Invariant 5: dimmed nodes have all-dimmed descendants
+    dimmed_set = {nid for nid, n in nodes.items() if n.get("branch_status") == "dimmed"}
+    for dimmed_id in dimmed_set:
+        dimmed_node = nodes[dimmed_id]
+        for child_id in dimmed_node.get("children_ids", []):
+            child = nodes.get(child_id, {})
+            if child.get("branch_status") != "dimmed":
+                raise CanvasInvariantError(
+                    f"Invariant 5 violated: {child_id} (child of dimmed "
+                    f"{dimmed_id}) is not dimmed"
+                )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------

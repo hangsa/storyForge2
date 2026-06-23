@@ -17,6 +17,7 @@ describe("NodeDetailPanel", () => {
         noveltyScore={null}
         suggestion=""
         isPathEndpoint={false}
+        mutationSuggestion={null}
         isOnActivePath={true}
         onExpand={() => {}}
         onEvaluate={() => {}}
@@ -37,6 +38,7 @@ describe("NodeDetailPanel", () => {
         noveltyScore={null}
         suggestion=""
         isPathEndpoint={false}
+        mutationSuggestion={null}
         isOnActivePath={false}
         onChooseAsBranch={onChoose}
         onExpand={() => {}}
@@ -62,6 +64,7 @@ describe("NodeDetailPanel", () => {
         }}
         suggestion=""
         isPathEndpoint={false}
+        mutationSuggestion={null}
         isOnActivePath={false}
         onExpand={() => {}}
         onEvaluate={() => {}}

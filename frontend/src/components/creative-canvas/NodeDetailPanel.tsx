@@ -8,6 +8,8 @@ interface NodeDetailPanelProps {
   suggestion: string;
   isPathEndpoint: boolean;
   mutationSuggestion: { nodeId: string; recommendation: string; loading: boolean } | null;
+  isOnActivePath: boolean;
+  onChooseAsBranch?: (nodeId: string) => void;
   onExpand: () => void;
   onEvaluate: () => void;
   onSelectPath: () => void;
@@ -21,6 +23,8 @@ export default function NodeDetailPanel({
   suggestion,
   isPathEndpoint,
   mutationSuggestion,
+  isOnActivePath,
+  onChooseAsBranch,
   onExpand,
   onEvaluate,
   onSelectPath,
@@ -63,25 +67,44 @@ export default function NodeDetailPanel({
           {/* Meta grid */}
           <div className="grid grid-cols-2 gap-3">
             <div className="p-2 bg-surface-container rounded">
-              <span className="font-label-mono text-xs text-system-log">维度</span>
-              <p className="font-body-ui text-primary text-sm mt-0.5">{node.dimension}</p>
-            </div>
-            <div className="p-2 bg-surface-container rounded">
               <span className="font-label-mono text-xs text-system-log">深度</span>
               <p className="font-body-ui text-primary text-sm mt-0.5">L{node.depth}</p>
             </div>
             <div className="p-2 bg-surface-container rounded">
-              <span className="font-label-mono text-xs text-system-log">新颖度评分</span>
-              <p className="font-body-ui text-primary text-sm mt-0.5">
-                {noveltyScore ? (
-                  <span className={noveltyScore.total >= 80 ? "text-emerald-400" : noveltyScore.total < 40 ? "text-red-400" : ""}>
-                    {noveltyScore.total.toFixed(0)} — {noveltyScore.grade}
-                  </span>
+              <span className="font-label-mono text-xs text-system-log">路径状态</span>
+              <p className="font-body-ui text-primary text-sm mt-0.5 flex items-center gap-2">
+                {node.branch_status === "active" ? (
+                  <>
+                    <span className="text-emerald-400">激活</span>
+                    <span className="material-symbols-outlined text-base">check_circle</span>
+                  </>
                 ) : (
-                  <span className="text-system-log/50">未评估</span>
+                  <>
+                    <span className="text-system-log">未选</span>
+                    <button
+                      onClick={() => onChooseAsBranch?.(node.id)}
+                      className="ml-auto px-2 py-1 text-xs bg-primary-container/20 text-primary-container rounded hover:bg-primary-container/30 transition-colors"
+                    >
+                      选择为分支
+                    </button>
+                  </>
                 )}
               </p>
             </div>
+            {isOnActivePath && (
+              <div className="p-2 bg-surface-container rounded">
+                <span className="font-label-mono text-xs text-system-log">新颖度评分</span>
+                <p className="font-body-ui text-primary text-sm mt-0.5">
+                  {noveltyScore ? (
+                    <span className={noveltyScore.total >= 80 ? "text-emerald-400" : noveltyScore.total < 40 ? "text-red-400" : ""}>
+                      {noveltyScore.total.toFixed(0)} — {noveltyScore.grade}
+                    </span>
+                  ) : (
+                    <span className="text-system-log/50">未评估</span>
+                  )}
+                </p>
+              </div>
+            )}
             <div className="p-2 bg-surface-container rounded">
               <span className="font-label-mono text-xs text-system-log">子节点</span>
               <p className="font-body-ui text-primary text-sm mt-0.5">{node.children_ids.length}</p>
@@ -146,12 +169,20 @@ export default function NodeDetailPanel({
         <div className="w-[380px] p-4 flex flex-col">
           {/* Radar */}
           <div className="flex-1">
-            {noveltyScore ? (
-              <NoveltyRadar scores={noveltyScore} />
+            {isOnActivePath ? (
+              noveltyScore ? (
+                <NoveltyRadar scores={noveltyScore} />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <span className="font-body-ui text-system-log/50 text-sm">
+                    点击"重新评估"获取新颖度分析
+                  </span>
+                </div>
+              )
             ) : (
               <div className="flex items-center justify-center h-full">
                 <span className="font-body-ui text-system-log/50 text-sm">
-                  点击"重新评估"获取新颖度分析
+                  未选分支暂不评分
                 </span>
               </div>
             )}

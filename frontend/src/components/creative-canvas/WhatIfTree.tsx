@@ -22,19 +22,13 @@ interface WhatIfTreeProps {
   positions: Record<string, { x: number; y: number }>;
   failedNodes: Record<string, { nodeId: string; message: string; attemptedAt: string }>;
   loadingNodes?: Record<string, true>;
+  showDimmedChildren?: boolean;
   onNodeClick: (nodeId: string) => void;
   onNodeExpand?: (nodeId: string) => void;
   onPositionChange?: (nodeId: string, x: number, y: number) => void;
   onRetry?: (nodeId: string) => void;
   onFitViewReady?: (fitView: () => void) => void;
 }
-
-const DIMENSION_COLORS: Record<string, string> = {
-  "角色动机": "#7c3aed",
-  "世界观规则": "#0891b2",
-  "情节方向": "#ea580c",
-  "读者体验": "#059669",
-};
 
 const nodeTypes = { canvasNode: CanvasNodeComponent };
 
@@ -46,6 +40,7 @@ function WhatIfTreeInner({
   positions,
   failedNodes,
   loadingNodes = {},
+  showDimmedChildren = false,
   onNodeClick,
   onNodeExpand,
   onPositionChange,
@@ -85,9 +80,16 @@ function WhatIfTreeInner({
 
     for (const [depthStr, levelNodes] of Object.entries(byDepth)) {
       const depth = parseInt(depthStr);
-      const totalWidth = (levelNodes.length - 1) * H_GAP;
+      const visibleNodes = levelNodes.filter((cn) => {
+        if (cn.branch_status === "active") return true;
+        if (!showDimmedChildren) return false;
+        // dimmed: only show if parent is active (not also dimmed)
+        const parent = cn.parent_id ? nodes[cn.parent_id] : null;
+        return parent?.branch_status === "active";
+      });
+      const totalWidth = (visibleNodes.length - 1) * H_GAP;
       const startX = -totalWidth / 2;
-      levelNodes.forEach((cn, i) => {
+      visibleNodes.forEach((cn, i) => {
         const isRoot = cn.id === rootId;
         const savedPosition = positions[cn.id];
         const computedPosition = {
@@ -101,7 +103,7 @@ function WhatIfTreeInner({
           data: {
             label: cn.id,
             content: cn.content,
-            dimension: cn.dimension,
+            branchStatus: cn.branch_status,
             depth: cn.depth,
             noveltyScore: cn.novelty_score,
             isRoot,
@@ -116,7 +118,7 @@ function WhatIfTreeInner({
     }
 
     return result;
-  }, [nodes, selectedNodeId, selectedPath, rootId, positions]);
+  }, [nodes, selectedNodeId, selectedPath, rootId, positions, showDimmedChildren]);
 
   const initialEdges: Edge[] = useMemo(() => {
     return edges.map((e) => ({
@@ -126,12 +128,12 @@ function WhatIfTreeInner({
       animated: selectedPath.includes(e.from) && selectedPath.includes(e.to),
       style: {
         stroke: selectedPath.includes(e.from) && selectedPath.includes(e.to)
-          ? DIMENSION_COLORS[nodes[e.to]?.dimension] || "#6b7280"
+          ? "#0891b2"
           : "rgba(255,255,255,0.15)",
         strokeWidth: selectedPath.includes(e.from) && selectedPath.includes(e.to) ? 2 : 1,
       },
     }));
-  }, [edges, nodes, selectedPath]);
+  }, [edges, selectedPath]);
 
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -142,9 +144,11 @@ function WhatIfTreeInner({
 
   const handleNodeDoubleClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
+      const nodeData = nodes[node.id];
+      if (nodeData?.branch_status !== "active") return;
       onNodeExpand?.(node.id);
     },
-    [onNodeExpand]
+    [nodes, onNodeExpand],
   );
 
   const handleNodeDragStop = useCallback(
@@ -179,8 +183,8 @@ function WhatIfTreeInner({
         />
         <MiniMap
           nodeColor={(node) => {
-            const d = (node.data as unknown as CanvasNodeData).dimension;
-            return DIMENSION_COLORS[d] || "#6b7280";
+            const d = (node.data as unknown as CanvasNodeData).branchStatus;
+            return d === "dimmed" ? "#4b5563" : "#6b7280";
           }}
           maskColor="rgba(0,0,0,0.5)"
           className="!bg-surface-container-low !border-outline-variant !rounded-lg"

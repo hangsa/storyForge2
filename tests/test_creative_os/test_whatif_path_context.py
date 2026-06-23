@@ -26,7 +26,7 @@ async def test_expand_node_includes_ancestor_chain_in_prompt():
 
     parent = WhatIfNode(
         id="wi_001_00", depth=1, parent_id="wi_000_00",
-        content="Parent", dimension="情节方向",
+        content="Parent", branch_status="active",
     )
     children = await engine.expand_node(parent, ancestor_contents=["Root content"])
 
@@ -43,7 +43,7 @@ async def test_expand_node_omits_ancestor_section_when_empty():
 
     root = WhatIfNode(
         id="wi_000_00", depth=0, parent_id=None,
-        content="Root", dimension="情节方向",
+        content="Root", branch_status="active",
     )
     await engine.expand_node(root, ancestor_contents=[])
 

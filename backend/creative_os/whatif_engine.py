@@ -8,12 +8,13 @@ from backend.models.creative_os import WhatIfNode
 
 logger = logging.getLogger(__name__)
 
-DIMENSIONS = ["角色动机", "世界观规则", "情节方向", "读者体验"]
+DIMENSIONS: list[str] = []  # kept as no-op for backward-compat; not used in prompts
 
 
 class WhatIfEngine:
     MAX_DEPTH = 3
-    BREADTH = 4
+    BRANCHES_PER_NODE = 3
+    BREADTH = 3  # backward-compat alias
 
     def __init__(self, model_router=None, novelty_evaluator=None) -> None:
         self._router = model_router
@@ -28,7 +29,6 @@ class WhatIfEngine:
             depth=0,
             parent_id=None,
             content=premise,
-            dimension=self._pick_dimension(0),
             is_expanded=False,
         )
 
@@ -60,15 +60,11 @@ class WhatIfEngine:
 
         system_prompt = (
             "你是一位资深的创意故事构思师，擅长从叙事前提中生发散性分支。\n"
-            "你的任务是：给定一个故事前提/创意节点，从4个叙事维度各生成一个分支可能。\n\n"
-            "四个叙事维度：\n"
-            "1. 角色动机 — 角色的内在驱动力和情感变化\n"
-            "2. 世界观规则 — 世界的底层法则和运行逻辑\n"
-            "3. 情节方向 — 故事的情节走向和冲突发展\n"
-            "4. 读者体验 — 读者的情绪体验和期待\n\n"
+            "你的任务是：给定一个故事前提/创意节点，生成 3 条互斥的剧情走向。\n"
+            "三条路径必须代表截然不同的故事方向，每条都应自洽、具体可感、不说空话。\n\n"
             "要求：\n"
-            "1. 每个分支要具体可感，不说空话\n"
-            "2. 分支之间要有足够的差异性\n"
+            "1. 每条路径要具体可感，不说空话\n"
+            "2. 三条路径之间要有足够的差异性，互斥\n"
             "3. novelty_score 要合理（0-100，越高越新颖）\n"
             "4. trope_tags 要贴切（1-3个标签）\n"
             "5. 子分支必须与祖先路径在叙事上连贯，不能前后矛盾\n"
@@ -78,16 +74,14 @@ class WhatIfEngine:
         user_prompt = (
             f"当前前提：{node.content}\n"
             f"当前深度：第{node.depth}层\n"
-            f"当前维度：{node.dimension}\n"
         )
         if ancestor_contents:
             chain = " → ".join(ancestor_contents)
             user_prompt += f"祖先路径（从根到当前）：\n{chain}\n"
         user_prompt += (
-            f"\n请生成{self.BREADTH}个分支（分别对应四个叙事维度：角色动机、世界观规则、情节方向、读者体验），"
+            f"\n请生成 {self.BRANCHES_PER_NODE} 条互斥的剧情走向选项，"
             "输出JSON数组格式：\n"
-            '[{"content": "分支内容（50-150字）", '
-            '"dimension": "角色动机/世界观规则/情节方向/读者体验", '
+            '[{"content": "走向内容（50-150字）", '
             '"novelty_score": 75, '
             '"trope_tags": ["标签1", "标签2"]}]'
         )
@@ -118,7 +112,7 @@ class WhatIfEngine:
             )
 
         children = []
-        for item in parsed[:self.BREADTH]:
+        for item in parsed[:self.BRANCHES_PER_NODE]:
             child_depth = node.depth + 1
             self._node_counter[child_depth] += 1
             child_id = (
@@ -131,7 +125,6 @@ class WhatIfEngine:
                 depth=child_depth,
                 parent_id=node.id,
                 content=item.get("content", ""),
-                dimension=item.get("dimension", self._pick_dimension(child_depth)),
                 novelty_score=item.get("novelty_score", 0.0),
                 trope_tags=item.get("trope_tags", []),
             )
@@ -161,4 +154,5 @@ class WhatIfEngine:
         return children[0]
 
     def _pick_dimension(self, depth: int) -> str:
-        return DIMENSIONS[depth % len(DIMENSIONS)]
+        """Deprecated — kept as a no-op for backward compat. Returns empty string."""
+        return ""

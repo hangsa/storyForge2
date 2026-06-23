@@ -42,7 +42,8 @@ class TestWhatIfNodeStructure:
         assert WhatIfEngine.MAX_DEPTH == 3
 
     def test_breadth_constant(self):
-        assert WhatIfEngine.BREADTH == 4
+        assert WhatIfEngine.BREADTH == 3
+        assert WhatIfEngine.BRANCHES_PER_NODE == 3
 
     def test_node_id_format(self, engine):
         root = engine.generate_root("test premise")
@@ -53,18 +54,12 @@ class TestWhatIfNodeStructure:
         root = engine.generate_root("test")
         assert root.children_ids == []
 
-    def test_node_dimension_is_valid(self, engine):
-        root = engine.generate_root("test")
-        assert root.dimension in {
-            "角色动机", "世界观规则", "情节方向", "读者体验"
-        }
-
     def test_total_nodes_within_bounds(self, engine):
-        # Maximum: 1 + 4 + 16 + 64 = 85 (but max 84 per spec)
+        # Maximum: 1 + 3 + 9 + 27 = 40 nodes
         theoretical_max = 1
         for d in range(1, WhatIfEngine.MAX_DEPTH + 1):
             theoretical_max += WhatIfEngine.BREADTH ** d
-        assert theoretical_max <= 85
+        assert theoretical_max == 40
 
     def test_engine_initialization(self, mock_router, mock_novelty):
         engine = WhatIfEngine(
@@ -97,11 +92,11 @@ class TestWhatIfEngineLLM:
         engine = WhatIfEngine(model_router=router)
         root = engine.generate_root("测试前提")
         children = await engine.expand_node(root)
-        assert len(children) == 4
+        assert len(children) == 3
         assert children[0].depth == 1
         assert children[0].parent_id == root.id
         assert root.is_expanded is True
-        assert len(root.children_ids) == 4
+        assert len(root.children_ids) == 3
 
     @pytest.mark.asyncio
     async def test_expand_node_without_router_raises(self):

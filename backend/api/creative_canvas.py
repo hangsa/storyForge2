@@ -533,10 +533,15 @@ async def expand_node(project_id: str, data: dict):
     canvas["nodes"][node_id] = _node_to_dict(node)
 
     # Set the chosen child for this expansion (the first child becomes active
-    # until the user picks another via /choose-branch).
+    # until the user picks another via /choose-branch). The other children
+    # default to dimmed — invariant 5 requires a dimmed node's children to
+    # all be dimmed, and only one child should be on the active path.
     branch_choices = canvas.setdefault("branch_choices", {})
     if node_id not in branch_choices and children:
         branch_choices[node_id] = children[0].id
+        for child in children[1:]:
+            child.branch_status = BRANCH_STATUS_DIMMED
+            canvas["nodes"][child.id]["branch_status"] = BRANCH_STATUS_DIMMED
 
     # Recompute selected_path
     canvas["selected_path"] = _compute_selected_path(

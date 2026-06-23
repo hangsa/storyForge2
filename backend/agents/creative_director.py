@@ -41,7 +41,7 @@ class CreativeDirector(BaseAgent):
 
         user_prompt = (
             f"当前节点内容：{current_node.content}\n"
-            f"当前节点维度：{current_node.dimension}\n"
+            f"当前节点分支状态：{current_node.branch_status}\n"
             f"当前节点新颖度评分：{current_node.novelty_score}\n\n"
             f"画布统计：\n"
             f"- 总节点数：{canvas_state.get('total_nodes', 0)}\n"
@@ -81,7 +81,7 @@ class CreativeDirector(BaseAgent):
         tags_str = ", ".join(node.trope_tags) if node.trope_tags else "无特定套路标签"
         user_prompt = (
             f"节点内容：{node.content}\n"
-            f"节点维度：{node.dimension}\n"
+            f"节点分支状态：{node.branch_status}\n"
             f"套路标签：{tags_str}\n\n"
             "请推荐最适合该节点的变异操作，说明理由。"
         )
@@ -107,7 +107,7 @@ class CreativeDirector(BaseAgent):
         path_summary_parts = []
         for i, node in enumerate(path_nodes):
             path_summary_parts.append(
-                f"节点{i+1}(深度{node.depth}, {node.dimension}, 新颖度{node.novelty_score}): {node.content}"
+                f"节点{i+1}(深度{node.depth}, 状态{node.branch_status}, 新颖度{node.novelty_score}): {node.content}"
             )
         path_summary = "\n".join(path_summary_parts)
 

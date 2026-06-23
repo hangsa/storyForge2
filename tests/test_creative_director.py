@@ -32,7 +32,6 @@ def sample_node():
         depth=1,
         parent_id="wi_001_00",
         content="主角发现自己的功法会加速世界毁灭",
-        dimension="世界观规则",
         novelty_score=72.0,
         trope_tags=["废柴逆袭", "末法时代"],
     )

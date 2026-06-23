@@ -660,6 +660,18 @@ export const api = {
       { node_id: nodeId }
     ),
 
+  chooseBranch: (projectId: string, parentNodeId: string, chosenChildId: string) =>
+    request<{
+      selected_path: string[];
+      branch_choices: Record<string, string>;
+      chosen_node: CanvasNode;
+      dimmed_count: number;
+    }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/choose-branch`,
+      { parent_node_id: parentNodeId, chosen_child_id: chosenChildId }
+    ),
+
   // --- v1.7 Branch Simulation ---
   runSimulation: (projectId: string, description: string) =>
     request<BranchSimulationReport>("POST", `/v1/projects/${encodeURIComponent(projectId)}/branches/simulate`, { description }),

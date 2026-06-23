@@ -31,6 +31,7 @@ export default function CreativeCanvasPage() {
     evaluateNode,
     selectPath,
     resetCanvas,
+    chooseBranch,
     retryExpand,
     updatePosition,
     getMutationSuggestion,
@@ -40,6 +41,7 @@ export default function CreativeCanvasPage() {
   const [conceptPremise, setConceptPremise] = useState("");
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [showDimmedChildren, setShowDimmedChildren] = useState(false);
 
   useEffect(() => {
     loadCanvas();
@@ -49,10 +51,24 @@ export default function CreativeCanvasPage() {
     }).catch(() => {});
   }, [loadCanvas, projectId]);
 
+  useEffect(() => {
+    if (status !== "initialized") return;
+    if (selectedPath.length === 0 || !projectId) return;
+    api.selectPath(projectId, selectedPath).catch(() => {});
+  }, [selectedPath, status, projectId]);
+
   const selectedNode = selectedNodeId ? nodes[selectedNodeId] : null;
   const selectedNodeScore = selectedNodeId ? noveltyScores[selectedNodeId] || null : null;
   const isPathEndpoint = selectedNodeId
     ? selectedPath.length > 0 && selectedPath[selectedPath.length - 1] === selectedNodeId
+    : false;
+
+  const activeCount = Object.values(nodes).filter(
+    (n) => n.branch_status === "active"
+  ).length;
+
+  const isOnActivePath = selectedNodeId
+    ? selectedPath.includes(selectedNodeId)
     : false;
 
   const isCanvasEmpty = Object.keys(nodes).length === 0;
@@ -109,6 +125,9 @@ export default function CreativeCanvasPage() {
             <>
               <CanvasToolbar
                 nodeCount={Object.keys(nodes).length}
+                activeCount={activeCount}
+                showDimmedChildren={showDimmedChildren}
+                onToggleDimmedChildren={() => setShowDimmedChildren((v) => !v)}
                 onRequestReset={() => setResetDialogOpen(true)}
                 onFitView={handleFitView}
               />
@@ -119,6 +138,7 @@ export default function CreativeCanvasPage() {
                 selectedPath={selectedPath}
                 positions={positions}
                 failedNodes={failedNodes}
+                showDimmedChildren={showDimmedChildren}
                 onNodeClick={(nodeId) => {
                   selectNode(nodeId);
                   if (!noveltyScores[nodeId]) evaluateNode(nodeId);
@@ -153,6 +173,15 @@ export default function CreativeCanvasPage() {
           suggestion={suggestion}
           isPathEndpoint={isPathEndpoint}
           mutationSuggestion={mutationSuggestion}
+          isOnActivePath={isOnActivePath}
+          onChooseAsBranch={(nodeId) => {
+            const parent = Object.values(nodes).find((n) =>
+              n.children_ids.includes(nodeId)
+            );
+            if (parent) {
+              chooseBranch(parent.id, nodeId).catch(() => {});
+            }
+          }}
           onExpand={() => expandNode(selectedNode.id)}
           onEvaluate={() => evaluateNode(selectedNode.id)}
           onSelectPath={() => selectPath(selectedNode.id)}

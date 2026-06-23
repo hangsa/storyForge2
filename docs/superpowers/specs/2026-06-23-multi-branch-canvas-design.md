@@ -180,7 +180,7 @@ class WhatIfEngine:
 |---|---|
 | `GET /state` | 不变（透明读出 v2 schema） |
 | `POST /init` | 生成的 root `branch_status="active"`，无 `dimension` 字段；初始化 `branch_choices={}`、`schema_version=2` |
-| `POST /expand` | 调用 `WhatIfEngine.expand_node()` 新版本；返回的 children 都 `active`；不读不写 `dimension` |
+| `POST /expand` | 调用 `WhatIfEngine.expand_node()` 新版本；返回的 children 都 `active`；不读不写 `dimension`；**校验请求节点 `branch_status="active"`**，否则 400 `DIMMED_NODE_CANNOT_EXPAND` |
 | `POST /choose-branch` | **新增**，见 4.1 |
 | `POST /select` | 改为**只接受 active 单链**；校验路径上每个节点 `branch_status="active"`；否则 400 `DIMMED_NODE_IN_PATH` |
 | `POST /evaluate` | 不变；UI 自行决定是否展示给 dimmed 节点 |
@@ -280,9 +280,10 @@ export interface WhatIfNode {
 
 ### 5.5 `CreativeCanvasPage` 行为
 
-- 当 `selectedPath` 变化时，**自动**触发 `POST /select`（无 debounce，每次变化都调；后端幂等）
+- 当 `selectedPath` 变化时，**自动**触发 `POST /select`（无 debounce，每次变化都调；后端幂等；只用于触发 CreativeDirector 评估 + 持久化 evaluation，**不**强制覆盖客户端已显示的 selected_path）
 - 路径评估文本显示在画布顶部状态条
 - 不再有「dimmed 节点的评分卡污染总分」问题（因为雷达图不显示）
+- `selectedPath` 变化来源：用户调用 `chooseBranch`、或 `/init`/`/expand` 后端响应附带新 selected_path
 
 ### 5.6 API client 新增（`frontend/src/api/client.ts`）
 
@@ -320,13 +321,15 @@ interface UseCreativeCanvasReturn {
 
 输入 v1 canvas dict，输出 v2 canvas dict：
 
-1. **删除每个节点的 `dimension` 字段**（如果存在）
-2. **每个节点加 `branch_status="active"`**（v1 没有这个概念，全部视为激活，因为 v1 语义是 facets 不是分支）
-3. **重建 `branch_choices`**：
+1. **保留** `created_at`、`updated_at`、`edges`、`evaluations` 字段（透传）
+2. **删除每个节点的 `dimension` 字段**（如果存在）
+3. **每个节点加 `branch_status="active"`**（v1 没有这个概念，全部视为激活，因为 v1 语义是 facets 不是分支）
+4. **重建 `branch_choices`**：
    - 取 `selected_path` 中相邻对 `(parent, child)`，填入 `branch_choices[parent] = child`
    - 若 `selected_path` 不构成单链（v1 可能有多 facets 路径），取最长合法前缀
-4. **写 `schema_version=2`**
-5. **`_validate_canvas_invariants()` 兜底**
+   - 若 `selected_path` 为空或 root 唯一，`branch_choices={}`
+5. **写 `schema_version=2`**
+6. **`_validate_canvas_invariants()` 兜底**；若失败抛错并保留原始文件
 
 ### 6.2 迁移触发
 

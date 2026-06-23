@@ -89,12 +89,12 @@ def _node_to_dict(node: WhatIfNode) -> dict:
         "depth": node.depth,
         "parent_id": node.parent_id,
         "content": node.content,
-        "dimension": node.dimension,
         "novelty_score": node.novelty_score,
         "trope_tags": node.trope_tags,
         "saturation_warning": node.saturation_warning,
         "children_ids": list(node.children_ids),
         "is_expanded": node.is_expanded,
+        "branch_status": node.branch_status,
     }
 
 
@@ -105,12 +105,12 @@ def _dict_to_node(d: dict) -> WhatIfNode:
         depth=d["depth"],
         parent_id=d.get("parent_id"),
         content=d.get("content", ""),
-        dimension=d.get("dimension", ""),
         novelty_score=d.get("novelty_score", 0.0),
         trope_tags=list(d.get("trope_tags", [])),
         saturation_warning=d.get("saturation_warning"),
         children_ids=list(d.get("children_ids", [])),
         is_expanded=d.get("is_expanded", False),
+        branch_status=d.get("branch_status", "active"),
     )
 
 

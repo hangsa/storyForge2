@@ -3,17 +3,34 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import CanvasToolbar from "../../components/creative-canvas/CanvasToolbar";
 
 describe("CanvasToolbar", () => {
-  it("renders node count and dimension legend", () => {
+  it("renders node count and active count", () => {
     render(
       <CanvasToolbar
         nodeCount={5}
+        activeCount={3}
+        showDimmedChildren={false}
+        onToggleDimmedChildren={() => {}}
         onRequestReset={() => {}}
         onFitView={() => {}}
       />
     );
-    expect(screen.getByText(/节点: 5/)).toBeInTheDocument();
-    expect(screen.getByText("角色动机")).toBeInTheDocument();
-    expect(screen.getByText("情节方向")).toBeInTheDocument();
+    expect(screen.getByText(/节点 5 \/ 激活 3/)).toBeInTheDocument();
+  });
+
+  it("calls onToggleDimmedChildren when toggle button is clicked", () => {
+    const onToggle = vi.fn();
+    render(
+      <CanvasToolbar
+        nodeCount={5}
+        activeCount={3}
+        showDimmedChildren={false}
+        onToggleDimmedChildren={onToggle}
+        onRequestReset={() => {}}
+        onFitView={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByText("显示未选子树"));
+    expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
   it("calls onRequestReset when reset button is clicked", () => {
@@ -21,6 +38,9 @@ describe("CanvasToolbar", () => {
     render(
       <CanvasToolbar
         nodeCount={5}
+        activeCount={3}
+        showDimmedChildren={false}
+        onToggleDimmedChildren={() => {}}
         onRequestReset={onRequestReset}
         onFitView={() => {}}
       />
@@ -34,6 +54,9 @@ describe("CanvasToolbar", () => {
     render(
       <CanvasToolbar
         nodeCount={5}
+        activeCount={3}
+        showDimmedChildren={false}
+        onToggleDimmedChildren={() => {}}
         onRequestReset={() => {}}
         onFitView={onFitView}
       />

@@ -26,6 +26,7 @@ export default function CanvasNode({ data, selected }: NodeProps) {
     <>
       <Handle type="target" position={Position.Top} className="!bg-system-log/40" />
       <div
+        data-testid={`node-${d.label}`}
         className={`
           px-3 py-2 rounded-lg min-w-[180px] max-w-[220px] transition-all duration-150 border-2
           ${isDimmed ? "opacity-50 cursor-default border-dashed border-system-log/30" : "cursor-pointer border-solid"}

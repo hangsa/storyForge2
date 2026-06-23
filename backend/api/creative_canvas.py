@@ -50,12 +50,25 @@ def _get_canvas_path(project_id: str) -> Path:
 
 
 def _read_canvas(project_id: str) -> Optional[dict]:
-    """Read canvas_state.json. Returns None if not initialized."""
+    """Read canvas_state.json. Returns None if not initialized.
+
+    Migrates v1 → v2 transparently. Migrated state is written back atomically
+    only when at least one mutation occurs; reads alone are non-mutating.
+    """
     path = _get_canvas_path(project_id)
     if not path.exists():
         return None
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        canvas = json.load(f)
+    if canvas.get("schema_version") != 2:
+        migrated = _migrate_v1_to_v2(canvas)
+        # Persist migrated form so future reads skip the migration step.
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(migrated, f, ensure_ascii=False, indent=2)
+        tmp.replace(path)
+        return migrated
+    return canvas
 
 
 def _write_canvas(project_id: str, data: dict) -> None:
@@ -130,6 +143,49 @@ def _delete_canvas(project_id: str) -> bool:
         return False
     path.unlink()
     return True
+
+
+def _migrate_v1_to_v2(canvas: dict) -> dict:
+    """One-shot migration from v1 (dimension-tagged facets) to v2 (multi-branch).
+
+    Idempotent: passing a v2 canvas through returns it unchanged.
+
+    Steps:
+        1. Preserve created_at/updated_at/edges/evaluations
+        2. Drop the dimension field on every node
+        3. Add branch_status="active" to every node
+        4. Rebuild branch_choices from selected_path adjacency
+        5. Tag schema_version=2
+    """
+    if canvas.get("schema_version") == 2:
+        return canvas
+
+    migrated = {
+        "schema_version": 2,
+        "root_node_id": canvas.get("root_node_id"),
+        "nodes": {},
+        "edges": list(canvas.get("edges", [])),
+        "selected_path": list(canvas.get("selected_path", [])),
+        "branch_choices": {},
+        "evaluations": dict(canvas.get("evaluations", {})),
+        "created_at": canvas.get("created_at"),
+        "updated_at": canvas.get("updated_at"),
+    }
+
+    for nid, node in canvas.get("nodes", {}).items():
+        new_node = {k: v for k, v in node.items() if k != "dimension"}
+        new_node["branch_status"] = "active"
+        migrated["nodes"][nid] = new_node
+
+    # Rebuild branch_choices: walk selected_path as parent->child pairs.
+    path = migrated["selected_path"]
+    for i in range(len(path) - 1):
+        parent, child = path[i], path[i + 1]
+        parent_node = migrated["nodes"].get(parent, {})
+        if child in parent_node.get("children_ids", []):
+            migrated["branch_choices"][parent] = child
+
+    return migrated
 
 
 # ---------------------------------------------------------------------------

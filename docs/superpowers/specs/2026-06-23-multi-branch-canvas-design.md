@@ -435,3 +435,22 @@ interface UseCreativeCanvasReturn {
 ---
 
 **End of design doc.** 接下来请人工 review，确认后进入 plan 阶段。
+
+---
+
+## Implementation Progress
+
+**Approved:** 2026-06-23
+**Implementation started:** 2026-06-23 via subagent-driven-development
+**Paused at:** Task 3 (user-requested checkpoint)
+
+**Completed so far:**
+- Task 1: `WhatIfNode` model — `dimension` dropped, `branch_status` + 3 constants added
+- Task 2: API serializers `_node_to_dict` / `_dict_to_node` updated; uses `BRANCH_STATUS_ACTIVE` constant
+- Task 3: `WhatIfEngine.expand_node()` now generates 3 mutually-exclusive branches; prompt rewritten to remove all dimension references; `test_whatif_path_context.py` fixtures cleaned
+
+**Known issues carried forward:**
+- `tests/test_creative_canvas_api.py::test_init_canvas` — mock asserts on removed `dimension` field (Task 8 cleanup target)
+- `tests/test_creative_os/test_whatif_engine.py` — 3 stale assertions (BREADTH=4, dimension in {...}, len(children)=4) (immediate next cleanup step)
+
+**Branch state:** `v1.7`, working tree clean, 3 commits ahead of last push.

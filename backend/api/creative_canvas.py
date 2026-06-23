@@ -72,7 +72,17 @@ def _read_canvas(project_id: str) -> Optional[dict]:
 
 
 def _write_canvas(project_id: str, data: dict) -> None:
-    """Atomically write canvas_state.json."""
+    """Atomically write canvas_state.json after validating invariants.
+
+    Raises CanvasInvariantError if the canvas would violate any of the 6
+    branching invariants. The file is left untouched in that case.
+    """
+    try:
+        _validate_canvas_invariants(data)
+    except CanvasInvariantError as exc:
+        logger.error("Refusing to write invalid canvas for %s: %s", project_id, exc)
+        raise
+
     path = _get_canvas_path(project_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(".tmp")

@@ -1,35 +1,37 @@
 interface CanvasToolbarProps {
   nodeCount: number;
+  activeCount: number;
+  showDimmedChildren: boolean;
+  onToggleDimmedChildren: () => void;
   onRequestReset: () => void;
   onFitView: () => void;
 }
 
-const DIMENSION_LEGEND = [
-  { label: "角色动机", color: "#7c3aed" },
-  { label: "世界观规则", color: "#0891b2" },
-  { label: "情节方向", color: "#ea580c" },
-  { label: "读者体验", color: "#059669" },
-];
-
-export default function CanvasToolbar({ nodeCount, onRequestReset, onFitView }: CanvasToolbarProps) {
+export default function CanvasToolbar({
+  nodeCount,
+  activeCount,
+  showDimmedChildren,
+  onToggleDimmedChildren,
+  onRequestReset,
+  onFitView,
+}: CanvasToolbarProps) {
   return (
     <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between">
       {/* Left: stats */}
       <div className="flex items-center gap-3 bg-surface-container-low/90 backdrop-blur px-3 py-1.5 rounded-lg border border-outline-variant/50">
         <span className="font-label-mono text-xs text-system-log">
-          节点: {nodeCount}
+          节点 {nodeCount} / 激活 {activeCount}
         </span>
-        <div className="flex items-center gap-2">
-          {DIMENSION_LEGEND.map((d) => (
-            <div key={d.label} className="flex items-center gap-1">
-              <div
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: d.color }}
-              />
-              <span className="font-label-mono text-xs text-system-log/70">{d.label}</span>
-            </div>
-          ))}
-        </div>
+        <button
+          onClick={onToggleDimmedChildren}
+          className={`px-2 py-1 text-xs rounded font-label-mono transition-colors ${
+            showDimmedChildren
+              ? "bg-primary-container/20 text-primary-container"
+              : "bg-surface-container text-system-log hover:text-primary"
+          }`}
+        >
+          {showDimmedChildren ? "隐藏未选子树" : "显示未选子树"}
+        </button>
       </div>
 
       {/* Right: actions */}

@@ -93,3 +93,88 @@ class TestMutationEngineLLM:
         engine = MutationEngine(model_router=None)
         with pytest.raises(NotImplementedError):
             await engine.mutate(sample_trope, MutationOp.INVERSION)
+
+
+class TestParseResponseRobustness:
+    """Regression: LLM output formats vary. Parser must accept:
+    - pure JSON
+    - markdown code-fenced JSON
+    - prose wrapped around JSON
+    - empty / malformed → empty dict (not crash)
+    """
+
+    def test_pure_json(self, mock_router):
+        engine = MutationEngine(model_router=mock_router)
+        result = engine._parse_response({
+            "content": '{"core_premise": "abc"}'
+        })
+        assert result == {"core_premise": "abc"}
+
+    def test_markdown_fenced_json(self, mock_router):
+        engine = MutationEngine(model_router=mock_router)
+        result = engine._parse_response({
+            "content": '```json\n{"core_premise": "abc"}\n```'
+        })
+        assert result == {"core_premise": "abc"}
+
+    def test_markdown_fenced_no_language(self, mock_router):
+        engine = MutationEngine(model_router=mock_router)
+        result = engine._parse_response({
+            "content": '```\n{"core_premise": "abc"}\n```'
+        })
+        assert result == {"core_premise": "abc"}
+
+    def test_prose_wrapped_json(self, mock_router):
+        engine = MutationEngine(model_router=mock_router)
+        result = engine._parse_response({
+            "content": '以下是结果：\n{"core_premise": "abc", "core_conflict": "def"}'
+        })
+        assert result["core_premise"] == "abc"
+        assert result["core_conflict"] == "def"
+
+    def test_empty_content(self, mock_router):
+        engine = MutationEngine(model_router=mock_router)
+        assert engine._parse_response({"content": ""}) == {}
+
+    def test_completely_garbage(self, mock_router):
+        engine = MutationEngine(model_router=mock_router)
+        assert engine._parse_response({"content": "hello world no json"}) == {}
+
+    def test_nested_braces_in_json(self, mock_router):
+        engine = MutationEngine(model_router=mock_router)
+        content = '前缀 {"a": 1, "b": {"c": 2}} 后缀'
+        result = engine._parse_response({"content": content})
+        assert result == {"a": 1, "b": {"c": 2}}
+
+
+class TestBuildMutationUserPrompt:
+    """The prompt must explicitly request the 4 output fields, otherwise
+    the LLM echoes back the input fields as a JSON object."""
+
+    def test_prompt_lists_all_four_output_fields(self, sample_trope):
+        prompt = MutationEngine._build_mutation_user_prompt(
+            sample_trope, MutationOp.INVERSION, context=""
+        )
+        assert "core_premise" in prompt
+        assert "core_conflict" in prompt
+        assert "novelty_hook" in prompt
+        assert "self_consistency_check" in prompt
+
+    def test_prompt_includes_operation_label(self, sample_trope):
+        prompt = MutationEngine._build_mutation_user_prompt(
+            sample_trope, MutationOp.ESCALATION, context=""
+        )
+        assert "加码" in prompt
+
+    def test_prompt_includes_context_when_provided(self, sample_trope):
+        prompt = MutationEngine._build_mutation_user_prompt(
+            sample_trope, MutationOp.SUBVERSION, context="主角在末世觉醒"
+        )
+        assert "主角在末世觉醒" in prompt
+
+    def test_fusion_prompt_unchanged(self, sample_trope):
+        """Fusion has its own prompt builder — verify it still works."""
+        prompt = MutationEngine._build_fusion_user_prompt(
+            sample_trope, sample_trope
+        )
+        assert "废柴逆袭" in prompt

@@ -132,7 +132,18 @@ class MutationEngine:
         ]
         if context:
             lines.append(f"额外上下文：{context}")
-        lines.append("\n请输出变异后的结果JSON：")
+        lines.append(
+            "\n请基于以上信息，输出应用「"
+            + op_label
+            + "」后的变异结果JSON，"
+            "必须严格使用以下字段（不要输出其它字段）：\n"
+            "{\n"
+            '  "core_premise": "变异后的核心前提（50-120字）",\n'
+            '  "core_conflict": "变异后的核心冲突（30-80字）",\n'
+            '  "novelty_hook": "抓住读者的新颖点（30-60字）",\n'
+            '  "self_consistency_check": "自洽性评估（30-60字）"\n'
+            "}"
+        )
         return "\n".join(lines)
 
     @staticmethod
@@ -157,8 +168,43 @@ class MutationEngine:
     @staticmethod
     def _parse_response(response: dict) -> dict:
         content = response.get("content", "{}")
+        if not content or not content.strip():
+            return {}
+        # Try direct parse first
         try:
             return json.loads(content)
         except json.JSONDecodeError:
-            logger.warning("Failed to parse mutation LLM response as JSON: %s", content)
-            return {}
+            pass
+        # Strip markdown code fences: ```json\n{...}\n``` or ```\n{...}\n```
+        stripped = content.strip()
+        if stripped.startswith("```"):
+            lines = stripped.split("\n")
+            # Drop first fence line and last fence line if present
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            stripped = "\n".join(lines).strip()
+        try:
+            return json.loads(stripped)
+        except json.JSONDecodeError:
+            pass
+        # Last resort: extract first balanced {...} block
+        start = content.find("{")
+        if start >= 0:
+            depth = 0
+            for i in range(start, len(content)):
+                if content[i] == "{":
+                    depth += 1
+                elif content[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = content[start:i + 1]
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
+        logger.warning(
+            "Failed to parse mutation LLM response as JSON: %s", content[:300]
+        )
+        return {}

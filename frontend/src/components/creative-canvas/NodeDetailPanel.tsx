@@ -114,66 +114,8 @@ export default function NodeDetailPanel({
             )}
           </div>
 
-          {/* Saturation warning */}
-          {node.saturation_warning && (
-            <div className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded">
-              <span className="material-symbols-outlined text-amber-400 text-xs align-middle mr-1">
-                warning
-              </span>
-              <span className="font-body-ui text-amber-300 text-xs">{node.saturation_warning}</span>
-            </div>
-          )}
-
-          {/* Suggestion */}
-          {suggestion && (
-            <div className="px-2.5 py-1.5 bg-primary-container/10 border border-primary-container/20 rounded">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="material-symbols-outlined text-primary-container text-xs">
-                  auto_awesome
-                </span>
-                <span className="font-label-mono text-xs text-primary-container">
-                  创意导演建议
-                </span>
-              </div>
-              <p className="font-body-narrative text-primary text-xs leading-snug">
-                {suggestion}
-              </p>
-            </div>
-          )}
-
-          <MutationSuggestion
-            loading={mutationSuggestion?.nodeId === node.id && mutationSuggestion.loading}
-            recommendation={
-              mutationSuggestion?.nodeId === node.id ? mutationSuggestion.recommendation : ""
-            }
-          />
-        </div>
-
-        {/* Right: radar + actions */}
-        <div className="w-[340px] p-3 flex flex-col">
-          {/* Radar */}
-          <div className="flex-1 min-h-0">
-            {isOnActivePath ? (
-              noveltyScore ? (
-                <NoveltyRadar scores={noveltyScore} />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <span className="font-body-ui text-system-log/50 text-xs">
-                    点击「重新评估」获取新颖度分析
-                  </span>
-                </div>
-              )
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <span className="font-body-ui text-system-log/50 text-xs">
-                  未选分支暂不评分
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Action bar */}
-          <div className="flex items-center gap-1.5 pt-2 border-t border-outline-variant/50 mt-2">
+          {/* Action bar — directly under the meta strip */}
+          <div className="flex items-center gap-1.5 pt-2 border-t border-outline-variant/50">
             <button
               onClick={onExpand}
               disabled={node.is_expanded}
@@ -219,6 +161,63 @@ export default function NodeDetailPanel({
                 </span>
                 路径终点
               </button>
+            )}
+          </div>
+
+          {/* Saturation warning */}
+          {node.saturation_warning && (
+            <div className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded">
+              <span className="material-symbols-outlined text-amber-400 text-xs align-middle mr-1">
+                warning
+              </span>
+              <span className="font-body-ui text-amber-300 text-xs">{node.saturation_warning}</span>
+            </div>
+          )}
+
+          {/* Suggestion */}
+          {suggestion && (
+            <div className="px-2.5 py-1.5 bg-primary-container/10 border border-primary-container/20 rounded">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="material-symbols-outlined text-primary-container text-xs">
+                  auto_awesome
+                </span>
+                <span className="font-label-mono text-xs text-primary-container">
+                  创意导演建议
+                </span>
+              </div>
+              <p className="font-body-narrative text-primary text-xs leading-snug">
+                {suggestion}
+              </p>
+            </div>
+          )}
+
+          <MutationSuggestion
+            loading={mutationSuggestion?.nodeId === node.id && mutationSuggestion.loading}
+            recommendation={
+              mutationSuggestion?.nodeId === node.id ? mutationSuggestion.recommendation : ""
+            }
+          />
+        </div>
+
+        {/* Right: radar only */}
+        <div className="w-[340px] p-3 flex flex-col">
+          <div className="flex-1 min-h-0">
+            {isOnActivePath ? (
+              noveltyScore ? (
+                <NoveltyRadar scores={noveltyScore} />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <span className="font-body-ui text-system-log/50 text-xs">
+                    点击「重新评估」获取新颖度分析
+                  </span>
+                </div>
+              )
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <span className="font-body-ui text-system-log/50 text-xs">
+                  未选分支暂不评分
+                </span>
+              </div>
             )}
           </div>
         </div>

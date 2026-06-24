@@ -56,6 +56,7 @@ tiers:
 agent_mapping:
   planner:
     concept_generation:        { tier: tier_1, model: default }
+    canvas_to_concept:         { tier: tier_1, model: default }
     world_generation:          { tier: tier_1, model: default }
     character_generation:      { tier: tier_1, model: default }
     outline_generation:        { tier: tier_1, model: default }

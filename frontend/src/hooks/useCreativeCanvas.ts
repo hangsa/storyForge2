@@ -332,31 +332,26 @@ export default function useCreativeCanvas(projectId: string | undefined) {
         : s.mutationSuggestion,
     }));
     try {
-      const result = await api.applyMutation(projectId, nodeId, operation);
-      setState((s) => {
-        const updatedNodes = {
-          ...s.nodes,
-          [result.new_node.id]: result.new_node,
-        };
-        // Add the new edge (parent → new sibling)
-        const newEdge = {
-          from: result.new_node.parent_id || "",
-          to: result.new_node.id,
-        };
-        const mergedEdges = s.edges.find(
-          (e) => e.from === newEdge.from && e.to === newEdge.to,
-        )
-          ? s.edges
-          : [...s.edges, newEdge];
-        return {
-          ...s,
-          nodes: updatedNodes,
-          edges: mergedEdges,
-          // Auto-select the new node so the user can review the mutation
-          selectedNodeId: result.new_node.id,
-          mutationSuggestion: null,
-        };
-      });
+      await api.applyMutation(projectId, nodeId, operation);
+      // Re-read the full canvas so local state matches server truth:
+      // the original node is now dimmed, the parent has a new child,
+      // and branch_choices has shifted to the mutation node. Manually
+      // patching these is error-prone (we'd have to dim the original
+      // AND its descendants AND update branch_choices AND selected_path).
+      await loadCanvas();
+      // Auto-select the new node so the user can review the mutation.
+      // Find the freshly-created mutation node by its `mu_` prefix.
+      const fresh = await api.getCanvasState(projectId);
+      const newNode = Object.values(fresh.nodes).find(
+        (n) => n.id.startsWith("mu_") && n.parent_id !== null &&
+               Object.keys(fresh.nodes).some((id) => id === nodeId) &&
+               fresh.nodes[nodeId]?.parent_id === n.parent_id,
+      );
+      setState((s) => ({
+        ...s,
+        selectedNodeId: newNode?.id ?? s.selectedNodeId,
+        mutationSuggestion: null,
+      }));
     } catch (e) {
       setState((s) => ({
         ...s,
@@ -371,7 +366,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
           : s.mutationSuggestion,
       }));
     }
-  }, [projectId]);
+  }, [projectId, loadCanvas]);
 
   return {
     ...state,

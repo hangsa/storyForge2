@@ -404,6 +404,14 @@ export interface CanvasNode {
   children_ids: string[];
   is_expanded: boolean;
   branch_status: BranchStatus;
+  mutation_context?: {
+    operation: string;
+    source_trope_id: string;
+    core_premise: string;
+    core_conflict: string;
+    novelty_hook: string;
+    self_consistency_check: string;
+  } | null;
 }
 
 export interface CanvasEdge {
@@ -420,6 +428,8 @@ export interface CanvasStateData {
   branch_choices?: Record<string, string>;
   created_at?: string;
   updated_at?: string;
+  committed_at?: string;
+  committed_concept_ref?: string;
 }
 
 export interface CanvasNodeDict {
@@ -689,6 +699,13 @@ export const api = {
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/choose-branch`,
       { parent_node_id: parentNodeId, chosen_child_id: chosenChildId }
+    ),
+
+  commitCanvas: (projectId: string) =>
+    request<ConceptResponse & { committed_at: string }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/commit`,
+      {}
     ),
 
   // --- v1.7 Branch Simulation ---

@@ -18,6 +18,23 @@ class PlannerAgent(BaseAgent):
         self.log_usage("concept_generation", response)
         return result, response
 
+    async def generate_concept_from_canvas(
+        self, canvas_summary: str, genre: str = "cool_novel"
+    ) -> tuple[dict, LLMResponse]:
+        """Translate a finalized canvas selected_path into a concept + story_dna.
+
+        Used by /api/v1/projects/<id>/creative/canvas/commit. The summary
+        is the selected_path nodes pre-formatted (content + trope_tags +
+        novelty_score + mutation_context) by the endpoint.
+        """
+        result, response = await self.generate_from_template(
+            "canvas_to_concept",
+            canvas_summary=canvas_summary,
+            genre=genre,
+        )
+        self.log_usage("canvas_to_concept", response)
+        return result, response
+
     async def generate_world(
         self,
         concept: dict,

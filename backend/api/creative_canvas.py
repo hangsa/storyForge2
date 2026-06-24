@@ -9,6 +9,7 @@ Provides thin orchestration endpoints for the Creative Canvas frontend:
 - POST   /merge  — Placeholder for node merging
 - POST   /evaluate — Re-score a node with NoveltyEvaluator
 - POST   /select — Update selected_path and get CreativeDirector path evaluation
+- POST   /commit — Translate selected_path into concept_and_dna.json via LLM
 - DELETE /state  — Reset the canvas (delete canvas_state.json)
 """
 
@@ -92,11 +93,17 @@ def _read_canvas(project_id: str) -> Optional[dict]:
     return canvas
 
 
-def _write_canvas(project_id: str, data: dict) -> None:
+def _write_canvas(project_id: str, data: dict, preserve_committed: bool = False) -> None:
     """Atomically write canvas_state.json after validating invariants.
 
     Raises CanvasInvariantError if the canvas would violate any of the 6
     branching invariants. The file is left untouched in that case.
+
+    By default this call clears the `committed_at` / `committed_concept_ref`
+    marker — any edit (expand, apply-mutation, choose-branch, select) should
+    invalidate the "已提交" chip on the frontend. Pass preserve_committed=True
+    from /commit itself so the marker the endpoint just stamped survives
+    the write.
     """
     try:
         _validate_canvas_invariants(data)
@@ -107,6 +114,10 @@ def _write_canvas(project_id: str, data: dict) -> None:
     # Keep the persisted edges in sync with children_ids so the file on disk
     # matches what _read_canvas would derive (avoids stale edge lists).
     data["edges"] = _derive_edges_from_nodes(data.get("nodes", {}))
+
+    if not preserve_committed:
+        data.pop("committed_at", None)
+        data.pop("committed_concept_ref", None)
 
     path = _get_canvas_path(project_id)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -143,6 +154,7 @@ def _node_to_dict(node: WhatIfNode) -> dict:
         "children_ids": list(node.children_ids),
         "is_expanded": node.is_expanded,
         "branch_status": node.branch_status,
+        "mutation_context": node.mutation_context,
     }
 
 
@@ -159,6 +171,7 @@ def _dict_to_node(d: dict) -> WhatIfNode:
         children_ids=list(d.get("children_ids", [])),
         is_expanded=d.get("is_expanded", False),
         branch_status=d.get("branch_status", BRANCH_STATUS_ACTIVE),
+        mutation_context=d.get("mutation_context"),
     )
 
 
@@ -847,7 +860,8 @@ async def apply_mutation(project_id: str, data: dict):
 
     # --- Step 3: build new WhatIfNode ------------------------------------
     # Use mutation_result.core_premise as the new node's content.
-    # Tag it with the operation for traceability.
+    # Tag it with the operation for traceability. Stash the full
+    # mutation_result on mutation_context so /commit can pass it to the LLM.
     import uuid
     new_id = f"mu_{uuid.uuid4().hex[:8]}"
     new_node = WhatIfNode(
@@ -861,6 +875,14 @@ async def apply_mutation(project_id: str, data: dict):
         children_ids=[],
         is_expanded=False,
         branch_status=BRANCH_STATUS_ACTIVE,
+        mutation_context={
+            "operation": mutation_result.operation.value,
+            "source_trope_id": mutation_result.source_trope_id,
+            "core_premise": mutation_result.core_premise,
+            "core_conflict": mutation_result.core_conflict,
+            "novelty_hook": mutation_result.novelty_hook,
+            "self_consistency_check": mutation_result.self_consistency_check,
+        },
     )
 
     # --- Step 4: insert into canvas --------------------------------------
@@ -1338,6 +1360,252 @@ async def choose_branch(project_id: str, data: dict):
             "branch_choices": canvas["branch_choices"],
             "chosen_node": nodes[chosen_id],
             "dimmed_count": len(dimmed_ids),
+        },
+    }
+
+
+# W3: Soft cap on per-node content and total summary size. The LLM prompt
+# template has max_tokens=4096, and a 10MB node would force us to drop most
+# of the context anyway. Truncate with a marker so the LLM knows there's more.
+MAX_NODE_CONTENT_CHARS = 8_000
+MAX_SUMMARY_CHARS = 32_000
+
+
+def _format_canvas_summary(selected_path: list, nodes: dict) -> str:
+    """Format selected_path nodes into a structured text for the LLM prompt.
+
+    Each node becomes 3-5 lines: header (depth + tags + novelty), content,
+    optional mutation_context block. Nodes are ordered root → leaf. Empty
+    content is rendered as "（无内容）" so the LLM doesn't lose its place.
+
+    Per-node content is capped at MAX_NODE_CONTENT_CHARS; the assembled
+    summary is capped at MAX_SUMMARY_CHARS. Truncations are logged so we
+    notice if users start hitting the cap routinely.
+    """
+    lines: list[str] = []
+    truncated_nodes: list[str] = []
+    for nid in selected_path:
+        node = nodes.get(nid) or {}
+        depth = node.get("depth", 0)
+        raw_content = (node.get("content") or "").strip()
+        if len(raw_content) > MAX_NODE_CONTENT_CHARS:
+            truncated_nodes.append(nid)
+            content = raw_content[:MAX_NODE_CONTENT_CHARS] + " […截断]"
+        else:
+            content = raw_content
+        tags = node.get("trope_tags") or []
+        novelty = node.get("novelty_score", 0.0) or 0.0
+        mutation = node.get("mutation_context")
+
+        header = f"[深度 {depth}]"
+        if tags:
+            header += f" 标签={','.join(tags)}"
+        if novelty:
+            header += f" 新颖度={novelty:.0f}"
+        lines.append(header)
+        lines.append(content or "（无内容）")
+
+        if mutation:
+            op = mutation.get("operation", "")
+            lines.append(f"  [变异 {op}]")
+            for label, key in (
+                ("核心冲突", "core_conflict"),
+                ("新颖钩子", "novelty_hook"),
+                ("自洽检查", "self_consistency_check"),
+            ):
+                val = (mutation.get(key) or "").strip()
+                if val:
+                    lines.append(f"  {label}: {val}")
+        lines.append("")  # blank separator between nodes
+
+    if truncated_nodes:
+        logger.warning(
+            "canvas_summary truncated %d node(s) for commit prompt: %s",
+            len(truncated_nodes), truncated_nodes,
+        )
+
+    text = "\n".join(lines).rstrip()
+    if len(text) > MAX_SUMMARY_CHARS:
+        logger.warning(
+            "canvas_summary total length %d exceeds cap %d, truncating",
+            len(text), MAX_SUMMARY_CHARS,
+        )
+        text = text[:MAX_SUMMARY_CHARS] + "\n[…后续内容已截断]"
+    return text
+
+
+@router.post("/commit")
+async def commit_canvas(project_id: str):
+    """Translate canvas selected_path into concept_and_dna.json via LLM.
+
+    Steps:
+        1. Read canvas_state.json (400 if not initialized)
+        2. Validate selected_path length >= 2 (root + at least one refinement)
+        3. Build canvas_summary text from selected_path
+        4. Read project.json for genre
+        5. Call PlannerAgent.generate_concept_from_canvas
+        6. Validate LLM output has story_dna.core_contradiction.statement
+        7. Write concept_and_dna.json (last-write-wins; overwrites any existing)
+        8. Update canvas_state.json with committed_at + committed_concept_ref
+        9. Return {concept, story_dna, source}
+
+    LLM output that misses the gate field is returned as 503 with the raw
+    payload in `detail` so the frontend can display the agent's text to the
+    user verbatim.
+    """
+    _ensure_project(project_id)
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+    selected_path = canvas.get("selected_path") or []
+    if len(selected_path) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "INSUFFICIENT_PATH",
+                "message": (
+                    "提交到概念讨论需要 selected_path 至少 2 个节点"
+                    "（根节点 + 至少一次细化/变异），当前只有 "
+                    f"{len(selected_path)} 个"
+                ),
+                "detail": {"selected_path_length": len(selected_path)},
+            },
+        )
+
+    nodes = canvas.get("nodes", {})
+    canvas_summary = _format_canvas_summary(selected_path, nodes)
+
+    # Read genre from project.json
+    project = _get_fm().read_json(project_id, "project.json") or {}
+    genre = project.get("genre", "cool_novel")
+
+    # LLM translation
+    from backend.agents.planner import PlannerAgent
+
+    agent = PlannerAgent(project_id)
+    try:
+        result, _ = await agent.generate_concept_from_canvas(
+            canvas_summary=canvas_summary,
+            genre=genre,
+        )
+    except ValueError as exc:
+        # LLM JSON parse failure or output missing required fields surfaced
+        # by the base agent. Bubble the message up so the UI can show it.
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "LLM_GENERATION_FAILED",
+                "message": f"画布翻译失败：{exc}",
+                "detail": {},
+            },
+        )
+    except Exception as exc:
+        logger.warning("commit_canvas LLM call failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "LLM_BACKEND_UNAVAILABLE",
+                "message": f"画布翻译失败：{exc}",
+                "detail": {},
+            },
+        )
+
+    # B1: Distinguish "LLM backend degraded / empty" from "LLM returned a
+    # well-formed dict that just misses a required field". The base agent
+    # silently degrades with {"text": "", "degraded": True} when Tier 2/3 is
+    # unavailable — surfacing that as LLM_OUTPUT_INVALID is misleading.
+    if not result or result.get("degraded") or not (result.get("concept") or result.get("story_dna")):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "LLM_BACKEND_UNAVAILABLE",
+                "message": "画布翻译失败：LLM 后端不可用（已降级或返回为空）",
+                "detail": {},
+            },
+        )
+
+    # Validate gate field
+    concept = result.get("concept") or {}
+    story_dna = result.get("story_dna") or {}
+    statement = (story_dna.get("core_contradiction") or {}).get("statement") or ""
+    if not statement.strip():
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "LLM_OUTPUT_INVALID",
+                "message": (
+                    "LLM 输出缺少 story_dna.core_contradiction.statement，"
+                    "无法满足 STAGE1→STAGE2 门控要求"
+                ),
+                "detail": {"raw_output": result},
+            },
+        )
+
+    # W4: Write canvas_state.json FIRST (stamp committed_at), then write
+    # concept_and_dna.json. If we crash between the two writes, we end up
+    # with "canvas says committed, concept file not yet updated" — the user
+    # sees a chip on /stage1/canvas and an empty/old concept on /stage1.
+    # The reverse order (concept updated, canvas not stamped) leaves the
+    # user with a new concept they have no audit trail for. The former is
+    # more recoverable (re-commit overwrites cleanly).
+    now = datetime.utcnow().isoformat()
+    canvas["committed_at"] = now
+    canvas["committed_concept_ref"] = "concept_and_dna.json"
+    canvas["updated_at"] = now
+    _write_canvas(project_id, canvas, preserve_committed=True)
+
+    # Write concept_and_dna.json (last-write-wins)
+    concept_and_dna = {
+        "concept": concept,
+        "story_dna": story_dna,
+        "source": "canvas",
+        "canvas_snapshot": {
+            "selected_path": selected_path,
+            "committed_at": now,
+        },
+    }
+    try:
+        _get_fm().write_json(project_id, "concept_and_dna.json", concept_and_dna)
+    except OSError as exc:
+        # canvas_state.json was already stamped with committed_at above.
+        # Leave it stamped: a subsequent /commit will overwrite both files
+        # cleanly. Surfacing the IO failure as 503 with a clear code so the
+        # UI can show a "retry commit" message instead of a generic error.
+        logger.error("commit_canvas concept_and_dna write failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "STORAGE_WRITE_FAILED",
+                "message": f"概念文件写入失败：{exc}（画布已标记为已提交，可重试提交）",
+                "detail": {},
+            },
+        )
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "已提交到概念讨论",
+        "detail": {
+            "concept": concept,
+            "story_dna": story_dna,
+            "source": "canvas",
+            "committed_at": now,
         },
     }
 

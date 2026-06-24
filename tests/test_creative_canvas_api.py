@@ -92,6 +92,7 @@ class TestCanvasInitEndpoint:
                 branch_status="active",
                 novelty_score=0, trope_tags=[], is_expanded=False,
                 children_ids=[], saturation_warning=None,
+                mutation_context=None,
             )
             mock_engine.return_value = mock_instance
 

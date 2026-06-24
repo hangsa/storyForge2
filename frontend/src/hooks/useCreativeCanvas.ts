@@ -43,6 +43,9 @@ interface CanvasState {
   failedNodes: Record<string, FailedNode>;
   loadingNodes: LoadingNodes;
   mutationSuggestion: MutationSuggestionState | null;
+  // Set by /commit; cleared on the next local edit (the backend also
+  // clears it on the server side, so this mirrors server state).
+  committedAt: string | null;
 }
 
 const initialState: CanvasState = {
@@ -60,6 +63,7 @@ const initialState: CanvasState = {
   failedNodes: {},
   loadingNodes: {},
   mutationSuggestion: null,
+  committedAt: null,
 };
 
 export default function useCreativeCanvas(projectId: string | undefined) {
@@ -85,6 +89,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
           failedNodes: {},
           loadingNodes: {},
           mutationSuggestion: null,
+          committedAt: data.committed_at || null,
         });
       }
     } catch {
@@ -112,6 +117,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
         failedNodes: {},
         loadingNodes: {},
         mutationSuggestion: null,
+        committedAt: data.committed_at || null,
       });
     } catch (e) {
       setState((s) => ({
@@ -165,6 +171,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
           suggestion: result.suggestion || s.suggestion,
           failedNodes: remainingFailed,
           loadingNodes: remainingLoading,
+          committedAt: null,
         };
       });
     } catch (e) {
@@ -229,6 +236,8 @@ export default function useCreativeCanvas(projectId: string | undefined) {
         selectedPath: result.selected_path,
         suggestion: result.evaluation || s.suggestion,
         selectedNodeId: null,
+        // server clears committed_at on /select, mirror locally
+        committedAt: null,
       }));
     } catch (e) {
       setState((s) => ({
@@ -363,6 +372,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
         failedNodes: {},
         loadingNodes: {},
         mutationSuggestion: null,
+        committedAt: fresh.committed_at || null,
       });
     } catch (e) {
       setState((s) => ({
@@ -380,6 +390,25 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     }
   }, [projectId]);
 
+  const commitCanvas = useCallback(async () => {
+    if (!projectId) return;
+    setState((s) => ({ ...s, error: null }));
+    try {
+      const result = await api.commitCanvas(projectId);
+      setState((s) => ({
+        ...s,
+        committedAt: result.committed_at || new Date().toISOString(),
+      }));
+      return result;
+    } catch (e) {
+      setState((s) => ({
+        ...s,
+        error: e instanceof Error ? e.message : "提交到概念讨论失败",
+      }));
+      throw e;
+    }
+  }, [projectId]);
+
   return {
     ...state,
     loadCanvas,
@@ -394,5 +423,6 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     updatePosition,
     getMutationSuggestion,
     applyMutation,
+    commitCanvas,
   };
 }

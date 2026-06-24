@@ -107,6 +107,9 @@ class WhatIfNode:
     children_ids: list[str] = field(default_factory=list)
     is_expanded: bool = False
     branch_status: str = BRANCH_STATUS_ACTIVE
+    # Populated by /apply-mutation; consumed by /commit when LLM-extracting
+    # the canvas into concept_and_dna.json. None for non-mutated nodes.
+    mutation_context: Optional[dict] = None
 
 
 @dataclass

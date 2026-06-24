@@ -37,7 +37,7 @@ export default function CanvasEmptyState({ onInit, loading, error, defaultPremis
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">double_arrow</span>
-            双击展开
+            双击扩展
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">analytics</span>

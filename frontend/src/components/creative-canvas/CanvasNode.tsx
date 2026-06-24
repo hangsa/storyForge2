@@ -79,7 +79,7 @@ export default function CanvasNode({ data, selected }: NodeProps) {
               className="text-[10px] px-1 py-0.5 rounded-full bg-primary-container/20 text-primary-container
                          hover:bg-primary-container/40 transition-colors font-label-mono"
             >
-              + 展开
+              + 扩展
             </button>
           )}
         </div>

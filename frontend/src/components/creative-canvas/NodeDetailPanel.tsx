@@ -125,7 +125,7 @@ export default function NodeDetailPanel({
               <span className="material-symbols-outlined text-xs align-middle mr-0.5">
                 unfold_more
               </span>
-              {node.is_expanded ? "已展开" : "展开"}
+              {node.is_expanded ? "已扩展" : "扩展"}
             </button>
             <button
               onClick={onEvaluate}

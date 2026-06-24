@@ -338,20 +338,32 @@ export default function useCreativeCanvas(projectId: string | undefined) {
       // and branch_choices has shifted to the mutation node. Manually
       // patching these is error-prone (we'd have to dim the original
       // AND its descendants AND update branch_choices AND selected_path).
-      await loadCanvas();
-      // Auto-select the new node so the user can review the mutation.
-      // Find the freshly-created mutation node by its `mu_` prefix.
+      // Do it in a single setState so we don't risk an intermediate
+      // frame showing stale data (original still marked active).
       const fresh = await api.getCanvasState(projectId);
+      const originalNode = fresh.nodes[nodeId];
+      const originalParentId = originalNode?.parent_id;
       const newNode = Object.values(fresh.nodes).find(
-        (n) => n.id.startsWith("mu_") && n.parent_id !== null &&
-               Object.keys(fresh.nodes).some((id) => id === nodeId) &&
-               fresh.nodes[nodeId]?.parent_id === n.parent_id,
+        (n) => n.id.startsWith("mu_") &&
+               n.parent_id === originalParentId &&
+               n.parent_id !== null,
       );
-      setState((s) => ({
-        ...s,
-        selectedNodeId: newNode?.id ?? s.selectedNodeId,
+      setState({
+        status: "initialized",
+        rootNodeId: fresh.root_node_id ?? null,
+        nodes: fresh.nodes,
+        edges: fresh.edges,
+        selectedNodeId: newNode?.id ?? null,
+        selectedPath: fresh.selected_path || [],
+        branchChoices: fresh.branch_choices || {},
+        noveltyScores: {},
+        suggestion: "",
+        error: null,
+        positions: {},
+        failedNodes: {},
+        loadingNodes: {},
         mutationSuggestion: null,
-      }));
+      });
     } catch (e) {
       setState((s) => ({
         ...s,
@@ -366,7 +378,7 @@ export default function useCreativeCanvas(projectId: string | undefined) {
           : s.mutationSuggestion,
       }));
     }
-  }, [projectId, loadCanvas]);
+  }, [projectId]);
 
   return {
     ...state,

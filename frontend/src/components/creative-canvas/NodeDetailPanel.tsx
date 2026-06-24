@@ -15,6 +15,7 @@ interface NodeDetailPanelProps {
   onEvaluate: () => void;
   onSelectPath: () => void;
   onGetMutation: () => void;
+  onApplyMutation?: (operation: string) => void;
   onClose: () => void;
 }
 
@@ -34,6 +35,7 @@ export default function NodeDetailPanel({
   onEvaluate,
   onSelectPath,
   onGetMutation,
+  onApplyMutation,
   onClose,
 }: NodeDetailPanelProps) {
   const [heightVh, setHeightVh] = useState(DEFAULT_HEIGHT_VH);
@@ -242,10 +244,20 @@ export default function NodeDetailPanel({
           )}
 
           <MutationSuggestion
-            loading={mutationSuggestion?.nodeId === node.id && mutationSuggestion.loading}
+            loading={
+              mutationSuggestion?.nodeId === node.id &&
+              mutationSuggestion.loading &&
+              !mutationSuggestion.recommendation
+            }
             recommendation={
               mutationSuggestion?.nodeId === node.id ? mutationSuggestion.recommendation : ""
             }
+            applying={
+              mutationSuggestion?.nodeId === node.id &&
+              mutationSuggestion.loading &&
+              !!mutationSuggestion.recommendation
+            }
+            onApply={onApplyMutation}
           />
         </div>
 

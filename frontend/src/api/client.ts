@@ -660,6 +660,25 @@ export const api = {
       { node_id: nodeId }
     ),
 
+  applyMutation: (projectId: string, nodeId: string, operation: string) =>
+    request<{
+      new_node: CanvasNode;
+      mutation_result: {
+        operation: string;
+        source_trope_id: string;
+        core_premise: string;
+        core_conflict: string;
+        novelty_hook: string;
+        self_consistency_check: string;
+        tokens_used: number;
+      };
+      dimmed_count: number;
+    }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/apply-mutation`,
+      { node_id: nodeId, operation }
+    ),
+
   chooseBranch: (projectId: string, parentNodeId: string, chosenChildId: string) =>
     request<{
       selected_path: string[];

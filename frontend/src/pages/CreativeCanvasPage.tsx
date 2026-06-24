@@ -35,6 +35,7 @@ export default function CreativeCanvasPage() {
     retryExpand,
     updatePosition,
     getMutationSuggestion,
+    applyMutation,
   } = useCreativeCanvas(projectId);
 
   // Load existing concept premise for canvas seeding
@@ -186,6 +187,7 @@ export default function CreativeCanvasPage() {
           onEvaluate={() => evaluateNode(selectedNode.id)}
           onSelectPath={() => selectPath(selectedNode.id)}
           onGetMutation={() => getMutationSuggestion(selectedNode.id)}
+          onApplyMutation={(op) => applyMutation(selectedNode.id, op)}
           onClose={() => selectNode(null)}
         />
       )}

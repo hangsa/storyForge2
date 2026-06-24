@@ -322,6 +322,57 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     }
   }, [projectId]);
 
+  const applyMutation = useCallback(async (nodeId: string, operation: string) => {
+    if (!projectId) return;
+    // Mark this mutation suggestion as applying so the UI can disable buttons
+    setState((s) => ({
+      ...s,
+      mutationSuggestion: s.mutationSuggestion?.nodeId === nodeId
+        ? { ...s.mutationSuggestion, loading: true }
+        : s.mutationSuggestion,
+    }));
+    try {
+      const result = await api.applyMutation(projectId, nodeId, operation);
+      setState((s) => {
+        const updatedNodes = {
+          ...s.nodes,
+          [result.new_node.id]: result.new_node,
+        };
+        // Add the new edge (parent → new sibling)
+        const newEdge = {
+          from: result.new_node.parent_id || "",
+          to: result.new_node.id,
+        };
+        const mergedEdges = s.edges.find(
+          (e) => e.from === newEdge.from && e.to === newEdge.to,
+        )
+          ? s.edges
+          : [...s.edges, newEdge];
+        return {
+          ...s,
+          nodes: updatedNodes,
+          edges: mergedEdges,
+          // Auto-select the new node so the user can review the mutation
+          selectedNodeId: result.new_node.id,
+          mutationSuggestion: null,
+        };
+      });
+    } catch (e) {
+      setState((s) => ({
+        ...s,
+        mutationSuggestion: s.mutationSuggestion?.nodeId === nodeId
+          ? {
+              ...s.mutationSuggestion,
+              loading: false,
+              recommendation:
+                (e instanceof Error ? e.message : "变异应用失败") +
+                " — 请重试或选择其他操作",
+            }
+          : s.mutationSuggestion,
+      }));
+    }
+  }, [projectId]);
+
   return {
     ...state,
     loadCanvas,
@@ -335,5 +386,6 @@ export default function useCreativeCanvas(projectId: string | undefined) {
     retryExpand,
     updatePosition,
     getMutationSuggestion,
+    applyMutation,
   };
 }

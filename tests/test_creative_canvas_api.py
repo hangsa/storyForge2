@@ -202,3 +202,317 @@ class TestCanvasExpandEndpoint:
         ]
         assert persisted_statuses.count("active") == 1
         assert persisted_statuses.count("dimmed") == 2
+
+
+class TestCanvasMutateEndpoint:
+
+    def test_mutate_returns_recommendation(self, client, temp_dir):
+        """Regression: /mutate should call CreativeDirector and return a
+        text recommendation (no longer the placeholder message)."""
+        from backend.api.creative_canvas import _read_canvas
+
+        # Seed a canvas with an active parent + 3 active children,
+        # one of which is the chosen branch.
+        creative_os_dir = temp_dir / "test_project" / "creative_os"
+        creative_os_dir.mkdir(parents=True, exist_ok=True)
+        creative_os_dir.joinpath("canvas_state.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "root_node_id": "wi_001_00",
+                "nodes": {
+                    "wi_001_00": {
+                        "id": "wi_001_00", "depth": 0, "parent_id": None,
+                        "content": "Root", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_002_00"], "is_expanded": True,
+                        "branch_status": "active",
+                    },
+                    "wi_002_00": {
+                        "id": "wi_002_00", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "废柴逆袭：主角觉醒血脉逆天改命",
+                        "novelty_score": 50, "trope_tags": ["废柴逆袭"],
+                        "saturation_warning": None, "children_ids": [],
+                        "is_expanded": False, "branch_status": "active",
+                    },
+                },
+                "edges": [],
+                "selected_path": ["wi_001_00", "wi_002_00"],
+                "branch_choices": {"wi_001_00": "wi_002_00"},
+                "evaluations": {},
+                "created_at": "2026-06-23T00:00:00",
+                "updated_at": "2026-06-23T00:00:00",
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        with patch(
+            "backend.agents.creative_director.CreativeDirector"
+        ) as MockDir:
+            MockDir.return_value.recommend_mutation = AsyncMock(
+                return_value="推荐 Inversion 反转：把废柴逆袭反转为天才陨落"
+            )
+            response = client.post(
+                "/api/v1/projects/test_project/creative/canvas/mutate",
+                json={"node_id": "wi_002_00"},
+            )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["error"] is False
+        assert "recommendation" in data["detail"]
+        assert "反转" in data["detail"]["recommendation"]
+
+    def test_mutate_rejects_dimmed_node(self, client, temp_dir):
+        creative_os_dir = temp_dir / "test_project" / "creative_os"
+        creative_os_dir.mkdir(parents=True, exist_ok=True)
+        creative_os_dir.joinpath("canvas_state.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "root_node_id": "wi_001_00",
+                "nodes": {
+                    "wi_001_00": {
+                        "id": "wi_001_00", "depth": 0, "parent_id": None,
+                        "content": "Root", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_002_00", "wi_002_01"],
+                        "is_expanded": True, "branch_status": "active",
+                    },
+                    "wi_002_00": {
+                        "id": "wi_002_00", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "A active", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "active",
+                    },
+                    "wi_002_01": {
+                        "id": "wi_002_01", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "B dimmed", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "dimmed",
+                    },
+                },
+                "edges": [],
+                "selected_path": ["wi_001_00", "wi_002_00"],
+                "branch_choices": {"wi_001_00": "wi_002_00"},
+                "evaluations": {},
+                "created_at": "2026-06-23T00:00:00",
+                "updated_at": "2026-06-23T00:00:00",
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        response = client.post(
+            "/api/v1/projects/test_project/creative/canvas/mutate",
+            json={"node_id": "wi_002_01"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "DIMMED_NODE_CANNOT_MUTATE"
+
+
+class TestCanvasApplyMutationEndpoint:
+
+    def test_apply_mutation_creates_sibling_node(self, client, temp_dir):
+        """Apply inversion: original node becomes dimmed, new active
+        sibling is added under the same parent, branch_choices updated."""
+        from backend.api.creative_canvas import _read_canvas
+
+        creative_os_dir = temp_dir / "test_project" / "creative_os"
+        creative_os_dir.mkdir(parents=True, exist_ok=True)
+        creative_os_dir.joinpath("canvas_state.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "root_node_id": "wi_001_00",
+                "nodes": {
+                    "wi_001_00": {
+                        "id": "wi_001_00", "depth": 0, "parent_id": None,
+                        "content": "Root", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_002_00"], "is_expanded": True,
+                        "branch_status": "active",
+                    },
+                    "wi_002_00": {
+                        "id": "wi_002_00", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "废柴逆袭", "novelty_score": 50,
+                        "trope_tags": ["废柴逆袭"], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "active",
+                    },
+                },
+                "edges": [],
+                "selected_path": ["wi_001_00", "wi_002_00"],
+                "branch_choices": {"wi_001_00": "wi_002_00"},
+                "evaluations": {},
+                "created_at": "2026-06-23T00:00:00",
+                "updated_at": "2026-06-23T00:00:00",
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # Mock MutationEngine to return a known MutationResult
+        from backend.models.creative_os import MutationOp, MutationResult
+
+        fake_result = MutationResult(
+            operation=MutationOp.INVERSION,
+            source_trope_id="synthetic_wi_002_00",
+            source_trope_name="废柴逆袭",
+            core_premise="天才陨落：主角从巅峰跌落，被迫以普通人身份重新崛起",
+            core_conflict="能力消失后的身份落差与信任危机",
+            novelty_hook="曾经的救世主成了被怀疑的对象",
+            self_consistency_check="逻辑自洽：可通过封印/失忆等机制合理化能力消失",
+            tokens_used=800,
+        )
+
+        class FakeEngine:
+            async def mutate(self, trope, op, context=""):
+                return fake_result
+
+        with patch(
+            "backend.creative_os.mutation_engine.MutationEngine",
+            return_value=FakeEngine(),
+        ):
+            response = client.post(
+                "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+                json={"node_id": "wi_002_00", "operation": "inversion"},
+            )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["error"] is False
+
+        new_node = data["detail"]["new_node"]
+        assert new_node["parent_id"] == "wi_001_00"
+        assert new_node["branch_status"] == "active"
+        assert "mut:inversion" in new_node["trope_tags"]
+        assert "天才陨落" in new_node["content"]
+
+        mutation_result = data["detail"]["mutation_result"]
+        assert mutation_result["operation"] == "inversion"
+        assert mutation_result["core_premise"] == fake_result.core_premise
+
+        # Persisted canvas: original dimmed, new active, branch_choice updated
+        canvas = _read_canvas("test_project")
+        nodes = canvas["nodes"]
+        new_id = new_node["id"]
+
+        assert nodes["wi_002_00"]["branch_status"] == "dimmed"
+        assert nodes[new_id]["branch_status"] == "active"
+        assert new_id in nodes["wi_001_00"]["children_ids"]
+        assert canvas["branch_choices"]["wi_001_00"] == new_id
+        # selected_path now points to new node
+        assert canvas["selected_path"][-1] == new_id
+
+    def test_apply_mutation_rejects_root_node(self, client, temp_dir):
+        creative_os_dir = temp_dir / "test_project" / "creative_os"
+        creative_os_dir.mkdir(parents=True, exist_ok=True)
+        creative_os_dir.joinpath("canvas_state.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "root_node_id": "wi_001_00",
+                "nodes": {
+                    "wi_001_00": {
+                        "id": "wi_001_00", "depth": 0, "parent_id": None,
+                        "content": "Root", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "active",
+                    },
+                },
+                "edges": [],
+                "selected_path": ["wi_001_00"],
+                "branch_choices": {},
+                "evaluations": {},
+                "created_at": "2026-06-23T00:00:00",
+                "updated_at": "2026-06-23T00:00:00",
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        response = client.post(
+            "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+            json={"node_id": "wi_001_00", "operation": "inversion"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "ROOT_CANNOT_MUTATE"
+
+    def test_apply_mutation_rejects_invalid_op(self, client, temp_dir):
+        creative_os_dir = temp_dir / "test_project" / "creative_os"
+        creative_os_dir.mkdir(parents=True, exist_ok=True)
+        creative_os_dir.joinpath("canvas_state.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "root_node_id": "wi_001_00",
+                "nodes": {
+                    "wi_001_00": {
+                        "id": "wi_001_00", "depth": 0, "parent_id": None,
+                        "content": "Root", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_002_00"], "is_expanded": True,
+                        "branch_status": "active",
+                    },
+                    "wi_002_00": {
+                        "id": "wi_002_00", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "A", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "active",
+                    },
+                },
+                "edges": [],
+                "selected_path": ["wi_001_00", "wi_002_00"],
+                "branch_choices": {"wi_001_00": "wi_002_00"},
+                "evaluations": {},
+                "created_at": "2026-06-23T00:00:00",
+                "updated_at": "2026-06-23T00:00:00",
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        response = client.post(
+            "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+            json={"node_id": "wi_002_00", "operation": "bogus_op"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "INVALID_OPERATION"
+
+    def test_apply_mutation_rejects_fusion(self, client, temp_dir):
+        """Fusion requires two nodes — should be rejected with a hint to
+        use /merge instead."""
+        creative_os_dir = temp_dir / "test_project" / "creative_os"
+        creative_os_dir.mkdir(parents=True, exist_ok=True)
+        creative_os_dir.joinpath("canvas_state.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "root_node_id": "wi_001_00",
+                "nodes": {
+                    "wi_001_00": {
+                        "id": "wi_001_00", "depth": 0, "parent_id": None,
+                        "content": "Root", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_002_00"], "is_expanded": True,
+                        "branch_status": "active",
+                    },
+                    "wi_002_00": {
+                        "id": "wi_002_00", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "A", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "active",
+                    },
+                },
+                "edges": [],
+                "selected_path": ["wi_001_00", "wi_002_00"],
+                "branch_choices": {"wi_001_00": "wi_002_00"},
+                "evaluations": {},
+                "created_at": "2026-06-23T00:00:00",
+                "updated_at": "2026-06-23T00:00:00",
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        response = client.post(
+            "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+            json={"node_id": "wi_002_00", "operation": "fusion"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "FUSION_NOT_SUPPORTED"

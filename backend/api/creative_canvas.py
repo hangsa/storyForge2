@@ -4,7 +4,8 @@ Provides thin orchestration endpoints for the Creative Canvas frontend:
 - GET    /state  — Read canvas_state.json
 - POST   /init   — Initialize canvas with root node via WhatIfEngine
 - POST   /expand — Expand a node via WhatIfEngine + NoveltyEvaluator + CreativeDirector
-- POST   /mutate — Placeholder for mutation operations
+- POST   /mutate — Recommend a mutation operation (text recommendation only)
+- POST   /apply-mutation — Apply a chosen mutation op, create new sibling node
 - POST   /merge  — Placeholder for node merging
 - POST   /evaluate — Re-score a node with NoveltyEvaluator
 - POST   /select — Update selected_path and get CreativeDirector path evaluation
@@ -592,19 +593,337 @@ async def expand_node(project_id: str, data: dict):
 
 @router.post("/mutate")
 async def mutate_node(project_id: str, data: dict):
-    """Placeholder: apply a mutation operation to a node.
+    """Recommend a mutation operation for a node.
+
+    Request body:
+        {"node_id": "wi_001_00"}
+
+    Returns a 30-80 char text recommendation from CreativeDirector describing
+    which mutation op (Inversion/Fusion/Escalation/Subversion) would best
+    transform this node's trope. The frontend uses this to preview options;
+    the actual application happens via /apply-mutation.
+    """
+    _ensure_project(project_id)
+
+    node_id = data.get("node_id", "")
+    if not node_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "VALIDATION_ERROR",
+                "message": "node_id 不能为空",
+                "detail": {},
+            },
+        )
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+    if node_id not in canvas["nodes"]:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "NODE_NOT_FOUND",
+                "message": f"节点 {node_id} 不存在",
+                "detail": {},
+            },
+        )
+
+    node = _dict_to_node(canvas["nodes"][node_id])
+
+    if node.branch_status != BRANCH_STATUS_ACTIVE:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "DIMMED_NODE_CANNOT_MUTATE",
+                "message": f"节点 {node_id} 已被弃选，无法分析变异",
+                "detail": {},
+            },
+        )
+
+    recommendation = ""
+    try:
+        from backend.agents.creative_director import CreativeDirector
+
+        director = CreativeDirector(project_id)
+        recommendation = await director.recommend_mutation(node)
+    except Exception as exc:
+        logger.warning("recommend_mutation failed: %s", exc)
+        recommendation = ""
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": {"recommendation": recommendation},
+    }
+
+
+@router.post("/apply-mutation")
+async def apply_mutation(project_id: str, data: dict):
+    """Apply a mutation operation and create a new sibling node.
 
     Request body:
         {"node_id": "wi_001_00", "operation": "inversion"}
 
-    Requires full LLM backend integration (MutationEngine + CreativeDirector).
+    Effect:
+        - Runs MutationEngine.mutate() with the synthetic Trope built from
+          the node's content + trope_tags
+        - Creates a new WhatIfNode as a SIBLING of the original (same parent)
+        - Sets the new node as the parent's chosen branch (active)
+        - Marks the original node and its descendants as dimmed
+        - Updates branch_choices and recomputes selected_path
+
+    Operations: inversion | escalation | subversion | fusion
+    (Fusion requires a second node and is not yet supported here — use
+    the placeholder /merge endpoint for cross-node fusion.)
     """
     _ensure_project(project_id)
+
+    node_id = data.get("node_id", "")
+    operation = data.get("operation", "")
+    if not node_id or not operation:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "VALIDATION_ERROR",
+                "message": "node_id 和 operation 都不能为空",
+                "detail": {},
+            },
+        )
+
+    from backend.models.creative_os import MutationOp
+    try:
+        mutation_op = MutationOp(operation)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "INVALID_OPERATION",
+                "message": f"不支持的变异操作: {operation}",
+                "detail": {"valid": [op.value for op in MutationOp]},
+            },
+        )
+
+    if mutation_op == MutationOp.FUSION:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "FUSION_NOT_SUPPORTED",
+                "message": "融合需要两个节点，请使用 /merge 端点",
+                "detail": {},
+            },
+        )
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+    nodes = canvas.get("nodes", {})
+    if node_id not in nodes:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "NODE_NOT_FOUND",
+                "message": f"节点 {node_id} 不存在",
+                "detail": {},
+            },
+        )
+
+    node = _dict_to_node(nodes[node_id])
+
+    if node.branch_status != BRANCH_STATUS_ACTIVE:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "DIMMED_NODE_CANNOT_MUTATE",
+                "message": f"节点 {node_id} 已被弃选，无法应用变异",
+                "detail": {},
+            },
+        )
+
+    if not node.parent_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "ROOT_CANNOT_MUTATE",
+                "message": "根节点无法被变异（无父节点可挂载新兄弟）",
+                "detail": {},
+            },
+        )
+
+    # --- Step 1: build synthetic Trope from node --------------------------
+    from backend.models.creative_os import Trope
+    synthetic_trope = Trope(
+        id=f"synthetic_{node.id}",
+        name=(node.trope_tags[0] if node.trope_tags else node.content[:20]),
+        category="web_novel",
+        description=node.content,
+        market_saturation=0.5,
+    )
+
+    # --- Step 2: run MutationEngine --------------------------------------
+    from backend.creative_os.mutation_engine import MutationEngine
+    from backend.llm.model_router import get_model_router
+
+    try:
+        router = get_model_router()
+        engine = MutationEngine(model_router=router)
+    except Exception:
+        engine = MutationEngine()
+
+    try:
+        mutation_result = await engine.mutate(synthetic_trope, mutation_op, context=node.content)
+    except NotImplementedError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "LLM_BACKEND_UNAVAILABLE",
+                "message": f"变异功能需要 LLM 后端支持：{exc}",
+                "detail": {},
+            },
+        )
+    except Exception as exc:
+        logger.warning("MutationEngine.mutate failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": True,
+                "code": "MUTATION_FAILED",
+                "message": f"变异生成失败：{exc}",
+                "detail": {},
+            },
+        )
+
+    # --- Step 3: build new WhatIfNode ------------------------------------
+    # Use mutation_result.core_premise as the new node's content.
+    # Tag it with the operation for traceability.
+    import uuid
+    new_id = f"mu_{uuid.uuid4().hex[:8]}"
+    new_node = WhatIfNode(
+        id=new_id,
+        depth=node.depth,
+        parent_id=node.parent_id,
+        content=mutation_result.core_premise or f"（{operation} 变异后的节点）",
+        novelty_score=0.0,
+        trope_tags=[f"mut:{operation}"] + list(node.trope_tags),
+        saturation_warning=None,
+        children_ids=[],
+        is_expanded=False,
+        branch_status=BRANCH_STATUS_ACTIVE,
+    )
+
+    # --- Step 4: insert into canvas --------------------------------------
+    parent = nodes[node.parent_id]
+    new_children = list(parent["children_ids"]) + [new_id]
+    parent["children_ids"] = new_children
+    nodes[new_id] = _node_to_dict(new_node)
+
+    # --- Step 5: update branch_choices & mark old subtree dimmed ---------
+    branch_choices = canvas.setdefault("branch_choices", {})
+    previous_active_id = branch_choices.get(node.parent_id)
+    branch_choices[node.parent_id] = new_id
+
+    def _collect_descendants(node_id_str: str) -> set[str]:
+        result = set()
+        stack = [node_id_str]
+        while stack:
+            cur = stack.pop()
+            cur_node = nodes.get(cur, {})
+            for child_id in cur_node.get("children_ids", []):
+                if child_id not in result:
+                    result.add(child_id)
+                    stack.append(child_id)
+        return result
+
+    # Dim original node + its descendants (invariant 5)
+    nodes[node_id]["branch_status"] = BRANCH_STATUS_DIMMED
+    for desc_id in _collect_descendants(node_id):
+        nodes[desc_id]["branch_status"] = BRANCH_STATUS_DIMMED
+
+    # Drop branch_choices that pointed into the now-dimmed subtree
+    if previous_active_id and previous_active_id != new_id:
+        for pid, cid in list(branch_choices.items()):
+            if pid == node.parent_id:
+                continue
+            cur = cid
+            visited = set()
+            drop = False
+            while cur and cur not in visited:
+                visited.add(cur)
+                if nodes.get(cur, {}).get("branch_status") == BRANCH_STATUS_DIMMED:
+                    drop = True
+                    break
+                cur = nodes.get(cur, {}).get("parent_id")
+            if drop:
+                del branch_choices[pid]
+
+    # --- Step 6: recompute selected_path & validate ----------------------
+    canvas["selected_path"] = _compute_selected_path(
+        nodes, branch_choices, canvas["root_node_id"]
+    )
+
+    try:
+        _validate_canvas_invariants(canvas)
+    except CanvasInvariantError as exc:
+        logger.error("Canvas invariants failed after apply-mutation: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": True,
+                "code": "INVARIANT_VIOLATION",
+                "message": str(exc),
+                "detail": {},
+            },
+        )
+
+    canvas["updated_at"] = datetime.utcnow().isoformat()
+    _write_canvas(project_id, canvas)
+
     return {
         "error": False,
         "code": "OK",
-        "message": "变异功能需要 LLM 后端支持，当前为占位实现",
-        "detail": {},
+        "message": "",
+        "detail": {
+            "new_node": _node_to_dict(new_node),
+            "mutation_result": {
+                "operation": mutation_result.operation.value,
+                "source_trope_id": mutation_result.source_trope_id,
+                "core_premise": mutation_result.core_premise,
+                "core_conflict": mutation_result.core_conflict,
+                "novelty_hook": mutation_result.novelty_hook,
+                "self_consistency_check": mutation_result.self_consistency_check,
+                "tokens_used": mutation_result.tokens_used,
+            },
+            "dimmed_count": 1 + len(_collect_descendants(node_id)),
+        },
     }
 
 

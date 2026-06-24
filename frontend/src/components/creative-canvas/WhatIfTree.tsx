@@ -53,14 +53,14 @@ function WhatIfTreeInner({
 
   // Expose fitView to parent for toolbar button
   useEffect(() => {
-    onFitViewReady?.(() => fitView({ padding: 0.3 }));
+    onFitViewReady?.(() => fitView({ padding: 0.1 }));
   }, [fitView, onFitViewReady]);
 
   // Auto-fit when nodes are added (expand operation)
   useEffect(() => {
     const currentCount = Object.keys(nodes).length;
     if (currentCount > nodeCountRef.current && currentCount > 1) {
-      setTimeout(() => fitView({ padding: 0.3 }), 100);
+      setTimeout(() => fitView({ padding: 0.1 }), 100);
     }
     nodeCountRef.current = currentCount;
   }, [nodes, fitView]);
@@ -74,8 +74,8 @@ function WhatIfTreeInner({
       byDepth[d].push(node);
     }
 
-    const H_GAP = 280;
-    const V_GAP = 180;
+    const H_GAP = 200;
+    const V_GAP = 120;
     const result: Node[] = [];
 
     for (const [depthStr, levelNodes] of Object.entries(byDepth)) {
@@ -168,7 +168,7 @@ function WhatIfTreeInner({
         onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.3 }}
+        fitViewOptions={{ padding: 0.1 }}
         minZoom={0.2}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}

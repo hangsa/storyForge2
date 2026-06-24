@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CanvasNode, NoveltyScoreDetail } from "../../api/client";
 import NoveltyRadar from "./NoveltyRadar";
 import MutationSuggestion from "./MutationSuggestion";
@@ -17,6 +18,10 @@ interface NodeDetailPanelProps {
   onClose: () => void;
 }
 
+const DEFAULT_HEIGHT_VH = 34;
+const MIN_HEIGHT_VH = 16;
+const MAX_HEIGHT_VH = 80;
+
 export default function NodeDetailPanel({
   node,
   noveltyScore,
@@ -31,6 +36,37 @@ export default function NodeDetailPanel({
   onGetMutation,
   onClose,
 }: NodeDetailPanelProps) {
+  const [heightVh, setHeightVh] = useState(DEFAULT_HEIGHT_VH);
+  const dragStateRef = useRef<{ startY: number; startHeightVh: number } | null>(null);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragStateRef.current = { startY: e.clientY, startHeightVh: heightVh };
+  }, [heightVh]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag) return;
+      // Panel grows from bottom: dragging UP (negative deltaY) → taller
+      const deltaVh = ((drag.startY - e.clientY) / window.innerHeight) * 100;
+      const next = Math.min(
+        MAX_HEIGHT_VH,
+        Math.max(MIN_HEIGHT_VH, drag.startHeightVh + deltaVh),
+      );
+      setHeightVh(next);
+    };
+    const handleMouseUp = () => {
+      dragStateRef.current = null;
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
   if (!node) return null;
 
   const branchStatusLabel = node.branch_status === "active" ? (
@@ -47,25 +83,39 @@ export default function NodeDetailPanel({
     <span className="text-system-log/50">未评估</span>
   );
 
+  const heightStyle = { height: `${heightVh}vh` };
+  const innerHeightStyle = { height: `calc(${heightVh}vh - 30px)` };
+
   return (
-    <div className="fixed bottom-0 left-[280px] right-0 h-[34vh] bg-surface-container-low border-t border-outline-variant shadow-2xl z-30 animate-slide-up">
-      {/* Drag handle */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-outline-variant/50">
+    <div
+      className="fixed bottom-0 left-[280px] right-0 bg-surface-container-low border-t border-outline-variant shadow-2xl z-30 animate-slide-up"
+      style={heightStyle}
+    >
+      {/* Drag handle — entire top bar is a grab zone */}
+      <div
+        onMouseDown={handleResizeStart}
+        className="flex items-center justify-between px-4 py-1.5 border-b border-outline-variant/50 cursor-ns-resize select-none"
+        title="拖动调整面板高度"
+      >
         <div className="flex items-center gap-2">
-          <div className="w-10 h-1 rounded-full bg-system-log/20 cursor-ns-resize" />
+          <div className="w-10 h-1 rounded-full bg-system-log/30 hover:bg-system-log/60 transition-colors" />
           <span className="font-label-mono text-xs text-system-log">
             {node.id}
           </span>
         </div>
         <button
-          onClick={onClose}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
           className="text-system-log hover:text-primary transition-colors"
         >
           <span className="material-symbols-outlined">close</span>
         </button>
       </div>
 
-      <div className="flex h-[calc(34vh-30px)]">
+      <div className="flex" style={innerHeightStyle}>
         {/* Left: node details */}
         <div className="flex-1 p-3 overflow-y-auto space-y-2.5 border-r border-outline-variant/50">
           {/* Content */}

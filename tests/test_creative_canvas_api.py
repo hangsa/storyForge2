@@ -203,6 +203,67 @@ class TestCanvasExpandEndpoint:
         assert persisted_statuses.count("active") == 1
         assert persisted_statuses.count("dimmed") == 2
 
+    def test_get_state_returns_edges_derived_from_children(self, client, temp_dir):
+        """Regression: edges must reflect each node's children_ids so the
+        frontend can render parent→child connection lines. Edges were
+        previously hardcoded to [] on write, leaving the tree visually
+        disconnected."""
+        project_dir = temp_dir / "test_project"
+        creative_os_dir = project_dir / "creative_os"
+        creative_os_dir.mkdir(parents=True, exist_ok=True)
+        creative_os_dir.joinpath("canvas_state.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "root_node_id": "wi_001_00",
+                "nodes": {
+                    "wi_001_00": {
+                        "id": "wi_001_00", "depth": 0, "parent_id": None,
+                        "content": "root", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_1_001_00", "wi_1_002_01"],
+                        "is_expanded": True, "branch_status": "active",
+                    },
+                    "wi_1_001_00": {
+                        "id": "wi_1_001_00", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "child a", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_2_001_00"],
+                        "is_expanded": True, "branch_status": "active",
+                    },
+                    "wi_1_002_01": {
+                        "id": "wi_1_002_01", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "child b", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "dimmed",
+                    },
+                    "wi_2_001_00": {
+                        "id": "wi_2_001_00", "depth": 2, "parent_id": "wi_1_001_00",
+                        "content": "grandchild", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "active",
+                    },
+                },
+                # Intentionally empty: _read_canvas must rebuild from children_ids
+                "edges": [],
+                "selected_path": ["wi_001_00", "wi_1_001_00"],
+                "branch_choices": {"wi_001_00": "wi_1_001_00"},
+                "evaluations": {},
+                "created_at": "2026-06-23T00:00:00",
+                "updated_at": "2026-06-23T00:00:00",
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        response = client.get("/api/v1/projects/test_project/creative/canvas/state")
+        assert response.status_code == 200
+        edges = response.json()["detail"]["edges"]
+        assert {"from": "wi_001_00", "to": "wi_1_001_00"} in edges
+        assert {"from": "wi_001_00", "to": "wi_1_002_01"} in edges
+        assert {"from": "wi_1_001_00", "to": "wi_2_001_00"} in edges
+        assert len(edges) == 3
+
 
 class TestCanvasMutateEndpoint:
 

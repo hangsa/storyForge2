@@ -50,12 +50,29 @@ def _get_canvas_path(project_id: str) -> Path:
     return settings.projects_dir / project_id / "creative_os" / "canvas_state.json"
 
 
+def _derive_edges_from_nodes(nodes: dict) -> list:
+    """Build the edges array from each node's children_ids.
+
+    Single source of truth: callers populate children_ids when expanding or
+    applying mutations; this derives the denormalized edges list at read
+    time so the persisted edges array can never drift out of sync.
+    """
+    edges = []
+    for parent_id, node in nodes.items():
+        for child_id in node.get("children_ids", []) or []:
+            edges.append({"from": parent_id, "to": child_id})
+    return edges
+
+
 def _read_canvas(project_id: str) -> Optional[dict]:
     """Read canvas_state.json. Returns None if not initialized.
 
     Migrates v1 → v2 transparently. When a v1 file is encountered, the
     migrated v2 form is written back atomically so subsequent reads skip
     the migration step.
+
+    Always returns a canvas whose `edges` field reflects the current
+    `children_ids` on every node (derived at read time).
     """
     path = _get_canvas_path(project_id)
     if not path.exists():
@@ -64,12 +81,14 @@ def _read_canvas(project_id: str) -> Optional[dict]:
         canvas = json.load(f)
     if canvas.get("schema_version") != 2:
         migrated = _migrate_v1_to_v2(canvas)
+        migrated["edges"] = _derive_edges_from_nodes(migrated.get("nodes", {}))
         # Persist migrated form so future reads skip the migration step.
         tmp = path.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(migrated, f, ensure_ascii=False, indent=2)
         tmp.replace(path)
         return migrated
+    canvas["edges"] = _derive_edges_from_nodes(canvas.get("nodes", {}))
     return canvas
 
 
@@ -84,6 +103,10 @@ def _write_canvas(project_id: str, data: dict) -> None:
     except CanvasInvariantError as exc:
         logger.error("Refusing to write invalid canvas for %s: %s", project_id, exc)
         raise
+
+    # Keep the persisted edges in sync with children_ids so the file on disk
+    # matches what _read_canvas would derive (avoids stale edge lists).
+    data["edges"] = _derive_edges_from_nodes(data.get("nodes", {}))
 
     path = _get_canvas_path(project_id)
     path.parent.mkdir(parents=True, exist_ok=True)

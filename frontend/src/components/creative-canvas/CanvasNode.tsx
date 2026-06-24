@@ -24,7 +24,7 @@ export default function CanvasNode({ data, selected }: NodeProps) {
 
   return (
     <>
-      <Handle type="target" position={Position.Top} className="!bg-system-log/40" />
+      <Handle type="target" position={Position.Left} className="!bg-system-log/40" />
       <div
         data-testid={`node-${d.label}`}
         className={`
@@ -84,7 +84,7 @@ export default function CanvasNode({ data, selected }: NodeProps) {
           )}
         </div>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-system-log/40" />
+      <Handle type="source" position={Position.Right} className="!bg-system-log/40" />
     </>
   );
 }

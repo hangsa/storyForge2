@@ -74,8 +74,8 @@ function WhatIfTreeInner({
       byDepth[d].push(node);
     }
 
-    const H_GAP = 260;
-    const V_GAP = 160;
+    const H_GAP = 280;
+    const V_GAP = 180;
     const result: Node[] = [];
 
     for (const [depthStr, levelNodes] of Object.entries(byDepth)) {
@@ -87,14 +87,14 @@ function WhatIfTreeInner({
         const parent = cn.parent_id ? nodes[cn.parent_id] : null;
         return parent?.branch_status === "active";
       });
-      const totalWidth = (visibleNodes.length - 1) * H_GAP;
-      const startX = -totalWidth / 2;
+      const totalHeight = (visibleNodes.length - 1) * V_GAP;
+      const startY = -totalHeight / 2;
       visibleNodes.forEach((cn, i) => {
         const isRoot = cn.id === rootId;
         const savedPosition = positions[cn.id];
         const computedPosition = {
-          x: startX + i * H_GAP,
-          y: depth * V_GAP,
+          x: depth * H_GAP,
+          y: startY + i * V_GAP,
         };
         result.push({
           id: cn.id,

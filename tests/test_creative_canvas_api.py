@@ -155,6 +155,9 @@ class TestCanvasExpandEndpoint:
         ]
 
         class FakeEngine:
+            def seed_counter_from_ids(self, existing_ids):
+                pass  # IDs are hardcoded in fake_children; no seeding needed
+
             async def expand_node(self, node, ancestor_contents=None):
                 for child in fake_children:
                     node.children_ids.append(child.id)
@@ -203,6 +206,178 @@ class TestCanvasExpandEndpoint:
         ]
         assert persisted_statuses.count("active") == 1
         assert persisted_statuses.count("dimmed") == 2
+
+    def test_expand_sibling_node_does_not_collide_ids(self, client, temp_dir):
+        """Regression: WhatIfEngine._node_counter used to reset on every
+        expand, so expanding two sibling nodes at the same depth produced
+        identical IDs (`wi_2_001_00`, `wi_2_002_01`, ...) for both subtrees.
+        The second expand silently OVERWROTE the first subtree's nodes,
+        flipping their parent_id and (worst of all) un-dimming them, which
+        then broke invariant 5 ("dimmed node's children must all be dimmed").
+
+        Seed a canvas where wi_1_001_00 (dimmed) already has grandchildren at
+        depth 2, then expand wi_1_002_01 (active sibling). After the call,
+        the original grandchildren must still belong to wi_1_001_00 and
+        still be dimmed; the new grandchildren must belong to wi_1_002_01
+        with unique IDs that don't collide.
+        """
+        from backend.models.creative_os import WhatIfNode
+
+        project_dir = temp_dir / "test_project"
+        creative_os_dir = project_dir / "creative_os"
+        creative_os_dir.mkdir(parents=True, exist_ok=True)
+        creative_os_dir.joinpath("canvas_state.json").write_text(
+            json.dumps({
+                "schema_version": 2,
+                "root_node_id": "wi_001_00",
+                "nodes": {
+                    "wi_001_00": {
+                        "id": "wi_001_00", "depth": 0, "parent_id": None,
+                        "content": "root", "novelty_score": 0,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_1_001_00", "wi_1_002_01",
+                                         "wi_1_003_02"],
+                        "is_expanded": True, "branch_status": "active",
+                    },
+                    "wi_1_001_00": {
+                        "id": "wi_1_001_00", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "sibling A", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": ["wi_2_001_00", "wi_2_002_01",
+                                         "wi_2_003_02"],
+                        "is_expanded": True, "branch_status": "dimmed",
+                    },
+                    "wi_1_002_01": {
+                        "id": "wi_1_002_01", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "sibling B (active)", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "active",
+                    },
+                    "wi_1_003_02": {
+                        "id": "wi_1_003_02", "depth": 1, "parent_id": "wi_001_00",
+                        "content": "sibling C", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "dimmed",
+                    },
+                    "wi_2_001_00": {
+                        "id": "wi_2_001_00", "depth": 2, "parent_id": "wi_1_001_00",
+                        "content": "grandchild A1", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "dimmed",
+                    },
+                    "wi_2_002_01": {
+                        "id": "wi_2_002_01", "depth": 2, "parent_id": "wi_1_001_00",
+                        "content": "grandchild A2", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "dimmed",
+                    },
+                    "wi_2_003_02": {
+                        "id": "wi_2_003_02", "depth": 2, "parent_id": "wi_1_001_00",
+                        "content": "grandchild A3", "novelty_score": 70,
+                        "trope_tags": [], "saturation_warning": None,
+                        "children_ids": [], "is_expanded": False,
+                        "branch_status": "dimmed",
+                    },
+                },
+                "edges": [],
+                "selected_path": ["wi_001_00", "wi_1_002_01"],
+                "branch_choices": {"wi_001_00": "wi_1_002_01"},
+                "evaluations": {},
+                "created_at": "2026-06-23T00:00:00",
+                "updated_at": "2026-06-23T00:00:00",
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # Mock WhatIfEngine so it tries to generate IDs at depth 2 — without
+        # the counter fix, it would emit wi_2_001_00 etc. and collide.
+        class FakeEngine:
+            def __init__(self, *a, **kw):
+                self._counter = {0: 0, 1: 0, 2: 0, 3: 0}
+
+            def seed_counter_from_ids(self, existing_ids):
+                # Mirror the real engine: bump counter to (max+1) at each
+                # depth based on existing IDs in the canvas.
+                for nid in existing_ids:
+                    parts = nid.split("_")
+                    if len(parts) < 4 or parts[0] != "wi":
+                        continue
+                    try:
+                        d, c = int(parts[1]), int(parts[2])
+                    except ValueError:
+                        continue
+                    if d in self._counter and c > self._counter[d]:
+                        self._counter[d] = c
+
+            async def expand_node(self, node, ancestor_contents=None):
+                # Mimic real engine behavior: bump counter and assign IDs.
+                # Without the seed fix the counter starts at 0, so first
+                # child gets `wi_2_001_00` — a guaranteed collision.
+                children = []
+                for i in range(3):
+                    self._counter[node.depth + 1] += 1
+                    cid = f"wi_{node.depth + 1}_{self._counter[node.depth + 1]:03d}_{i:02d}"
+                    child = WhatIfNode(
+                        id=cid, depth=node.depth + 1, parent_id=node.id,
+                        content=f"new {cid}", novelty_score=70,
+                        trope_tags=[], children_ids=[], is_expanded=False,
+                        branch_status="active",
+                    )
+                    children.append(child)
+                    node.children_ids.append(cid)
+                node.is_expanded = True
+                return children
+
+        with patch(
+            "backend.creative_os.whatif_engine.WhatIfEngine",
+            return_value=FakeEngine(),
+        ), patch(
+            "backend.creative_os.novelty_evaluator.NoveltyEvaluator"
+        ) as MockEval:
+            MockEval.return_value.evaluate_node.return_value = MagicMock(
+                total=70, market_saturation_score=70,
+                trope_similarity_score=70, contradiction_depth_score=70,
+                discussion_potential_score=70, grade="B",
+            )
+            with patch(
+                "backend.agents.creative_director.CreativeDirector"
+            ) as MockDir:
+                MockDir.return_value.suggest_direction = AsyncMock(return_value="")
+                response = client.post(
+                    "/api/v1/projects/test_project/creative/canvas/expand",
+                    json={"node_id": "wi_1_002_01"},
+                )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        new_node_ids = list(data["detail"]["nodes"].keys())
+
+        # 1. New children must NOT collide with wi_1_001_00's grandchildren.
+        for cid in new_node_ids:
+            assert cid not in {"wi_2_001_00", "wi_2_002_01", "wi_2_003_02"}, (
+                f"expand produced colliding ID {cid}; engine counter was "
+                f"not seeded from existing canvas"
+            )
+
+        # 2. Reload canvas from disk; original grandchildren must still
+        #    belong to wi_1_001_00 and still be dimmed.
+        from backend.api.creative_canvas import _read_canvas
+        canvas = _read_canvas("test_project")
+        original_grandchildren = {
+            "wi_2_001_00", "wi_2_002_01", "wi_2_003_02"
+        }
+        for cid in original_grandchildren:
+            node = canvas["nodes"][cid]
+            assert node["parent_id"] == "wi_1_001_00", (
+                f"{cid} was reparented to {node['parent_id']}"
+            )
+            assert node["branch_status"] == "dimmed", (
+                f"{cid} should still be dimmed but is {node['branch_status']}"
+            )
 
     def test_get_state_returns_edges_derived_from_children(self, client, temp_dir):
         """Regression: edges must reflect each node's children_ids so the
@@ -264,7 +439,6 @@ class TestCanvasExpandEndpoint:
         assert {"from": "wi_001_00", "to": "wi_1_002_01"} in edges
         assert {"from": "wi_1_001_00", "to": "wi_2_001_00"} in edges
         assert len(edges) == 3
-
 
 class TestCanvasMutateEndpoint:
 

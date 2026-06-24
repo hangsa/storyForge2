@@ -494,6 +494,11 @@ async def expand_node(project_id: str, data: dict):
     except Exception:
         engine = WhatIfEngine()
 
+    # Seed the engine's per-depth counter from existing canvas IDs so
+    # expanding a sibling of an already-expanded node doesn't regenerate
+    # colliding IDs (wi_2_001_00 etc.) and overwrite the prior subtree.
+    engine.seed_counter_from_ids(canvas.get("nodes", {}).keys())
+
     try:
         # Build ancestor chain (root → ... → parent) for narrative continuity.
         # Cap hops at MAX_ANCESTOR_HOPS to prevent infinite loops on cyclic state.

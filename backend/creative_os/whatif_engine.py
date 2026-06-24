@@ -21,6 +21,32 @@ class WhatIfEngine:
         self._novelty_evaluator = novelty_evaluator
         self._node_counter: dict[int, int] = {0: 0, 1: 0, 2: 0, 3: 0}
 
+    def seed_counter_from_ids(self, existing_ids) -> None:
+        """Initialize the per-depth counter from existing node IDs.
+
+        Without this, expanding two sibling nodes at the same depth produces
+        identical IDs (`wi_2_001_00`, `wi_2_002_01`, ...) for both subtrees —
+        the second expand silently overwrites the first subtree's nodes,
+        flipping their parent_id and (worst of all) un-dimming them, which
+        then breaks invariant 5 ("dimmed node's children must all be dimmed").
+
+        ID format: `wi_<depth>_<counter:03d>_<position:02d>`. Unknown ID
+        shapes are ignored — the engine never sees them via this entry
+        point, so the conservative behavior is "leave counter untouched".
+        """
+        for nid in existing_ids:
+            parts = nid.split("_")
+            if len(parts) < 4 or parts[0] != "wi":
+                continue
+            try:
+                depth = int(parts[1])
+                counter = int(parts[2])
+            except ValueError:
+                continue
+            if depth in self._node_counter:
+                if counter > self._node_counter[depth]:
+                    self._node_counter[depth] = counter
+
     def generate_root(self, premise: str) -> WhatIfNode:
         self._node_counter[0] += 1
         node_id = f"wi_{self._node_counter[0]:03d}_00"

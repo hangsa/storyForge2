@@ -1,13 +1,15 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import api, { Outline, ScenePlan } from "../api/client";
+import api, { Outline, NovelOutline, ScenePlan } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
+import NovelOutlinePanel from "../components/stage3/NovelOutlinePanel";
 
 export default function Stage3Page() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
 
   const [outline, setOutline] = useState<Outline | null>(null);
+  const [novelOutline, setNovelOutline] = useState<NovelOutline | null>(null);
   const [loading, setLoading] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +23,11 @@ export default function Stage3Page() {
     if (!projectId) return;
     api.getOutline(projectId)
       .then((data) => { if (data && Object.keys(data).length > 0) setOutline(data); })
+      .catch(() => {});
+    api.getNovelOutline(projectId)
+      .then((data) => {
+        if (data && Object.keys(data).length > 0) setNovelOutline(data);
+      })
       .catch(() => {});
   }, [projectId]);
 
@@ -94,7 +101,10 @@ export default function Stage3Page() {
 
   if (!projectId) return null;
 
-  const canAdvance = outline && outline.chapters.length > 0;
+  const hasNovelOutline =
+    novelOutline !== null &&
+    (novelOutline.core_conflict_theme.length > 0 || novelOutline.volumes.length > 0);
+  const canAdvance = outline && outline.chapters.length > 0 && hasNovelOutline;
 
   const narrativeRoleLabels: Record<ScenePlan["narrative_role"], string> = {
     setup: "铺垫",
@@ -171,11 +181,25 @@ export default function Stage3Page() {
         </div>
       </div>
 
+      {!hasNovelOutline && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded text-amber-300 font-body-ui text-xs">
+          建议先生成"全书大纲"以让后续章节与全本骨架保持一致。完成后即可进入写作中心。
+        </div>
+      )}
+
       {error && (
         <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
           {error}
         </div>
       )}
+
+      {/* Novel-level outline (top layer — must exist before chapter outline) */}
+      <NovelOutlinePanel
+        projectId={projectId}
+        data={novelOutline}
+        onChange={setNovelOutline}
+        onError={(msg) => setError(msg || null)}
+      />
 
       {outline && outline.chapters.length > 0 ? (
         <div className="space-y-8">

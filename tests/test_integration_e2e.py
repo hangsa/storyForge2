@@ -133,11 +133,16 @@ class TestConductorStageTransitions:
         })
         assert resp.status_code == 200
 
-        # Create world.json + characters.json, then STAGE2 -> STAGE3
+        # Create world.json + characters.json + novel_outline.json, then STAGE2 -> STAGE3
         with open(f"{proj_dir}/world.json", "w") as f:
             json.dump({"era": "异世界", "power_system": {"name": "灵力", "ceilings": []}}, f, ensure_ascii=False)
         with open(f"{proj_dir}/characters.json", "w") as f:
             json.dump({"characters": [{"id": "c1", "name": "主角"}]}, f, ensure_ascii=False)
+        with open(f"{proj_dir}/novel_outline.json", "w") as f:
+            json.dump({
+                "core_conflict_theme": "测试冲突",
+                "volumes": [{"name": "第一卷", "chapter_range": "1-50", "summary": "x", "key_events": []}],
+            }, f, ensure_ascii=False)
 
         resp = client.post("/api/conductor/advance", json={
             "project_id": proj_id, "target_stage": "STAGE3",
@@ -319,7 +324,7 @@ class TestMultiChapterE2E:
         })
         assert resp.status_code == 200
 
-        # ── STAGE2 → STAGE3: Provide characters + world ──
+        # ── STAGE2 → STAGE3: Provide characters + world + novel_outline ──
         self._write_json(f"{proj_dir}/characters.json", {
             "characters": [
                 {"id": "char_001", "name": "林峰", "character_type": "protagonist"},
@@ -329,6 +334,10 @@ class TestMultiChapterE2E:
         self._write_json(f"{proj_dir}/world.json", {
             "era": "近未来", "geography": "废土城市",
             "power_system": {"name": "灵力", "ceilings": ["第九境"], "core_rules": []},
+        })
+        self._write_json(f"{proj_dir}/novel_outline.json", {
+            "core_conflict_theme": "力量与孤独",
+            "volumes": [{"name": "崛起", "chapter_range": "1-50", "summary": "主角觉醒", "key_events": []}],
         })
         resp = client.post("/api/conductor/advance", json={
             "project_id": proj_id, "target_stage": "STAGE3",
@@ -488,6 +497,11 @@ class TestStageBackwardNavigation:
             json.dump({"era": "异世界", "power_system": {"name": "灵力", "ceilings": []}}, f, ensure_ascii=False)
         with open(f"{proj_dir}/characters.json", "w") as f:
             json.dump({"characters": [{"id": "c1", "name": "主角"}]}, f, ensure_ascii=False)
+        with open(f"{proj_dir}/novel_outline.json", "w") as f:
+            json.dump({
+                "core_conflict_theme": "测试冲突",
+                "volumes": [{"name": "v1", "chapter_range": "1-50", "summary": "x", "key_events": []}],
+            }, f, ensure_ascii=False)
         with open(f"{proj_dir}/outline.json", "w") as f:
             json.dump({"chapters": [{"chapter_number": 1, "title": "第一章", "scene_plan": [{"scene_number": 1}]}]}, f, ensure_ascii=False)
         with open(f"{proj_dir}/progress.json", "w") as f:

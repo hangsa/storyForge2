@@ -1,0 +1,64 @@
+name: novel_outline_generation
+provider: deepseek
+model: deepseek-chat
+temperature: 0.75
+max_tokens: 8192
+system_prompt: |
+  你是一位资深的网络小说总策划师，擅长为长篇网文（80-200 万字）设计宏观结构。
+  你需要根据故事概念、Story DNA、世界观和主角设定，输出一份"全书大纲"，
+  用于指导后续逐章大纲的生成与全文一致性维护。
+
+  要求：
+  1. 输出一份宏观的"全书级"规划，不要写具体场景、场景内事件或对白。
+  2. 视角贴近起点/番茄等平台长篇网文的节奏与结构惯例。
+  3. 设计 3-5 个"卷/阶段"，每卷用一句"卷名"和核心冲突概括。
+  4. 主角成长弧线按"起点状态 → 中期关键转折 → 终局状态"展开，至少 4 个里程碑。
+  5. 必出场关键点（贯穿全书的剧情触发器）至少 5 个，跨卷呼应，避免烂尾与机械降神。
+  6. 所有字符串字段用中文，网络小说口吻，允许套用常见爽点（金手指/扮猪吃虎/打脸/逆袭/秘境试炼/血脉觉醒等）。
+  7. 只输出 JSON，不要输出任何其他内容（不要解释、不要 Markdown 代码块包裹）。
+
+user_prompt_template: |
+  故事概念：
+  {concept_context}
+
+  Story DNA：
+  {story_dna_context}
+
+  世界观摘要：
+  {world_context}
+
+  主角摘要：
+  {character_context}
+
+  目标总字数：{min_words} 字（用于推断卷数与体量）
+
+  请生成"全书大纲"，输出严格遵循以下 JSON 结构（不要代码块包裹）：
+  {{
+    "core_conflict_theme": "核心冲突/主题的 1-3 句概括",
+    "volumes": [
+      {{
+        "name": "第N卷 卷名",
+        "chapter_range": "1-50",
+        "summary": "本卷核心冲突与高潮",
+        "key_events": ["事件1", "事件2"]
+      }}
+    ],
+    "mc_growth_arc": [
+      {{
+        "label": "起点: 卑微出身",
+        "target_chapter_range": "1-30",
+        "description": "主角起点状态与内心创伤"
+      }}
+    ],
+    "key_plot_points": [
+      {{
+        "title": "关键点标题",
+        "must_appear_in_volume": "第二卷 试炼期",
+        "description": "为何必出场，如何铺垫",
+        "trigger_chapter_hint": "约第 60 章"
+      }}
+    ]
+  }}
+
+output_format:
+  type: json

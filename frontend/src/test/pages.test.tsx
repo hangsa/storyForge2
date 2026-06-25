@@ -20,6 +20,9 @@ vi.mock("../api/client", () => ({
     getCharacter: vi.fn().mockResolvedValue({}),
     generateOutline: vi.fn(),
     getOutline: vi.fn().mockResolvedValue({}),
+    getNovelOutline: vi.fn().mockResolvedValue({}),
+    generateNovelOutline: vi.fn(),
+    updateNovelOutline: vi.fn(),
     writeScene: vi.fn(),
     forcePass: vi.fn(),
     skipScene: vi.fn(),
@@ -109,6 +112,22 @@ describe("Stage3Page", () => {
   it("renders generate button", () => {
     render(<Stage3Page />);
     expect(screen.getByText("生成大纲")).toBeInTheDocument();
+  });
+
+  it("renders novel-level outline panel above chapter outline", () => {
+    render(<Stage3Page />);
+    expect(screen.getByText("全书大纲")).toBeInTheDocument();
+    expect(screen.getByText("AI 生成全书大纲")).toBeInTheDocument();
+    expect(
+      screen.getByText(/尚未生成 — AI 将基于 STAGE2 的世界观和角色设计全书骨架/)
+    ).toBeInTheDocument();
+  });
+
+  it("shows banner when novel outline is missing", () => {
+    render(<Stage3Page />);
+    expect(
+      screen.getByText(/建议先生成.+全书大纲.+以让后续章节与全本骨架保持一致/)
+    ).toBeInTheDocument();
   });
 });
 

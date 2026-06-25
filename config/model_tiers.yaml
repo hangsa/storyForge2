@@ -60,6 +60,7 @@ agent_mapping:
     world_generation:          { tier: tier_1, model: default }
     character_generation:      { tier: tier_1, model: default }
     outline_generation:        { tier: tier_1, model: default }
+    novel_outline_generation:  { tier: tier_1, model: default }
     creative_brainstorming:    { tier: tier_1, model: default }
     whatif_expansion:          { tier: tier_1, model: default }
     novelty_evaluation:        { tier: tier_2, model: default }

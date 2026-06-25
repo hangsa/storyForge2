@@ -65,6 +65,35 @@ class Stage1To3Context(BaseModel):
     min_words: int = 4000
 
 
+class VolumeDivision(BaseModel):
+    name: str = ""
+    chapter_range: str = ""
+    summary: str = ""
+    key_events: list[str] = []
+
+
+class GrowthMilestone(BaseModel):
+    label: str = ""
+    target_chapter_range: str = ""
+    description: str = ""
+
+
+class KeyPlotPoint(BaseModel):
+    title: str = ""
+    must_appear_in_volume: str = ""
+    description: str = ""
+    trigger_chapter_hint: str = ""
+
+
+class NovelOutline(BaseModel):
+    core_conflict_theme: str = ""
+    volumes: list[VolumeDivision] = []
+    mc_growth_arc: list[GrowthMilestone] = []
+    key_plot_points: list[KeyPlotPoint] = []
+    generated_at: str = ""
+    updated_at: str = ""
+
+
 class WritingContext(BaseModel):
     l0_runtime: dict = {}
     character: dict = {}

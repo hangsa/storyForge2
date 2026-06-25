@@ -30,6 +30,9 @@ user_prompt_template: |
   角色设定：
   {character_context}
 
+  全书大纲（如有 — 用于保持章节与全本骨架一致）：
+  {novel_outline_context}
+
   目标章节：第 {chapter_number} 章
   最低字数：{min_words} 字
 

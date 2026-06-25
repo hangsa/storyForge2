@@ -204,6 +204,10 @@ class TestAdvance:
 
         _write_json(projects_dir, pid, "characters.json", {"characters": [{"name": "林峰"}]})
         _write_json(projects_dir, pid, "world.json", {"era": "玄幻"})
+        _write_json(projects_dir, pid, "novel_outline.json", {
+            "core_conflict_theme": "测试冲突",
+            "volumes": [{"name": "v1", "chapter_range": "1-10", "summary": "x", "key_events": []}],
+        })
         assert sm.advance(pid, Stage.STAGE3).allowed
 
         _write_json(projects_dir, pid, "outline.json", {

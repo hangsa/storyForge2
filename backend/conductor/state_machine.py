@@ -54,6 +54,18 @@ PRECONDITIONS: dict[Stage, list[tuple]] = {
             lambda v: v is not None,
             "world.json 不能为空",
         ),
+        (
+            "novel_outline.json",
+            "core_conflict_theme",
+            lambda v: bool(v),
+            "全书大纲核心冲突不能为空（请先生成全书大纲）",
+        ),
+        (
+            "novel_outline.json",
+            "volumes",
+            lambda v: isinstance(v, list) and len(v) >= 1,
+            "全书大纲至少需 1 个卷/阶段",
+        ),
     ],
     Stage.STAGE4: [
         ("outline.json", "chapters", lambda v: isinstance(v, list) and len(v) >= 1, "chapters 数组不能为空"),

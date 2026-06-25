@@ -209,6 +209,35 @@ export interface Outline {
   }>;
 }
 
+export interface VolumeDivision {
+  name: string;
+  chapter_range: string;
+  summary: string;
+  key_events: string[];
+}
+
+export interface GrowthMilestone {
+  label: string;
+  target_chapter_range: string;
+  description: string;
+}
+
+export interface KeyPlotPoint {
+  title: string;
+  must_appear_in_volume: string;
+  description: string;
+  trigger_chapter_hint: string;
+}
+
+export interface NovelOutline {
+  core_conflict_theme: string;
+  volumes: VolumeDivision[];
+  mc_growth_arc: GrowthMilestone[];
+  key_plot_points: KeyPlotPoint[];
+  generated_at: string;
+  updated_at: string;
+}
+
 export interface ParsedLog {
   type: string;
   params: Record<string, string>;
@@ -547,6 +576,15 @@ export const api = {
 
   updateOutline: (projectId: string, outline: Outline) =>
     request<void>("PUT", "/stage3/outline", { project_id: projectId, outline }),
+
+  getNovelOutline: (projectId: string) =>
+    request<NovelOutline>("GET", `/stage3/novel-outline?project_id=${encodeURIComponent(projectId)}`),
+
+  generateNovelOutline: (projectId: string) =>
+    request<NovelOutline>("POST", "/stage3/generate-novel-outline", { project_id: projectId }),
+
+  updateNovelOutline: (projectId: string, novelOutline: NovelOutline) =>
+    request<NovelOutline>("PUT", "/stage3/novel-outline", { project_id: projectId, novel_outline: novelOutline }),
 
   getScenePlan: (projectId: string, sceneNum: number) =>
     request<ScenePlan>("GET", `/stage4/scene-plan/${sceneNum}?project_id=${projectId}`),

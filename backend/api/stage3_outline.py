@@ -65,6 +65,8 @@ async def generate_outline(data: dict):
 
     project = fm.read_json(project_id, "project.json")
 
+    novel_outline = fm.read_json(project_id, "novel_outline.json") or None
+
     agent = PlannerAgent(project_id)
     try:
         result, response = await agent.generate_outline(
@@ -74,6 +76,7 @@ async def generate_outline(data: dict):
             character=character,
             chapter_number=data.get("chapter_number", 1),
             min_words=project.get("min_words", 4000) if project else 4000,
+            novel_outline=novel_outline,
         )
     except ValueError as e:
         raise HTTPException(
@@ -128,6 +131,127 @@ async def update_outline(data: dict):
         "code": "OK",
         "message": "大纲已更新",
         "detail": outline_data,
+    }
+
+
+# --- Novel-Level Outline Endpoints (v1.7 Phase 3) ---
+
+
+@router.get("/novel-outline")
+async def get_novel_outline(project_id: str = Query(...)):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+    data = fm.read_json(project_id, "novel_outline.json") or {}
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": data,
+    }
+
+
+@router.post("/generate-novel-outline")
+async def generate_novel_outline(data: dict):
+    project_id = data.get("project_id", "")
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    sm = StageStateMachine(settings.projects_dir)
+    current = sm.get_current_stage(project_id)
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE3):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "STAGE_NOT_READY",
+                "message": f"当前阶段为 {current.value}，无法生成全书大纲",
+                "detail": {},
+            },
+        )
+
+    concept_and_dna = fm.read_json(project_id, "concept_and_dna.json")
+    world = fm.read_json(project_id, "world.json")
+    characters_data = fm.read_json(project_id, "characters.json")
+
+    if not all([concept_and_dna, world, characters_data]):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "PRECONDITION_FAILED",
+                "message": "缺少前置数据：需先生成概念 (STAGE1)、世界观与角色 (STAGE2)",
+                "detail": {},
+            },
+        )
+
+    characters = characters_data.get("characters", [])
+    character = characters[0] if characters else {}
+
+    project = fm.read_json(project_id, "project.json")
+    min_words = project.get("min_words", 4000) if project else 4000
+
+    agent = PlannerAgent(project_id)
+    try:
+        result, response = await agent.generate_novel_outline(
+            concept=concept_and_dna.get("concept", {}),
+            story_dna=concept_and_dna.get("story_dna", {}),
+            world=world,
+            character=character,
+            min_words=min_words,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
+        )
+
+    from datetime import datetime
+    now = datetime.utcnow().isoformat()
+    existing = fm.read_json(project_id, "novel_outline.json") or {}
+    result["generated_at"] = existing.get("generated_at", now) if existing.get("generated_at") else now
+    result["updated_at"] = now
+
+    fm.write_json(project_id, "novel_outline.json", result)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "全书大纲生成成功",
+        "detail": result,
+    }
+
+
+@router.put("/novel-outline")
+async def update_novel_outline(data: dict):
+    project_id = data.get("project_id", "")
+    novel_outline_data = data.get("novel_outline", data)
+
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    from datetime import datetime
+    existing = fm.read_json(project_id, "novel_outline.json") or {}
+    novel_outline_data["generated_at"] = existing.get("generated_at", "")
+    novel_outline_data["updated_at"] = datetime.utcnow().isoformat()
+    if not existing.get("generated_at") and not novel_outline_data.get("generated_at"):
+        novel_outline_data["generated_at"] = novel_outline_data["updated_at"]
+
+    fm.write_json(project_id, "novel_outline.json", novel_outline_data)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "全书大纲已更新",
+        "detail": novel_outline_data,
     }
 
 

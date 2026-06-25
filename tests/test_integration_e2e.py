@@ -458,3 +458,100 @@ class TestMultiChapterE2E:
         style_data = style_resp.json()
         assert style_data["error"] is False
         assert style_data["detail"]["sentence"]["avg_length"] > 0
+
+
+class TestStageBackwardNavigation:
+    """REGRESSION: once a project has advanced past a stage, the user must still
+    be able to operate on that stage (re-edit, regenerate, etc.) from the UI.
+    Old `current != Stage.N` check returned 400 STAGE_NOT_READY for any
+    backward navigation. New rule: only block when current < target.
+    """
+
+    def _advance_to(self, client, proj_id, target_stage, proj_dir):
+        """Use the conductor API to advance a project to a specific stage."""
+        resp = client.post("/api/conductor/advance", json={
+            "project_id": proj_id, "target_stage": target_stage,
+        })
+        assert resp.status_code == 200, f"Failed to advance to {target_stage}: {resp.text}"
+
+    def _seed(self, proj_id):
+        """Create prerequisite files so the project can advance through all gates."""
+        import os, json
+        proj_dir = f"projects/{proj_id}"
+        os.makedirs(proj_dir, exist_ok=True)
+        with open(f"{proj_dir}/concept_and_dna.json", "w") as f:
+            json.dump({
+                "concept": {"title": "测试", "premise": "test", "tone": "", "theme": ""},
+                "story_dna": {"core_contradiction": {"statement": "力量与责任的矛盾", "side_a": "", "side_b": ""}},
+            }, f, ensure_ascii=False)
+        with open(f"{proj_dir}/world.json", "w") as f:
+            json.dump({"era": "异世界", "power_system": {"name": "灵力", "ceilings": []}}, f, ensure_ascii=False)
+        with open(f"{proj_dir}/characters.json", "w") as f:
+            json.dump({"characters": [{"id": "c1", "name": "主角"}]}, f, ensure_ascii=False)
+        with open(f"{proj_dir}/outline.json", "w") as f:
+            json.dump({"chapters": [{"chapter_number": 1, "title": "第一章", "scene_plan": [{"scene_number": 1}]}]}, f, ensure_ascii=False)
+        with open(f"{proj_dir}/progress.json", "w") as f:
+            json.dump({"chapters": [{"chapter_number": 1, "scenes": [{"scene_number": 1, "status": "completed"}]}]}, f, ensure_ascii=False)
+        return proj_dir
+
+    def test_stage1_allowed_at_stage4(self, client, project_data):
+        """Once advanced to STAGE4, re-editing concept (stage1) should be allowed."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        self._seed(proj_id)
+        self._advance_to(client, proj_id, "STAGE1", None)
+        self._advance_to(client, proj_id, "STAGE2", None)
+        self._advance_to(client, proj_id, "STAGE3", None)
+        self._advance_to(client, proj_id, "STAGE4", None)
+
+        # Old behavior: 400 STAGE_NOT_READY. New behavior: should pass the
+        # stage gate (may still fail with VALIDATION_ERROR or LLM error, but
+        # NOT with STAGE_NOT_READY).
+        resp = client.post("/api/stage1/generate", json={"project_id": proj_id})
+        assert resp.status_code != 400 or resp.json()["detail"].get("code") != "STAGE_NOT_READY", (
+            f"STAGE1 operations should be allowed when project is at STAGE4, "
+            f"got: {resp.json()}"
+        )
+
+    def test_stage4_write_scene_allowed_at_stage5(self, client, project_data):
+        """Once advanced to STAGE5, re-writing a scene in stage4 should be allowed."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        self._seed(proj_id)
+        self._advance_to(client, proj_id, "STAGE1", None)
+        self._advance_to(client, proj_id, "STAGE2", None)
+        self._advance_to(client, proj_id, "STAGE3", None)
+        self._advance_to(client, proj_id, "STAGE4", None)
+        self._advance_to(client, proj_id, "STAGE5", None)
+
+        # Old behavior: 400 STAGE_NOT_READY. Now allowed: the endpoint should
+        # reach the precondition check (and likely fail there with a different
+        # code such as SCENE_NOT_FOUND, because the seeded outline is minimal).
+        resp = client.post("/api/stage4/write-scene", json={
+            "project_id": proj_id,
+            "chapter_number": 1,
+            "scene_number": 1,
+        })
+        body = resp.json().get("detail", {})
+        assert body.get("code") != "STAGE_NOT_READY", (
+            f"STAGE4 write-scene should be allowed at STAGE5, got: {resp.json()}"
+        )
+
+    def test_init_blocks_all_stage_operations(self, client, project_data):
+        """The pre-condition (project must have advanced AT LEAST to that stage)
+        must still hold. INIT -> STAGE1/2/3/4/6 all blocked."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+
+        for endpoint, payload in [
+            ("/api/stage1/generate", {"project_id": proj_id}),
+            ("/api/stage2/generate-world", {"project_id": proj_id}),
+            ("/api/stage3/generate", {"project_id": proj_id}),
+            ("/api/stage4/write-scene", {"project_id": proj_id, "chapter_number": 1, "scene_number": 1}),
+            ("/api/stage6/export", {"project_id": proj_id, "options": {}}),
+        ]:
+            resp = client.post(endpoint, json=payload)
+            assert resp.status_code == 400, f"{endpoint} should block at INIT"
+            assert resp.json()["detail"]["code"] == "STAGE_NOT_READY", (
+                f"{endpoint} expected STAGE_NOT_READY at INIT, got: {resp.json()}"
+            )

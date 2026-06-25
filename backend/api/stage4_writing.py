@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
-from backend.conductor.state_machine import StageStateMachine, Stage
+from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.conductor.circuit_breaker import CircuitBreaker
 from backend.conductor.checkpoint import CheckpointManager
 from backend.agents.writer import WriterAgent
@@ -162,7 +162,7 @@ async def write_scene(data: dict):
 
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
-    if current != Stage.STAGE4:
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE4):
         raise HTTPException(
             status_code=400,
             detail={
@@ -613,7 +613,7 @@ async def advance_chapter(data: dict):
 
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
-    if current != Stage.STAGE4:
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE4):
         raise HTTPException(
             status_code=400,
             detail={"error": True, "code": "STAGE_NOT_READY", "message": f"当前阶段为 {current.value}，无法推进章节", "detail": {}},

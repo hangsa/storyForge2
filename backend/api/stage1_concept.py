@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
-from backend.conductor.state_machine import StageStateMachine, Stage
+from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
 
 router = APIRouter(prefix="/api/stage1", tags=["stage1"])
@@ -36,7 +36,7 @@ async def generate_concept(data: dict):
 
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
-    if current != Stage.STAGE1:
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE1):
         raise HTTPException(
             status_code=400,
             detail={

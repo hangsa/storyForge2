@@ -142,3 +142,44 @@ def test_writer_submit_exemption_if_conflict_creates_request(tmp_path):
     data = json.loads((proj / "progress.json").read_text(encoding="utf-8"))
     assert len(data["exemptions"]) == 1
     assert data["exemptions"][0]["rule_to_break"]["rule_id"] == "timeline_continuity"
+
+
+def test_reviewer_assembles_exemption_approval_data(tmp_path):
+    """Reviewer.assemble_exemption_approval_data must group pending requests with their antipatterns."""
+    import re
+    from backend.agents.reviewer import ReviewerAgent
+
+    proj = tmp_path / "test_proj"
+    proj.mkdir()
+    (proj / "progress.json").write_text(json.dumps({"exemptions": []}), encoding="utf-8")
+    (proj / "creative_os").mkdir()
+    (proj / "creative_os" / "exemption_antipatterns.json").write_text(
+        json.dumps([{
+            "rule_id": "timeline_continuity",
+            "creative_intent_pattern": re.escape("回忆到童年"),
+            "count": 5,
+            "representative_case": "上一章请求类似意图被拒绝",
+        }]),
+        encoding="utf-8",
+    )
+
+    agent = ReviewerAgent.__new__(ReviewerAgent)
+    # Seed a pending exemption
+    from backend.models.exemption import ExemptionManager, ExemptionRequest
+    mgr = ExemptionManager(proj)
+    mgr.submit(ExemptionRequest(
+        id="ex_ui_001",
+        scene_id="ch01_scene_001",
+        rule_to_break={"layer": "fact_guard", "rule_id": "timeline_continuity", "rule_description": "时间线", "constraint_type": "hard"},
+        creative_intent="回忆到童年片段",
+        expected_effect="情感强化",
+    ))
+
+    data = agent.assemble_exemption_approval_data(project_dir=proj)
+    assert len(data) == 1
+    item = data[0]
+    assert item["id"] == "ex_ui_001"
+    assert item["status"] == "pending"
+    # Antipatterns should surface for the matching rule
+    assert len(item["antipatterns"]) >= 1
+    assert item["antipatterns"][0]["count"] == 5

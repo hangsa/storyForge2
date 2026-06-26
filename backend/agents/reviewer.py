@@ -1,6 +1,7 @@
 import logging
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from backend.utils.json_parser import parse_json_text
@@ -419,6 +420,54 @@ class ReviewerAgent:
             passed=True,  # 不阻断
             detail="\n".join(lines),
         )
+
+    # --- v1.7: Creative Exemption UI data ---
+
+    def assemble_exemption_approval_data(self, project_dir: Path) -> list[dict]:
+        """Group all pending ExemptionRequests with their antipatterns for the approval UI.
+
+        Returns a list of dicts:
+        {
+            "id": str,
+            "scene_id": str,
+            "rule_to_break": dict,
+            "creative_intent": str,
+            "expected_effect": str,
+            "status": str,
+            "requested_at": str,
+            "antipatterns": [{"rule_id", "creative_intent_pattern", "count", "representative_case"}],
+        }
+        """
+        from backend.models.exemption import ExemptionManager
+
+        mgr = ExemptionManager(Path(project_dir))
+        pending = [
+            ex for ex in mgr.list_all()
+            if ex.status == "pending"
+        ]
+        out = []
+        for ex in pending:
+            rule_id = ex.rule_to_break.get("rule_id", "")
+            antipatterns = mgr.check_antipatterns(rule_id, ex.creative_intent)
+            out.append({
+                "id": ex.id,
+                "scene_id": ex.scene_id,
+                "rule_to_break": ex.rule_to_break,
+                "creative_intent": ex.creative_intent,
+                "expected_effect": ex.expected_effect,
+                "status": ex.status,
+                "requested_at": ex.requested_at,
+                "antipatterns": [
+                    {
+                        "rule_id": a.rule_id,
+                        "creative_intent_pattern": a.creative_intent_pattern,
+                        "count": a.count,
+                        "representative_case": a.representative_case,
+                    }
+                    for a in antipatterns
+                ],
+            })
+        return out
 
     # --- v1.6: Narrative Guard ---
 

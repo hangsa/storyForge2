@@ -1,6 +1,6 @@
 """Tests for Creative Exemption — ExemptionManager + dataclasses."""
 import json
-import tempfile
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 

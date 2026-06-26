@@ -28,9 +28,8 @@ OUTCOME_GOOD = "good"
 OUTCOME_POOR = "poor"
 VALID_OUTCOMES = {OUTCOME_EXCELLENT, OUTCOME_GOOD, OUTCOME_POOR}
 
-# Antipattern threshold — after N rejected requests with similar intent,
-# ExemptionManager.check_antipatterns() starts returning them
-ANTIPATTERN_THRESHOLD = 3
+# Antipattern threshold reserved for future gating logic — see check_antipatterns().
+ANTIPATTERN_THRESHOLD = 3  # noqa: F841 — reserved for "surface only after N rejections" rule
 
 
 @dataclass

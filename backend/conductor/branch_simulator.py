@@ -19,11 +19,9 @@ class BranchSimulator:
         self,
         projects_dir: Path,
         model_router=None,
-        impact_analyzer=None,
     ) -> None:
         self._projects_dir = Path(projects_dir)
         self._router = model_router
-        self._impact_analyzer = impact_analyzer
 
     async def simulate(
         self, project_id: str, branch_description: str

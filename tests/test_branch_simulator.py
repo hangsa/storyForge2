@@ -33,24 +33,17 @@ def mock_router():
 
 
 @pytest.fixture
-def mock_impact_analyzer():
-    return MagicMock()
-
-
-@pytest.fixture
-def simulator(temp_dir, mock_router, mock_impact_analyzer):
+def simulator(temp_dir, mock_router):
     return BranchSimulator(
         projects_dir=temp_dir,
         model_router=mock_router,
-        impact_analyzer=mock_impact_analyzer,
     )
 
 
 class TestBranchSimulatorInit:
 
-    def test_initialization(self, simulator, mock_router, mock_impact_analyzer):
+    def test_initialization(self, simulator, mock_router):
         assert simulator._router is mock_router
-        assert simulator._impact_analyzer is mock_impact_analyzer
 
     def test_projects_dir_set(self, simulator, temp_dir):
         assert simulator._projects_dir == temp_dir

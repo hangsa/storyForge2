@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.config import settings
@@ -5,6 +7,9 @@ from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.conductor.branch_simulator import BranchSimulator
 from backend.agents.planner import PlannerAgent
+from backend.llm.model_router import get_model_router
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/stage3", tags=["stage3"])
 fm = FileManager(settings.projects_dir)
@@ -275,7 +280,7 @@ def _get_fm() -> FileManager:
 @branch_router.post("/simulate")
 async def simulate_branch(project_id: str, data: dict):
     description = data.get("description", "")
-    if not description:
+    if not description or not description.strip():
         raise HTTPException(
             status_code=400,
             detail={
@@ -283,6 +288,16 @@ async def simulate_branch(project_id: str, data: dict):
                 "code": "VALIDATION_ERROR",
                 "message": "description 不能为空",
                 "detail": {},
+            },
+        )
+    if len(description) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "VALIDATION_ERROR",
+                "message": "description 长度不能超过 1000 字符",
+                "detail": {"max_length": 1000, "actual_length": len(description)},
             },
         )
 
@@ -297,8 +312,15 @@ async def simulate_branch(project_id: str, data: dict):
             },
         )
 
+    try:
+        router = get_model_router()
+    except Exception as e:
+        logger.warning("Failed to get model router, proceeding with deterministic-only: %s", e)
+        router = None
+
     simulator = BranchSimulator(
         projects_dir=settings.projects_dir,
+        model_router=router,
     )
 
     report = await simulator.simulate(project_id, description)

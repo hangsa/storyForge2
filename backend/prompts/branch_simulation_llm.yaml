@@ -40,7 +40,7 @@ user_prompt_template: |
     }},
     "alternative_suggestions": {{
       "content": "替代分支方案建议（100-200字）",
-      "confidence": "low"
+      "confidence": "high | medium | low"
     }}
   }}
 

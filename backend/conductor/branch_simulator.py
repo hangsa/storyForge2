@@ -212,7 +212,7 @@ class BranchSimulator:
                 "请分析此分支变更的三项影响，输出JSON格式：\n"
                 '{"tension_curve": {"content": "...", "confidence": "medium"}, '
                 '"foreshadowing_risk": {"content": "...", "confidence": "medium"}, '
-                '"alternative_suggestions": {"content": "...", "confidence": "low"}}'
+                '"alternative_suggestions": {"content": "...", "confidence": "high | medium | low"}}'
             )
 
         try:

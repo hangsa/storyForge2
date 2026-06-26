@@ -8,7 +8,7 @@ from typing import Optional
 class LLMInference:
     """LLM 推理结果，封装置信度标注."""
     content: str
-    confidence: str          # "medium" | "low"
+    confidence: str          # "high" | "medium" | "low"
     model: str
     tokens_used: int = 0
 

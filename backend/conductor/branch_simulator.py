@@ -199,7 +199,7 @@ class BranchSimulator:
                 "1. 张力曲线预测：分析分支变更对故事张力曲线的影响\n"
                 "2. 伏笔风险评估：评估哪些伏笔可能受影响或需要调整\n"
                 "3. 替代方案建议：提出替代的分支方向\n\n"
-                "每项任务需要标注置信度：medium 或 low。只输出JSON。"
+                "每项任务需要标注置信度：high、medium 或 low。只输出JSON。"
             )
             user_prompt = (
                 f"分支变更描述：{description}\n\n"

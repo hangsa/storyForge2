@@ -11,7 +11,11 @@ system_prompt: |
   2. 伏笔风险评估：评估哪些伏笔可能受影响或需要调整
   3. 替代方案建议：提出替代的分支方向
 
-  每项任务需要标注置信度：🟡 中置信度 或 🟠 低置信度。
+  每项任务需要标注置信度（三选一）：
+  - 🟢 high（高置信度）：结论基于明确证据，伏笔/角色直接相关
+  - 🟡 medium（中置信度）：结论合理但有不确定性
+  - 🟠 low（低置信度）：高度推测，仅作参考
+
   只输出JSON。
 
 user_prompt_template: |
@@ -28,11 +32,11 @@ user_prompt_template: |
   {{
     "tension_curve": {{
       "content": "张力曲线预测分析（100-200字）",
-      "confidence": "medium"
+      "confidence": "high | medium | low"
     }},
     "foreshadowing_risk": {{
       "content": "伏笔风险评估（100-200字）",
-      "confidence": "medium"
+      "confidence": "high | medium | low"
     }},
     "alternative_suggestions": {{
       "content": "替代分支方案建议（100-200字）",

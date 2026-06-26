@@ -1,8 +1,13 @@
 interface ConfidenceBadgeProps {
-  confidence: "medium" | "low";
+  confidence: "high" | "medium" | "low";
 }
 
 const CONFIDENCE_CONFIG: Record<string, { icon: string; label: string; className: string }> = {
+  high: {
+    icon: "🟢",
+    label: "高置信度",
+    className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+  },
   medium: {
     icon: "🟡",
     label: "中置信度",

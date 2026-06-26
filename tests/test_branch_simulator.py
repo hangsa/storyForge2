@@ -110,6 +110,22 @@ class TestLLMInference:
             report = await simulator.simulate("test_project", "test")
             assert report.tokens_used_total == 0
 
+    @pytest.mark.asyncio
+    async def test_simulate_passes_through_high_confidence(self, simulator):
+        with patch.object(simulator, '_run_deterministic', return_value={
+            "chapter_range": (1, 1), "characters": [], "foreshadowings": [],
+            "growth_shifts": {}, "reader_metrics": {},
+        }):
+            # Override the mock router to return high confidence
+            simulator._router.execute = AsyncMock(return_value={
+                "content": '{"tension_curve": {"content": "明确", "confidence": "high"}}',
+                "usage": {"input": 100, "output": 50},
+                "model": "sonnet",
+            })
+            report = await simulator.simulate("test_project", "test")
+            assert report.tension_curve_projection is not None
+            assert report.tension_curve_projection.confidence == "high"
+
 
 class TestBranchSimulationReport:
 

@@ -493,7 +493,7 @@ export interface CanvasSelectResponse {
 
 export interface LLMInferenceItem {
   content: string;
-  confidence: "medium" | "low";
+  confidence: "high" | "medium" | "low";
 }
 
 export interface BranchSimulationReport {

@@ -14,7 +14,7 @@ function InferenceCard({
 }: {
   label: string;
   icon: string;
-  item: { content: string; confidence: "medium" | "low" } | null;
+  item: { content: string; confidence: "high" | "medium" | "low" } | null;
 }) {
   return (
     <GlassPanel>

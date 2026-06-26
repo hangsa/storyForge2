@@ -56,8 +56,16 @@ class NarrativeGuardResult:
 class ReviewerAgent:
     """Fact Guard reviewer + v1.6 Narrative Guard + Style Guard L3. Checks 1-5 are zero-LLM."""
 
-    def __init__(self, project_id: str):
-        self.project_id = project_id
+    def __init__(self, project_id: str, model_router=None) -> None:
+        self._project_id = project_id
+        self._router = model_router
+        self._prechecker = None
+        if model_router is not None:
+            try:
+                from backend.semantic_precheck.prechecker import SemanticPrechecker
+                self._prechecker = SemanticPrechecker(model_router=model_router)
+            except Exception as e:
+                logger.warning("Failed to init SemanticPrechecker: %s", e)
 
     def run_fact_guard(
         self,
@@ -66,6 +74,7 @@ class ReviewerAgent:
         world_rules: dict,
         scene_plan: dict,
         storyos_state: Optional[dict] = None,
+        precheck_result=None,
     ) -> FactGuardResult:
         if storyos_state is None:
             storyos_state = {}
@@ -110,7 +119,7 @@ class ReviewerAgent:
             self.check_3_world_rules(draft_text, world_rules),
             self.check_4_asset_compliance(draft_text, storyos_state),
             self.check_5_log_completeness(draft_text, scene_plan),
-            self.check_6_semantic_precheck_review(),  # v1.6: framework stub
+            self.check_6_semantic_precheck_review(precheck_result=precheck_result),
         ]
 
         all_passed = all(c.passed for c in checks)
@@ -367,37 +376,48 @@ class ReviewerAgent:
 
     def check_6_semantic_precheck_review(
         self,
-        semantic_precheck_results: Optional[list[CheckResult]] = None,
+        precheck_result=None,
     ) -> CheckResult:
         """
-        Fact Guard 第 6 项：语义预检结果复核。
+        Fact Guard 第 6 项：语义预检结果复核（v1.7）。
 
-        v1.6: semantic_precheck_results 始终为 None → 始终 passed
-        v1.7: 接入 LLM 语义完整性预检结果，复核并过滤误报
-
-        此项不阻断——语义预检基于 LLM，存在误报可能。
+        语义预检基于 Tier 3 LLM 推断，可能存在误报。
+        此项**不阻断**——passed 永远为 True，detail 仅作为提示。
         """
-        if semantic_precheck_results is None:
+        if precheck_result is None:
             return CheckResult(
                 check_id=6,
                 name="语义预检结果复核",
                 passed=True,
-                detail="v1.6 — 语义预检尚未接入，此项暂不生效",
+                detail="语义预检未运行（无 precheck_result 传入）",
             )
 
-        # v1.7: 以下为预留逻辑
-        failed_checks = [c for c in semantic_precheck_results if not c.passed]
-        if not failed_checks:
+        if getattr(precheck_result, "skipped_reason", ""):
             return CheckResult(
-                check_id=6, name="语义预检结果复核", passed=True,
-                detail="语义预检全部通过",
+                check_id=6,
+                name="语义预检结果复核",
+                passed=True,
+                detail=f"语义预检跳过：{precheck_result.skipped_reason}",
             )
 
+        suggestions = precheck_result.suggestions or []
+        if not suggestions:
+            return CheckResult(
+                check_id=6,
+                name="语义预检结果复核",
+                passed=True,
+                detail="语义预检全部通过（无漏写建议）",
+            )
+
+        # Info-only: never blocks. Just list the suggestions.
+        lines = [f"语义预检发现 {len(suggestions)} 项可能漏写："]
+        for s in suggestions[:5]:  # cap at 5 in detail
+            lines.append(f"  - [{s.event_type}] {s.location_hint}: {s.reason}")
         return CheckResult(
             check_id=6,
             name="语义预检结果复核",
             passed=True,  # 不阻断
-            detail=f"语义预检 {len(failed_checks)} 项未通过，待 v1.7 复核引擎处理",
+            detail="\n".join(lines),
         )
 
     # --- v1.6: Narrative Guard ---

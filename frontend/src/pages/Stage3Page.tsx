@@ -4,7 +4,11 @@ import api, { Outline, NovelOutline, ScenePlan } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
 import NovelOutlinePanel from "../components/stage3/NovelOutlinePanel";
 
-export default function Stage3Page() {
+interface Stage3PageProps {
+  initialTab?: "novel-outline" | "outline";
+}
+
+export default function Stage3Page({ initialTab = "novel-outline" }: Stage3PageProps) {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
 
@@ -17,6 +21,11 @@ export default function Stage3Page() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<"novel-outline" | "outline">(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Load existing outline on mount
   useEffect(() => {
@@ -122,26 +131,6 @@ export default function Stage3Page() {
 
   return (
     <>
-      {/* v1.7 tab toggle: Outline / Branch Simulation */}
-      <div className="pt-1 pb-3">
-        <div className="flex items-center gap-1">
-          <button
-            className="px-4 py-2 font-body-ui text-sm rounded-lg
-                       bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
-          >
-            <span className="material-symbols-outlined text-sm align-middle mr-1">list_alt</span>
-            大纲视图
-          </button>
-          <button
-            onClick={() => navigate(`/project/${projectId}/stage3/branches`)}
-            className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
-                       hover:text-primary hover:bg-surface-container transition-colors"
-          >
-            <span className="material-symbols-outlined text-sm align-middle mr-1">call_split</span>
-            分支模拟
-          </button>
-        </div>
-      </div>
       <div className="max-w-5xl mx-auto pb-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -155,37 +144,17 @@ export default function Stage3Page() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        {canAdvance && (
           <button
-            onClick={() => handleGenerate()}
-            disabled={loading}
-            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+            onClick={handleAdvance}
+            disabled={advancing}
+            className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
                        rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
           >
-            {loading
-              ? `正在生成第${nextChapterNumber}章...`
-              : outline
-                ? `生成第${nextChapterNumber}章`
-                : "生成大纲"}
+            {advancing ? "推进中..." : "进入写作中心 →"}
           </button>
-          {canAdvance && (
-            <button
-              onClick={handleAdvance}
-              disabled={advancing}
-              className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
-                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-            >
-              {advancing ? "推进中..." : "进入写作中心 →"}
-            </button>
-          )}
-        </div>
+        )}
       </div>
-
-      {!hasNovelOutline && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded text-amber-300 font-body-ui text-xs">
-          建议先生成"全书大纲"以让后续章节与全本骨架保持一致。完成后即可进入写作中心。
-        </div>
-      )}
 
       {error && (
         <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
@@ -193,15 +162,39 @@ export default function Stage3Page() {
         </div>
       )}
 
-      {/* Novel-level outline (top layer — must exist before chapter outline) */}
-      <NovelOutlinePanel
-        projectId={projectId}
-        data={novelOutline}
-        onChange={setNovelOutline}
-        onError={(msg) => setError(msg || null)}
-      />
+      {activeTab === "novel-outline" && (
+        <NovelOutlinePanel
+          projectId={projectId}
+          data={novelOutline}
+          onChange={setNovelOutline}
+          onError={(msg) => setError(msg || null)}
+        />
+      )}
 
-      {outline && outline.chapters.length > 0 ? (
+      {activeTab === "outline" && (
+        <>
+          {!hasNovelOutline && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded text-amber-300 font-body-ui text-xs">
+              建议先生成"全书大纲"以让后续章节与全本骨架保持一致。完成后即可进入写作中心。
+            </div>
+          )}
+
+          <div className="flex items-center justify-end">
+            <button
+              onClick={() => handleGenerate()}
+              disabled={loading}
+              className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {loading
+                ? `正在生成第${nextChapterNumber}章...`
+                : outline
+                  ? `生成第${nextChapterNumber}章`
+                  : "生成大纲"}
+            </button>
+          </div>
+
+          {outline && outline.chapters.length > 0 ? (
         <div className="space-y-8">
           {outline.chapters.map((chapter) => (
             <div key={chapter.chapter_number}>
@@ -448,6 +441,8 @@ export default function Stage3Page() {
           </span>
           <p className="font-body-ui text-system-log">点击"生成大纲"开始阶段 3</p>
         </div>
+      )}
+        </>
       )}
     </div>
     </>

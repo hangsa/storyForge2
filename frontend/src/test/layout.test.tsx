@@ -75,7 +75,7 @@ describe("SideNavBar", () => {
 
   it("renders all stage navigation items", () => {
     render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
-    expect(screen.getByText("项目初始化")).toBeInTheDocument();
+    expect(screen.getByText("项目中心")).toBeInTheDocument();
     expect(screen.getByText("概念讨论")).toBeInTheDocument();
     expect(screen.getByText("世界观+角色")).toBeInTheDocument();
     expect(screen.getByText("情节头脑风暴")).toBeInTheDocument();

@@ -26,7 +26,8 @@ const STAGES: StageItem[] = [
     label: "情节头脑风暴",
     icon: "account_tree",
     subItems: [
-      { key: "STAGE3", label: "大纲视图", icon: "list_alt", path: "stage3" },
+      { key: "STAGE3", label: "全书大纲", icon: "menu_book", path: "stage3" },
+      { key: "STAGE3_OUTLINE", label: "大纲视图", icon: "list_alt", path: "stage3/outline" },
       { key: "STAGE3_BRANCHES", label: "分支模拟", icon: "call_split", path: "stage3/branches" },
     ],
   },

@@ -17,6 +17,7 @@ const ImpactAnalysisPage = lazy(() => import("./pages/ImpactAnalysisPage"));
 const StoryOSPage = lazy(() => import("./pages/StoryOSPage"));
 const CreativeCanvasPage = lazy(() => import("./pages/CreativeCanvasPage"));
 const BranchSimulationPage = lazy(() => import("./pages/BranchSimulationPage"));
+const Stage3Layout = lazy(() => import("./components/layout/Stage3Layout"));
 
 function StageWrapper({ children, name }: { children: React.ReactNode; name: string }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -67,11 +68,38 @@ function App() {
           element={
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="stage3">
-                <Stage3Page />
+                <Stage3Layout />
               </StageWrapper>
             </Suspense>
           }
-        />
+        >
+          <Route
+            index
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <Stage3Page initialTab="novel-outline" />
+              </Suspense>
+            }
+          />
+          <Route
+            path="outline"
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <Stage3Page initialTab="outline" />
+              </Suspense>
+            }
+          />
+          <Route
+            path="branches"
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <StageWrapper name="stage3-branches">
+                  <BranchSimulationPage />
+                </StageWrapper>
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="/project/:projectId/stage4"
           element={
@@ -158,16 +186,6 @@ function App() {
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="stage1-canvas">
                 <CreativeCanvasPage />
-              </StageWrapper>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/project/:projectId/stage3/branches"
-          element={
-            <Suspense fallback={<LoadingFallback />}>
-              <StageWrapper name="stage3-branches">
-                <BranchSimulationPage />
               </StageWrapper>
             </Suspense>
           }

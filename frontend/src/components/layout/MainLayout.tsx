@@ -17,6 +17,7 @@ const STAGE_FROM_PATH: Record<string, string> = {
   impact: "IMPACT",
   storyos: "STORYOS",
   "stage1/canvas": "STAGE1_CANVAS",
+  "stage3/outline": "STAGE3_OUTLINE",
   "stage3/branches": "STAGE3_BRANCHES",
 };
 
@@ -33,6 +34,7 @@ const STAGE_TO_PATH: Record<string, string> = {
   IMPACT: "impact",
   STORYOS: "storyos",
   STAGE1_CANVAS: "stage1/canvas",
+  STAGE3_OUTLINE: "stage3/outline",
   STAGE3_BRANCHES: "stage3/branches",
 };
 

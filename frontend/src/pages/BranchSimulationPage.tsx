@@ -27,27 +27,6 @@ export default function BranchSimulationPage() {
 
   return (
     <div className="h-[calc(100vh-112px)] flex flex-col">
-      {/* Tab bar — same position as Stage3Page */}
-      <div className="pt-1 pb-3">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => navigate(`/project/${projectId}/stage3`)}
-            className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
-                       hover:text-primary hover:bg-surface-container transition-colors"
-          >
-            <span className="material-symbols-outlined text-sm align-middle mr-1">list_alt</span>
-            大纲视图
-          </button>
-          <button
-            className="px-4 py-2 font-body-ui text-sm rounded-lg
-                       bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
-          >
-            <span className="material-symbols-outlined text-sm align-middle mr-1">call_split</span>
-            分支模拟
-          </button>
-        </div>
-      </div>
-
       {/* Two-column layout — full-width via negative horizontal+bottom margins */}
       <div className="flex-1 flex gap-0 overflow-hidden -mx-6 -mb-6 min-h-0">
         {/* Left column: input + history */}

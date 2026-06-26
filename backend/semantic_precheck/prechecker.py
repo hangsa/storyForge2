@@ -54,13 +54,17 @@ class SemanticPrechecker:
 
     # --- public ---
 
-    def check(
+    async def check(
         self,
         scene_text: str,
         scene_plan: dict,
         character_names: list[str],
     ) -> PrecheckResult:
-        """Inspect scene text for missed SF_LOG tags. Returns suggestions only."""
+        """Inspect scene text for missed SF_LOG tags. Returns suggestions only.
+
+        Async because `_run_llm` awaits the model router — calling from inside
+        FastAPI's already-running event loop would otherwise fail.
+        """
         if self._router is None:
             return PrecheckResult(
                 precheck_passed=True,
@@ -79,7 +83,7 @@ class SemanticPrechecker:
                 skipped_reason="empty scene text",
             )
 
-        return self._run_llm(scene_text, scene_plan, character_names)
+        return await self._run_llm(scene_text, scene_plan, character_names)
 
     # --- private ---
 
@@ -99,7 +103,7 @@ class SemanticPrechecker:
             "user_template": data.get("user_prompt_template", "").strip(),
         }
 
-    def _run_llm(
+    async def _run_llm(
         self,
         scene_text: str,
         scene_plan: dict,
@@ -122,14 +126,11 @@ class SemanticPrechecker:
         ]
 
         try:
-            import asyncio
-            result_ = asyncio.get_event_loop().run_until_complete(
-                self._router.execute(
-                    agent_name="reviewer",
-                    task_name="semantic_precheck",
-                    messages=messages,
-                    json_mode=True,
-                )
+            result_ = await self._router.execute(
+                agent_name="reviewer",
+                task_name="semantic_precheck",
+                messages=messages,
+                json_mode=True,
             )
         except Exception as e:
             logger.warning("Semantic precheck LLM call failed: %s", e)

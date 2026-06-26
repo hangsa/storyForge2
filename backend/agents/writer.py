@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse
@@ -192,3 +193,35 @@ class WriterAgent(BaseAgent):
         return await self.generate_from_template(
             "scene_rewrite", **template_vars, **kwargs
         )
+
+    def submit_exemption_if_conflict(
+        self,
+        *,
+        scene_id: str,
+        rule_conflict: dict,
+        creative_intent: str,
+        expected_effect: str,
+        project_dir: Path,
+    ) -> Optional[dict]:
+        """If Writer detects a rule conflict with a defensible creative intent,
+        submit an ExemptionRequest via ExemptionManager. Returns the request dict
+        (status=pending) or None if intent is empty.
+        """
+        from backend.models.exemption import ExemptionManager, ExemptionRequest
+
+        if not creative_intent or not creative_intent.strip():
+            return None
+
+        # Deterministic-ish ID from scene + rule_id + epoch ms (low collision risk)
+        import time
+        req_id = f"ex_{scene_id}_{rule_conflict.get('rule_id', 'unknown')}_{int(time.time() * 1000)}"
+        req = ExemptionRequest(
+            id=req_id,
+            scene_id=scene_id,
+            rule_to_break=rule_conflict,
+            creative_intent=creative_intent,
+            expected_effect=expected_effect,
+        )
+        mgr = ExemptionManager(Path(project_dir))
+        mgr.submit(req)
+        return {"id": req.id, "status": req.status, "scene_id": req.scene_id}

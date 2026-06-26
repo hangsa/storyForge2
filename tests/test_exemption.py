@@ -111,3 +111,34 @@ def test_api_submit_endpoint_creates_exemption(tmp_path, monkeypatch):
 
     data = json.loads((proj / "progress.json").read_text(encoding="utf-8"))
     assert any(ex["id"] == "ex_api_001" for ex in data["exemptions"])
+
+
+def test_writer_submit_exemption_if_conflict_creates_request(tmp_path):
+    """Writer's submit_exemption_if_conflict must persist a request when conflicts exist."""
+    from backend.agents.writer import WriterAgent
+
+    proj = tmp_path / "test_proj"
+    proj.mkdir()
+    (proj / "progress.json").write_text(json.dumps({"exemptions": []}), encoding="utf-8")
+
+    writer = WriterAgent("test_proj")
+    rule_conflict = {
+        "layer": "fact_guard",
+        "rule_id": "timeline_continuity",
+        "rule_description": "时间线连续性",
+        "constraint_type": "hard",
+    }
+    result = writer.submit_exemption_if_conflict(
+        scene_id="ch01_scene_001",
+        rule_conflict=rule_conflict,
+        creative_intent="主角在回忆中回到童年",
+        expected_effect="情感锚点强化",
+        project_dir=proj,
+    )
+    assert result is not None
+    assert result["id"].startswith("ex_")
+    assert result["status"] == "pending"
+
+    data = json.loads((proj / "progress.json").read_text(encoding="utf-8"))
+    assert len(data["exemptions"]) == 1
+    assert data["exemptions"][0]["rule_to_break"]["rule_id"] == "timeline_continuity"

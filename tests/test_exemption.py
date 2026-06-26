@@ -68,3 +68,46 @@ def test_progress_file_includes_exemptions_field():
     )
     assert pf.exemptions == []
     assert isinstance(pf.exemptions, list)
+
+
+def test_api_submit_endpoint_creates_exemption(tmp_path, monkeypatch):
+    """POST /api/.../exemptions must persist the request via ExemptionManager."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    # Seed a project directory
+    proj = tmp_path / "test_proj"
+    proj.mkdir()
+    (proj / "progress.json").write_text(json.dumps({
+        "project_id": "test_proj",
+        "exemptions": [],
+    }), encoding="utf-8")
+
+    # Patch settings.projects_dir to point at tmp_path
+    from backend.config import settings
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
+
+    # Import the router and create a test app
+    from backend.api.stage4_writing import router
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    payload = {
+        "id": "ex_api_001",
+        "scene_id": "ch01_scene_001",
+        "rule_to_break": {
+            "layer": "fact_guard",
+            "rule_id": "timeline_continuity",
+            "rule_description": "时间线连续性",
+            "constraint_type": "hard",
+        },
+        "creative_intent": "API 测试创意意图",
+        "expected_effect": "API 测试预期效果",
+    }
+    resp = client.post("/api/v1/projects/test_proj/exemptions", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["id"] == "ex_api_001"
+
+    data = json.loads((proj / "progress.json").read_text(encoding="utf-8"))
+    assert any(ex["id"] == "ex_api_001" for ex in data["exemptions"])

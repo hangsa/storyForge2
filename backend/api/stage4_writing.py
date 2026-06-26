@@ -19,9 +19,12 @@ from backend.memory_os.memory_coordinator import MemoryCoordinator
 from backend.reader_os.calculator import ReaderOS
 from backend.semantic_precheck.prechecker import PrecheckResult
 
-router = APIRouter(prefix="/api/stage4", tags=["stage4"])
+stage4_router = APIRouter(prefix="/api/stage4", tags=["stage4"])
 fm = FileManager(settings.projects_dir)
 logger = logging.getLogger(__name__)
+
+# Top-level router combining stage4 + v1.7 exemptions routes. main.py and tests import `router`.
+router = APIRouter()
 
 
 async def _run_semantic_precheck(
@@ -92,7 +95,7 @@ def _load_context(project_id: str, chapter_number: Optional[int] = None) -> dict
     }
 
 
-@router.get("/scene-plan/{scene_num}")
+@stage4_router.get("/scene-plan/{scene_num}")
 async def get_scene_plan(scene_num: int, project_id: str):
     ctx = _load_context(project_id)
     scenes = ctx["chapter"].get("scene_plan", [])
@@ -110,7 +113,7 @@ async def get_scene_plan(scene_num: int, project_id: str):
     )
 
 
-@router.get("/scene-draft")
+@stage4_router.get("/scene-draft")
 async def get_scene_draft(project_id: str, chapter_number: int = 1, scene_number: int = 1):
     """Load a previously saved scene draft from disk."""
     if not project_id:
@@ -150,7 +153,7 @@ async def get_scene_draft(project_id: str, chapter_number: int = 1, scene_number
     }
 
 
-@router.put("/scene-draft")
+@stage4_router.put("/scene-draft")
 async def update_scene_draft(data: dict):
     """Save manually edited scene draft text to disk."""
     project_id = data.get("project_id", "")
@@ -177,7 +180,7 @@ async def update_scene_draft(data: dict):
     }
 
 
-@router.post("/write-scene")
+@stage4_router.post("/write-scene")
 async def write_scene(data: dict):
     project_id = data.get("project_id", "")
     chapter_number = data.get("chapter_number", 1)
@@ -563,7 +566,7 @@ async def write_scene(data: dict):
     }
 
 
-@router.post("/force-pass")
+@stage4_router.post("/force-pass")
 async def force_pass(data: dict):
     project_id = data.get("project_id", "")
     scene_number = data.get("scene_number", 1)
@@ -591,7 +594,7 @@ async def force_pass(data: dict):
     }
 
 
-@router.post("/skip-scene")
+@stage4_router.post("/skip-scene")
 async def skip_scene(data: dict):
     project_id = data.get("project_id", "")
     scene_number = data.get("scene_number", 1)
@@ -636,7 +639,7 @@ async def skip_scene(data: dict):
     }
 
 
-@router.get("/progress")
+@stage4_router.get("/progress")
 async def get_progress(project_id: str):
     # v1.6 Phase 3b: ensure baseline manifest exists on first STAGE 4 entry
     from backend.conductor.impact_analyzer import ImpactAnalyzer
@@ -679,7 +682,7 @@ async def get_progress(project_id: str):
     }
 
 
-@router.post("/advance-chapter")
+@stage4_router.post("/advance-chapter")
 async def advance_chapter(data: dict):
     """推进到下一章：触发 Summary Archiver + ReaderOS + L2 更新"""
     project_id = data.get("project_id", "")
@@ -828,7 +831,7 @@ async def advance_chapter(data: dict):
 # --- v1.6 Phase 3a: Chapter Review API ---
 
 
-@router.get("/chapter-reviews")
+@stage4_router.get("/chapter-reviews")
 async def list_chapter_reviews(project_id: str):
     """List all available chapter reviews for a project."""
     from pathlib import Path
@@ -855,7 +858,7 @@ async def list_chapter_reviews(project_id: str):
     }
 
 
-@router.get("/chapter-review")
+@stage4_router.get("/chapter-review")
 async def get_chapter_review(project_id: str, chapter: int):
     """Get chapter review data. Returns 404 if not yet generated."""
     from backend.conductor.chapter_review import ChapterReviewBuilder
@@ -881,7 +884,7 @@ async def get_chapter_review(project_id: str, chapter: int):
     }
 
 
-@router.post("/chapter-review/decide")
+@stage4_router.post("/chapter-review/decide")
 async def decide_chapter_review(data: dict):
     """Author decision on chapter review.
     Request: {project_id, chapter_number, decision: "approved"|"revise", feedback?: string}
@@ -923,3 +926,71 @@ async def decide_chapter_review(data: dict):
         "message": f"Decision '{decision}' recorded for chapter {chapter_number}",
         "detail": {"status": "ok"},
     }
+
+
+# --- v1.7: Creative Exemption API (T3.8) ---
+
+from backend.models.exemption import ExemptionRequest, ExemptionManager
+
+# Separate sub-router so the URL prefix doesn't collide with the existing /api/stage4 prefix.
+exemptions_router = APIRouter(prefix="/api/v1/projects/{project_id}/exemptions", tags=["exemptions"])
+
+
+@exemptions_router.post("")
+def submit_exemption(project_id: str, request: ExemptionRequest) -> dict:
+    """Writer submits a creative exemption request. Persists to progress.json."""
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    mgr.submit(request)
+    return {"id": request.id, "status": request.status}
+
+
+@exemptions_router.put("/{exemption_id}/approve")
+def approve_exemption(project_id: str, exemption_id: str, approved_by: str) -> dict:
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    mgr.approve(exemption_id, approved_by=approved_by)
+    return {"id": exemption_id, "status": "approved"}
+
+
+@exemptions_router.put("/{exemption_id}/reject")
+def reject_exemption(project_id: str, exemption_id: str, reason: str) -> dict:
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    mgr.reject(exemption_id, reason=reason)
+    return {"id": exemption_id, "status": "rejected"}
+
+
+@exemptions_router.put("/{exemption_id}/outcome")
+def set_exemption_outcome(project_id: str, exemption_id: str, outcome: str) -> dict:
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    mgr.evaluate_outcome(exemption_id, outcome)
+    return {"id": exemption_id, "status": "evaluated", "outcome": outcome}
+
+
+@exemptions_router.get("/{exemption_id}/antipatterns")
+def get_exemption_antipatterns(
+    project_id: str, exemption_id: str
+) -> list[dict]:
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    ex = mgr.get(exemption_id)
+    if ex is None:
+        return []
+    rule_id = ex.rule_to_break.get("rule_id", "")
+    matches = mgr.check_antipatterns(rule_id, ex.creative_intent)
+    return [
+        {
+            "rule_id": m.rule_id,
+            "creative_intent_pattern": m.creative_intent_pattern,
+            "count": m.count,
+            "representative_case": m.representative_case,
+        }
+        for m in matches
+    ]
+
+
+# Mount both sub-routers into the top-level `router` so main.py and tests get all routes.
+router.include_router(stage4_router)
+router.include_router(exemptions_router)

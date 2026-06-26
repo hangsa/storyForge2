@@ -183,3 +183,79 @@ def test_reviewer_assembles_exemption_approval_data(tmp_path):
     # Antipatterns should surface for the matching rule
     assert len(item["antipatterns"]) >= 1
     assert item["antipatterns"][0]["count"] == 5
+
+
+def test_exemption_full_lifecycle_submit_approve_reject(tmp_path):
+    """submit → approve: status=approved, approved_by populated. reject on another: status=rejected, rejected_reason populated."""
+    from backend.models.exemption import ExemptionManager, ExemptionRequest
+
+    proj = tmp_path / "test_proj"
+    proj.mkdir()
+    (proj / "progress.json").write_text(json.dumps({"exemptions": []}), encoding="utf-8")
+    mgr = ExemptionManager(proj)
+
+    # Submit 2 requests
+    mgr.submit(ExemptionRequest(
+        id="ex_life_1", scene_id="s1",
+        rule_to_break={"layer": "x", "rule_id": "r1", "rule_description": "d", "constraint_type": "soft"},
+        creative_intent="i1", expected_effect="e1",
+    ))
+    mgr.submit(ExemptionRequest(
+        id="ex_life_2", scene_id="s2",
+        rule_to_break={"layer": "x", "rule_id": "r2", "rule_description": "d", "constraint_type": "soft"},
+        creative_intent="i2", expected_effect="e2",
+    ))
+
+    # Approve the first
+    mgr.approve("ex_life_1", approved_by="user_001")
+    ex1 = mgr.get("ex_life_1")
+    assert ex1.status == "approved"
+    assert ex1.approved_by == "user_001"
+
+    # Reject the second
+    mgr.reject("ex_life_2", reason="意图不清晰")
+    ex2 = mgr.get("ex_life_2")
+    assert ex2.status == "rejected"
+    assert ex2.rejected_reason == "意图不清晰"
+
+
+def test_exemption_evaluate_outcome_validates_value(tmp_path):
+    """evaluate_outcome must reject invalid outcomes."""
+    from backend.models.exemption import ExemptionManager, ExemptionRequest
+
+    proj = tmp_path / "test_proj"
+    proj.mkdir()
+    (proj / "progress.json").write_text(json.dumps({"exemptions": []}), encoding="utf-8")
+    mgr = ExemptionManager(proj)
+    mgr.submit(ExemptionRequest(
+        id="ex_out_1", scene_id="s1",
+        rule_to_break={"layer": "x", "rule_id": "r", "rule_description": "d", "constraint_type": "soft"},
+        creative_intent="i", expected_effect="e",
+    ))
+    mgr.approve("ex_out_1", approved_by="u")
+    mgr.evaluate_outcome("ex_out_1", "excellent")
+    assert mgr.get("ex_out_1").outcome == "excellent"
+
+    with pytest.raises(ValueError):
+        mgr.evaluate_outcome("ex_out_1", "spectacular")
+
+
+def test_antipatterns_appear_after_repeated_rejections(tmp_path):
+    """After ≥1 rejection with similar intent, check_antipatterns surfaces the antipattern."""
+    from backend.models.exemption import ExemptionManager, ExemptionRequest
+
+    proj = tmp_path / "test_proj"
+    proj.mkdir()
+    (proj / "progress.json").write_text(json.dumps({"exemptions": []}), encoding="utf-8")
+    mgr = ExemptionManager(proj)
+    mgr.submit(ExemptionRequest(
+        id="ex_anti_1", scene_id="s1",
+        rule_to_break={"layer": "x", "rule_id": "R_same", "rule_description": "d", "constraint_type": "soft"},
+        creative_intent="通过角色对话让读者共情", expected_effect="e",
+    ))
+    mgr.reject("ex_anti_1", reason="之前已拒绝类似意图")
+
+    matches = mgr.check_antipatterns("R_same", "通过角色对话让读者共情")
+    assert len(matches) == 1
+    assert matches[0].count == 1
+    assert "之前已拒绝" in matches[0].representative_case

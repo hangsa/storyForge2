@@ -54,3 +54,17 @@ def test_exemption_manager_submit_appends_to_progress_json(tmp_path):
     assert len(data["exemptions"]) == 1
     assert data["exemptions"][0]["id"] == "ex_001"
     assert data["exemptions"][0]["status"] == "pending"
+
+
+def test_progress_file_includes_exemptions_field():
+    """ProgressFile must accept an exemptions list (default empty)."""
+    from backend.models.progress import ProgressFile
+
+    pf = ProgressFile(
+        project_id="test_proj",
+        current_stage="STAGE4",
+        current_chapter=1,
+        total_chapters=10,
+    )
+    assert pf.exemptions == []
+    assert isinstance(pf.exemptions, list)

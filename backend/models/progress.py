@@ -49,6 +49,7 @@ class ProgressFile(BaseModel):
     total_chapters: int = 1
     chapters: list[ChapterProgress] = []
     circuit_breaker_events: list[CircuitBreakerEvent] = []
+    exemptions: list[dict] = []   # v1.7: ExemptionRequest dicts (raw, no validation)
 
 
 class NarrativeGuardWarning(BaseModel):

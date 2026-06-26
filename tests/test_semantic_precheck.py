@@ -71,3 +71,105 @@ async def test_run_semantic_precheck_helper_returns_passed_when_no_router(monkey
     )
     assert result.precheck_passed is True
     assert "no router" in result.skipped_reason
+
+
+@pytest.mark.asyncio
+async def test_prechecker_routes_to_llm_and_parses_suggestions():
+    """When router is provided and LLM returns JSON, suggestions are parsed correctly."""
+    from backend.semantic_precheck.prechecker import SemanticPrechecker
+
+    router = MagicMock()
+    router.execute = AsyncMock(return_value={
+        "content": json.dumps({
+            "suggestions": [
+                {
+                    "event_type": "twist_reveal",
+                    "location_hint": "结尾",
+                    "suggested_tag": "<!-- SF_LOG twist_reveal id=\"tw_99\" -->",
+                    "reason": "师父身份暴露但无标记",
+                }
+            ]
+        }, ensure_ascii=False),
+        "usage": {"input": 300, "output": 80},
+        "model": "claude-haiku",
+    })
+    prechecker = SemanticPrechecker(model_router=router)
+    result = await prechecker.check(
+        scene_text="林峰看着屏幕，瞳孔猛然收缩。",
+        scene_plan={"required_logs": []},
+        character_names=["林峰"],
+    )
+    assert result.precheck_passed is False
+    assert len(result.suggestions) == 1
+    assert result.suggestions[0].event_type == "twist_reveal"
+    assert result.tokens_used == 380
+
+
+@pytest.mark.asyncio
+async def test_prechecker_graceful_skip_on_non_json_response():
+    """Bad JSON from LLM → empty suggestions, precheck_passed=True."""
+    from backend.semantic_precheck.prechecker import SemanticPrechecker
+
+    router = MagicMock()
+    router.execute = AsyncMock(return_value={
+        "content": "not json at all",
+        "usage": {"input": 100, "output": 50},
+        "model": "claude-haiku",
+    })
+    prechecker = SemanticPrechecker(model_router=router)
+    result = await prechecker.check(
+        scene_text="text",
+        scene_plan={},
+        character_names=["x"],
+    )
+    assert result.precheck_passed is True
+    assert result.suggestions == []
+    assert "non-JSON" in result.skipped_reason
+
+
+@pytest.mark.asyncio
+async def test_prechecker_filters_out_unsanctioned_event_types():
+    """Only the 3 TARGET_EVENT_TYPES are surfaced. Others are silently dropped."""
+    from backend.semantic_precheck.prechecker import SemanticPrechecker
+
+    router = MagicMock()
+    router.execute = AsyncMock(return_value={
+        "content": json.dumps({
+            "suggestions": [
+                {"event_type": "character_emotion", "reason": "should be filtered"},
+                {"event_type": "knowledge_gain", "reason": "should be filtered"},
+                {"event_type": "character_location_change", "reason": "should be filtered"},
+                {"event_type": "twist_reveal", "reason": "kept", "location_hint": "x", "suggested_tag": "y"},
+            ]
+        }),
+        "usage": {"input": 1, "output": 1},
+        "model": "claude-haiku",
+    })
+    prechecker = SemanticPrechecker(model_router=router)
+    result = await prechecker.check(
+        scene_text="x",
+        scene_plan={},
+        character_names=["x"],
+    )
+    assert len(result.suggestions) == 1
+    assert result.suggestions[0].event_type == "twist_reveal"
+
+
+@pytest.mark.asyncio
+async def test_prechecker_never_blocks_even_with_suggestions():
+    """precheck_passed is False when suggestions exist, but downstream check_6 still passes=True."""
+    from backend.semantic_precheck.prechecker import SemanticPrechecker
+
+    router = MagicMock()
+    router.execute = AsyncMock(return_value={
+        "content": json.dumps({"suggestions": [
+            {"event_type": "registry_create", "reason": "x", "location_hint": "y", "suggested_tag": "z"}
+        ]}),
+        "usage": {"input": 1, "output": 1},
+        "model": "claude-haiku",
+    })
+    prechecker = SemanticPrechecker(model_router=router)
+    result = await prechecker.check(scene_text="x", scene_plan={}, character_names=["x"])
+    # precheck_passed reflects "any suggestions?" — but the check_6 handler never blocks
+    assert result.precheck_passed is False
+    assert len(result.suggestions) == 1

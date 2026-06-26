@@ -17,10 +17,39 @@ from backend.memory_os.l1_hot import L1Hot
 from backend.memory_os.l2_warm import L2WarmMemory
 from backend.memory_os.memory_coordinator import MemoryCoordinator
 from backend.reader_os.calculator import ReaderOS
+from backend.semantic_precheck.prechecker import PrecheckResult
 
 router = APIRouter(prefix="/api/stage4", tags=["stage4"])
 fm = FileManager(settings.projects_dir)
 logger = logging.getLogger(__name__)
+
+
+async def _run_semantic_precheck(
+    scene_text: str,
+    scene_plan: dict,
+    character_names: list[str],
+) -> PrecheckResult:
+    """Module-level async wrapper so tests can patch it cleanly.
+
+    Returns precheck_passed=True with empty suggestions on any failure.
+    Never raises — the precheck is advisory.
+    """
+    try:
+        from backend.llm.model_router import get_model_router
+        from backend.semantic_precheck.prechecker import SemanticPrechecker
+
+        router = get_model_router()
+        if router is None:
+            return PrecheckResult(precheck_passed=True, skipped_reason="no router")
+        prechecker = SemanticPrechecker(model_router=router)
+        return await prechecker.check(
+            scene_text=scene_text,
+            scene_plan=scene_plan or {},
+            character_names=character_names or [],
+        )
+    except Exception as e:
+        logger.warning("Semantic precheck skipped: %s", e)
+        return PrecheckResult(precheck_passed=True, skipped_reason=f"error: {e}")
 
 
 def _load_context(project_id: str, chapter_number: Optional[int] = None) -> dict:
@@ -261,12 +290,34 @@ async def write_scene(data: dict):
     attempt = 1
     current_draft = draft_text
 
+    # --- v1.7: Semantic precheck (advisory, runs once per scene) ---
+    char_names = [c.get("name", "") for c in ctx.get("characters", []) if c.get("name")]
+    precheck_result = await _run_semantic_precheck(
+        scene_text=current_draft,
+        scene_plan=scene_plan,
+        character_names=char_names,
+    )
+    if precheck_result.tokens_used:
+        try:
+            from backend.llm.base_provider import LLMResponse
+            synth = LLMResponse(
+                text="",
+                tokens_in=precheck_result.tokens_used,
+                tokens_out=0,
+                model="semantic_precheck",
+                provider="semantic_precheck",
+            )
+            writer.log_usage("semantic_precheck_tokens", synth)
+        except Exception as e:
+            logger.warning("Failed to log semantic precheck tokens (non-blocking): %s", e)
+
     while True:
         fg_result = reviewer.run_fact_guard(
             draft_text=current_draft,
             characters=ctx["characters"],
             world_rules=ctx["world"],
             scene_plan=scene_plan,
+            precheck_result=precheck_result,
         )
 
         breaker_result = breaker.check(
@@ -368,6 +419,20 @@ async def write_scene(data: dict):
             "cascade_executed": registry_report.cascade_executed,
         },
         "style_guard_violations": style_violations,
+        "precheck_result": {
+            "precheck_passed": precheck_result.precheck_passed,
+            "suggestions": [
+                {
+                    "event_type": s.event_type,
+                    "location_hint": s.location_hint,
+                    "suggested_tag": s.suggested_tag,
+                    "reason": s.reason,
+                }
+                for s in (precheck_result.suggestions or [])
+            ],
+            "tokens_used": precheck_result.tokens_used,
+            "skipped_reason": getattr(precheck_result, "skipped_reason", ""),
+        },
     }
     fm.write_json(project_id, f"chapters/{meta_filename}", scene_meta)
 
@@ -479,6 +544,20 @@ async def write_scene(data: dict):
             "l0_snapshot": {
                 "scene": scene_number,
                 "goal": scene_plan.get("goal", ""),
+            },
+            "precheck_result": {
+                "precheck_passed": precheck_result.precheck_passed,
+                "suggestions": [
+                    {
+                        "event_type": s.event_type,
+                        "location_hint": s.location_hint,
+                        "suggested_tag": s.suggested_tag,
+                        "reason": s.reason,
+                    }
+                    for s in (precheck_result.suggestions or [])
+                ],
+                "tokens_used": precheck_result.tokens_used,
+                "skipped_reason": getattr(precheck_result, "skipped_reason", ""),
             },
         },
     }

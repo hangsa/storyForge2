@@ -50,3 +50,24 @@ def test_reviewer_run_fact_guard_accepts_precheck_result_parameter():
     sem = checks["语义预检结果复核"]
     assert sem.passed is True  # never blocks
     assert "1 项" in sem.detail or "未通过" in sem.detail
+
+
+@pytest.mark.asyncio
+async def test_run_semantic_precheck_helper_returns_passed_when_no_router(monkeypatch):
+    """Module-level helper degrades to passed=True when no router is available."""
+    from backend.api import stage4_writing
+    from backend.semantic_precheck.prechecker import PrecheckResult
+
+    # Force get_model_router to return None
+    monkeypatch.setattr(
+        "backend.llm.model_router.get_model_router",
+        lambda: None,
+    )
+
+    result = await stage4_writing._run_semantic_precheck(
+        scene_text="test",
+        scene_plan={},
+        character_names=["x"],
+    )
+    assert result.precheck_passed is True
+    assert "no router" in result.skipped_reason

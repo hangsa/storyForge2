@@ -75,6 +75,7 @@ agent_mapping:
     narrative_guard:           { tier: tier_2, model: default }
     style_guard:               { tier: tier_0 }
     coherence_scoring:         { tier: tier_0 }
+    semantic_precheck:         { tier: tier_3, model: default }
 
   storyos_agent:
     sf_log_parsing:            { tier: tier_0 }

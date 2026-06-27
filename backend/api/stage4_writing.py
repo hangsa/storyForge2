@@ -1066,18 +1066,25 @@ def apply_sf_log_suggestions(
 
     text = payload.get("text", "")
     raw_suggestions = payload.get("suggestions", []) or []
-    suggestions = [
-        SFLogSuggestion(
+    from backend.utils.regex_patterns import SF_LOG_PATTERN, VALID_LOG_TYPES
+    suggestions = []
+    for s in raw_suggestions:
+        if not isinstance(s, dict):
+            continue
+        event_type = s.get("event_type", "")
+        if event_type not in VALID_LOG_TYPES:
+            continue  # silently drop unknown types
+        suggested_tag = s.get("suggested_tag", "")
+        if not SF_LOG_PATTERN.search(suggested_tag):
+            continue  # silently drop malformed tags
+        suggestions.append(SFLogSuggestion(
             type=s.get("type", "missing"),
             severity=s.get("severity", "suggestion"),
-            event_type=s.get("event_type", ""),
-            suggested_tag=s.get("suggested_tag", ""),
+            event_type=event_type,
+            suggested_tag=suggested_tag,
             location_hint=s.get("location_hint", ""),
             reason=s.get("reason", ""),
-        )
-        for s in raw_suggestions
-        if isinstance(s, dict)
-    ]
+        ))
     engine = SFLogSuggestionEngine(model_router=None)
     updated = engine.apply_suggestions(text, suggestions)
     return {"scene_id": scene_id, "updated_text": updated}

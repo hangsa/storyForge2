@@ -214,6 +214,40 @@ async def test_engine_handles_top_level_json_list_gracefully():
     assert report.tokens_used == 0
 
 
+def test_api_apply_sf_logs_silently_drops_invalid_inputs(tmp_path, monkeypatch):
+    """PUT /sf-logs must silently drop suggestions with unknown event_type or malformed tag."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api import stage4_writing
+
+    from backend.config import settings
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
+
+    app = FastAPI()
+    app.include_router(stage4_writing.router)
+    client = TestClient(app)
+
+    resp = client.put(
+        "/api/v1/projects/test_proj/scenes/ch01_scene_001/sf-logs",
+        json={
+            "text": "原始文本。",
+            "suggestions": [
+                {"type": "missing", "event_type": "evil_hacker_log", "suggested_tag": "x"},  # unknown type
+                {"type": "missing", "event_type": "twist_reveal", "suggested_tag": "not a tag"},  # malformed
+                {"type": "missing", "event_type": "twist_reveal",
+                 "suggested_tag": '<!-- SF_LOG twist_reveal id="tw_001" -->',  # valid
+                 "location_hint": "", "reason": "", "severity": "suggestion"},
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    updated = resp.json()["updated_text"]
+    # Only the valid one is inserted
+    assert "tw_001" in updated
+    assert "evil_hacker_log" not in updated
+    assert "not a tag" not in updated
+
+
 # --- helper for the sync-via-asyncio test ---
 
 async def await_run(engine, original, modified):

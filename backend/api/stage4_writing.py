@@ -994,3 +994,93 @@ def get_exemption_antipatterns(
 # Mount both sub-routers into the top-level `router` so main.py and tests get all routes.
 router.include_router(stage4_router)
 router.include_router(exemptions_router)
+
+
+# --- v1.7: User Edit Assist API (T3.10) ---
+
+from backend.agents.storyos_agent import SFLogSuggestionEngine
+
+
+sf_logs_router = APIRouter(prefix="/api/v1/projects/{project_id}/scenes/{scene_id}")
+
+
+@sf_logs_router.post("/sf-log-suggestions")
+async def analyze_sf_log_diff(
+    project_id: str,
+    scene_id: str,
+    payload: dict,
+) -> dict:
+    """Analyze user edits to a Scene and propose SF_LOG changes.
+
+    Body: { original_text: str, modified_text: str }
+    Returns: SFLogDiffReport as dict
+    """
+    original = payload.get("original_text", "")
+    modified = payload.get("modified_text", "")
+
+    try:
+        from backend.llm.model_router import get_model_router
+        router = get_model_router()
+    except Exception:
+        router = None
+
+    engine = SFLogSuggestionEngine(model_router=router)
+    report = await engine.analyze_diff(
+        original_text=original,
+        modified_text=modified,
+        existing_sf_logs=[],
+        character_names=[],
+    )
+    return {
+        "scene_id": scene_id,
+        "original_text": report.original_text,
+        "modified_text": report.modified_text,
+        "deleted_logs": report.deleted_logs,
+        "suggestions": [
+            {
+                "type": s.type,
+                "severity": s.severity,
+                "event_type": s.event_type,
+                "suggested_tag": s.suggested_tag,
+                "location_hint": s.location_hint,
+                "reason": s.reason,
+            }
+            for s in report.suggestions
+        ],
+        "tokens_used": report.tokens_used,
+    }
+
+
+@sf_logs_router.put("/sf-logs")
+def apply_sf_log_suggestions(
+    project_id: str,
+    scene_id: str,
+    payload: dict,
+) -> dict:
+    """Batch-apply suggested SF_LOG tags to the modified text.
+
+    Body: { text: str, suggestions: [SFLogSuggestion] }
+    Returns: { updated_text: str }
+    """
+    from backend.agents.storyos_agent import SFLogSuggestion
+
+    text = payload.get("text", "")
+    raw_suggestions = payload.get("suggestions", []) or []
+    suggestions = [
+        SFLogSuggestion(
+            type=s.get("type", "missing"),
+            severity=s.get("severity", "suggestion"),
+            event_type=s.get("event_type", ""),
+            suggested_tag=s.get("suggested_tag", ""),
+            location_hint=s.get("location_hint", ""),
+            reason=s.get("reason", ""),
+        )
+        for s in raw_suggestions
+        if isinstance(s, dict)
+    ]
+    engine = SFLogSuggestionEngine(model_router=None)
+    updated = engine.apply_suggestions(text, suggestions)
+    return {"scene_id": scene_id, "updated_text": updated}
+
+
+router.include_router(sf_logs_router)

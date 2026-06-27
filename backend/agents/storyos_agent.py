@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,8 @@ from backend.utils.regex_patterns import (
     PARAM_PATTERN,
     VALID_LOG_TYPES,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -418,3 +421,230 @@ class StoryOSAgent:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         tmp.replace(path)
+
+
+# --- v1.7: User Edit Assist (T3.9) ---
+
+
+@dataclass
+class SFLogSuggestion:
+    type: str                                  # "missing" | "deleted" | "modified"
+    severity: str                              # "warning" | "suggestion"
+    event_type: str                            # SF_LOG type
+    suggested_tag: str                         # full SF_LOG tag
+    location_hint: str                         # where in the text
+    reason: str                                # why we suggest it
+
+
+@dataclass
+class SFLogDiffReport:
+    original_text: str
+    modified_text: str
+    deleted_logs: list[dict] = field(default_factory=list)   # raw text + parsed type/id
+    suggestions: list[SFLogSuggestion] = field(default_factory=list)
+    tokens_used: int = 0
+
+
+class SFLogSuggestionEngine:
+    """Analyzes user edits to a Scene and proposes SF_LOG changes.
+
+    Two phases:
+    1. Deterministic: parse deleted SF_LOG tags from the original text.
+    2. Tier 3 LLM (optional): detect new/modified events implied by the diff.
+    """
+
+    def __init__(self, model_router) -> None:
+        self._router = model_router
+        self._prompt = self._load_prompt()
+
+    async def analyze_diff(
+        self,
+        original_text: str,
+        modified_text: str,
+        existing_sf_logs: list[dict],
+        character_names: list[str],
+    ) -> SFLogDiffReport:
+        deleted = self._detect_deleted_logs(original_text, modified_text)
+
+        if self._router is None or not self._prompt:
+            return SFLogDiffReport(
+                original_text=original_text,
+                modified_text=modified_text,
+                deleted_logs=deleted,
+                suggestions=[],
+                tokens_used=0,
+            )
+
+        return await self._run_llm_phase(
+            original_text, modified_text, existing_sf_logs, character_names, deleted
+        )
+
+    def apply_suggestions(self, text: str, suggestions: list[SFLogSuggestion]) -> str:
+        """Insert the suggested SF_LOG tags into the text.
+
+        Simple strategy: append each tag at the end of the text. Tags already present
+        are not duplicated. This is a v1 implementation — location_hint-based
+        insertion comes later.
+        """
+        if not suggestions:
+            return text
+        insertion_lines = []
+        for s in suggestions:
+            if s.suggested_tag and s.suggested_tag not in text:
+                insertion_lines.append(s.suggested_tag)
+        if not insertion_lines:
+            return text
+        # Append at end, one tag per line, separated by a blank line
+        sep = "\n" if text.endswith("\n") else "\n\n"
+        return text + sep + "\n".join(insertion_lines) + "\n"
+
+    # --- private ---
+
+    def _detect_deleted_logs(self, original: str, modified: str) -> list[dict]:
+        """Find SF_LOG tags present in original but absent in modified."""
+        orig_tags = SF_LOG_PATTERN.findall(original or "")
+        mod_tags = set(SF_LOG_PATTERN.findall(modified or ""))
+        deleted = []
+        for tag_type, params_str in orig_tags:
+            if (tag_type, params_str) in mod_tags:
+                continue
+            params = self._parse_simple_params(params_str)
+            deleted.append({
+                "raw_text": f"<!-- SF_LOG {tag_type} {params_str} -->",
+                "type": tag_type,
+                "id": params.get("id", ""),
+            })
+        return deleted
+
+    @staticmethod
+    def _parse_simple_params(params_str: str) -> dict:
+        """Parse 'key="value" key2="value2"' into a dict. Tolerant of unquoted values."""
+        out = {}
+        for match in re.finditer(r'(\w+)\s*=\s*"([^"]*)"', params_str):
+            out[match.group(1)] = match.group(2)
+        return out
+
+    def _load_prompt(self) -> Optional[dict]:
+        path = Path("backend/prompts/sf_log_suggestion.yaml")
+        if not path.exists():
+            logger.warning("sf_log_suggestion.yaml not found at %s", path)
+            return None
+        try:
+            import yaml
+            with open(path, encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.warning("Failed to load sf_log_suggestion.yaml: %s", e)
+            return None
+        return {
+            "system_prompt": data.get("system_prompt", "").strip(),
+            "user_template": data.get("user_prompt_template", "").strip(),
+        }
+
+    async def _run_llm_phase(
+        self,
+        original: str,
+        modified: str,
+        existing_logs: list[dict],
+        character_names: list[str],
+        deleted: list[dict],
+    ) -> SFLogDiffReport:
+        diff_text = self._make_diff_snippet(original, modified)
+        if not diff_text.strip():
+            return SFLogDiffReport(
+                original_text=original, modified_text=modified,
+                deleted_logs=deleted, suggestions=[], tokens_used=0,
+            )
+
+        existing_str = ", ".join(log.get("type", "") for log in existing_logs) or "（无）"
+        chars_str = "、".join(character_names) if character_names else "（未指定）"
+
+        user_prompt = self._prompt["user_template"].format(
+            diff_text=diff_text[:1500],
+            existing_logs=existing_str,
+            character_names=chars_str,
+        )
+        messages = [
+            {"role": "system", "content": self._prompt["system_prompt"]},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            result = await self._router.execute(
+                agent_name="storyos_agent",
+                task_name="sf_log_suggestion",
+                messages=messages,
+                json_mode=True,
+            )
+        except Exception as e:
+            logger.warning("SF_LOG suggestion LLM call failed: %s", e)
+            return SFLogDiffReport(
+                original_text=original, modified_text=modified,
+                deleted_logs=deleted, suggestions=[], tokens_used=0,
+            )
+
+        content = result.get("content", "")
+        if not content:
+            return SFLogDiffReport(
+                original_text=original, modified_text=modified,
+                deleted_logs=deleted, suggestions=[], tokens_used=0,
+            )
+
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            logger.warning("sf_log_suggestion returned non-JSON: %r", content[:200])
+            return SFLogDiffReport(
+                original_text=original, modified_text=modified,
+                deleted_logs=deleted, suggestions=[], tokens_used=0,
+            )
+
+        suggestions = self._parse_suggestions(parsed.get("suggestions", []))
+        tokens = result.get("usage", {})
+        tokens_used = tokens.get("input", 0) + tokens.get("output", 0)
+
+        return SFLogDiffReport(
+            original_text=original,
+            modified_text=modified,
+            deleted_logs=deleted,
+            suggestions=suggestions,
+            tokens_used=tokens_used,
+        )
+
+    @staticmethod
+    def _make_diff_snippet(original: str, modified: str, max_chars: int = 1500) -> str:
+        """Build a concise diff snippet. Falls back to truncated modified if diff is huge."""
+        import difflib
+        if not original and not modified:
+            return ""
+        diff = list(difflib.unified_diff(
+            original.splitlines(),
+            modified.splitlines(),
+            lineterm="",
+            n=1,
+        ))
+        joined = "\n".join(diff)
+        if len(joined) > max_chars:
+            joined = joined[:max_chars] + "\n... (truncated)"
+        return joined
+
+    @staticmethod
+    def _parse_suggestions(raw: list) -> list[SFLogSuggestion]:
+        out: list[SFLogSuggestion] = []
+        if not isinstance(raw, list):
+            return out
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            event_type = item.get("event_type", "")
+            if event_type not in VALID_LOG_TYPES:
+                continue
+            out.append(SFLogSuggestion(
+                type=item.get("type", "missing"),
+                severity=item.get("severity", "suggestion"),
+                event_type=event_type,
+                suggested_tag=item.get("suggested_tag", ""),
+                location_hint=item.get("location_hint", ""),
+                reason=item.get("reason", ""),
+            ))
+        return out

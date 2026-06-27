@@ -488,6 +488,8 @@ class SFLogSuggestionEngine:
         """
         if not suggestions:
             return text
+        if any(s.location_hint for s in suggestions):
+            logger.info("apply_suggestions: v1 ignores location_hint (only appends at end)")
         insertion_lines = []
         for s in suggestions:
             if s.suggested_tag and s.suggested_tag not in text:

@@ -30,4 +30,10 @@ Thumbs.db
 # Project data (runtime)
 projects/
 
+# Visual companion mockups (created by superpowers brainstorming skill)
+.superpowers/
+
+# Claude / agent local state
+.claude/
+
 llm_usage.jsonl

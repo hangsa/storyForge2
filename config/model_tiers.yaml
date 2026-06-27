@@ -81,6 +81,7 @@ agent_mapping:
     sf_log_parsing:            { tier: tier_0 }
     cascade_propagation:       { tier: tier_0 }
     conflict_detection:        { tier: tier_0 }
+    sf_log_suggestion:         { tier: tier_3, model: default }
 
   summary_archiver:
     chapter_summary:           { tier: tier_3, model: default }

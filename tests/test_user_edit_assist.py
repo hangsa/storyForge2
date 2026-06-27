@@ -196,6 +196,24 @@ async def test_engine_filters_unsanctioned_event_types():
     assert report.suggestions[0].event_type == "twist_reveal"
 
 
+@pytest.mark.asyncio
+async def test_engine_handles_top_level_json_list_gracefully():
+    """LLM may return a top-level JSON list (e.g. '["x"]') instead of an object — must not crash."""
+    from backend.agents.storyos_agent import SFLogSuggestionEngine
+    import json
+
+    router = MagicMock()
+    router.execute = AsyncMock(return_value={
+        "content": json.dumps(["not", "an", "object"]),
+        "usage": {"input": 1, "output": 1},
+        "model": "claude-haiku",
+    })
+    engine = SFLogSuggestionEngine(model_router=router)
+    report = await engine.analyze_diff("a", "b", [], [])
+    assert report.suggestions == []
+    assert report.tokens_used == 0
+
+
 # --- helper for the sync-via-asyncio test ---
 
 async def await_run(engine, original, modified):

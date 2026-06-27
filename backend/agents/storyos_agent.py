@@ -599,6 +599,15 @@ class SFLogSuggestionEngine:
                 deleted_logs=deleted, suggestions=[], tokens_used=0,
             )
 
+        if not isinstance(parsed, dict):
+            logger.warning(
+                "sf_log_suggestion returned non-object JSON: %r", str(parsed)[:200]
+            )
+            return SFLogDiffReport(
+                original_text=original, modified_text=modified,
+                deleted_logs=deleted, suggestions=[], tokens_used=0,
+            )
+
         suggestions = self._parse_suggestions(parsed.get("suggestions", []))
         tokens = result.get("usage", {})
         tokens_used = tokens.get("input", 0) + tokens.get("output", 0)

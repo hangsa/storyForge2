@@ -611,6 +611,58 @@ export interface SFLogDiffReport {
   tokens_used: number;
 }
 
+// --- Style Sandbox types ---
+
+export interface SandboxSentenceParams {
+  avg_length_range: [number, number];
+  short_sentence_ratio: number;
+  paragraph_length_range: [number, number];
+}
+export interface SandboxDialogueParams {
+  ratio: number;
+  max_consecutive_lines: number;
+}
+export interface SandboxRhythmParams {
+  pacing_bpm: number;
+  scene_change_frequency: number;
+}
+export interface SandboxDensityParams {
+  description_ratio: number;
+  action_ratio: number;
+}
+export interface SandboxSatisfactionParams {
+  satisfaction_beat_count: number;
+  suspense_hook_required: boolean;
+}
+export interface SandboxParams {
+  sentence: SandboxSentenceParams;
+  dialogue: SandboxDialogueParams;
+  rhythm: SandboxRhythmParams;
+  density: SandboxDensityParams;
+  satisfaction: SandboxSatisfactionParams;
+}
+export interface PreviewResponse {
+  rendered_text: string;
+  source_avg_length: number;
+  rendered_avg_length: number;
+  tokens_used: number;
+  skipped_reason?: string;
+}
+export interface SavedStyleConfig {
+  name: string;
+  path: string;
+  params: SandboxParams;
+  created_at: string;
+}
+
+export const DEFAULT_SANDBOX_PARAMS: SandboxParams = {
+  sentence: { avg_length_range: [15, 45], short_sentence_ratio: 0.3, paragraph_length_range: [80, 200] },
+  dialogue: { ratio: 0.35, max_consecutive_lines: 6 },
+  rhythm: { pacing_bpm: 300, scene_change_frequency: 0.5 },
+  density: { description_ratio: 0.4, action_ratio: 0.3 },
+  satisfaction: { satisfaction_beat_count: 5, suspense_hook_required: true },
+};
+
 // --- API functions ---
 
 export const api = {
@@ -677,6 +729,32 @@ export const api = {
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/characters/${encodeURIComponent(characterId)}/growth/workshop/discuss`,
       req,
+    ),
+
+  styleSandboxPreview: (
+    projectId: string,
+    req: { source_text: string; params: SandboxParams; genre?: string }
+  ) =>
+    request<PreviewResponse>(
+      "POST",
+      `/v1/projects/${projectId}/style/sandbox/preview`,
+      req,
+    ),
+  styleSandboxSave: (projectId: string, req: { name: string; params: SandboxParams }) =>
+    request<{ name: string; path: string }>(
+      "POST",
+      `/v1/projects/${projectId}/style/sandbox/save`,
+      req,
+    ),
+  styleSandboxListConfigs: (projectId: string) =>
+    request<{ configs: SavedStyleConfig[] }>(
+      "GET",
+      `/v1/projects/${projectId}/style/sandbox/configs`,
+    ),
+  styleSandboxLoadConfig: (projectId: string, name: string) =>
+    request<SavedStyleConfig>(
+      "GET",
+      `/v1/projects/${projectId}/style/sandbox/configs/${encodeURIComponent(name)}`,
     ),
 
   generateOutline: (projectId: string, chapterNumber?: number) =>

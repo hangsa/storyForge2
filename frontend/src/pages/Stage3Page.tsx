@@ -130,21 +130,9 @@ export default function Stage3Page({ initialTab = "novel-outline" }: Stage3PageP
   };
 
   return (
-    <>
-      <div className="max-w-5xl mx-auto pb-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-primary-container">情节头脑风暴</h1>
-          <p className="font-body-ui text-system-log mt-1">
-            规划章节结构与场景节奏，设计叙事弧线
-            {outline && outline.chapters.length > 0 && (
-              <span className="ml-2 text-primary-container">
-                已生成 {outline.chapters.length} 章
-              </span>
-            )}
-          </p>
-        </div>
-        {canAdvance && (
+    <div className="space-y-4">
+      {canAdvance && (
+        <div className="flex justify-end">
           <button
             onClick={handleAdvance}
             disabled={advancing}
@@ -153,8 +141,8 @@ export default function Stage3Page({ initialTab = "novel-outline" }: Stage3PageP
           >
             {advancing ? "推进中..." : "进入写作中心 →"}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
@@ -179,7 +167,12 @@ export default function Stage3Page({ initialTab = "novel-outline" }: Stage3PageP
             </div>
           )}
 
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-3">
+            {outline && outline.chapters.length > 0 && (
+              <span className="font-label-mono text-system-log text-xs">
+                已生成 {outline.chapters.length} 章
+              </span>
+            )}
             <button
               onClick={() => handleGenerate()}
               disabled={loading}
@@ -426,7 +419,7 @@ export default function Stage3Page({ initialTab = "novel-outline" }: Stage3PageP
           ))}
         </div>
       ) : (
-        <div className="text-center py-16">
+        <div className="text-center py-8">
           <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
             account_tree
           </span>
@@ -435,7 +428,7 @@ export default function Stage3Page({ initialTab = "novel-outline" }: Stage3PageP
       )}
 
       {!outline && !loading && (
-        <div className="text-center py-16">
+        <div className="text-center py-8">
           <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
             account_tree
           </span>
@@ -445,6 +438,5 @@ export default function Stage3Page({ initialTab = "novel-outline" }: Stage3PageP
         </>
       )}
     </div>
-    </>
   );
 }

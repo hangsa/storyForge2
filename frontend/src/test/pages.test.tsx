@@ -202,14 +202,22 @@ describe("Stage3Page", () => {
 
   it("renders three sub-tabs: novel outline / outline / branches", () => {
     renderWithRouter("/project/test-project/stage3", <></>);
-    // The first matching div.flex.items-center.gap-1 is the sub-tab row
-    // rendered by Stage3Layout, before any panel content.
-    const tabRow = document.querySelector("div.flex.items-center.gap-1")!;
-    const tabButtons = tabRow.querySelectorAll("button");
+    // Stage3Layout's tab switcher is the unique pill container in the
+    // document. Other buttons (e.g. "AI 生成全书大纲" inside NovelOutlinePanel)
+    // also mention 全书大纲, so we scope to the pill to find the tabs.
+    const pill = document.querySelector("div.flex.gap-1.bg-surface-container")!;
+    const tabButtons = pill.querySelectorAll("button");
     expect(tabButtons).toHaveLength(3);
     expect(tabButtons[0].textContent).toContain("全书大纲");
     expect(tabButtons[1].textContent).toContain("大纲视图");
     expect(tabButtons[2].textContent).toContain("分支模拟");
+  });
+
+  it("renders the tab switcher in pill style matching STAGE2", () => {
+    renderWithRouter("/project/test-project/stage3", <></>);
+    const pill = document.querySelector("div.flex.gap-1.bg-surface-container")!;
+    expect(pill.className).toMatch(/rounded-lg/);
+    expect(pill.className).toMatch(/p-1/);
   });
 
   it("default tab is novel outline — shows novel-level panel", () => {
@@ -222,8 +230,8 @@ describe("Stage3Page", () => {
 
   it("switches to chapter outline tab and renders generate button", () => {
     renderWithRouter("/project/test-project/stage3", <></>);
-    const tabRow = document.querySelector("div.flex.items-center.gap-1")!;
-    const outlineTabBtn = tabRow.querySelectorAll("button")[1];
+    const pill = document.querySelector("div.flex.gap-1.bg-surface-container")!;
+    const outlineTabBtn = pill.querySelectorAll("button")[1];
     act(() => {
       outlineTabBtn.click();
     });
@@ -232,8 +240,8 @@ describe("Stage3Page", () => {
 
   it("shows banner on chapter outline tab when novel outline is missing", () => {
     renderWithRouter("/project/test-project/stage3", <></>);
-    const tabRow = document.querySelector("div.flex.items-center.gap-1")!;
-    const outlineTabBtn = tabRow.querySelectorAll("button")[1];
+    const pill = document.querySelector("div.flex.gap-1.bg-surface-container")!;
+    const outlineTabBtn = pill.querySelectorAll("button")[1];
     act(() => {
       outlineTabBtn.click();
     });

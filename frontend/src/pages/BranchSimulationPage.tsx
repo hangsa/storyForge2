@@ -26,7 +26,7 @@ export default function BranchSimulationPage() {
   }, [loadHistory]);
 
   return (
-    <div className="h-[calc(100vh-112px)] flex flex-col">
+    <div className="h-[calc(100vh-212px)] flex flex-col">
       {/* Two-column layout — full-width via negative horizontal+bottom margins */}
       <div className="flex-1 flex gap-0 overflow-hidden -mx-6 -mb-6 min-h-0">
         {/* Left column: input + history */}

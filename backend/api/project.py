@@ -109,6 +109,53 @@ async def delete_project(project_id: str):
     }
 
 
+@router.post("/bulk-delete")
+async def bulk_delete_projects(data: dict):
+    ids = data.get("project_ids")
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "VALIDATION_ERROR",
+                "message": "project_ids 必须是非空数组",
+                "detail": {},
+            },
+        )
+
+    # Use a fresh FileManager so the current settings.projects_dir is honored
+    # (the module-level `fm` is bound at import time and would not pick up
+    # test-time changes to settings.projects_dir).
+    fm_local = FileManager(settings.projects_dir)
+
+    deleted: list = []
+    failed: list = []
+    for pid in ids:
+        if not isinstance(pid, str) or not pid:
+            failed.append({"id": str(pid), "error": "invalid_id"})
+            continue
+        try:
+            if not fm_local.project_exists(pid):
+                failed.append({"id": pid, "error": "not_found"})
+                continue
+            fm_local.delete_project(pid)
+            deleted.append(pid)
+        except Exception as e:
+            failed.append({"id": pid, "error": str(e)})
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"已删除 {len(deleted)} 个，失败 {len(failed)} 个",
+        "detail": {
+            "deleted": deleted,
+            "failed": failed,
+            "deleted_count": len(deleted),
+            "failed_count": len(failed),
+        },
+    }
+
+
 @router.get("/{project_id}/status")
 async def get_project_status(project_id: str):
     data = fm.read_json(project_id, "project.json")

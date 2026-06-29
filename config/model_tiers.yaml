@@ -99,5 +99,6 @@ agent_mapping:
     trope_extraction:          { tier: tier_3, model: default }
 
   character_designer:
+    growth_discuss:            { tier: tier_1, model: default }
     growth_discussion:         { tier: tier_1, model: default }
     arc_analysis:              { tier: tier_2, model: default }

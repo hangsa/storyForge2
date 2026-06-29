@@ -122,7 +122,7 @@ const visibleProjects = useMemo(() => {
 }, [projects, searchQuery]);
 ```
 
-The grid renders `visibleProjects` instead of `projects`. The existing empty state, loading state, and count display all key off `visibleProjects.length` (with a secondary "N 个匹配项 / 总 M 个" hint when a search is active and the list is non-empty but filtered).
+The grid renders `visibleProjects` instead of `projects`. The existing empty state, loading state, and count display all key off `visibleProjects.length`. When `searchQuery` is non-empty and the filter is active (so `visibleProjects.length < projects.length`), a small right-aligned hint above the grid reads `"N 个匹配项 / 共 M 个"` (e.g. `"23 个匹配项 / 共 917 个"`) so the user knows the list is filtered and how aggressively. When the search yields zero results, the existing empty-state block is reused with a "无匹配项目" headline and a "清空搜索" button that resets `searchQuery`.
 
 ### API client addition
 
@@ -156,7 +156,7 @@ export interface BulkDeleteResult {
 +---------------------------------------------+
 ```
 
-- Search input: 240px wide, magnifier icon on the left, native `placeholder="搜索项目名称"`, controlled by `searchQuery`. No submit button — filter is live on every keystroke.
+- Search input: 240px wide, `type="search"` (so the browser provides a native clear-X for free), magnifier icon on the left, `placeholder="搜索项目名称"`, controlled by `searchQuery`. No submit button — filter is live on every keystroke. Clearing the field (via X or Escape) restores the full list immediately.
 - Mode toggle button: uses `check_box` / `check_box_outline_blank` icon, label switches between "多选" and "退出多选". When `selectMode` is on, the button gets the primary-container accent border.
 - "新建项目" stays exactly where it is.
 

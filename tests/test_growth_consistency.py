@@ -63,3 +63,41 @@ def test_tight_spacing_ignores_none_chapters():
     )
     tight = [w for w in result.warnings if w.rule_id == "tight_spacing"]
     assert tight == []
+
+
+def test_missing_event_triggers_warning_when_no_chapter_match():
+    stages = [
+        GrowthStage(stage_number=1, stage_name="转折", bound_chapter=5,
+                    trigger_event_type=GrowthEventType.BETRAYAL_EXPERIENCED),
+    ]
+    outline = [{"chapter_number": 5, "registry_changes": {"created": [], "updated": []}}]
+    result = check_growth_consistency(
+        character_id="c1", stages=stages, total_chapters=20,
+        conflicts=[], outline_chapters=outline,
+    )
+    missing = [w for w in result.warnings if w.rule_id == "missing_event"]
+    assert len(missing) == 1
+    assert missing[0].stage_index == 0
+    assert missing[0].severity == "warning"
+
+
+def test_missing_event_passes_when_binder_matches():
+    outline = [{
+        "chapter_number": 5,
+        "registry_changes": {"created": [{"type": "conflict", "description": "主角遭遇背叛"}]},
+    }]
+    # Sanity: confirm the binder would match
+    from backend.growth_curve.binder import _match_trigger_in_registry_changes
+    assert _match_trigger_in_registry_changes(
+        GrowthEventType.BETRAYAL_EXPERIENCED.value, outline[0]["registry_changes"]
+    )
+    stages = [
+        GrowthStage(stage_number=1, stage_name="转折", bound_chapter=5,
+                    trigger_event_type=GrowthEventType.BETRAYAL_EXPERIENCED),
+    ]
+    result = check_growth_consistency(
+        character_id="c1", stages=stages, total_chapters=20,
+        conflicts=[], outline_chapters=outline,
+    )
+    missing = [w for w in result.warnings if w.rule_id == "missing_event"]
+    assert missing == []

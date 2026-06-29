@@ -7,6 +7,7 @@ import { ToastProvider } from "./hooks/useToast";
 import ToastContainer from "./components/shared/ToastContainer";
 
 const Stage1Page = lazy(() => import("./pages/Stage1Page"));
+const Stage1Layout = lazy(() => import("./components/layout/Stage1Layout"));
 const Stage2Page = lazy(() => import("./pages/Stage2Page"));
 const Stage3Page = lazy(() => import("./pages/Stage3Page"));
 const Stage4Page = lazy(() => import("./pages/Stage4Page"));
@@ -51,11 +52,30 @@ function App() {
           element={
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="stage1">
-                <Stage1Page />
+                <Stage1Layout />
               </StageWrapper>
             </Suspense>
           }
-        />
+        >
+          <Route
+            index
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <Stage1Page />
+              </Suspense>
+            }
+          />
+          <Route
+            path="canvas"
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <StageWrapper name="stage1-canvas">
+                  <CreativeCanvasPage />
+                </StageWrapper>
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="/project/:projectId/stage2"
           element={
@@ -179,16 +199,6 @@ function App() {
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="storyos">
                 <StoryOSPage />
-              </StageWrapper>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/project/:projectId/stage1/canvas"
-          element={
-            <Suspense fallback={<LoadingFallback />}>
-              <StageWrapper name="stage1-canvas">
-                <CreativeCanvasPage />
               </StageWrapper>
             </Suspense>
           }

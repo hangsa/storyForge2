@@ -129,34 +129,16 @@ export default function CreativeCanvasPage() {
   };
 
   return (
-    <div className="h-[calc(100vh-112px)] flex flex-col">
-      {/* Tab bar — same position as Stage1Page */}
-      <div className="pt-1 pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => navigate(`/project/${projectId}/stage1`)}
-              className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
-                         hover:text-primary hover:bg-surface-container transition-colors"
-            >
-              <span className="material-symbols-outlined text-sm align-middle mr-1">bolt</span>
-              快速生成
-            </button>
-            <button
-              className="px-4 py-2 font-body-ui text-sm rounded-lg
-                         bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
-            >
-              <span className="material-symbols-outlined text-sm align-middle mr-1">account_tree</span>
-              创意画布
-            </button>
-          </div>
-          <div className="flex items-center gap-3">
-            {committedAt && (
-              <span
-                className="px-2.5 py-1 text-xs font-label-mono rounded-full
-                           bg-tertiary-container/20 text-tertiary-container
-                           border border-tertiary-container/40"
-                title={committedAt}
+    <div className="h-[calc(100vh-240px)] flex flex-col pt-4">
+      {/* Action row — commit button + committed-at badge.
+          Tab + title live in Stage1Layout. */}
+      <div className="flex items-center justify-end gap-3 mb-2">
+        {committedAt && (
+          <span
+            className="px-2.5 py-1 text-xs font-label-mono rounded-full
+                       bg-tertiary-container/20 text-tertiary-container
+                       border border-tertiary-container/40"
+            title={committedAt}
               >
                 <span className="material-symbols-outlined text-xs align-middle mr-1">check_circle</span>
                 已提交 · 编辑后将失效
@@ -181,13 +163,11 @@ export default function CreativeCanvasPage() {
               {committing ? "提交中..." : "提交到概念讨论 →"}
             </button>
           </div>
-        </div>
-        {commitError && (
-          <div className="mt-2 p-3 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-xs">
-            {commitError}
-          </div>
-        )}
-      </div>
+          {commitError && (
+            <div className="mb-2 p-3 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-xs">
+              {commitError}
+            </div>
+          )}
 
       {/* W6: unified canvas-page error banner. Shows whichever error is
           most recent (commit error overrides hook error when both are set,

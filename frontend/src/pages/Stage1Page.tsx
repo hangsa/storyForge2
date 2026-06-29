@@ -92,55 +92,27 @@ export default function Stage1Page() {
   const canAdvance = concept && storyDna;
 
   return (
-    <>
-      {/* v1.7 tab toggle: Quick / Creative Canvas */}
-      <div className="pt-1 pb-3">
-        <div className="flex items-center gap-1">
+    <div className="space-y-6 pt-6">
+      {/* Action row — generate / advance buttons. Title + tabs live in Stage1Layout. */}
+      <div className="flex items-center justify-end gap-3">
+        <button
+          onClick={handleGenerate}
+          disabled={loading}
+          className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+                     rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+        >
+          {loading ? "生成中..." : concept ? "重新生成" : "生成概念"}
+        </button>
+        {canAdvance && (
           <button
-            className="px-4 py-2 font-body-ui text-sm rounded-lg
-                       bg-primary-container/10 text-primary-container border-b-2 border-primary-container"
-          >
-            <span className="material-symbols-outlined text-sm align-middle mr-1">bolt</span>
-            快速生成
-          </button>
-          <button
-            onClick={() => navigate(`/project/${projectId}/stage1/canvas`)}
-            className="px-4 py-2 font-body-ui text-sm rounded-lg text-system-log
-                       hover:text-primary hover:bg-surface-container transition-colors"
-          >
-            <span className="material-symbols-outlined text-sm align-middle mr-1">account_tree</span>
-            创意画布
-          </button>
-        </div>
-      </div>
-      <div className="max-w-5xl mx-auto pb-8 space-y-6">
-        <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-primary-container">概念讨论</h1>
-          <p className="font-body-ui text-system-log mt-1">
-            生成故事概念与核心矛盾，构建小说的叙事基础
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+            onClick={handleAdvance}
+            disabled={advancing}
+            className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
                        rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
           >
-            {loading ? "生成中..." : concept ? "重新生成" : "生成概念"}
+            {advancing ? "推进中..." : "进入世界观+角色 →"}
           </button>
-          {canAdvance && (
-            <button
-              onClick={handleAdvance}
-              disabled={advancing}
-              className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
-                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-            >
-              {advancing ? "推进中..." : "进入世界观+角色 →"}
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {error && (
@@ -317,6 +289,5 @@ export default function Stage1Page() {
         </div>
       )}
     </div>
-    </>
   );
 }

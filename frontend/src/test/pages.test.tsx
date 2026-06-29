@@ -95,6 +95,7 @@ import Stage2Page from "../pages/Stage2Page";
 import Stage3Page from "../pages/Stage3Page";
 import Stage4Page from "../pages/Stage4Page";
 import StyleSandboxPage from "../pages/StyleSandboxPage";
+import Stage1Layout from "../components/layout/Stage1Layout";
 import Stage3Layout from "../components/layout/Stage3Layout";
 import { ToastProvider } from "../hooks/useToast";
 
@@ -118,7 +119,9 @@ function renderPage(ui: React.ReactNode, path = "/project/test-project/stage1") 
     <MemoryRouter initialEntries={[path]}>
       <ToastProvider>
         <Routes>
-          <Route path="/project/:projectId/stage1" element={ui} />
+          <Route path="/project/:projectId/stage1" element={<Stage1Layout />}>
+            <Route index element={ui} />
+          </Route>
           <Route path="/project/:projectId/stage2" element={ui} />
           <Route path="/project/:projectId/stage4" element={ui} />
           <Route path="/project/:projectId/style" element={ui} />
@@ -138,6 +141,28 @@ describe("Stage1Page", () => {
   it("renders generate button", () => {
     renderPage(<Stage1Page />);
     expect(screen.getByText("生成概念")).toBeInTheDocument();
+  });
+
+  it("renders both subtabs from the layout with the quick tab active", () => {
+    renderPage(<Stage1Page />);
+    const quickTab = screen.getByRole("button", { name: /快速生成/ });
+    const canvasTab = screen.getByRole("button", { name: /创意画布/ });
+    expect(quickTab).toBeInTheDocument();
+    expect(canvasTab).toBeInTheDocument();
+    // Quick tab is active (primary-container background)
+    expect(quickTab.className).toMatch(/bg-primary-container/);
+    // Canvas tab is inactive
+    expect(canvasTab.className).not.toMatch(/bg-primary-container/);
+  });
+
+  it("renders the tab switcher in pill style matching STAGE2", () => {
+    renderPage(<Stage1Page />);
+    // The pill container has bg-surface-container + rounded-lg + p-1
+    const quickTab = screen.getByRole("button", { name: /快速生成/ });
+    const pill = quickTab.parentElement!;
+    expect(pill.className).toMatch(/bg-surface-container/);
+    expect(pill.className).toMatch(/rounded-lg/);
+    expect(pill.className).toMatch(/p-1/);
   });
 });
 

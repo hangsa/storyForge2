@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 def test_exemption_request_defaults():
@@ -259,3 +261,82 @@ def test_antipatterns_appear_after_repeated_rejections(tmp_path):
     assert len(matches) == 1
     assert matches[0].count == 1
     assert "之前已拒绝" in matches[0].representative_case
+
+
+def _build_client_with_project(tmp_path, monkeypatch):
+    """Helper: seed a project dir with 1 pending + 1 approved exemption, return a TestClient."""
+    from backend.api.stage4_writing import router
+    from backend.config import settings
+    from backend.models.exemption import ExemptionManager, ExemptionRequest
+
+    proj = tmp_path / "test_proj"
+    proj.mkdir()
+    (proj / "progress.json").write_text(json.dumps({"exemptions": []}), encoding="utf-8")
+
+    mgr = ExemptionManager(proj)
+    mgr.submit(ExemptionRequest(
+        id="ex_list_pending", scene_id="ch01_scene_001",
+        rule_to_break={"layer": "fact_guard", "rule_id": "timeline_continuity", "rule_description": "时间线", "constraint_type": "hard"},
+        creative_intent="回忆到童年片段", expected_effect="情感强化",
+    ))
+    mgr.submit(ExemptionRequest(
+        id="ex_list_approved", scene_id="ch01_scene_002",
+        rule_to_break={"layer": "style_guard", "rule_id": "dialogue_length", "rule_description": "对白长度", "constraint_type": "soft"},
+        creative_intent="长对白强化人物", expected_effect="人物张力",
+    ))
+    mgr.approve("ex_list_approved", approved_by="user_001")
+
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
+
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_api_list_exemptions_endpoint_returns_pending_only(tmp_path, monkeypatch):
+    """GET /api/v1/projects/{id}/exemptions?status=pending returns only pending items."""
+    client = _build_client_with_project(tmp_path, monkeypatch)
+
+    resp = client.get("/api/v1/projects/test_proj/exemptions?status=pending")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["status"] == "pending"
+    assert data[0]["id"] == "ex_list_pending"
+
+
+def test_api_list_exemptions_empty_status_defaults_to_pending(tmp_path, monkeypatch):
+    """Omitting ?status applies the pending default filter."""
+    client = _build_client_with_project(tmp_path, monkeypatch)
+
+    resp = client.get("/api/v1/projects/test_proj/exemptions")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert all(item["status"] == "pending" for item in data)
+    assert data[0]["id"] == "ex_list_pending"
+
+
+def test_api_list_exemptions_invalid_status_returns_empty(tmp_path, monkeypatch):
+    """An unknown status string matches nothing and returns []."""
+    client = _build_client_with_project(tmp_path, monkeypatch)
+
+    resp = client.get("/api/v1/projects/test_proj/exemptions?status=garbage")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+def test_api_list_exemptions_mixed_status_filter_works(tmp_path, monkeypatch):
+    """Switching ?status=approved returns only approved items."""
+    client = _build_client_with_project(tmp_path, monkeypatch)
+
+    resp = client.get("/api/v1/projects/test_proj/exemptions?status=approved")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["status"] == "approved"
+    assert data[0]["id"] == "ex_list_approved"
+    assert data[0]["approved_by"] == "user_001"

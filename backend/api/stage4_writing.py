@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import asdict
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 
@@ -989,6 +990,16 @@ def get_exemption_antipatterns(
         }
         for m in matches
     ]
+
+
+@exemptions_router.get("")
+def list_exemptions(project_id: str, status: str = "pending") -> list[dict]:
+    """List exemption requests for a project, filtered by status."""
+    proj_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(proj_dir)
+    items = mgr.list_all()
+    out = [asdict(e) for e in items if e.status == status]
+    return out
 
 
 # Mount both sub-routers into the top-level `router` so main.py and tests get all routes.

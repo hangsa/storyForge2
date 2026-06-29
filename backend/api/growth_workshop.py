@@ -10,7 +10,9 @@ from backend.config import settings
 from backend.growth_curve.workshop.consistency_checker import check_growth_consistency
 from backend.growth_curve.workshop.models import (
     ConsistencyWarning, WorkshopAdjustRequest, WorkshopCheckResult,
+    WorkshopDiscussRequest, WorkshopDiscussResponse,
 )
+from backend.llm.model_router import get_model_router
 from backend.models.character import GrowthEventType, GrowthStage
 
 logger = logging.getLogger(__name__)
@@ -180,3 +182,51 @@ def adjust_endpoint(project_id: str, character_id: str, req: WorkshopAdjustReque
         "stages": [s.model_dump() for s in req.stages],
         "warnings": [w.model_dump() for w in result.warnings],
     })
+
+
+@router.post("/discuss")
+async def discuss_endpoint(
+    project_id: str, character_id: str, req: WorkshopDiscussRequest
+) -> dict:
+    """Free-form Q&A about the character's growth curve.
+
+    Delegates to CharacterDesigner (Tier 1 LLM). When no router is
+    configured or the underlying LLM call fails (e.g. test env without
+    API keys), the endpoint degrades gracefully — the caller still
+    receives a valid envelope with `skipped_reason` set so the frontend
+    can render a useful "暂时无法回答" placeholder rather than crashing.
+    """
+    inputs = _build_inputs(project_id, character_id)
+    if inputs is None:
+        raise _err("CHARACTER_NOT_FOUND", f"角色 {character_id} 不存在", status=404)
+    character, outline, _, _ = inputs
+    router_instance = get_model_router()
+    if router_instance is None:
+        return _envelope(WorkshopDiscussResponse(
+            answer="", suggestions=[], skipped_reason="no router",
+        ).model_dump())
+    # Import lazily so the endpoint module loads even if the agents
+    # package has optional dependencies missing in some environments.
+    from backend.agents.character_designer import CharacterDesigner
+
+    agent = CharacterDesigner(project_id=project_id, model_router=router_instance)
+    try:
+        resp: WorkshopDiscussResponse = await agent.discuss(
+            character=character, outline=outline, question=req.question,
+        )
+    except Exception as exc:
+        # Tier 1 has no silent-degrade path — guard so the endpoint
+        # never 500s. The frontend reads `skipped_reason` to render.
+        logger.warning(
+            "growth_workshop.discuss failed character_id=%s err=%s",
+            character_id, exc,
+        )
+        resp = WorkshopDiscussResponse(
+            answer="", suggestions=[],
+            skipped_reason=f"llm error: {type(exc).__name__}",
+        )
+    logger.info(
+        "growth_workshop.discuss character_id=%s skipped=%s",
+        character_id, bool(resp.skipped_reason),
+    )
+    return _envelope(resp.model_dump())

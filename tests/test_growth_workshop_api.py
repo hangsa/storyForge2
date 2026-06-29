@@ -101,3 +101,18 @@ def test_invalid_event_type_does_not_500():
     warnings = body.get("detail", {}).get("warnings", [])
     invalid = [w for w in warnings if w.get("rule_id") == "invalid_event_type"]
     assert len(invalid) == 1, f"expected 1 invalid_event_type warning, got {warnings}"
+
+
+def test_discuss_returns_envelope_with_answer():
+    pid = _create_project("gw_test_discuss")
+    r = client.post(
+        f"/api/v1/projects/{pid}/characters/c1/growth/workshop/discuss",
+        json={"question": "节奏是否合适？"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["error"] is False
+    assert "detail" in body
+    detail = body["detail"]
+    assert "answer" in detail
+    assert "suggestions" in detail

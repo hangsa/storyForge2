@@ -3,6 +3,8 @@ import { Routes, Route, useParams } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
 import ProjectListPage from "./pages/ProjectListPage";
 import StageErrorBoundary from "./components/shared/StageErrorBoundary";
+import { ToastProvider } from "./hooks/useToast";
+import ToastContainer from "./components/shared/ToastContainer";
 
 const Stage1Page = lazy(() => import("./pages/Stage1Page"));
 const Stage2Page = lazy(() => import("./pages/Stage2Page"));
@@ -40,7 +42,8 @@ function LoadingFallback() {
 
 function App() {
   return (
-    <Routes>
+    <ToastProvider>
+      <Routes>
       <Route path="/" element={<ProjectListPage />} />
       <Route element={<MainLayout />}>
         <Route
@@ -191,7 +194,9 @@ function App() {
           }
         />
       </Route>
-    </Routes>
+      </Routes>
+      <ToastContainer />
+    </ToastProvider>
   );
 }
 

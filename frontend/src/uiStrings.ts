@@ -1,17 +1,4 @@
-import type { DrawerTab } from "./types/stage4";
-
-interface DrawerCounts {
-  precheck: number;
-  impact: number;
-  exemption: number;
-  sfLogSuggestions: number;
-}
-
 export const uiStrings = {
-  drawer: {
-    peekHint: (counts: DrawerCounts): string =>
-      `共 ${counts.precheck + counts.impact + counts.exemption + counts.sfLogSuggestions} 项待处理`,
-  },
   precheck: {
     empty: "本次写作无需补充标记",
     skippedPrefix: "预检已跳过：",

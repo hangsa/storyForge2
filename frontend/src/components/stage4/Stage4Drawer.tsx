@@ -94,6 +94,7 @@ export default function Stage4Drawer({ counts, activeTab, onTabChange, onCollaps
             <button
               key={tab}
               type="button"
+              id={`drawer-tab-${tab}`}
               role="tab"
               aria-selected={selected}
               aria-controls={`drawer-panel-${tab}`}

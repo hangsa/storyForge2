@@ -119,7 +119,10 @@ export default function Stage4Page() {
     const result = await writeScene(projectId, chapterNum, sceneNum);
     if (result?.precheck_result) {
       precheck.setData(result.precheck_result);
-      toast.show(uiStrings.toasts.precheckReady(result.precheck_result.suggestions.length));
+      toast.show(
+        uiStrings.toasts.precheckReady(result.precheck_result.suggestions.length),
+        { onClick: () => setActiveTab("precheck") },
+      );
     }
     loadProgress();
   };
@@ -196,7 +199,10 @@ export default function Stage4Page() {
       void (async () => {
         await suggestions.analyze(preEditText, newText, []);
         if (suggestions.report) {
-          toast.show(uiStrings.toasts.suggestionsReady(suggestions.report.suggestions.length));
+          toast.show(
+            uiStrings.toasts.suggestionsReady(suggestions.report.suggestions.length),
+            { onClick: () => setActiveTab("sfLogSuggestions") },
+          );
         }
       })();
     } catch {

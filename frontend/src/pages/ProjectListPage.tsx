@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useProject } from "../hooks/useProject";
 import api, { ProjectSummary } from "../api/client";
@@ -47,6 +47,11 @@ export default function ProjectListPage() {
   const [minWords, setMinWords] = useState(4000);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -62,6 +67,12 @@ export default function ProjectListPage() {
       setLoading(false);
     }
   };
+
+  const visibleProjects = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) => p.title.toLowerCase().includes(q));
+  }, [projects, searchQuery]);
 
   const openCreate = () => {
     setCreateStep("intent");
@@ -119,13 +130,29 @@ export default function ProjectListPage() {
               AI 驱动的创意叙事操作系统
             </p>
           </div>
-          <button
-            onClick={openCreate}
-            className="btn-ghost flex items-center gap-2"
-          >
-            <span className="material-symbols-outlined text-lg">add</span>
-            新建项目
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <span className="material-symbols-outlined text-base absolute left-3 top-1/2 -translate-y-1/2 text-system-log/60 pointer-events-none">
+                search
+              </span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索项目名称"
+                className="w-60 bg-surface-container border border-outline-variant rounded-lg
+                           pl-9 pr-3 py-1.5 text-sm text-primary placeholder:text-system-log/50
+                           focus:outline-none focus:border-primary-container"
+              />
+            </div>
+            <button
+              onClick={openCreate}
+              className="btn-ghost flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-lg">add</span>
+              新建项目
+            </button>
+          </div>
         </div>
       </header>
 
@@ -160,54 +187,79 @@ export default function ProjectListPage() {
               创建新项目
             </button>
           </div>
-        ) : (
-          /* Project grid */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((p) => (
-              <GlassPanel
-                key={p.id}
-                className="hover:border-primary-container/30 transition-colors group relative"
-              >
-                <button
-                  onClick={() => navigate(`/project/${p.id}/stage1`)}
-                  className="w-full text-left cursor-pointer"
-                >
-                  <div className="flex items-start justify-between mb-3 pr-8">
-                    <h3 className="font-headline-md text-primary group-hover:text-primary-container transition-colors">
-                      {p.title}
-                    </h3>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded font-label-mono shrink-0 ${STAGE_COLORS[p.current_stage] || "bg-system-log/20 text-system-log"}`}
-                    >
-                      {STAGE_LABELS[p.current_stage] || p.current_stage}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs font-label-mono text-system-log">
-                    <span>{GENRES[p.genre] || p.genre}</span>
-                    <span>·</span>
-                    <span>{p.min_words.toLocaleString()} 字</span>
-                    {p.created_at && (
-                      <>
-                        <span>·</span>
-                        <span>{p.created_at.slice(0, 10)}</span>
-                      </>
-                    )}
-                  </div>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteTarget(p);
-                  }}
-                  className="absolute top-3 right-3 p-1.5 rounded text-system-log/50 hover:text-red-400
-                             hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
-                  title="删除项目"
-                >
-                  <span className="material-symbols-outlined text-base">delete</span>
-                </button>
-              </GlassPanel>
-            ))}
+        ) : visibleProjects.length === 0 ? (
+          /* Zero-match empty state */
+          <div className="text-center py-24">
+            <span className="material-symbols-outlined text-6xl text-system-log/20 mb-4 block">
+              search_off
+            </span>
+            <h2 className="font-headline-md text-primary mb-2">无匹配项目</h2>
+            <p className="font-body-ui text-system-log mb-6 max-w-md mx-auto">
+              没有标题包含「{searchQuery}」的项目。
+            </p>
+            <button
+              onClick={() => setSearchQuery("")}
+              className="btn-ghost inline-flex items-center gap-2"
+              title="清空搜索"
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">close</span>
+              清空搜索
+            </button>
           </div>
+        ) : (
+          <>
+            {searchQuery.trim() && (
+              <div className="text-right font-label-mono text-xs text-system-log mb-3">
+                {visibleProjects.length} 个匹配项 / 共 {projects.length} 个
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleProjects.map((p) => (
+                <GlassPanel
+                  key={p.id}
+                  className="hover:border-primary-container/30 transition-colors group relative"
+                >
+                  <button
+                    onClick={() => navigate(`/project/${p.id}/stage1`)}
+                    className="w-full text-left cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between mb-3 pr-8">
+                      <h3 className="font-headline-md text-primary group-hover:text-primary-container transition-colors">
+                        {p.title}
+                      </h3>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded font-label-mono shrink-0 ${STAGE_COLORS[p.current_stage] || "bg-system-log/20 text-system-log"}`}
+                      >
+                        {STAGE_LABELS[p.current_stage] || p.current_stage}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs font-label-mono text-system-log">
+                      <span>{GENRES[p.genre] || p.genre}</span>
+                      <span>·</span>
+                      <span>{p.min_words.toLocaleString()} 字</span>
+                      {p.created_at && (
+                        <>
+                          <span>·</span>
+                          <span>{p.created_at.slice(0, 10)}</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(p);
+                    }}
+                    className="absolute top-3 right-3 p-1.5 rounded text-system-log/50 hover:text-red-400
+                               hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                    title="删除项目"
+                  >
+                    <span className="material-symbols-outlined text-base">delete</span>
+                  </button>
+                </GlassPanel>
+              ))}
+            </div>
+          </>
         )}
       </main>
 

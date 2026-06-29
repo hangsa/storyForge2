@@ -81,7 +81,7 @@ from backend.style_engine.sandbox_renderer import save_sandbox_config, list_sand
 def test_sanitize_name_strips_path_separators():
     assert _sanitize_name("../etc/passwd") == "etc_passwd"
     assert _sanitize_name("foo\\bar") == "foo_bar"
-    assert _sanitize_name("normal name") == "normal_name"
+    assert _sanitize_name("normal name") == "normal name"
     assert _sanitize_name("") == "unnamed"
 
 

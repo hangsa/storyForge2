@@ -117,7 +117,7 @@ from datetime import datetime, timezone
 from backend.style_engine.sandbox_models import SavedStyleConfig, SandboxParams
 
 
-_NAME_FORBIDDEN = re.compile(r"[^\w一-鿿\-]+", re.UNICODE)
+_NAME_FORBIDDEN = re.compile(r"[^\w一-鿿\-\s]+", re.UNICODE)
 _NAME_MAX = 64
 
 

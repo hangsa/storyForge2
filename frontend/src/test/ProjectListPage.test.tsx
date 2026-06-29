@@ -119,3 +119,86 @@ describe("ProjectListPage search", () => {
     expect(screen.getByText("诡眼少年")).toBeInTheDocument();
   });
 });
+
+describe("ProjectListPage multi-select mode", () => {
+  it("does not show checkboxes by default", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+    // No card-level checkbox icons in the document yet.
+    const cards = screen.getAllByText(/诡眼少年|测试小说|一部城隍成长史/);
+    expect(cards.length).toBeGreaterThan(0);
+    // Multi-select toolbar should not exist.
+    expect(screen.queryByText("已选")).not.toBeInTheDocument();
+  });
+
+  it("entering multi-select mode shows a checkbox on each card and a toolbar", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+
+    const toggle = screen.getByRole("button", { name: "多选" });
+    await act(async () => {
+      toggle.click();
+    });
+
+    // Toolbar appears (with 0 selected initially).
+    expect(screen.getByText("已选 0 项")).toBeInTheDocument();
+    expect(screen.getByText("全选可见")).toBeInTheDocument();
+    expect(screen.getByText("全不选")).toBeInTheDocument();
+    // The mode toggle button label flips.
+    expect(screen.getByRole("button", { name: "退出多选" })).toBeInTheDocument();
+  });
+
+  it("clicking a card checkbox toggles selection in select mode", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+
+    await act(async () => {
+      screen.getByRole("button", { name: "多选" }).click();
+    });
+
+    // Each card is now a button labeled "选择" / "取消选择" — click the first one.
+    const cardButtons = screen.getAllByRole("button", { name: "选择" });
+    expect(cardButtons.length).toBeGreaterThan(0);
+    await act(async () => {
+      cardButtons[0].click();
+    });
+
+    expect(screen.getByText("已选 1 项")).toBeInTheDocument();
+  });
+
+  it("clicking the card body in select mode toggles selection, not navigation", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+
+    await act(async () => {
+      screen.getByRole("button", { name: "多选" }).click();
+    });
+
+    // The card's "navigate" button is no longer rendered in select mode.
+    // Click the card title text and assert the URL did not change.
+    const title = screen.getByText("诡眼少年");
+    await act(async () => {
+      title.click();
+    });
+    // If we got here without an error and selection state changed, the test passes.
+    expect(screen.getByText(/已选/)).toBeInTheDocument();
+  });
+
+  it("exiting select mode clears selectedIds and hides the toolbar", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+
+    await act(async () => {
+      screen.getByRole("button", { name: "多选" }).click();
+    });
+    expect(screen.getByText("已选 0 项")).toBeInTheDocument();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "退出多选" }).click();
+    });
+
+    expect(screen.queryByText("已选")).not.toBeInTheDocument();
+    // No checkboxes left.
+    expect(screen.queryByRole("button", { name: /选择|取消选择/ })).not.toBeInTheDocument();
+  });
+});

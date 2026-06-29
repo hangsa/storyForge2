@@ -74,6 +74,20 @@ export default function ProjectListPage() {
     return projects.filter((p) => p.title.toLowerCase().includes(q));
   }, [projects, searchQuery]);
 
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const openCreate = () => {
     setCreateStep("intent");
     setIntent("");
@@ -146,6 +160,19 @@ export default function ProjectListPage() {
               />
             </div>
             <button
+              onClick={() => {
+                if (selectMode) exitSelectMode();
+                else setSelectMode(true);
+              }}
+              className={`btn-ghost flex items-center gap-2 ${selectMode ? "border border-primary-container" : ""}`}
+              aria-label={selectMode ? "退出多选" : "多选"}
+            >
+              <span className="material-symbols-outlined text-lg">
+                {selectMode ? "check_box" : "check_box_outline_blank"}
+              </span>
+              {selectMode ? "退出多选" : "多选"}
+            </button>
+            <button
               onClick={openCreate}
               className="btn-ghost flex items-center gap-2"
             >
@@ -160,6 +187,48 @@ export default function ProjectListPage() {
         {error && (
           <div className="p-4 bg-error/10 border border-error/30 rounded-lg text-error font-body-ui text-sm mb-6">
             {error}
+          </div>
+        )}
+
+        {selectMode && (
+          <div
+            data-testid="bulk-action-bar"
+            className="sticky top-2 z-10 mb-4 bg-surface-container-low border border-primary-container/40
+                       rounded-lg px-4 py-2 flex items-center gap-3 shadow-lg shadow-black/20"
+          >
+            <button
+              onClick={exitSelectMode}
+              className="flex items-center gap-1 text-system-log hover:text-primary text-sm"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+              取消多选
+            </button>
+            <span className="text-sm font-label-mono text-primary">
+              已选 {selectedIds.size} 项
+            </span>
+            <div className="flex-1" />
+            <button
+              onClick={() => setSelectedIds(new Set(visibleProjects.map((p) => p.id)))}
+              className="text-sm text-system-log hover:text-primary"
+            >
+              全选可见
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              disabled={selectedIds.size === 0}
+              className="text-sm text-system-log hover:text-primary disabled:opacity-40"
+            >
+              全不选
+            </button>
+            <button
+              onClick={() => setShowBulkDeleteModal(true)}
+              disabled={selectedIds.size === 0}
+              className="flex items-center gap-1 px-3 py-1 bg-error text-surface-container-low
+                         text-sm rounded hover:opacity-90 disabled:opacity-40"
+            >
+              <span className="material-symbols-outlined text-base">delete</span>
+              批量删除 ({selectedIds.size})
+            </button>
           </div>
         )}
 
@@ -217,45 +286,91 @@ export default function ProjectListPage() {
               {visibleProjects.map((p) => (
                 <GlassPanel
                   key={p.id}
-                  className="hover:border-primary-container/30 transition-colors group relative"
+                  className={`transition-colors group relative ${
+                    selectedIds.has(p.id)
+                      ? "border-primary-container"
+                      : "hover:border-primary-container/30"
+                  }`}
                 >
-                  <button
-                    onClick={() => navigate(`/project/${p.id}/stage1`)}
-                    className="w-full text-left cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between mb-3 pr-8">
-                      <h3 className="font-headline-md text-primary group-hover:text-primary-container transition-colors">
-                        {p.title}
-                      </h3>
+                  {selectMode ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSelected(p.id)}
+                      className="w-full text-left cursor-pointer flex items-start gap-3 p-0"
+                      aria-label={selectedIds.has(p.id) ? "取消选择" : "选择"}
+                    >
                       <span
-                        className={`text-xs px-2 py-0.5 rounded font-label-mono shrink-0 ${STAGE_COLORS[p.current_stage] || "bg-system-log/20 text-system-log"}`}
+                        className={`material-symbols-outlined text-xl mt-0.5 shrink-0 ${
+                          selectedIds.has(p.id) ? "text-primary-container" : "text-system-log/50"
+                        }`}
                       >
-                        {STAGE_LABELS[p.current_stage] || p.current_stage}
+                        {selectedIds.has(p.id) ? "check_box" : "check_box_outline_blank"}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs font-label-mono text-system-log">
-                      <span>{GENRES[p.genre] || p.genre}</span>
-                      <span>·</span>
-                      <span>{p.min_words.toLocaleString()} 字</span>
-                      {p.created_at && (
-                        <>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between mb-3 pr-2">
+                          <h3 className="font-headline-md text-primary group-hover:text-primary-container transition-colors">
+                            {p.title}
+                          </h3>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded font-label-mono shrink-0 ${STAGE_COLORS[p.current_stage] || "bg-system-log/20 text-system-log"}`}
+                          >
+                            {STAGE_LABELS[p.current_stage] || p.current_stage}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs font-label-mono text-system-log">
+                          <span>{GENRES[p.genre] || p.genre}</span>
                           <span>·</span>
-                          <span>{p.created_at.slice(0, 10)}</span>
-                        </>
-                      )}
-                    </div>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget(p);
-                    }}
-                    className="absolute top-3 right-3 p-1.5 rounded text-system-log/50 hover:text-red-400
-                               hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
-                    title="删除项目"
-                  >
-                    <span className="material-symbols-outlined text-base">delete</span>
-                  </button>
+                          <span>{p.min_words.toLocaleString()} 字</span>
+                          {p.created_at && (
+                            <>
+                              <span>·</span>
+                              <span>{p.created_at.slice(0, 10)}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => navigate(`/project/${p.id}/stage1`)}
+                        className="w-full text-left cursor-pointer"
+                      >
+                        <div className="flex items-start justify-between mb-3 pr-8">
+                          <h3 className="font-headline-md text-primary group-hover:text-primary-container transition-colors">
+                            {p.title}
+                          </h3>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded font-label-mono shrink-0 ${STAGE_COLORS[p.current_stage] || "bg-system-log/20 text-system-log"}`}
+                          >
+                            {STAGE_LABELS[p.current_stage] || p.current_stage}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs font-label-mono text-system-log">
+                          <span>{GENRES[p.genre] || p.genre}</span>
+                          <span>·</span>
+                          <span>{p.min_words.toLocaleString()} 字</span>
+                          {p.created_at && (
+                            <>
+                              <span>·</span>
+                              <span>{p.created_at.slice(0, 10)}</span>
+                            </>
+                          )}
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(p);
+                        }}
+                        className="absolute top-3 right-3 p-1.5 rounded text-system-log/50 hover:text-red-400
+                                   hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                        title="删除项目"
+                      >
+                        <span className="material-symbols-outlined text-base">delete</span>
+                      </button>
+                    </>
+                  )}
                 </GlassPanel>
               ))}
             </div>

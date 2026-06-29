@@ -73,3 +73,49 @@ async def test_render_preview_skipped_when_router_raises():
     )
     assert resp.skipped_reason
     assert resp.rendered_text == ""
+
+
+from backend.style_engine.sandbox_renderer import save_sandbox_config, list_sandbox_configs, load_sandbox_config, _sanitize_name
+
+
+def test_sanitize_name_strips_path_separators():
+    assert _sanitize_name("../etc/passwd") == "etc_passwd"
+    assert _sanitize_name("foo\\bar") == "foo_bar"
+    assert _sanitize_name("normal name") == "normal_name"
+    assert _sanitize_name("") == "unnamed"
+
+
+def test_save_and_list_roundtrip(tmp_path, monkeypatch):
+    from backend.config import settings
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
+    (tmp_path / "p1" / "styles").mkdir(parents=True)
+    params = SandboxParams()
+    params.sentence.avg_length_range = [8, 20]
+    path = save_sandbox_config(project_id="p1", name="快节奏", params=params)
+    assert path.exists()
+    assert path.name == "快节奏.yaml" or path.name.endswith(".yaml")
+    configs = list_sandbox_configs(project_id="p1")
+    assert len(configs) == 1
+    assert configs[0].name == "快节奏"
+
+
+def test_save_rejects_duplicate_name(tmp_path, monkeypatch):
+    from backend.config import settings
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
+    (tmp_path / "p1" / "styles").mkdir(parents=True)
+    params = SandboxParams()
+    save_sandbox_config(project_id="p1", name="dup", params=params)
+    import pytest
+    with pytest.raises(FileExistsError):
+        save_sandbox_config(project_id="p1", name="dup", params=params)
+
+
+def test_load_saved_config(tmp_path, monkeypatch):
+    from backend.config import settings
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
+    (tmp_path / "p1" / "styles").mkdir(parents=True)
+    params = SandboxParams()
+    params.dialogue.ratio = 0.5
+    save_sandbox_config(project_id="p1", name="dialogue_heavy", params=params)
+    loaded = load_sandbox_config(project_id="p1", name="dialogue_heavy")
+    assert loaded.params.dialogue.ratio == 0.5

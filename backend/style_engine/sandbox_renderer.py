@@ -109,3 +109,75 @@ async def render_preview(
             rendered_text="", source_avg_length=source_avg, rendered_avg_length=0.0,
             tokens_used=0, skipped_reason=f"llm error: {type(exc).__name__}: {exc}",
         )
+
+
+import re
+from datetime import datetime, timezone
+
+from backend.style_engine.sandbox_models import SavedStyleConfig, SandboxParams
+
+
+_NAME_FORBIDDEN = re.compile(r"[^\w一-鿿\-]+", re.UNICODE)
+_NAME_MAX = 64
+
+
+def _sanitize_name(name: str) -> str:
+    cleaned = _NAME_FORBIDDEN.sub("_", name).strip("_")
+    if not cleaned:
+        cleaned = "unnamed"
+    return cleaned[:_NAME_MAX]
+
+
+def _styles_dir(project_id: str) -> Path:
+    base = Path(settings.projects_dir) / project_id / "styles"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def save_sandbox_config(*, project_id: str, name: str, params: SandboxParams) -> Path:
+    safe = _sanitize_name(name)
+    path = _styles_dir(project_id) / f"{safe}.yaml"
+    if path.exists():
+        raise FileExistsError(f"已存在同名配置：{safe}")
+    data = {
+        "name": safe,
+        "params": params.model_dump(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def list_sandbox_configs(project_id: str) -> list[SavedStyleConfig]:
+    base = Path(settings.projects_dir) / project_id / "styles"
+    if not base.exists():
+        return []
+    configs: list[SavedStyleConfig] = []
+    for p in sorted(base.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except yaml.YAMLError:
+            continue
+        if not isinstance(data, dict):
+            continue
+        configs.append(SavedStyleConfig(
+            name=data.get("name", p.stem),
+            path=str(p),
+            params=SandboxParams(**data.get("params", {})),
+            created_at=data.get("created_at", ""),
+        ))
+    return configs
+
+
+def load_sandbox_config(*, project_id: str, name: str) -> SavedStyleConfig:
+    safe = _sanitize_name(name)
+    path = _styles_dir(project_id) / f"{safe}.yaml"
+    if not path.exists():
+        raise FileNotFoundError(f"配置不存在：{safe}")
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return SavedStyleConfig(
+        name=data.get("name", safe),
+        path=str(path),
+        params=SandboxParams(**data.get("params", {})),
+        created_at=data.get("created_at", ""),
+    )

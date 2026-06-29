@@ -58,7 +58,7 @@ export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps
       <div className="border-t border-outline-variant mx-4 mb-4" />
 
       {/* Stage navigation */}
-      <div className="px-4 mb-4 flex-1">
+      <div className="px-4 mb-4">
         <div className="font-label-mono text-system-log uppercase tracking-wider mb-2">
           叙事阶段
         </div>

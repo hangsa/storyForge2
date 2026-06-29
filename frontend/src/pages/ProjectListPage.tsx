@@ -133,6 +133,31 @@ export default function ProjectListPage() {
     }
   };
 
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const result = await api.bulkDeleteProjects(ids);
+      setProjects((prev) => prev.filter((p) => !result.deleted.includes(p.id)));
+      setShowBulkDeleteModal(false);
+      if (result.failed.length === 0) {
+        exitSelectMode();
+      } else {
+        const failedIds = new Set(result.failed.map((f) => f.id));
+        setSelectedIds(failedIds);
+        setError(
+          `已删除 ${result.deleted_count} 个，${result.failed_count} 个失败：` +
+            result.failed.map((f) => `${f.id} (${f.error})`).join("、"),
+        );
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "批量删除失败");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-canvas-bg">
       {/* Header */}
@@ -568,6 +593,75 @@ export default function ProjectListPage() {
                              rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
                 >
                   {deleting ? "删除中..." : "确认删除"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-surface-container-low border border-error/30 rounded-lg max-w-lg w-full mx-4 overflow-hidden relative">
+            <button
+              onClick={() => setShowBulkDeleteModal(false)}
+              disabled={bulkDeleting}
+              className="absolute top-3 right-3 text-system-log hover:text-primary disabled:opacity-30 z-10"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+            <div className="px-4 py-3 flex items-center gap-2 border-b border-outline-variant">
+              <span className="material-symbols-outlined text-error">delete</span>
+              <span className="font-label-mono text-error">
+                批量删除 {selectedIds.size} 个项目
+              </span>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="font-body-ui text-system-log text-xs">
+                将永久删除以下项目及其所有数据（概念、大纲、章节、模拟记录），此操作不可撤销。
+              </p>
+              <div className="max-h-60 overflow-y-auto border border-outline-variant rounded">
+                {projects
+                  .filter((p) => selectedIds.has(p.id))
+                  .slice(0, 20)
+                  .map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between px-3 py-2 border-b border-outline-variant last:border-b-0"
+                    >
+                      <span className="font-display text-primary text-sm truncate pr-3">
+                        {p.title}
+                      </span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded font-label-mono shrink-0 ${STAGE_COLORS[p.current_stage] || "bg-system-log/20 text-system-log"}`}
+                      >
+                        {STAGE_LABELS[p.current_stage] || p.current_stage}
+                      </span>
+                    </div>
+                  ))}
+                {projects.filter((p) => selectedIds.has(p.id)).length > 20 && (
+                  <div className="px-3 py-2 text-xs text-system-log text-center">
+                    + {projects.filter((p) => selectedIds.has(p.id)).length - 20} 项未显示
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setShowBulkDeleteModal(false)}
+                  disabled={bulkDeleting}
+                  className="px-4 py-2 bg-surface-container text-system-log text-sm
+                             rounded-lg hover:bg-surface-container-low transition-colors disabled:opacity-40"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleBulkDeleteConfirm}
+                  disabled={bulkDeleting}
+                  className="px-4 py-2 bg-error text-surface-container-low text-sm
+                             rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+                >
+                  {bulkDeleting ? "删除中..." : "确认删除"}
                 </button>
               </div>
             </div>

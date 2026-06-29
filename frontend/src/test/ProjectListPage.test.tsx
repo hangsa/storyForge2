@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, fireEvent } from "@testing-library/react";
+import { render, screen, act, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 const { mockApi } = vi.hoisted(() => ({
@@ -281,5 +281,135 @@ describe("ProjectListPage bulk action toolbar", () => {
     const bulkBtn = screen.getByRole("button", { name: /批量删除/ });
     expect(bulkBtn).not.toBeDisabled();
     expect(bulkBtn.textContent).toContain("3");
+  });
+});
+
+describe("ProjectListPage bulk delete", () => {
+  async function selectAllThree() {
+    await act(async () => {
+      screen.getByRole("button", { name: "多选" }).click();
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "全选可见" }).click();
+    });
+  }
+
+  it("opening the modal lists every selected project by title", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await selectAllThree();
+
+    await act(async () => {
+      screen.getByRole("button", { name: /批量删除/ }).click();
+    });
+
+    expect(screen.getByText("批量删除 3 个项目")).toBeInTheDocument();
+    const list = screen.getByText("批量删除 3 个项目").closest("div")!.parentElement!;
+    expect(within(list as HTMLElement).getByText("诡眼少年")).toBeInTheDocument();
+    expect(within(list as HTMLElement).getByText("测试小说")).toBeInTheDocument();
+    expect(within(list as HTMLElement).getByText("一部城隍成长史")).toBeInTheDocument();
+  });
+
+  it("confirming the modal calls bulkDeleteProjects ONCE with the full selection", async () => {
+    mockApi.bulkDeleteProjects.mockResolvedValue({
+      deleted: ["proj_a", "proj_b", "proj_c"],
+      failed: [],
+      deleted_count: 3,
+      failed_count: 0,
+    });
+
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await selectAllThree();
+
+    await act(async () => {
+      screen.getByRole("button", { name: /批量删除/ }).click();
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "确认删除" }).click();
+    });
+
+    expect(mockApi.bulkDeleteProjects).toHaveBeenCalledTimes(1);
+    expect(mockApi.bulkDeleteProjects).toHaveBeenCalledWith(
+      expect.arrayContaining(["proj_a", "proj_b", "proj_c"]),
+    );
+    expect(mockApi.bulkDeleteProjects.mock.calls[0][0]).toHaveLength(3);
+  });
+
+  it("on full success, exits select mode and removes deleted projects from the list", async () => {
+    mockApi.bulkDeleteProjects.mockResolvedValue({
+      deleted: ["proj_a", "proj_b", "proj_c"],
+      failed: [],
+      deleted_count: 3,
+      failed_count: 0,
+    });
+
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await selectAllThree();
+
+    await act(async () => {
+      screen.getByRole("button", { name: /批量删除/ }).click();
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "确认删除" }).click();
+    });
+
+    // Modal closes, select mode exits, toolbar gone.
+    expect(screen.queryByText("批量删除 3 个项目")).not.toBeInTheDocument();
+    expect(screen.queryByText("已选")).not.toBeInTheDocument();
+    // Projects removed from local list.
+    expect(screen.queryByText("诡眼少年")).not.toBeInTheDocument();
+    expect(screen.queryByText("测试小说")).not.toBeInTheDocument();
+    expect(screen.queryByText("一部城隍成长史")).not.toBeInTheDocument();
+  });
+
+  it("on partial failure, keeps select mode, prunes to failed-only, shows an error banner", async () => {
+    mockApi.bulkDeleteProjects.mockResolvedValue({
+      deleted: ["proj_a"],
+      failed: [{ id: "proj_b", error: "not_found" }],
+      deleted_count: 1,
+      failed_count: 1,
+    });
+
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await selectAllThree();
+
+    await act(async () => {
+      screen.getByRole("button", { name: /批量删除/ }).click();
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "确认删除" }).click();
+    });
+
+    // Modal closed, select mode still active, selection pruned to 1.
+    expect(screen.queryByText("批量删除 3 个项目")).not.toBeInTheDocument();
+    expect(screen.getByText("已选 1 项")).toBeInTheDocument();
+    // Error banner surfaces the failure detail.
+    expect(screen.getByText(/已删除 1 个，1 个失败/)).toBeInTheDocument();
+    expect(screen.getByText(/proj_b \(not_found\)/)).toBeInTheDocument();
+  });
+
+  it("does NOT call deleteProject per-item — only the bulk endpoint", async () => {
+    mockApi.bulkDeleteProjects.mockResolvedValue({
+      deleted: ["proj_a", "proj_b", "proj_c"],
+      failed: [],
+      deleted_count: 3,
+      failed_count: 0,
+    });
+
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await selectAllThree();
+
+    await act(async () => {
+      screen.getByRole("button", { name: /批量删除/ }).click();
+    });
+    await act(async () => {
+      screen.getByRole("button", { name: "确认删除" }).click();
+    });
+
+    expect(mockApi.deleteProject).not.toHaveBeenCalled();
   });
 });

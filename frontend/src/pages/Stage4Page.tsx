@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import api, { ParsedLog, CheckResult, ProgressFile, ChapterReviewData, ExemptionRequest } from "../api/client";
+import api, { ParsedLog, CheckResult, ProgressFile, ChapterReviewData, ExemptionRequest, SandboxParams, SavedStyleConfig } from "../api/client";
 import { useStage4Writing } from "../hooks/useStage4Writing";
 import { useStage4Precheck } from "../hooks/useStage4Precheck";
 import { useStage4Impact } from "../hooks/useStage4Impact";
@@ -55,6 +55,9 @@ export default function Stage4Page() {
   const [preEditText, setPreEditText] = useState("");
   const [activeTab, setActiveTab] = useState<DrawerTab | null>(null);
   const [approvalItem, setApprovalItem] = useState<ExemptionRequest | null>(null);
+  const [useCustomStyle, setUseCustomStyle] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<SandboxParams | null>(null);
+  const [savedStyles, setSavedStyles] = useState<SavedStyleConfig[]>([]);
 
   const precheck = useStage4Precheck();
   const impact = useStage4Impact(projectId || "");
@@ -107,6 +110,16 @@ export default function Stage4Page() {
     }
   }, [exemptions.items.length, activeTab]);
 
+  // Load saved style configs when checkbox is enabled.
+  useEffect(() => {
+    if (!useCustomStyle || !projectId) return;
+    let cancelled = false;
+    api.styleSandboxListConfigs(projectId)
+      .then((r) => { if (!cancelled) setSavedStyles(r.configs || []); })
+      .catch(() => { if (!cancelled) setSavedStyles([]); });
+    return () => { cancelled = true; };
+  }, [useCustomStyle, projectId]);
+
   const counts = useMemo(() => ({
     precheck: precheck.data?.suggestions.length ?? 0,
     impact: impact.report ? impact.report.summary.P0 + impact.report.summary.P1 : 0,
@@ -116,7 +129,8 @@ export default function Stage4Page() {
 
   const handleWrite = async () => {
     if (!projectId) return;
-    const result = await writeScene(projectId, chapterNum, sceneNum);
+    const customStyleConfig = useCustomStyle ? selectedStyle : null;
+    const result = await writeScene(projectId, chapterNum, sceneNum, customStyleConfig);
     if (result?.precheck_result) {
       precheck.setData(result.precheck_result);
       toast.show(
@@ -333,6 +347,36 @@ export default function Stage4Page() {
           >
             状态: {sceneFromProgress.status}
           </span>
+        )}
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={useCustomStyle}
+            onChange={(e) => {
+              setUseCustomStyle(e.target.checked);
+              if (!e.target.checked) setSelectedStyle(null);
+            }}
+            className="accent-primary-container"
+          />
+          使用自定义风格
+        </label>
+        {useCustomStyle && (
+          <select
+            value={selectedStyle ? JSON.stringify(selectedStyle) : ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedStyle(v ? (JSON.parse(v) as SandboxParams) : null);
+            }}
+            className="border border-outline-variant rounded px-2 py-1 text-sm bg-surface-container-low text-primary"
+            aria-label="选择自定义风格"
+          >
+            <option value="">— 请选择 —</option>
+            {savedStyles.map((s) => (
+              <option key={s.name} value={JSON.stringify(s.params)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
         )}
         {state.status !== "idle" && (
           <span className="text-xs px-2 py-0.5 bg-primary-container/20 text-primary-container rounded font-label-mono">

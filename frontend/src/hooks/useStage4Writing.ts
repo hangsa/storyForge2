@@ -4,6 +4,7 @@ import api, {
   CheckResult,
   ParsedLog,
   ApiError,
+  SandboxParams,
 } from "../api/client";
 
 type PipelineStatus =
@@ -71,7 +72,8 @@ interface UseStage4WritingReturn {
   writeScene: (
     projectId: string,
     chapterNumber: number,
-    sceneNumber: number
+    sceneNumber: number,
+    customStyleConfig?: SandboxParams | null
   ) => Promise<WriteSceneResponse | null>;
   forcePass: (projectId: string, sceneNumber: number) => Promise<void>;
   skipScene: (projectId: string, sceneNumber: number) => Promise<void>;
@@ -104,7 +106,8 @@ export function useStage4Writing(): UseStage4WritingReturn {
     async (
       projectId: string,
       chapterNumber: number,
-      sceneNumber: number
+      sceneNumber: number,
+      customStyleConfig: SandboxParams | null = null
     ) => {
       setState((prev) => ({
         ...prev,
@@ -118,6 +121,7 @@ export function useStage4Writing(): UseStage4WritingReturn {
           project_id: projectId,
           chapter_number: chapterNumber,
           scene_number: sceneNumber,
+          custom_style_config: customStyleConfig,
         });
 
         const newStatus: PipelineStatus =

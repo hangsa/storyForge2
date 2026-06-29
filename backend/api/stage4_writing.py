@@ -186,6 +186,7 @@ async def write_scene(data: dict):
     project_id = data.get("project_id", "")
     chapter_number = data.get("chapter_number", 1)
     scene_number = data.get("scene_number", 1)
+    custom_style_config = data.get("custom_style_config") or None
 
     if not project_id:
         raise HTTPException(
@@ -274,6 +275,7 @@ async def write_scene(data: dict):
             growth_stage_hint=ctx_mem.growth_stage_hint,
             character_growth_context=character_growth_context,
             reader_os_warnings=reader_warnings_str,
+            custom_style_config=custom_style_config,
         )
     except ValueError as e:
         raise HTTPException(
@@ -360,6 +362,7 @@ async def write_scene(data: dict):
                     growth_stage_hint=ctx_mem.growth_stage_hint,
                     character_growth_context=character_growth_context,
                     reader_os_warnings=reader_warnings_str,
+                    custom_style_config=custom_style_config,
                 )
             except ValueError as e:
                 raise HTTPException(

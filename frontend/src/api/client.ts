@@ -778,8 +778,16 @@ export const api = {
   getScenePlan: (projectId: string, sceneNum: number) =>
     request<ScenePlan>("GET", `/stage4/scene-plan/${sceneNum}?project_id=${projectId}`),
 
-  writeScene: (data: { project_id: string; chapter_number: number; scene_number: number }) =>
-    request<WriteSceneResponse>("POST", "/stage4/write-scene", data),
+  writeScene: (data: {
+    project_id: string;
+    chapter_number: number;
+    scene_number: number;
+    custom_style_config?: SandboxParams | null;
+  }) =>
+    request<WriteSceneResponse>("POST", "/stage4/write-scene", {
+      ...data,
+      custom_style_config: data.custom_style_config ?? null,
+    }),
 
   forcePass: (data: { project_id: string; scene_number: number }) =>
     request<void>("POST", "/stage4/force-pass", data),

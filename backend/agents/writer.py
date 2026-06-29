@@ -4,6 +4,23 @@ from typing import Optional
 from backend.agents.base_agent import BaseAgent, LLMResponse
 
 
+def _build_custom_style_desc(custom_style_config) -> str:
+    """Convert a custom_style_config dict (SandboxParams shape) into a Chinese
+    description for the writer prompt. Returns "" on None or invalid input.
+    """
+    if not custom_style_config:
+        return ""
+    try:
+        from backend.style_engine.sandbox_models import SandboxParams
+        from backend.style_engine.sandbox_renderer import _build_params_description
+
+        if isinstance(custom_style_config, SandboxParams):
+            return _build_params_description(custom_style_config)
+        return _build_params_description(SandboxParams(**custom_style_config))
+    except Exception:
+        return ""
+
+
 class WriterAgent(BaseAgent):
     agent_name = "writer"
 
@@ -72,6 +89,7 @@ class WriterAgent(BaseAgent):
         l4_context: str = "",
         growth_stage_hint: str = "",
         character_growth_context: str = "",
+        custom_style_config_desc: str = "",
     ) -> dict:
         core_contradiction = concept.get("story_dna", {}).get(
             "core_contradiction", {}
@@ -128,6 +146,7 @@ class WriterAgent(BaseAgent):
             "l4_context": l4_context,
             "growth_stage_hint": growth_stage_hint,
             "character_growth_context": character_growth_context,
+            "custom_style_config_desc": custom_style_config_desc,
         }
 
     async def write_scene(
@@ -148,6 +167,7 @@ class WriterAgent(BaseAgent):
         style_template: Optional[dict] = None,
         storyos_state: Optional[dict] = None,
         reader_os_warnings: str = "",
+        custom_style_config=None,
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
@@ -155,6 +175,7 @@ class WriterAgent(BaseAgent):
             l0_context, l1_context,
             l2_context, l3_context, l4_context, growth_stage_hint,
             character_growth_context,
+            custom_style_config_desc=_build_custom_style_desc(custom_style_config),
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         return await self.generate_from_template(
@@ -179,6 +200,7 @@ class WriterAgent(BaseAgent):
         growth_stage_hint: str = "",
         character_growth_context: str = "",
         reader_os_warnings: str = "",
+        custom_style_config=None,
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
@@ -186,6 +208,7 @@ class WriterAgent(BaseAgent):
             l0_context, l1_context,
             l2_context, l3_context, l4_context, growth_stage_hint,
             character_growth_context,
+            custom_style_config_desc=_build_custom_style_desc(custom_style_config),
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["retry_hints"] = retry_hints

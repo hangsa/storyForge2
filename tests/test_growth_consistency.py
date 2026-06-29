@@ -37,3 +37,29 @@ def test_invalid_event_type_triggers_error():
     assert len(invalid) == 1
     assert invalid[0].severity == "error"
     assert invalid[0].stage_index == 0
+
+
+def test_tight_spacing_triggers_warning():
+    stages = _stages_with_chapters([3, 4, 10])
+    result = check_growth_consistency(
+        character_id="c1", stages=stages, total_chapters=20, conflicts=[], outline_chapters=[],
+    )
+    tight = [w for w in result.warnings if w.rule_id == "tight_spacing"]
+    assert len(tight) == 1
+    assert tight[0].stage_index == 1
+    assert tight[0].severity == "warning"
+    assert tight[0].chapter_number == 4
+
+
+def test_tight_spacing_ignores_none_chapters():
+    stages = [
+        GrowthStage(stage_number=1, stage_name="a", bound_chapter=3,
+                    trigger_event_type=GrowthEventType.BETRAYAL_EXPERIENCED),
+        GrowthStage(stage_number=2, stage_name="b", bound_chapter=None,
+                    trigger_event_type=GrowthEventType.BETRAYAL_EXPERIENCED),
+    ]
+    result = check_growth_consistency(
+        character_id="c1", stages=stages, total_chapters=20, conflicts=[], outline_chapters=[],
+    )
+    tight = [w for w in result.warnings if w.rule_id == "tight_spacing"]
+    assert tight == []

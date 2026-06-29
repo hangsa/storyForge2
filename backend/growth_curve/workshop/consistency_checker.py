@@ -40,7 +40,18 @@ def check_growth_consistency(
                 message=f"事件类型 {_event_type_value(stage)!r} 不在 8 类白名单内",
             ))
 
-    # Subsequent rules will be added in Tasks 3, 4, 5.
+    for i in range(len(stages) - 1):
+        curr, nxt = stages[i], stages[i + 1]
+        if curr.bound_chapter is None or nxt.bound_chapter is None:
+            continue
+        gap = nxt.bound_chapter - curr.bound_chapter
+        if gap < 2:
+            warnings.append(ConsistencyWarning(
+                rule_id="tight_spacing", severity="warning",
+                stage_index=i + 1, chapter_number=nxt.bound_chapter,
+                message=f"第 {curr.bound_chapter} → {nxt.bound_chapter} 章间隔仅 {gap} 章",
+                suggestion="拉大到 ≥ 2 章",
+            ))
 
     return WorkshopCheckResult(
         character_id=character_id,

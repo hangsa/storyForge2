@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 vi.mock("react-router-dom", async () => {
@@ -38,6 +38,23 @@ vi.mock("../api/client", () => ({
       suggestions: [],
       skipped_reason: undefined,
     }),
+    styleSandboxPreview: vi.fn().mockResolvedValue({
+      rendered_text: "",
+      source_avg_length: 0,
+      rendered_avg_length: 0,
+      tokens_used: 0,
+      skipped_reason: "no router",
+    }),
+    styleSandboxSave: vi.fn().mockResolvedValue({ name: "", path: "" }),
+    styleSandboxListConfigs: vi.fn().mockResolvedValue({ configs: [] }),
+    styleSandboxLoadConfig: vi.fn().mockResolvedValue({}),
+  },
+  DEFAULT_SANDBOX_PARAMS: {
+    sentence: { avg_length_range: [15, 45], short_sentence_ratio: 0.3, paragraph_length_range: [80, 200] },
+    dialogue: { ratio: 0.35, max_consecutive_lines: 6 },
+    rhythm: { pacing_bpm: 300, scene_change_frequency: 0.5 },
+    density: { description_ratio: 0.4, action_ratio: 0.3 },
+    satisfaction: { satisfaction_beat_count: 5, suspense_hook_required: true },
   },
   ApiError: class extends Error {
     code: string;
@@ -77,6 +94,7 @@ import Stage1Page from "../pages/Stage1Page";
 import Stage2Page from "../pages/Stage2Page";
 import Stage3Page from "../pages/Stage3Page";
 import Stage4Page from "../pages/Stage4Page";
+import StyleSandboxPage from "../pages/StyleSandboxPage";
 import Stage3Layout from "../components/layout/Stage3Layout";
 import { ToastProvider } from "../hooks/useToast";
 
@@ -103,6 +121,7 @@ function renderPage(ui: React.ReactNode, path = "/project/test-project/stage1") 
           <Route path="/project/:projectId/stage1" element={ui} />
           <Route path="/project/:projectId/stage2" element={ui} />
           <Route path="/project/:projectId/stage4" element={ui} />
+          <Route path="/project/:projectId/style" element={ui} />
         </Routes>
       </ToastProvider>
     </MemoryRouter>,
@@ -221,5 +240,16 @@ describe("Stage4Page", () => {
   it("renders start writing button", () => {
     renderPage(<Stage4Page />);
     expect(screen.getByText("开始写作")).toBeInTheDocument();
+  });
+});
+
+describe("StyleSandboxPage", () => {
+  it("renders ParamSliders and the style sandbox section", async () => {
+    renderPage(<StyleSandboxPage />, "/project/test-project/style");
+    expect(screen.getByText("风格沙盒")).toBeInTheDocument();
+    expect(screen.getByText("句长")).toBeInTheDocument();
+    expect(screen.getByText("对白")).toBeInTheDocument();
+    expect(screen.getByText(/参考文本（≥50 字）/)).toBeInTheDocument();
+    expect(screen.getByText(/已保存配置/)).toBeInTheDocument();
   });
 });

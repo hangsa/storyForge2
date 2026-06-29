@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import api from "../api/client";
+import api, { DEFAULT_SANDBOX_PARAMS, type SandboxParams } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
+import ParamSliders from "../components/style/ParamSliders";
+import PreviewComparison from "../components/style/PreviewComparison";
+import StyleConfigList from "../components/style/StyleConfigList";
+import { useStyleSandbox } from "../hooks/useStyleSandbox";
 
 interface ExtractedStyleResult {
   sentence: { avg_length: number; distribution: { short_pct: number; medium_pct: number; long_pct: number } };
@@ -21,6 +25,16 @@ export default function StyleSandboxPage() {
   const [result, setResult] = useState<ExtractedStyleResult | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+
+  const sandbox = useStyleSandbox(projectId || "");
+  const [params, setParams] = useState<SandboxParams>(DEFAULT_SANDBOX_PARAMS);
+  const [sourceText, setSourceText] = useState<string>("");
+  const [configName, setConfigName] = useState<string>("");
+
+  useEffect(() => {
+    void sandbox.loadConfigs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAnalyze = async () => {
     if (!projectId || !referenceText.trim()) return;
@@ -193,6 +207,65 @@ export default function StyleSandboxPage() {
           </GlassPanel>
         </>
       )}
+
+      {/* Style Sandbox: parameter tuning + preview + saved configs */}
+      <section className="mt-6 space-y-4">
+        <h2 className="text-xl font-semibold text-white">风格沙盒 — 参数调优</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1 text-white">参考文本（≥50 字）</label>
+            <textarea
+              value={sourceText}
+              onChange={(e) => setSourceText(e.target.value)}
+              className="w-full h-40 rounded-lg border border-system-log/20 bg-surface-container-low px-3 py-2 text-sm text-white"
+              aria-label="沙盒参考文本"
+            />
+          </div>
+          <ParamSliders params={params} onChange={setParams} />
+        </div>
+        <div className="flex gap-2 items-center">
+          <button
+            type="button"
+            onClick={() => sandbox.preview(sourceText, params)}
+            disabled={sandbox.previewing || sourceText.length < 50}
+            className="px-3 py-1 rounded bg-indigo-600 text-white text-sm disabled:opacity-50"
+          >
+            {sandbox.previewing ? "渲染中…" : "▶ 预览"}
+          </button>
+          <input
+            type="text"
+            value={configName}
+            onChange={(e) => setConfigName(e.target.value)}
+            placeholder="配置名（如：爽文快节奏 v1）"
+            className="border rounded px-2 py-1 text-sm bg-surface-container-low border-system-log/20 text-white"
+            aria-label="新配置名"
+          />
+          <button
+            type="button"
+            onClick={() => sandbox.save(configName, params)}
+            disabled={sandbox.saving || !configName}
+            className="px-3 py-1 rounded bg-green-600 text-white text-sm disabled:opacity-50"
+          >
+            💾 保存
+          </button>
+        </div>
+        {sandbox.previewResponse && (
+          <PreviewComparison
+            sourceText={sourceText}
+            sourceAvgLength={sandbox.previewResponse.source_avg_length}
+            renderedText={sandbox.previewResponse.rendered_text}
+            renderedAvgLength={sandbox.previewResponse.rendered_avg_length}
+            skippedReason={sandbox.previewResponse.skipped_reason}
+          />
+        )}
+        {sandbox.previewError && (
+          <p className="text-sm text-red-600">{sandbox.previewError}</p>
+        )}
+        <section>
+          <h3 className="text-lg font-medium mb-2 text-white">已保存配置</h3>
+          <StyleConfigList configs={sandbox.configs} onLoad={(c) => setParams(c.params)} />
+        </section>
+      </section>
     </div>
   );
 }

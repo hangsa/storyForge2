@@ -109,7 +109,7 @@ export default function Stage4Page() {
 
   const counts = useMemo(() => ({
     precheck: precheck.data?.suggestions.length ?? 0,
-    impact: (impact.report?.items ?? []).filter((i) => i.priority === "P0" || i.priority === "P1").length,
+    impact: impact.report ? impact.report.summary.P0 + impact.report.summary.P1 : 0,
     exemption: exemptions.items.length,
     sfLogSuggestions: suggestions.report?.suggestions.length ?? 0,
   }), [precheck.data, impact.report, exemptions.items.length, suggestions.report]);

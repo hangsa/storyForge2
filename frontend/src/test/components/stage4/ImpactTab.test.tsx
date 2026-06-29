@@ -1,15 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import ImpactTab from "../../../components/stage4/ImpactTab";
-import type { ImpactReport } from "../../../hooks/useStage4Impact";
+import type { ImpactReport } from "../../../api/client";
 
 const report: ImpactReport = {
-  items: [
-    { priority: "P0", file: "storyos/conflicts.json", description: "主线冲突升级" },
-    { priority: "P1", file: "characters/林峰.yaml", description: "角色状态变化" },
-    { priority: "P2", file: "chapters/c3.md", description: "节奏调整" },
-    { priority: "P2", file: "chapters/c4.md", description: "新伏笔" },
+  project_id: "proj_1",
+  modified_files: [],
+  entries: [
+    { chapter_number: 1, scene_numbers: [1], priority: "P0", reason: "主线冲突升级", affected_assets: [] },
+    { chapter_number: 1, scene_numbers: [2], priority: "P1", reason: "角色状态变化", affected_assets: [] },
+    { chapter_number: 3, scene_numbers: [1, 2], priority: "P2", reason: "节奏调整", affected_assets: [] },
+    { chapter_number: 4, scene_numbers: [1], priority: "P2", reason: "新伏笔", affected_assets: [] },
   ],
+  summary: { P0: 1, P1: 1, P2: 2 },
 };
 
 describe("ImpactTab", () => {
@@ -22,11 +25,11 @@ describe("ImpactTab", () => {
 
   it("rendersTop3Items", () => {
     render(<ImpactTab report={report} loading={false} error={null} onRun={() => {}} onViewFull={() => {}} />);
-    // Only the first 3 items are shown in the compact view.
-    expect(screen.getByText(/storyos\/conflicts.json/)).toBeInTheDocument();
-    expect(screen.getByText(/characters\/林峰.yaml/)).toBeInTheDocument();
-    expect(screen.getByText(/chapters\/c3.md/)).toBeInTheDocument();
-    expect(screen.queryByText(/chapters\/c4.md/)).not.toBeInTheDocument();
+    // Only the first 3 entries are shown in the compact view.
+    expect(screen.getByText(/ch1:1/)).toBeInTheDocument();
+    expect(screen.getByText(/ch1:2/)).toBeInTheDocument();
+    expect(screen.getByText(/ch3:1,2/)).toBeInTheDocument();
+    expect(screen.queryByText(/ch4:1/)).not.toBeInTheDocument();
   });
 
   it("noReport_runButton_callsOnRun", () => {

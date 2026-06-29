@@ -21,6 +21,7 @@ export const uiStrings = {
     rerun: "重新分析",
     viewFull: "查看完整报告",
     topCount: 3,
+    empty: "暂无影响分析报告",
   },
   exemption: {
     empty: "暂无待审批的创意豁免请求",

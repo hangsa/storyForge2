@@ -1,11 +1,8 @@
 import { useState, useCallback } from "react";
-import api, { ApiError } from "../api/client";
+import api, { ApiError, ImpactReport } from "../api/client";
 
-export interface ImpactReport {
-  items: Array<{ priority: "P0" | "P1" | "P2"; file: string; description: string }>;
-  // Other fields exist; the drawer only reads `items` for badge counts.
-  [key: string]: unknown;
-}
+// Re-export so consumers can keep importing ImpactReport from the hook.
+export type { ImpactReport } from "../api/client";
 
 export interface UseStage4ImpactReturn {
   report: ImpactReport | null;
@@ -25,7 +22,7 @@ export function useStage4Impact(projectId: string): UseStage4ImpactReturn {
     setError(null);
     try {
       const r = await api.analyzeImpact(projectId);
-      setReport(r as ImpactReport);
+      setReport(r);
     } catch (e) {
       setError(e instanceof ApiError || e instanceof Error ? e.message : "分析失败");
     } finally {

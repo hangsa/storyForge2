@@ -1,4 +1,4 @@
-import type { ImpactReport } from "../../hooks/useStage4Impact";
+import type { ImpactReport, ImpactEntry } from "../../api/client";
 import { uiStrings } from "../../uiStrings";
 
 interface ImpactTabProps {
@@ -9,10 +9,19 @@ interface ImpactTabProps {
   onViewFull: () => void;
 }
 
-function countByPriority(items: ImpactReport["items"]) {
-  const counts = { P0: 0, P1: 0, P2: 0 };
-  for (const i of items) counts[i.priority] += 1;
-  return counts;
+interface DisplayItem {
+  priority: "P0" | "P1" | "P2";
+  file: string;
+  description: string;
+}
+
+function toDisplay(e: ImpactEntry): DisplayItem {
+  const scenes = e.scene_numbers.length > 0 ? `:${e.scene_numbers.join(",")}` : "";
+  return {
+    priority: e.priority,
+    file: `ch${e.chapter_number}${scenes}`,
+    description: e.reason,
+  };
 }
 
 export default function ImpactTab({ report, loading, error, onRun, onViewFull }: ImpactTabProps) {
@@ -29,13 +38,13 @@ export default function ImpactTab({ report, loading, error, onRun, onViewFull }:
   if (!report) {
     return (
       <div className="impact-tab">
-        <p>暂无影响分析报告</p>
+        <p>{uiStrings.impact.empty}</p>
         <button type="button" onClick={onRun}>{uiStrings.impact.run}</button>
       </div>
     );
   }
-  const counts = countByPriority(report.items);
-  const top = report.items.slice(0, uiStrings.impact.topCount);
+  const counts = report.summary;
+  const top = report.entries.map(toDisplay).slice(0, uiStrings.impact.topCount);
   return (
     <div className="impact-tab">
       <div className="impact-counts">

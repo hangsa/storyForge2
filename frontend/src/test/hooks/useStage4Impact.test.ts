@@ -8,15 +8,23 @@ vi.mock("../../api/client", () => {
 });
 import api from "../../api/client";
 
+const fakeReport = {
+  project_id: "proj_1",
+  modified_files: ["storyos/conflicts.json"],
+  entries: [
+    { chapter_number: 1, scene_numbers: [1], priority: "P0", reason: "主线冲突升级", affected_assets: ["conflict:1"] },
+  ],
+  summary: { P0: 1, P1: 0, P2: 0 },
+};
+
 describe("useStage4Impact", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("run_succeeds_setsReport", async () => {
-    const report = { items: [{ priority: "P0", file: "x.md", description: "d" }] };
-    vi.mocked(api.analyzeImpact).mockResolvedValueOnce(report);
+    vi.mocked(api.analyzeImpact).mockResolvedValueOnce(fakeReport as any);
     const { result } = renderHook(() => useStage4Impact("proj_1"));
     await act(async () => { await result.current.run(); });
-    expect(result.current.report).toEqual(report);
+    expect(result.current.report).toEqual(fakeReport);
     expect(result.current.error).toBeNull();
   });
 
@@ -29,7 +37,7 @@ describe("useStage4Impact", () => {
   });
 
   it("clear_emptiesReport", async () => {
-    vi.mocked(api.analyzeImpact).mockResolvedValueOnce({ items: [] });
+    vi.mocked(api.analyzeImpact).mockResolvedValueOnce(fakeReport as any);
     const { result } = renderHook(() => useStage4Impact("proj_1"));
     await act(async () => { await result.current.run(); });
     act(() => result.current.clear());

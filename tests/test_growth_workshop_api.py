@@ -55,6 +55,12 @@ def test_adjust_succeeds_with_valid_stages():
     (proj / "characters.json").write_text(json.dumps({"characters": [
         {"id": "c1", "name": "林峰", "growth_curve": {"stages": []}}
     ]}))
+    # Outline has 3 chapters so bound_chapter=3 is within range.
+    (proj / "outline.json").write_text(json.dumps({
+        "chapters": [
+            {"chapter_number": 1}, {"chapter_number": 2}, {"chapter_number": 3},
+        ]
+    }))
     r = client.put(
         f"/api/v1/projects/{pid}/characters/c1/growth/workshop/adjust",
         json={"stages": [
@@ -67,3 +73,31 @@ def test_adjust_succeeds_with_valid_stages():
     assert body["error"] is False
     saved = json.loads((proj / "characters.json").read_text())
     assert saved["characters"][0]["growth_curve"]["stages"][0]["bound_chapter"] == 3
+
+
+def test_invalid_event_type_does_not_500():
+    """Regression: invalid trigger_event_type strings (typo / legacy disk data)
+    must NOT 500. They must reach check_growth_consistency and produce an
+    invalid_event_type warning.
+
+    The bug surfaces when stages are loaded from disk (the /check endpoint
+    uses _coerce_stages directly on the JSON file). Without the fix,
+    GrowthStage.model_validate raises ValidationError → HTTP 500.
+    """
+    import json
+    pid = _create_project("gw_test_invalid_evt")
+    proj = settings.projects_dir / pid
+    # Disk-loaded stage with a typo'd event type (not in 8-class whitelist).
+    (proj / "characters.json").write_text(json.dumps({"characters": [
+        {"id": "c1", "name": "林峰", "growth_curve": {"stages": [
+            {"stage_number": 1, "stage_name": "起点", "bound_chapter": 1,
+             "trigger_event_type": "betrayal_xxperienced"}
+        ]}}
+    ]}))
+    r = client.post(f"/api/v1/projects/{pid}/characters/c1/growth/workshop/check")
+    # Must not 500.
+    assert r.status_code == 200, f"expected 200, got {r.status_code}: {r.text[:500]}"
+    body = r.json()
+    warnings = body.get("detail", {}).get("warnings", [])
+    invalid = [w for w in warnings if w.get("rule_id") == "invalid_event_type"]
+    assert len(invalid) == 1, f"expected 1 invalid_event_type warning, got {warnings}"

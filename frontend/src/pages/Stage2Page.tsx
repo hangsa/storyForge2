@@ -4,8 +4,9 @@ import api, { World, Character, CharacterSet, GrowthEventType } from "../api/cli
 import GlassPanel from "../components/shared/GlassPanel";
 import { setNestedValue } from "../utils/nested";
 import TagEditor from "../components/shared/TagEditor";
+import GrowthWorkshop from "../components/stage2/GrowthWorkshop";
 
-type Tab = "world" | "character";
+type Tab = "world" | "character" | "workshop";
 
 const CHARACTER_TYPES: { value: string; label: string; icon: string }[] = [
   { value: "protagonist", label: "主角", icon: "star" },
@@ -810,6 +811,7 @@ export default function Stage2Page() {
   const tabs: { key: Tab; label: string; icon: string }[] = [
     { key: "world", label: "世界观", icon: "public" },
     { key: "character", label: "角色设定", icon: "person" },
+    { key: "workshop", label: "成长工坊", icon: "timeline" },
   ];
 
   return (
@@ -1279,6 +1281,23 @@ export default function Stage2Page() {
               {/* Selected character detail */}
               {selectedCharacter && <CharacterDetail key={selectedCharacter.id} character={selectedCharacter} onCharacterUpdate={handleCharacterSave} saving={saving} />}
             </>
+          )}
+        </div>
+      )}
+
+      {/* Workshop Tab */}
+      {activeTab === "workshop" && (
+        <div className="space-y-6">
+          {selectedCharacter ? (
+            <GrowthWorkshop projectId={projectId} character={selectedCharacter} />
+          ) : (
+            <div className="text-center py-16">
+              <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
+                timeline
+              </span>
+              <p className="font-body-ui text-system-log mb-2">成长工坊</p>
+              <p className="font-body-ui text-system-log/50 text-sm">请先在「角色设定」标签选择一个角色</p>
+            </div>
           )}
         </div>
       )}

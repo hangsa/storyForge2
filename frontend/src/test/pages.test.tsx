@@ -16,7 +16,7 @@ vi.mock("../api/client", () => ({
     generateWorld: vi.fn(),
     getWorld: vi.fn().mockResolvedValue({}),
     generateCharacter: vi.fn(),
-    getCharacter: vi.fn().mockResolvedValue({}),
+    getCharacter: vi.fn().mockResolvedValue({ characters: [], current: null }),
     generateOutline: vi.fn(),
     getOutline: vi.fn().mockResolvedValue({}),
     getNovelOutline: vi.fn().mockResolvedValue({}),
@@ -27,6 +27,17 @@ vi.mock("../api/client", () => ({
     skipScene: vi.fn(),
     getStage4Progress: vi.fn(),
     getChapterReview: vi.fn().mockResolvedValue({}),
+    growthWorkshopCheck: vi.fn().mockResolvedValue({
+      character_id: "c1",
+      warnings: [],
+      checked_at: "2026-06-29T00:00:00Z",
+    }),
+    growthWorkshopAdjust: vi.fn().mockResolvedValue({ stages: [], warnings: [] }),
+    growthWorkshopDiscuss: vi.fn().mockResolvedValue({
+      answer: "mocked",
+      suggestions: [],
+      skipped_reason: undefined,
+    }),
   },
   ApiError: class extends Error {
     code: string;
@@ -130,6 +141,11 @@ describe("Stage2Page", () => {
       screen.getByRole("button", { name: /角色设定/ }).click();
     });
     expect(screen.getByText("尚未生成角色设定")).toBeInTheDocument();
+  });
+
+  it("renders the 成长工坊 tab in the tab switcher", () => {
+    renderPage(<Stage2Page />);
+    expect(screen.getByText("成长工坊")).toBeInTheDocument();
   });
 });
 

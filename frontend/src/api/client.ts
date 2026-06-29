@@ -520,6 +520,60 @@ export interface SimulationHistoryItem {
   created_at: string;
 }
 
+// --- Stage4 v1.7 additions ---
+
+export interface ExemptionRequest {
+  id: string;
+  scene_id: string;
+  rule_to_break: { layer: string; rule_id: string; rule_description: string; constraint_type: string };
+  creative_intent: string;
+  expected_effect: string;
+  status: "pending" | "approved" | "rejected";
+  requested_by: string;
+  requested_at: string;
+  approved_by: string | null;
+  rejected_reason: string | null;
+  outcome: string | null;
+}
+
+export interface ExemptionAntipattern {
+  rule_id: string;
+  creative_intent_pattern: string;
+  count: number;
+  representative_case: string;
+}
+
+export interface PrecheckSuggestion {
+  event_type: string;
+  location_hint: string;
+  suggested_tag: string;
+  reason: string;
+}
+
+export interface PrecheckResult {
+  precheck_passed: boolean;
+  suggestions: PrecheckSuggestion[];
+  tokens_used: number;
+  skipped_reason?: string;
+}
+
+export interface SFLogSuggestion {
+  type: "missing" | "modified";
+  severity: "warning" | "suggestion";
+  event_type: string;
+  suggested_tag: string;
+  location_hint: string;
+  reason: string;
+}
+
+export interface SFLogDiffReport {
+  original_text: string;
+  modified_text: string;
+  deleted_logs: Array<{ raw_text: string; type: string; id: string }>;
+  suggestions: SFLogSuggestion[];
+  tokens_used: number;
+}
+
 // --- API functions ---
 
 export const api = {
@@ -752,6 +806,27 @@ export const api = {
 
   getSimulationHistory: (projectId: string) =>
     request<SimulationHistoryItem[]>("GET", `/v1/projects/${encodeURIComponent(projectId)}/branches/history`),
+
+  // --- Stage4 exemptions + sf-log + precheck ---
+  listExemptions: (projectId: string, status: "pending" | "approved" | "rejected" = "pending") =>
+    request<ExemptionRequest[]>("GET", `/v1/projects/${projectId}/exemptions?status=${status}`),
+
+  approveExemption: (projectId: string, id: string, approvedBy: string = "user_default") =>
+    request<{ id: string; status: string }>("PUT", `/v1/projects/${projectId}/exemptions/${id}/approve?approved_by=${encodeURIComponent(approvedBy)}`),
+
+  rejectExemption: (projectId: string, id: string, reason: string) =>
+    request<{ id: string; status: string }>("PUT", `/v1/projects/${projectId}/exemptions/${id}/reject?reason=${encodeURIComponent(reason)}`),
+
+  getExemptionAntipatterns: (projectId: string, id: string) =>
+    request<ExemptionAntipattern[]>("GET", `/v1/projects/${projectId}/exemptions/${id}/antipatterns`),
+
+  suggestSFLogChanges: (projectId: string, sceneId: string, original: string, modified: string) =>
+    request<SFLogDiffReport>("POST", `/v1/projects/${projectId}/scenes/${sceneId}/sf-log-suggestions`,
+      { original_text: original, modified_text: modified }),
+
+  applySFLogSuggestions: (projectId: string, sceneId: string, text: string, suggestions: SFLogSuggestion[]) =>
+    request<{ updated_text: string }>("PUT", `/v1/projects/${projectId}/scenes/${sceneId}/sf-logs`,
+      { text, suggestions }),
 };
 
 export { ApiError };

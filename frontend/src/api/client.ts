@@ -73,6 +73,13 @@ export interface ProjectSummary {
   min_words: number;
 }
 
+export interface BulkDeleteResult {
+  deleted: string[];
+  failed: { id: string; error: string }[];
+  deleted_count: number;
+  failed_count: number;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -671,6 +678,13 @@ export const api = {
 
   deleteProject: (projectId: string) =>
     request<{ project_id: string }>("DELETE", `/project/${encodeURIComponent(projectId)}`),
+
+  bulkDeleteProjects: (projectIds: string[]) =>
+    request<BulkDeleteResult>(
+      "POST",
+      "/project/bulk-delete",
+      { project_ids: projectIds },
+    ),
 
   createProject: (data: { intent: string; genre: string; min_words: number; title?: string }) =>
     request<Project>("POST", "/project/create", data),

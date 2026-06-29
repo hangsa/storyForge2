@@ -194,7 +194,8 @@ export default function ProjectListPage() {
           <div
             data-testid="bulk-action-bar"
             className="sticky top-2 z-10 mb-4 bg-surface-container-low border border-primary-container/40
-                       rounded-lg px-4 py-2 flex items-center gap-3 shadow-lg shadow-black/20"
+                       rounded-lg px-4 py-2 flex items-center gap-3 shadow-lg shadow-black/20
+                       animate-[slideDown_150ms_ease-out]"
           >
             <button
               onClick={exitSelectMode}

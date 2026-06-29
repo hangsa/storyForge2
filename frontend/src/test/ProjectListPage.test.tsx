@@ -202,3 +202,84 @@ describe("ProjectListPage multi-select mode", () => {
     expect(screen.queryByRole("button", { name: /选择|取消选择/ })).not.toBeInTheDocument();
   });
 });
+
+describe("ProjectListPage bulk action toolbar", () => {
+  async function enterSelectMode() {
+    await act(async () => {
+      screen.getByRole("button", { name: "多选" }).click();
+    });
+  }
+
+  it("toolbar is hidden when 0 selected", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await enterSelectMode();
+    // With 0 selected, the toolbar still renders (showing '已选 0 项') per the
+    // spec — but the 批量删除 button is disabled.
+    const bulkBtn = screen.getByRole("button", { name: /批量删除/ });
+    expect(bulkBtn).toBeDisabled();
+  });
+
+  it("全选可见 selects every visible project", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await enterSelectMode();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "全选可见" }).click();
+    });
+
+    expect(screen.getByText("已选 3 项")).toBeInTheDocument();
+  });
+
+  it("全选可见 respects the active search filter", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await enterSelectMode();
+
+    const input = screen.getByPlaceholderText("搜索项目名称") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "测试" } });
+    });
+
+    await act(async () => {
+      screen.getByRole("button", { name: "全选可见" }).click();
+    });
+
+    // Only '测试小说' matches, so 1 selected.
+    expect(screen.getByText("已选 1 项")).toBeInTheDocument();
+  });
+
+  it("全不选 clears the selection but keeps select mode active", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await enterSelectMode();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "全选可见" }).click();
+    });
+    expect(screen.getByText("已选 3 项")).toBeInTheDocument();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "全不选" }).click();
+    });
+
+    expect(screen.getByText("已选 0 项")).toBeInTheDocument();
+    // Still in select mode (the toggle button label is still '退出多选').
+    expect(screen.getByRole("button", { name: "退出多选" })).toBeInTheDocument();
+  });
+
+  it("批量删除 button is enabled once ≥1 project is selected", async () => {
+    renderPage();
+    await screen.findByText("诡眼少年");
+    await enterSelectMode();
+
+    await act(async () => {
+      screen.getByRole("button", { name: "全选可见" }).click();
+    });
+
+    const bulkBtn = screen.getByRole("button", { name: /批量删除/ });
+    expect(bulkBtn).not.toBeDisabled();
+    expect(bulkBtn.textContent).toContain("3");
+  });
+});

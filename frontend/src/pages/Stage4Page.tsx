@@ -1,13 +1,27 @@
-import { useState, useCallback, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import api, { ParsedLog, CheckResult, ProgressFile, ChapterReviewData } from "../api/client";
+import api, { ParsedLog, CheckResult, ProgressFile, ChapterReviewData, ExemptionRequest } from "../api/client";
 import { useStage4Writing } from "../hooks/useStage4Writing";
+import { useStage4Precheck } from "../hooks/useStage4Precheck";
+import { useStage4Impact } from "../hooks/useStage4Impact";
+import { useStage4Exemptions } from "../hooks/useStage4Exemptions";
+import { useStage4Suggestions } from "../hooks/useStage4Suggestions";
+import { useToast } from "../hooks/useToast";
 import GlassPanel from "../components/shared/GlassPanel";
 import ChapterProgress from "../components/stage4/ChapterProgress";
 import ReaderOSGauges from "../components/shared/ReaderOSGauges";
 import WritingFormulaTable from "../components/shared/WritingFormulaTable";
+import Stage4Drawer from "../components/stage4/Stage4Drawer";
+import PrecheckTab from "../components/stage4/PrecheckTab";
+import ImpactTab from "../components/stage4/ImpactTab";
+import ExemptionTab from "../components/stage4/ExemptionTab";
+import ExemptionApprovalModal from "../components/stage4/ExemptionApprovalModal";
+import SFLogSuggestionsTab from "../components/stage4/SFLogSuggestionsTab";
+import type { DrawerTab } from "../types/stage4";
+import { APPROVER_DEFAULT } from "../auth";
+import { uiStrings } from "../uiStrings";
 
 const LOG_TYPE_LABELS: Record<string, string> = {
   character_relation_change: "角色关系",
@@ -25,6 +39,7 @@ const LOG_TYPE_LABELS: Record<string, string> = {
 
 export default function Stage4Page() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
   const { state, writeScene, forcePass, skipScene, loadDraft, reset } = useStage4Writing();
 
   const [chapterNum, setChapterNum] = useState(1);
@@ -37,6 +52,15 @@ export default function Stage4Page() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [reviewData, setReviewData] = useState<ChapterReviewData | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [preEditText, setPreEditText] = useState("");
+  const [activeTab, setActiveTab] = useState<DrawerTab | null>(null);
+  const [approvalItem, setApprovalItem] = useState<ExemptionRequest | null>(null);
+
+  const precheck = useStage4Precheck();
+  const impact = useStage4Impact(projectId || "");
+  const exemptions = useStage4Exemptions(projectId || "");
+  const suggestions = useStage4Suggestions(projectId || "", `${chapterNum}_${sceneNum}`);
+  const toast = useToast();
 
   const loadProgress = useCallback(async () => {
     if (!projectId) return;
@@ -64,9 +88,39 @@ export default function Stage4Page() {
     return () => { cancelled = true; };
   }, [projectId, chapterNum]);
 
+  // Mount + scene change: refresh exemptions.
+  useEffect(() => {
+    if (!projectId) return;
+    void exemptions.refresh();
+  }, [projectId, chapterNum, sceneNum, exemptions]);
+
+  // Scene change: clear per-scene data.
+  useEffect(() => {
+    precheck.clear();
+    suggestions.clear();
+  }, [chapterNum, sceneNum, precheck, suggestions]);
+
+  // Auto-open on exemption (action-required only).
+  useEffect(() => {
+    if (exemptions.items.length > 0 && activeTab === null) {
+      setActiveTab("exemption");
+    }
+  }, [exemptions.items.length, activeTab]);
+
+  const counts = useMemo(() => ({
+    precheck: precheck.data?.suggestions.length ?? 0,
+    impact: (impact.report?.items ?? []).filter((i) => i.priority === "P0" || i.priority === "P1").length,
+    exemption: exemptions.items.length,
+    sfLogSuggestions: suggestions.report?.suggestions.length ?? 0,
+  }), [precheck.data, impact.report, exemptions.items.length, suggestions.report]);
+
   const handleWrite = async () => {
     if (!projectId) return;
-    await writeScene(projectId, chapterNum, sceneNum);
+    const result = await writeScene(projectId, chapterNum, sceneNum);
+    if (result?.precheck_result) {
+      precheck.setData(result.precheck_result);
+      toast.show(uiStrings.toasts.precheckReady(result.precheck_result.suggestions.length));
+    }
     loadProgress();
   };
 
@@ -121,6 +175,7 @@ export default function Stage4Page() {
   };
 
   const handleDraftEditStart = () => {
+    setPreEditText(state.draftText || "");
     setDraftEditValue(state.draftText || "");
     setEditingDraft(true);
   };
@@ -137,6 +192,13 @@ export default function Stage4Page() {
       });
       setEditingDraft(false);
       loadDraft(projectId, chapterNum, sceneNum);
+      const newText = draftEditValue;
+      void (async () => {
+        await suggestions.analyze(preEditText, newText, []);
+        if (suggestions.report) {
+          toast.show(uiStrings.toasts.suggestionsReady(suggestions.report.suggestions.length));
+        }
+      })();
     } catch {
       // silent fail
     } finally {
@@ -634,6 +696,73 @@ export default function Stage4Page() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Stage4 Drawer (bottom slide-out panel) + approval modal */}
+      <Stage4Drawer
+        counts={counts}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onCollapse={() => setActiveTab(null)}
+      >
+        {{
+          precheck: <PrecheckTab data={precheck.data} loading={precheck.loading} error={precheck.error} />,
+          impact: (
+            <ImpactTab
+              report={impact.report}
+              loading={impact.loading}
+              error={impact.error}
+              onRun={impact.run}
+              onViewFull={() => {
+                if (projectId) navigate(`/project/${projectId}/impact`);
+              }}
+            />
+          ),
+          exemption: (
+            <ExemptionTab
+              items={exemptions.items}
+              loading={exemptions.loading}
+              error={exemptions.error}
+              onSelect={setApprovalItem}
+              onRefresh={exemptions.refresh}
+            />
+          ),
+          sfLogSuggestions: (
+            <SFLogSuggestionsTab
+              data={suggestions.report}
+              loading={suggestions.loading}
+              error={suggestions.error}
+              onApply={async (selected) => {
+                const currentText = state.draftText || "";
+                const { updated_text } = await suggestions.apply(selected, currentText);
+                await api.updateSceneDraft({
+                  project_id: projectId!,
+                  chapter_number: chapterNum,
+                  scene_number: sceneNum,
+                  draft_text: updated_text,
+                });
+                loadDraft(projectId!, chapterNum, sceneNum);
+                suggestions.clear();
+              }}
+              onDismiss={suggestions.clear}
+            />
+          ),
+        }}
+      </Stage4Drawer>
+      {approvalItem && (
+        <ExemptionApprovalModal
+          item={approvalItem}
+          onFetchAntipatterns={exemptions.getAntipatterns}
+          onApprove={async () => {
+            await exemptions.approve(approvalItem.id, APPROVER_DEFAULT);
+            setApprovalItem(null);
+          }}
+          onReject={async (reason) => {
+            await exemptions.reject(approvalItem.id, reason);
+            setApprovalItem(null);
+          }}
+          onClose={() => setApprovalItem(null)}
+        />
       )}
     </div>
   );

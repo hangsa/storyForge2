@@ -67,6 +67,7 @@ import Stage2Page from "../pages/Stage2Page";
 import Stage3Page from "../pages/Stage3Page";
 import Stage4Page from "../pages/Stage4Page";
 import Stage3Layout from "../components/layout/Stage3Layout";
+import { ToastProvider } from "../hooks/useToast";
 
 function renderWithRouter(initialRoute: string, ui: React.ReactNode) {
   return render(
@@ -86,11 +87,13 @@ function renderWithRouter(initialRoute: string, ui: React.ReactNode) {
 function renderPage(ui: React.ReactNode, path = "/project/test-project/stage1") {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/project/:projectId/stage1" element={ui} />
-        <Route path="/project/:projectId/stage2" element={ui} />
-        <Route path="/project/:projectId/stage4" element={ui} />
-      </Routes>
+      <ToastProvider>
+        <Routes>
+          <Route path="/project/:projectId/stage1" element={ui} />
+          <Route path="/project/:projectId/stage2" element={ui} />
+          <Route path="/project/:projectId/stage4" element={ui} />
+        </Routes>
+      </ToastProvider>
     </MemoryRouter>,
   );
 }

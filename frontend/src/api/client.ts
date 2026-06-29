@@ -274,6 +274,7 @@ export interface WriteSceneResponse {
   persistent_failures?: CheckResult[];
   compatibility_note?: string;
   user_options?: string[];
+  precheck_result?: PrecheckResult;
 }
 
 export interface ProjectStatus {

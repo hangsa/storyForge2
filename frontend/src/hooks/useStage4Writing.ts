@@ -72,7 +72,7 @@ interface UseStage4WritingReturn {
     projectId: string,
     chapterNumber: number,
     sceneNumber: number
-  ) => Promise<void>;
+  ) => Promise<WriteSceneResponse | null>;
   forcePass: (projectId: string, sceneNumber: number) => Promise<void>;
   skipScene: (projectId: string, sceneNumber: number) => Promise<void>;
   loadDraft: (projectId: string, chapterNumber: number, sceneNumber: number) => Promise<void>;
@@ -140,12 +140,14 @@ export function useStage4Writing(): UseStage4WritingReturn {
           circuitBreakerTriggered: resp.status === "circuit_breaker_triggered",
           compatibilityNote: resp.compatibility_note || null,
         }));
+        return resp;
       } catch (e) {
         setState((prev) => ({
           ...prev,
           status: "idle",
           error: e instanceof ApiError ? e.message : "写作失败",
         }));
+        return null;
       }
     },
     []

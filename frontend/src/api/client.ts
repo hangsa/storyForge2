@@ -154,6 +154,42 @@ export interface GrowthCurve {
   stages: GrowthStage[];
 }
 
+export type ConsistencyRuleId =
+  | "out_of_range"
+  | "invalid_event_type"
+  | "missing_event"
+  | "low_misaligned"
+  | "tight_spacing";
+
+export interface ConsistencyWarning {
+  rule_id: ConsistencyRuleId;
+  severity: "error" | "warning";
+  stage_index: number | null;
+  chapter_number: number | null;
+  message: string;
+  suggestion: string | null;
+}
+
+export interface WorkshopCheckResult {
+  character_id: string;
+  warnings: ConsistencyWarning[];
+  checked_at: string;
+}
+
+export interface WorkshopAdjustRequest {
+  stages: GrowthStage[];
+}
+
+export interface WorkshopDiscussRequest {
+  question: string;
+}
+
+export interface WorkshopDiscussResponse {
+  answer: string;
+  suggestions: string[];
+  skipped_reason?: string;
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -622,6 +658,26 @@ export const api = {
 
   updateCharacter: (projectId: string, characterData: CharacterSet) =>
     request<void>("PUT", "/stage2/character", { project_id: projectId, characters: characterData.characters }),
+
+  growthWorkshopCheck: (projectId: string, characterId: string) =>
+    request<WorkshopCheckResult>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/characters/${encodeURIComponent(characterId)}/growth/workshop/check`,
+    ),
+
+  growthWorkshopAdjust: (projectId: string, characterId: string, req: WorkshopAdjustRequest) =>
+    request<{ stages: GrowthStage[]; warnings: ConsistencyWarning[] }>(
+      "PUT",
+      `/v1/projects/${encodeURIComponent(projectId)}/characters/${encodeURIComponent(characterId)}/growth/workshop/adjust`,
+      req,
+    ),
+
+  growthWorkshopDiscuss: (projectId: string, characterId: string, req: WorkshopDiscussRequest) =>
+    request<WorkshopDiscussResponse>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/characters/${encodeURIComponent(characterId)}/growth/workshop/discuss`,
+      req,
+    ),
 
   generateOutline: (projectId: string, chapterNumber?: number) =>
     request<Outline>("POST", "/stage3/generate", { project_id: projectId, chapter_number: chapterNumber ?? 1 }),

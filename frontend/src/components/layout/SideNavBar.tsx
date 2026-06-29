@@ -11,26 +11,9 @@ interface StageItem {
 }
 
 const STAGES: StageItem[] = [
-  {
-    key: "STAGE1",
-    label: "概念讨论",
-    icon: "lightbulb",
-    subItems: [
-      { key: "STAGE1", label: "快速生成", icon: "bolt", path: "stage1" },
-      { key: "STAGE1_CANVAS", label: "创意画布", icon: "account_tree", path: "stage1/canvas" },
-    ],
-  },
+  { key: "STAGE1", label: "概念讨论", icon: "lightbulb" },
   { key: "STAGE2", label: "世界观+角色", icon: "public" },
-  {
-    key: "STAGE3",
-    label: "情节头脑风暴",
-    icon: "account_tree",
-    subItems: [
-      { key: "STAGE3", label: "全书大纲", icon: "menu_book", path: "stage3" },
-      { key: "STAGE3_OUTLINE", label: "大纲视图", icon: "list_alt", path: "stage3/outline" },
-      { key: "STAGE3_BRANCHES", label: "分支模拟", icon: "call_split", path: "stage3/branches" },
-    ],
-  },
+  { key: "STAGE3", label: "情节头脑风暴", icon: "account_tree" },
   { key: "STAGE4", label: "写作中心", icon: "edit_note" },
   { key: "STAGE5", label: "全书诊断", icon: "clinical_notes" },
   { key: "STAGE6", label: "导出中心", icon: "download" },

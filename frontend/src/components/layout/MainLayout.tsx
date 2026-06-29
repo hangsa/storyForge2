@@ -16,9 +16,9 @@ const STAGE_FROM_PATH: Record<string, string> = {
   review: "REVIEW",
   impact: "IMPACT",
   storyos: "STORYOS",
-  "stage1/canvas": "STAGE1_CANVAS",
-  "stage3/outline": "STAGE3_OUTLINE",
-  "stage3/branches": "STAGE3_BRANCHES",
+  "stage1/canvas": "STAGE1",
+  "stage3/outline": "STAGE3",
+  "stage3/branches": "STAGE3",
 };
 
 const STAGE_TO_PATH: Record<string, string> = {
@@ -33,9 +33,6 @@ const STAGE_TO_PATH: Record<string, string> = {
   REVIEW: "review",
   IMPACT: "impact",
   STORYOS: "storyos",
-  STAGE1_CANVAS: "stage1/canvas",
-  STAGE3_OUTLINE: "stage3/outline",
-  STAGE3_BRANCHES: "stage3/branches",
 };
 
 export default function MainLayout() {

@@ -102,3 +102,7 @@ agent_mapping:
     growth_discuss:            { tier: tier_1, model: default }
     growth_discussion:         { tier: tier_1, model: default }
     arc_analysis:              { tier: tier_2, model: default }
+
+  style_sandbox:
+    preview:
+      tier: tier_3

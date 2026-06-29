@@ -7,8 +7,12 @@ analysis.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
-from backend.style_engine.sandbox_models import SandboxParams
+import yaml
+
+from backend.config import settings
+from backend.style_engine.sandbox_models import PreviewResponse, SandboxParams
 from backend.style_engine.style_extractor import _split_sentences
 
 
@@ -46,4 +50,62 @@ def _build_params_description(params: SandboxParams) -> str:
     )
 
 
-# Preview rendering itself is implemented in Task 3 (depends on prompt YAML).
+_PROMPT_PATH = Path(settings.prompts_dir) / "style_engine" / "sandbox_preview.yaml"
+
+
+def _load_prompt() -> dict:
+    with open(_PROMPT_PATH, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+async def render_preview(
+    *,
+    model_router,
+    source_text: str,
+    params: SandboxParams,
+    genre: str,
+) -> PreviewResponse:
+    """Render a style preview via Tier 3 LLM. Returns skipped response on failure."""
+    source_avg = compute_avg_length(source_text)
+    try:
+        prompt = _load_prompt()
+        user_prompt = prompt["user_prompt_template"].format(
+            genre=genre,
+            params_description=_build_params_description(params),
+            source_text=source_text,
+        )
+        result = await model_router.execute(
+            agent_name="style_sandbox",
+            task_name="preview",
+            messages=[
+                {"role": "system", "content": prompt["system_prompt"]},
+                {"role": "user", "content": user_prompt},
+            ],
+            json_mode=False,
+            temperature=prompt.get("temperature", 0.6),
+            max_tokens=prompt.get("max_tokens", 1024),
+        )
+        content = (result.get("content") or "").strip()
+        usage = result.get("usage", {})
+        tokens_used = int(usage.get("input", 0)) + int(usage.get("output", 0))
+        if not content:
+            return PreviewResponse(
+                rendered_text="", source_avg_length=source_avg, rendered_avg_length=0.0,
+                tokens_used=tokens_used, skipped_reason="no LLM response",
+            )
+        # Strip stray markdown fences if present
+        if content.startswith("```"):
+            content = re.sub(r"^```[a-z]*\n?", "", content)
+            content = re.sub(r"\n?```$", "", content)
+        rendered_avg = compute_avg_length(content)
+        return PreviewResponse(
+            rendered_text=content,
+            source_avg_length=source_avg,
+            rendered_avg_length=rendered_avg,
+            tokens_used=tokens_used,
+        )
+    except Exception as exc:
+        return PreviewResponse(
+            rendered_text="", source_avg_length=source_avg, rendered_avg_length=0.0,
+            tokens_used=0, skipped_reason=f"llm error: {type(exc).__name__}: {exc}",
+        )

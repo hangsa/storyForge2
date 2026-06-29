@@ -1,0 +1,21 @@
+name: style_sandbox_preview
+provider: anthropic
+model: claude-haiku
+temperature: 0.6
+max_tokens: 1024
+system_prompt: |
+  你是网文风格改写助手。根据作者给出的风格参数，将原文改写成对应风格。
+  严格保留原文情节含义与角色，只调整句式、节奏、对白比例、描写密度。
+  只输出改写后的文本，不要任何解释或 markdown 包装。
+user_prompt_template: |
+  体裁：{genre}
+
+  风格参数：
+  {params_description}
+
+  原文：
+  {source_text}
+
+  请按上述参数改写：
+output_format:
+  type: text

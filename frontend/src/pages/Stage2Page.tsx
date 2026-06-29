@@ -815,11 +815,11 @@ export default function Stage2Page() {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto py-8 space-y-6">
+    <div className="max-w-5xl mx-auto py-5 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-primary-container">世界观与角色</h1>
-          <p className="font-body-ui text-system-log mt-1">
+          <h1 className="text-3xl font-bold text-primary-container">世界观与角色</h1>
+          <p className="font-body-ui text-system-log mt-0.5 text-sm">
             构建故事世界的基础规则与核心角色设定
           </p>
         </div>
@@ -847,7 +847,7 @@ export default function Stage2Page() {
           <button
             key={key}
             onClick={() => { setActiveTab(key); setEditingField(null); setEditValue(""); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-body-ui text-sm transition-colors ${
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-md font-body-ui text-sm transition-colors ${
               activeTab === key
                 ? "bg-primary-container text-surface-container-low"
                 : "text-system-log hover:text-primary"
@@ -861,9 +861,9 @@ export default function Stage2Page() {
 
       {/* World Tab */}
       {activeTab === "world" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {!world ? (
-            <div className="text-center py-16">
+            <div className="text-center py-8">
               <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
                 public
               </span>
@@ -1190,9 +1190,9 @@ export default function Stage2Page() {
 
       {/* Character Tab */}
       {activeTab === "character" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {characters.length === 0 ? (
-            <div className="text-center py-16">
+            <div className="text-center py-8">
               <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
                 person
               </span>
@@ -1287,11 +1287,11 @@ export default function Stage2Page() {
 
       {/* Workshop Tab */}
       {activeTab === "workshop" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {selectedCharacter ? (
             <GrowthWorkshop projectId={projectId} character={selectedCharacter} />
           ) : (
-            <div className="text-center py-16">
+            <div className="text-center py-8">
               <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
                 timeline
               </span>

@@ -61,7 +61,7 @@ export default function Stage4Drawer({ counts, activeTab, onTabChange, onCollaps
       className="stage4-drawer"
       style={{
         position: "fixed",
-        bottom: 0, left: 0, right: 0,
+        bottom: 0, left: 280, right: 0,
         height: isExpanded ? DRAWER_EXPANDED_HEIGHT_PX : DRAWER_PEEK_HEIGHT_PX,
         transition: `height ${DRAWER_SLIDE_DURATION_MS}ms`,
         zIndex: 50,

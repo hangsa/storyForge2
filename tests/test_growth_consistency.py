@@ -101,3 +101,49 @@ def test_missing_event_passes_when_binder_matches():
     )
     missing = [w for w in result.warnings if w.rule_id == "missing_event"]
     assert missing == []
+
+
+def test_low_misaligned_triggers_when_low_has_no_high_conflict():
+    stages = [
+        GrowthStage(stage_number=1, stage_name="低谷", bound_chapter=12,
+                    trigger_event_type=GrowthEventType.IRREVERSIBLE_LOSS),
+    ]
+    conflicts = [
+        {"created_chapter": 12, "intensity": "low"},
+        {"created_chapter": 12, "intensity": "medium"},
+    ]
+    result = check_growth_consistency(
+        character_id="c1", stages=stages, total_chapters=20,
+        conflicts=conflicts, outline_chapters=[],
+    )
+    misaligned = [w for w in result.warnings if w.rule_id == "low_misaligned"]
+    assert len(misaligned) == 1
+    assert misaligned[0].severity == "warning"
+
+
+def test_low_misaligned_passes_with_critical_conflict():
+    stages = [
+        GrowthStage(stage_number=1, stage_name="低谷", bound_chapter=12,
+                    trigger_event_type=GrowthEventType.IRREVERSIBLE_LOSS),
+    ]
+    conflicts = [{"created_chapter": 12, "intensity": "critical"}]
+    result = check_growth_consistency(
+        character_id="c1", stages=stages, total_chapters=20,
+        conflicts=conflicts, outline_chapters=[],
+    )
+    misaligned = [w for w in result.warnings if w.rule_id == "low_misaligned"]
+    assert misaligned == []
+
+
+def test_low_misaligned_ignores_non_low_stages():
+    stages = [
+        GrowthStage(stage_number=1, stage_name="起点", bound_chapter=12,
+                    trigger_event_type=GrowthEventType.BETRAYAL_EXPERIENCED),
+    ]
+    conflicts = []
+    result = check_growth_consistency(
+        character_id="c1", stages=stages, total_chapters=20,
+        conflicts=conflicts, outline_chapters=[],
+    )
+    misaligned = [w for w in result.warnings if w.rule_id == "low_misaligned"]
+    assert misaligned == []

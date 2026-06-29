@@ -6,6 +6,7 @@ from backend.models.character import GrowthStage
 
 
 _VALID_EVENT_TYPES = set(TRIGGER_KEYWORDS.keys())
+_HIGH_INTENSITIES = {"high", "critical"}
 
 
 def _event_type_value(stage: GrowthStage) -> str:
@@ -69,6 +70,22 @@ def check_growth_consistency(
                 stage_index=idx, chapter_number=stage.bound_chapter,
                 message=f"第 {stage.bound_chapter} 章 outline 中无匹配的 {_event_type_value(stage)} 事件",
                 suggestion="在大纲该章补一个对应 registry_create 日志",
+            ))
+
+    for idx, stage in enumerate(stages):
+        if stage.stage_name != "低谷" or stage.bound_chapter is None:
+            continue
+        has_high = any(
+            c.get("created_chapter") == stage.bound_chapter
+            and c.get("intensity") in _HIGH_INTENSITIES
+            for c in conflicts
+        )
+        if not has_high:
+            warnings.append(ConsistencyWarning(
+                rule_id="low_misaligned", severity="warning",
+                stage_index=idx, chapter_number=stage.bound_chapter,
+                message=f"第 {stage.bound_chapter} 章低谷阶段 outline 中无 high/critical 强度冲突",
+                suggestion="在大纲该章添加一次 critical/high 强度冲突升级",
             ))
 
     return WorkshopCheckResult(

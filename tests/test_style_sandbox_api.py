@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from unittest.mock import patch, AsyncMock, MagicMock
 
@@ -11,7 +12,10 @@ client = TestClient(app)
 
 
 def _ensure_project(pid: str):
-    (Path(settings.projects_dir) / pid).mkdir(parents=True, exist_ok=True)
+    proj = Path(settings.projects_dir) / pid
+    if proj.exists():
+        shutil.rmtree(proj)
+    proj.mkdir(parents=True)
 
 
 def test_preview_returns_422_for_short_text():

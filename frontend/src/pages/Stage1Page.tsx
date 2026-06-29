@@ -92,7 +92,7 @@ export default function Stage1Page() {
   const canAdvance = concept && storyDna;
 
   return (
-    <div className="space-y-6 pt-6">
+    <div className="space-y-4">
       {/* Action row — generate / advance buttons. Title + tabs live in Stage1Layout. */}
       <div className="flex items-center justify-end gap-3">
         <button
@@ -281,7 +281,7 @@ export default function Stage1Page() {
       )}
 
       {!concept && !loading && (
-        <div className="text-center py-16">
+        <div className="text-center py-8">
           <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
             lightbulb
           </span>

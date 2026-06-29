@@ -129,7 +129,7 @@ export default function CreativeCanvasPage() {
   };
 
   return (
-    <div className="h-[calc(100vh-240px)] flex flex-col pt-4">
+    <div className="h-[calc(100vh-180px)] flex flex-col pt-1">
       {/* Action row — commit button + committed-at badge.
           Tab + title live in Stage1Layout. */}
       <div className="flex items-center justify-end gap-3 mb-2">

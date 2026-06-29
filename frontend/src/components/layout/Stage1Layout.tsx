@@ -24,39 +24,35 @@ export default function Stage1Layout() {
   ];
 
   return (
-    <>
+    <div className="max-w-5xl mx-auto px-6 py-5 space-y-3">
       {/* Page title — matches STAGE2 header placement */}
-      <div className="max-w-5xl mx-auto pt-8 px-6">
-        <h1 className="text-4xl font-bold text-primary-container">概念讨论</h1>
-        <p className="font-body-ui text-system-log mt-1">
+      <div>
+        <h1 className="text-3xl font-bold text-primary-container">概念讨论</h1>
+        <p className="font-body-ui text-system-log mt-0.5 text-sm">
           生成故事概念与核心矛盾，构建小说的叙事基础
         </p>
       </div>
 
       {/* Tab switcher — pill / segmented-control style (mirrors STAGE2) */}
-      <div className="max-w-5xl mx-auto px-6 mt-6">
-        <div className="flex gap-1 bg-surface-container rounded-lg p-1 w-fit">
-          {tabs.map(({ key, label, icon }) => (
-            <button
-              key={key}
-              onClick={() => goTo(key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md font-body-ui text-sm transition-colors ${
-                active === key
-                  ? "bg-primary-container text-surface-container-low"
-                  : "text-system-log hover:text-primary"
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">{icon}</span>
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="flex gap-1 bg-surface-container rounded-lg p-1 w-fit">
+        {tabs.map(({ key, label, icon }) => (
+          <button
+            key={key}
+            onClick={() => goTo(key)}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-md font-body-ui text-sm transition-colors ${
+              active === key
+                ? "bg-primary-container text-surface-container-low"
+                : "text-system-log hover:text-primary"
+            }`}
+          >
+            <span className="material-symbols-outlined text-lg">{icon}</span>
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Child page content */}
-      <div className="max-w-5xl mx-auto px-6 pb-8">
-        <Outlet />
-      </div>
-    </>
+      <Outlet />
+    </div>
   );
 }

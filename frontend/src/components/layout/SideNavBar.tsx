@@ -38,7 +38,7 @@ const STAGES: StageItem[] = [
 
 export default function SideNavBar({ currentStage, onNavigate }: SideNavBarProps) {
   return (
-    <nav className="fixed left-0 top-16 w-[280px] h-[calc(100vh-64px)] bg-surface-container-low border-r border-outline-variant flex flex-col py-4">
+    <nav className="fixed left-0 top-16 w-[280px] h-[calc(100vh-64px)] bg-surface-container-low border-r border-outline-variant flex flex-col py-4 overflow-y-auto">
       {/* Project section */}
       <div className="px-4 mb-4">
         <div className="font-label-mono text-system-log uppercase tracking-wider mb-2">

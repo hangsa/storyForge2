@@ -65,19 +65,26 @@ export default function Stage4Page() {
   const suggestions = useStage4Suggestions(projectId || "", `${chapterNum}_${sceneNum}`);
   const toast = useToast();
 
-  const loadProgress = useCallback(async () => {
+  const loadProgress = useCallback(async (opts: { syncChapter?: boolean } = {}) => {
     if (!projectId) return;
     try {
       const p = await api.getStage4Progress(projectId);
       setProgress(p);
-      if (p.current_chapter) setChapterNum(p.current_chapter);
+      // Only sync chapterNum to progress.current_chapter on the initial mount
+      // and after explicit chapter advancement. Otherwise we override the
+      // user's manual chapter selection on every writeScene/forcePass/skip
+      // refresh — which made the 本章场景 bar appear stuck (because the user
+      // got silently sent back to the chapter indicated by current_chapter).
+      if (opts.syncChapter && p.current_chapter) {
+        setChapterNum(p.current_chapter);
+      }
     } catch {
       // silent fail on progress load
     }
   }, [projectId]);
 
   useEffect(() => {
-    loadProgress();
+    loadProgress({ syncChapter: true });
   }, [loadProgress]);
 
   useEffect(() => {
@@ -235,7 +242,8 @@ export default function Stage4Page() {
     setAdvancing(true);
     try {
       await api.advanceChapter(projectId);
-      loadProgress();
+      // Advance flips current_chapter to the new chapter, so sync chapterNum.
+      loadProgress({ syncChapter: true });
     } catch {
       // silent fail
     } finally {

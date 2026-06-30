@@ -320,18 +320,6 @@ export default function Stage4Page() {
       {/* Controls bar */}
       <div className="flex items-center gap-4 p-4 bg-surface-container rounded-lg flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="font-label-mono text-system-log text-xs">章节</span>
-          <input
-            type="number"
-            min={1}
-            max={totalChapters}
-            value={chapterNum}
-            onChange={(e) => handleChapterNumChange(Number(e.target.value))}
-            className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
-                       font-body-ui text-primary text-sm focus:outline-none focus:border-primary-container"
-          />
-        </div>
-        <div className="flex items-center gap-2">
           <span className="font-label-mono text-system-log text-xs">场景</span>
           <input
             type="number"
@@ -339,6 +327,18 @@ export default function Stage4Page() {
             max={totalScenes || 1}
             value={sceneNum}
             onChange={(e) => handleSceneChange(Number(e.target.value))}
+            className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                       font-body-ui text-primary text-sm focus:outline-none focus:border-primary-container"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-label-mono text-system-log text-xs">章节</span>
+          <input
+            type="number"
+            min={1}
+            max={totalChapters}
+            value={chapterNum}
+            onChange={(e) => handleChapterNumChange(Number(e.target.value))}
             className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
                        font-body-ui text-primary text-sm focus:outline-none focus:border-primary-container"
           />

@@ -21,7 +21,7 @@ export default function GrowthStageEditor({ stages, onChange }: Props) {
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-left text-gray-600">
+        <tr className="text-left text-on-surface-variant border-b border-outline-variant">
           <th>阶段</th>
           <th>章节</th>
           <th>触发类型</th>

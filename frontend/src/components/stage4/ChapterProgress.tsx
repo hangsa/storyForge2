@@ -29,12 +29,28 @@ export default function ChapterProgress({
   const trackedScenes = currentChapterProgress?.scenes.length || 0;
   const plannedScenes = currentChapterProgress?.total_scenes || trackedScenes;
   const chapterDone = plannedScenes > 0 && completedScenes >= plannedScenes;
+
+  // Overall progress is computed from scenes (not chapters), so the bar
+  // reflects writing progress the moment a scene is force-passed or completed
+  // — not only when the user clicks "进入第 N 章 →" to flip the chapter
+  // status to "completed". Otherwise the bar sits at 0% until chapter
+  // advancement, even when most scenes are done.
+  const totalScenesPlanned = chapters.reduce(
+    (sum, ch) => sum + (ch.total_scenes || ch.scenes?.length || 0),
+    0,
+  );
+  const totalScenesDone = chapters.reduce(
+    (sum, ch) =>
+      sum +
+      (ch.scenes?.filter(
+        (s) => s.status === "completed" || s.status === "force_passed",
+      ).length || 0),
+    0,
+  );
   const overallPercent =
-    totalChapters > 1
-      ? Math.round((chapters.filter((ch) => ch.status === "completed").length / totalChapters) * 100)
-      : chapterDone
-        ? 100
-        : 0;
+    totalScenesPlanned > 0
+      ? Math.round((totalScenesDone / totalScenesPlanned) * 100)
+      : 0;
 
   return (
     <div className="space-y-3">

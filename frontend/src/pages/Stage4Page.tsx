@@ -23,6 +23,41 @@ import type { DrawerTab } from "../types/stage4";
 import { APPROVER_DEFAULT } from "../auth";
 import { uiStrings } from "../uiStrings";
 
+function computeDefaultChapterScene(p: ProgressFile): { chapter: number; scene: number } {
+  const chapters = [...(p.chapters || [])].sort(
+    (a, b) => b.chapter_number - a.chapter_number,
+  );
+  for (const ch of chapters) {
+    const planned = ch.total_scenes || ch.scenes?.length || 0;
+    if (planned <= 0) continue;
+    const doneSet = new Set(
+      (ch.scenes || [])
+        .filter(
+          (s) =>
+            s.status === "completed" ||
+            s.status === "force_passed" ||
+            s.status === "skipped",
+        )
+        .map((s) => s.scene_number),
+    );
+    const nextScene = Array.from({ length: planned }, (_, i) => i + 1).find(
+      (n) => !doneSet.has(n),
+    );
+    if (nextScene !== undefined) {
+      return { chapter: ch.chapter_number, scene: nextScene };
+    }
+  }
+  const lastChapter = chapters[0];
+  if (lastChapter) {
+    const planned = lastChapter.total_scenes || lastChapter.scenes?.length || 0;
+    return {
+      chapter: lastChapter.chapter_number,
+      scene: planned > 0 ? planned : 1,
+    };
+  }
+  return { chapter: p.current_chapter || 1, scene: 1 };
+}
+
 const LOG_TYPE_LABELS: Record<string, string> = {
   character_relation_change: "角色关系",
   character_emotion: "角色情感",
@@ -70,18 +105,26 @@ export default function Stage4Page() {
     try {
       const p = await api.getStage4Progress(projectId);
       setProgress(p);
-      // Only sync chapterNum to progress.current_chapter on the initial mount
-      // and after explicit chapter advancement. Otherwise we override the
-      // user's manual chapter selection on every writeScene/forcePass/skip
-      // refresh — which made the 本章场景 bar appear stuck (because the user
-      // got silently sent back to the chapter indicated by current_chapter).
-      if (opts.syncChapter && p.current_chapter) {
-        setChapterNum(p.current_chapter);
+      // Only sync chapterNum/sceneNum on the initial mount and after explicit
+      // chapter advancement. Otherwise we override the user's manual chapter
+      // selection on every writeScene/forcePass/skip refresh — which made the
+      // 本章场景 bar appear stuck (because the user got silently sent back to
+      // the chapter indicated by current_chapter).
+      //
+      // On sync, jump to the latest chapter that still has unfinished work,
+      // and within it the next scene to write. If everything is done, fall
+      // back to the last chapter's last scene. This matches what users
+      // expect after a refresh: "show me where I left off".
+      if (opts.syncChapter) {
+        const { chapter, scene } = computeDefaultChapterScene(p);
+        setChapterNum(chapter);
+        setSceneNum(scene);
+        await loadDraft(projectId, chapter, scene);
       }
     } catch {
       // silent fail on progress load
     }
-  }, [projectId]);
+  }, [projectId, loadDraft]);
 
   useEffect(() => {
     loadProgress({ syncChapter: true });

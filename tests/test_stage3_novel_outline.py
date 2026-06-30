@@ -158,19 +158,25 @@ class TestNovelOutlineEndpoints:
 
 
 class TestStateMachinePreconditions:
-    """The new STAGE3 preconditions must require novel_outline.json."""
+    """STAGE3 preconditions check STAGE2's outputs (world + characters), not
+    STAGE3's own output (novel_outline). The novel outline is generated INSIDE
+    Stage 3 — requiring it to exist before entering would be a chicken-and-egg
+    block on the UI's "进入情节头脑风暴" button.
+    """
 
-    def test_stage3_preconditions_include_novel_outline(self):
+    def test_stage3_preconditions_exclude_novel_outline(self):
         checks = PRECONDITIONS[Stage.STAGE3]
         filenames = [c[0] for c in checks]
-        assert "novel_outline.json" in filenames
+        assert "novel_outline.json" not in filenames, (
+            "novel_outline.json is STAGE3's output, not a precondition for entering it"
+        )
 
-    def test_state_machine_blocks_stage3_without_novel_outline(self, projects_dir):
-        """Project at STAGE2 with all STAGE3 prereqs EXCEPT novel_outline.json
-        must fail to advance to STAGE3 — the new precondition triggers."""
+    def test_state_machine_allows_stage3_without_novel_outline(self, projects_dir):
+        """Project at STAGE2 with world + characters but no novel_outline.json
+        must be allowed to advance to STAGE3 — the user is entering STAGE3
+        to generate the outline."""
         sm = StageStateMachine(projects_dir)
         proj_id = "proj_test"
-        # Project at STAGE2 with STAGE3 prereqs (world, characters) but no novel_outline
         _write_json(projects_dir, proj_id, "project.json", {
             "id": proj_id, "title": "t", "genre": "g", "min_words": 4000,
             "current_stage": "STAGE2", "stage_history": [], "created_at": "2025-01-01T00:00:00",
@@ -181,15 +187,30 @@ class TestStateMachinePreconditions:
         _write_json(projects_dir, proj_id, "world.json", {"era": "异世界"})
 
         result = sm.transition_check(proj_id, Stage.STAGE3)
-        assert not result.allowed
-        # Failure must mention novel_outline.json — either in missing_files or failed_checks
-        all_messages = " ".join(result.missing_files + result.failed_checks)
-        assert "novel_outline.json" in all_messages, (
-            f"Expected novel_outline.json to be flagged. missing={result.missing_files} "
-            f"failed={result.failed_checks}"
+        assert result.allowed, (
+            f"STAGE2→STAGE3 should pass with world + characters. "
+            f"missing={result.missing_files} failed={result.failed_checks}"
         )
 
+    def test_state_machine_blocks_stage3_without_world_or_characters(self, projects_dir):
+        """Without world.json or characters.json, the user genuinely hasn't
+        completed STAGE2 and must not be allowed into STAGE3."""
+        sm = StageStateMachine(projects_dir)
+        proj_id = "proj_test"
+        _write_json(projects_dir, proj_id, "project.json", {
+            "id": proj_id, "title": "t", "genre": "g", "min_words": 4000,
+            "current_stage": "STAGE2", "stage_history": [], "created_at": "2025-01-01T00:00:00",
+        })
+        # Intentionally no characters.json / world.json
+
+        result = sm.transition_check(proj_id, Stage.STAGE3)
+        assert not result.allowed
+        assert "characters.json" in result.missing_files
+        assert "world.json" in result.missing_files
+
     def test_state_machine_allows_stage3_with_novel_outline(self, projects_dir):
+        """Having novel_outline.json is fine — it just means the user already
+        generated it (e.g., is returning after a session restart)."""
         sm = StageStateMachine(projects_dir)
         proj_id = "proj_test"
         _write_json(projects_dir, proj_id, "project.json", {

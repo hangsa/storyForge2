@@ -439,15 +439,12 @@ def _advance_to_stage6(client, proj_id: str):
     })
     assert resp.status_code == 200, f"STAGE1→STAGE2 failed: {resp.json()}"
 
-    # STAGE2 → STAGE3: needs characters.json + world.json + novel_outline.json
+    # STAGE2 → STAGE3: needs characters.json + world.json (novel_outline is
+    # generated inside STAGE3, not a precondition for entering it)
     _write_prereq_file(proj_dir, "characters.json", {
         "characters": [{"id": "char_001", "name": "测试角色"}],
     })
     _write_prereq_file(proj_dir, "world.json", {"era": "古代"})
-    _write_prereq_file(proj_dir, "novel_outline.json", {
-        "core_conflict_theme": "测试冲突",
-        "volumes": [{"name": "v1", "chapter_range": "1-10", "summary": "x", "key_events": []}],
-    })
     resp = client.post("/api/conductor/advance", json={
         "project_id": proj_id, "target_stage": "STAGE3",
     })

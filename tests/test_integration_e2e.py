@@ -324,7 +324,8 @@ class TestMultiChapterE2E:
         })
         assert resp.status_code == 200
 
-        # ── STAGE2 → STAGE3: Provide characters + world + novel_outline ──
+        # ── STAGE2 → STAGE3: Provide characters + world (novel_outline is
+        # generated inside STAGE3, not a precondition for entering it) ──
         self._write_json(f"{proj_dir}/characters.json", {
             "characters": [
                 {"id": "char_001", "name": "林峰", "character_type": "protagonist"},
@@ -334,10 +335,6 @@ class TestMultiChapterE2E:
         self._write_json(f"{proj_dir}/world.json", {
             "era": "近未来", "geography": "废土城市",
             "power_system": {"name": "灵力", "ceilings": ["第九境"], "core_rules": []},
-        })
-        self._write_json(f"{proj_dir}/novel_outline.json", {
-            "core_conflict_theme": "力量与孤独",
-            "volumes": [{"name": "崛起", "chapter_range": "1-50", "summary": "主角觉醒", "key_events": []}],
         })
         resp = client.post("/api/conductor/advance", json={
             "project_id": proj_id, "target_stage": "STAGE3",

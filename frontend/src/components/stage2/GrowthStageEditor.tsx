@@ -36,6 +36,7 @@ export default function GrowthStageEditor({ stages, onChange }: Props) {
                 value={s.stage_name}
                 onChange={(e) => update(i, { stage_name: e.target.value })}
                 aria-label={`阶段 ${i + 1} 名称`}
+                className="bg-surface-container-low text-on-surface border border-outline-variant rounded px-1"
               >
                 {STAGE_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -43,7 +44,7 @@ export default function GrowthStageEditor({ stages, onChange }: Props) {
             <td>
               <input
                 type="number"
-                className="w-20 border rounded px-1"
+                className="w-20 bg-surface-container-low text-on-surface border border-outline-variant rounded px-1"
                 value={s.bound_chapter ?? ""}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -57,6 +58,7 @@ export default function GrowthStageEditor({ stages, onChange }: Props) {
                 value={s.trigger_event_type}
                 onChange={(e) => update(i, { trigger_event_type: e.target.value as GrowthEventType })}
                 aria-label={`阶段 ${i + 1} 触发类型`}
+                className="bg-surface-container-low text-on-surface border border-outline-variant rounded px-1"
               >
                 {TRIGGER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -64,7 +66,7 @@ export default function GrowthStageEditor({ stages, onChange }: Props) {
             <td>
               <input
                 type="text"
-                className="w-full border rounded px-1"
+                className="w-full bg-surface-container-low text-on-surface border border-outline-variant rounded px-1"
                 value={s.character_change ?? ""}
                 onChange={(e) => update(i, { character_change: e.target.value })}
                 aria-label={`阶段 ${i + 1} 描述`}

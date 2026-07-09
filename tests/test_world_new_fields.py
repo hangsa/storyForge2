@@ -42,10 +42,6 @@ def test_world_round_trips_through_model_dump():
 
 
 def test_world_yaml_prompt_references_both_fields():
-    pytest.skip(
-        "Deferred: depends on Task 2 of v1.8 plan which adds these strings to "
-        "backend/prompts/world_generation.yaml. Will be unblocked once Task 2 lands."
-    )
     from pathlib import Path
     prompt_path = Path(__file__).resolve().parents[1] / "backend" / "prompts" / "world_generation.yaml"
     text = prompt_path.read_text(encoding="utf-8")

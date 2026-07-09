@@ -52,18 +52,43 @@ export interface UseSidebarReturn {
   toggle: () => void;
 }
 
+function clamp(w: number): number {
+  return Math.max(MIN, Math.min(MAX, w));
+}
+
 export function useSidebar(): UseSidebarReturn {
   const initial = loadFromStorage();
   const [collapsed, setCollapsed] = useState<boolean>(initial.collapsed);
   const [width, setWidth] = useState<number>(initial.width);
+
+  const setWidthLive = useCallback((w: number) => {
+    setWidth(clamp(w));
+  }, []);
+
+  const commitWidth = useCallback(
+    (w: number) => {
+      const next = clamp(w);
+      setWidth(next);
+      saveToStorage({ collapsed, width: next });
+    },
+    [collapsed]
+  );
+
+  const toggle = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      saveToStorage({ collapsed: next, width });
+      return next;
+    });
+  }, [width]);
 
   return {
     collapsed,
     width,
     MIN,
     MAX,
-    setWidthLive: () => {},
-    commitWidth: () => {},
-    toggle: () => {},
+    setWidthLive,
+    commitWidth,
+    toggle,
   };
 }

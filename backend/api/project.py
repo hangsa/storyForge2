@@ -1,3 +1,4 @@
+import re as _re
 import uuid
 from datetime import datetime
 
@@ -152,6 +153,72 @@ async def bulk_delete_projects(data: dict):
             "failed": failed,
             "deleted_count": len(deleted),
             "failed_count": len(failed),
+        },
+    }
+
+
+_KNOWN_STAGES = ("INIT", "STAGE1", "STAGE2", "STAGE3", "STAGE4", "STAGE5", "STAGE6", "COMPLETED")
+_SF_LOG_COMMENT_RE = _re.compile(r"<!--.*?-->", _re.DOTALL)
+
+
+@router.get("/stats")
+async def get_project_stats():
+    projects_dir = settings.projects_dir
+    fm_local = FileManager(projects_dir)
+    stage_distribution = {s: 0 for s in _KNOWN_STAGES}
+    total_books = 0
+    total_chapters = 0
+    total_words = 0
+
+    if projects_dir.exists():
+        for proj_dir in projects_dir.iterdir():
+            if not proj_dir.is_dir():
+                continue
+            proj_file = proj_dir / "project.json"
+            if not proj_file.exists():
+                continue
+
+            try:
+                project_data = fm_local.read_json(proj_dir.name, "project.json")
+            except Exception:
+                continue
+            if not project_data:
+                continue
+
+            total_books += 1
+            stage = project_data.get("current_stage", "INIT")
+            if stage in stage_distribution:
+                stage_distribution[stage] += 1
+
+            outline = fm_local.read_json(proj_dir.name, "outline.json")
+            if isinstance(outline, dict):
+                chapters = outline.get("chapters", [])
+                if isinstance(chapters, list):
+                    total_chapters += len(chapters)
+
+            chapters_dir = proj_dir / "chapters"
+            if chapters_dir.exists() and chapters_dir.is_dir():
+                for draft_file in chapters_dir.iterdir():
+                    if not draft_file.is_file():
+                        continue
+                    if not draft_file.name.endswith(".md"):
+                        continue
+                    try:
+                        text = draft_file.read_text(encoding="utf-8")
+                    except Exception:
+                        continue
+                    visible = _SF_LOG_COMMENT_RE.sub("", text)
+                    total_words += len(visible)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": {
+            "total_books": total_books,
+            "total_chapters": total_chapters,
+            "total_words": total_words,
+            "stage_distribution": stage_distribution,
         },
     }
 

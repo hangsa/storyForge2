@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
-from backend.conductor.state_machine import StageStateMachine, Stage
+from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 
 router = APIRouter(prefix="/api/stage6", tags=["stage6"])
 
@@ -143,7 +143,7 @@ async def export_novel(data: dict):
 
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
-    if current not in (Stage.STAGE6, Stage.COMPLETED):
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE6):
         raise HTTPException(
             status_code=400,
             detail={

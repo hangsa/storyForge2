@@ -1,5 +1,5 @@
 const API_BASE = "/api";
-const TIMEOUT_MS = 300_000;
+const TIMEOUT_MS = 600_000;
 
 class ApiError extends Error {
   code: string;
@@ -71,6 +71,13 @@ export interface ProjectSummary {
   current_stage: string;
   created_at: string;
   min_words: number;
+}
+
+export interface BulkDeleteResult {
+  deleted: string[];
+  failed: { id: string; error: string }[];
+  deleted_count: number;
+  failed_count: number;
 }
 
 export interface Project {
@@ -154,6 +161,42 @@ export interface GrowthCurve {
   stages: GrowthStage[];
 }
 
+export type ConsistencyRuleId =
+  | "out_of_range"
+  | "invalid_event_type"
+  | "missing_event"
+  | "low_misaligned"
+  | "tight_spacing";
+
+export interface ConsistencyWarning {
+  rule_id: ConsistencyRuleId;
+  severity: "error" | "warning";
+  stage_index: number | null;
+  chapter_number: number | null;
+  message: string;
+  suggestion: string | null;
+}
+
+export interface WorkshopCheckResult {
+  character_id: string;
+  warnings: ConsistencyWarning[];
+  checked_at: string;
+}
+
+export interface WorkshopAdjustRequest {
+  stages: GrowthStage[];
+}
+
+export interface WorkshopDiscussRequest {
+  question: string;
+}
+
+export interface WorkshopDiscussResponse {
+  answer: string;
+  suggestions: string[];
+  skipped_reason?: string;
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -209,6 +252,35 @@ export interface Outline {
   }>;
 }
 
+export interface VolumeDivision {
+  name: string;
+  chapter_range: string;
+  summary: string;
+  key_events: string[];
+}
+
+export interface GrowthMilestone {
+  label: string;
+  target_chapter_range: string;
+  description: string;
+}
+
+export interface KeyPlotPoint {
+  title: string;
+  must_appear_in_volume: string;
+  description: string;
+  trigger_chapter_hint: string;
+}
+
+export interface NovelOutline {
+  core_conflict_theme: string;
+  volumes: VolumeDivision[];
+  mc_growth_arc: GrowthMilestone[];
+  key_plot_points: KeyPlotPoint[];
+  generated_at: string;
+  updated_at: string;
+}
+
 export interface ParsedLog {
   type: string;
   params: Record<string, string>;
@@ -245,6 +317,7 @@ export interface WriteSceneResponse {
   persistent_failures?: CheckResult[];
   compatibility_note?: string;
   user_options?: string[];
+  precheck_result?: PrecheckResult;
 }
 
 export interface ProjectStatus {
@@ -389,11 +462,229 @@ export interface RollbackResult {
   baseline_updated: boolean;
 }
 
+export type BranchStatus = "active" | "dimmed";
+
+// --- v1.7 Creative Canvas types ---
+
+export interface CanvasNode {
+  id: string;
+  depth: number;
+  parent_id: string | null;
+  content: string;
+  novelty_score: number;
+  trope_tags: string[];
+  saturation_warning: string | null;
+  children_ids: string[];
+  is_expanded: boolean;
+  branch_status: BranchStatus;
+  mutation_context?: {
+    operation: string;
+    source_trope_id: string;
+    core_premise: string;
+    core_conflict: string;
+    novelty_hook: string;
+    self_consistency_check: string;
+  } | null;
+}
+
+export interface CanvasEdge {
+  from: string;
+  to: string;
+}
+
+export interface CanvasStateData {
+  schema_version?: number;
+  root_node_id: string | null;
+  nodes: Record<string, CanvasNode>;
+  edges: CanvasEdge[];
+  selected_path: string[];
+  branch_choices?: Record<string, string>;
+  created_at?: string;
+  updated_at?: string;
+  committed_at?: string;
+  committed_concept_ref?: string;
+}
+
+export interface CanvasNodeDict {
+  [nodeId: string]: CanvasNode;
+}
+
+export interface NoveltyScoreDetail {
+  total: number;
+  market_saturation_score: number;
+  trope_similarity_score: number;
+  contradiction_depth_score: number;
+  discussion_potential_score: number;
+  grade: string;
+}
+
+export interface CanvasExpandResponse {
+  nodes: CanvasNodeDict;
+  scores: Record<string, NoveltyScoreDetail>;
+  suggestion: string;
+}
+
+export interface CanvasInitRequest {
+  premise: string;
+}
+
+export interface CanvasSelectResponse {
+  selected_path: string[];
+  evaluation: string;
+}
+
+// --- v1.7 Branch Simulation types ---
+
+export interface LLMInferenceItem {
+  content: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface BranchSimulationReport {
+  branch_point_description: string;
+  affected_chapter_range: [number, number];
+  affected_characters: string[];
+  affected_foreshadowings: string[];
+  growth_curve_shifts: Record<string, number>;
+  reader_metrics_projection: Record<string, string>;
+  tension_curve_projection: LLMInferenceItem | null;
+  foreshadowing_risk_assessment: LLMInferenceItem | null;
+  alternative_suggestions: LLMInferenceItem | null;
+  created_at: string;
+  tokens_used_total: number;
+}
+
+export interface SimulationRequest {
+  description: string;
+}
+
+export interface SimulationHistoryItem {
+  id: string;
+  description: string;
+  created_at: string;
+}
+
+// --- Stage4 v1.7 additions ---
+
+export interface ExemptionRequest {
+  id: string;
+  scene_id: string;
+  rule_to_break: { layer: string; rule_id: string; rule_description: string; constraint_type: string };
+  creative_intent: string;
+  expected_effect: string;
+  status: "pending" | "approved" | "rejected";
+  requested_by: string;
+  requested_at: string;
+  approved_by: string | null;
+  rejected_reason: string | null;
+  outcome: string | null;
+}
+
+export interface ExemptionAntipattern {
+  rule_id: string;
+  creative_intent_pattern: string;
+  count: number;
+  representative_case: string;
+}
+
+export interface PrecheckSuggestion {
+  event_type: string;
+  location_hint: string;
+  suggested_tag: string;
+  reason: string;
+}
+
+export interface PrecheckResult {
+  precheck_passed: boolean;
+  suggestions: PrecheckSuggestion[];
+  tokens_used: number;
+  skipped_reason?: string;
+}
+
+export interface SFLogSuggestion {
+  type: "missing" | "modified";
+  severity: "warning" | "suggestion";
+  event_type: string;
+  suggested_tag: string;
+  location_hint: string;
+  reason: string;
+}
+
+export interface SFLogDiffReport {
+  original_text: string;
+  modified_text: string;
+  deleted_logs: Array<{ raw_text: string; type: string; id: string }>;
+  suggestions: SFLogSuggestion[];
+  tokens_used: number;
+}
+
+// --- Style Sandbox types ---
+
+export interface SandboxSentenceParams {
+  avg_length_range: [number, number];
+  short_sentence_ratio: number;
+  paragraph_length_range: [number, number];
+}
+export interface SandboxDialogueParams {
+  ratio: number;
+  max_consecutive_lines: number;
+}
+export interface SandboxRhythmParams {
+  pacing_bpm: number;
+  scene_change_frequency: number;
+}
+export interface SandboxDensityParams {
+  description_ratio: number;
+  action_ratio: number;
+}
+export interface SandboxSatisfactionParams {
+  satisfaction_beat_count: number;
+  suspense_hook_required: boolean;
+}
+export interface SandboxParams {
+  sentence: SandboxSentenceParams;
+  dialogue: SandboxDialogueParams;
+  rhythm: SandboxRhythmParams;
+  density: SandboxDensityParams;
+  satisfaction: SandboxSatisfactionParams;
+}
+export interface PreviewResponse {
+  rendered_text: string;
+  source_avg_length: number;
+  rendered_avg_length: number;
+  tokens_used: number;
+  skipped_reason?: string;
+}
+export interface SavedStyleConfig {
+  name: string;
+  path: string;
+  params: SandboxParams;
+  created_at: string;
+}
+
+export const DEFAULT_SANDBOX_PARAMS: SandboxParams = {
+  sentence: { avg_length_range: [15, 45], short_sentence_ratio: 0.3, paragraph_length_range: [80, 200] },
+  dialogue: { ratio: 0.35, max_consecutive_lines: 6 },
+  rhythm: { pacing_bpm: 300, scene_change_frequency: 0.5 },
+  density: { description_ratio: 0.4, action_ratio: 0.3 },
+  satisfaction: { satisfaction_beat_count: 5, suspense_hook_required: true },
+};
+
 // --- API functions ---
 
 export const api = {
   listProjects: () =>
     request<ProjectSummary[]>("GET", "/project/list"),
+
+  deleteProject: (projectId: string) =>
+    request<{ project_id: string }>("DELETE", `/project/${encodeURIComponent(projectId)}`),
+
+  bulkDeleteProjects: (projectIds: string[]) =>
+    request<BulkDeleteResult>(
+      "POST",
+      "/project/bulk-delete",
+      { project_ids: projectIds },
+    ),
 
   createProject: (data: { intent: string; genre: string; min_words: number; title?: string }) =>
     request<Project>("POST", "/project/create", data),
@@ -434,8 +725,54 @@ export const api = {
   updateCharacter: (projectId: string, characterData: CharacterSet) =>
     request<void>("PUT", "/stage2/character", { project_id: projectId, characters: characterData.characters }),
 
-  generateOutline: (projectId: string) =>
-    request<Outline>("POST", "/stage3/generate", { project_id: projectId }),
+  growthWorkshopCheck: (projectId: string, characterId: string) =>
+    request<WorkshopCheckResult>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/characters/${encodeURIComponent(characterId)}/growth/workshop/check`,
+    ),
+
+  growthWorkshopAdjust: (projectId: string, characterId: string, req: WorkshopAdjustRequest) =>
+    request<{ stages: GrowthStage[]; warnings: ConsistencyWarning[] }>(
+      "PUT",
+      `/v1/projects/${encodeURIComponent(projectId)}/characters/${encodeURIComponent(characterId)}/growth/workshop/adjust`,
+      req,
+    ),
+
+  growthWorkshopDiscuss: (projectId: string, characterId: string, req: WorkshopDiscussRequest) =>
+    request<WorkshopDiscussResponse>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/characters/${encodeURIComponent(characterId)}/growth/workshop/discuss`,
+      req,
+    ),
+
+  styleSandboxPreview: (
+    projectId: string,
+    req: { source_text: string; params: SandboxParams; genre?: string }
+  ) =>
+    request<PreviewResponse>(
+      "POST",
+      `/v1/projects/${projectId}/style/sandbox/preview`,
+      req,
+    ),
+  styleSandboxSave: (projectId: string, req: { name: string; params: SandboxParams }) =>
+    request<{ name: string; path: string }>(
+      "POST",
+      `/v1/projects/${projectId}/style/sandbox/save`,
+      req,
+    ),
+  styleSandboxListConfigs: (projectId: string) =>
+    request<{ configs: SavedStyleConfig[] }>(
+      "GET",
+      `/v1/projects/${projectId}/style/sandbox/configs`,
+    ),
+  styleSandboxLoadConfig: (projectId: string, name: string) =>
+    request<SavedStyleConfig>(
+      "GET",
+      `/v1/projects/${projectId}/style/sandbox/configs/${encodeURIComponent(name)}`,
+    ),
+
+  generateOutline: (projectId: string, chapterNumber?: number) =>
+    request<Outline>("POST", "/stage3/generate", { project_id: projectId, chapter_number: chapterNumber ?? 1 }),
 
   getOutline: (projectId: string) =>
     request<Outline>("GET", `/stage3/outline?project_id=${encodeURIComponent(projectId)}`),
@@ -443,11 +780,28 @@ export const api = {
   updateOutline: (projectId: string, outline: Outline) =>
     request<void>("PUT", "/stage3/outline", { project_id: projectId, outline }),
 
+  getNovelOutline: (projectId: string) =>
+    request<NovelOutline>("GET", `/stage3/novel-outline?project_id=${encodeURIComponent(projectId)}`),
+
+  generateNovelOutline: (projectId: string) =>
+    request<NovelOutline>("POST", "/stage3/generate-novel-outline", { project_id: projectId }),
+
+  updateNovelOutline: (projectId: string, novelOutline: NovelOutline) =>
+    request<NovelOutline>("PUT", "/stage3/novel-outline", { project_id: projectId, novel_outline: novelOutline }),
+
   getScenePlan: (projectId: string, sceneNum: number) =>
     request<ScenePlan>("GET", `/stage4/scene-plan/${sceneNum}?project_id=${projectId}`),
 
-  writeScene: (data: { project_id: string; chapter_number: number; scene_number: number }) =>
-    request<WriteSceneResponse>("POST", "/stage4/write-scene", data),
+  writeScene: (data: {
+    project_id: string;
+    chapter_number: number;
+    scene_number: number;
+    custom_style_config?: SandboxParams | null;
+  }) =>
+    request<WriteSceneResponse>("POST", "/stage4/write-scene", {
+      ...data,
+      custom_style_config: data.custom_style_config ?? null,
+    }),
 
   forcePass: (data: { project_id: string; scene_number: number }) =>
     request<void>("POST", "/stage4/force-pass", data),
@@ -533,6 +887,103 @@ export const api = {
     request<RollbackResult>("POST", "/conductor/execute-rollback", {
       project_id: projectId, action,
     }),
+
+  // --- v1.7 Creative Canvas ---
+  getCanvasState: (projectId: string) =>
+    request<CanvasStateData>("GET", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/state`),
+
+  initCanvas: (projectId: string, premise: string) =>
+    request<CanvasStateData>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/init`, { premise }),
+
+  expandNode: (projectId: string, nodeId: string) =>
+    request<CanvasExpandResponse>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/expand`, { node_id: nodeId }),
+
+  evaluateNode: (projectId: string, nodeId: string) =>
+    request<NoveltyScoreDetail>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/evaluate`, { node_id: nodeId }),
+
+  selectPath: (projectId: string, pathNodeIds: string[]) =>
+    request<CanvasSelectResponse>("POST", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/select`, { path_node_ids: pathNodeIds }),
+
+  resetCanvas: (projectId: string) =>
+    request<{
+      root_node_id: string | null;
+      nodes: Record<string, never>;
+      edges: never[];
+      selected_path: never[];
+    }>("DELETE", `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/state`),
+
+  getMutationSuggestion: (projectId: string, nodeId: string) =>
+    request<{ recommendation: string }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/mutate`,
+      { node_id: nodeId }
+    ),
+
+  applyMutation: (projectId: string, nodeId: string, operation: string) =>
+    request<{
+      new_node: CanvasNode;
+      mutation_result: {
+        operation: string;
+        source_trope_id: string;
+        core_premise: string;
+        core_conflict: string;
+        novelty_hook: string;
+        self_consistency_check: string;
+        tokens_used: number;
+      };
+      dimmed_count: number;
+    }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/apply-mutation`,
+      { node_id: nodeId, operation }
+    ),
+
+  chooseBranch: (projectId: string, parentNodeId: string, chosenChildId: string) =>
+    request<{
+      selected_path: string[];
+      branch_choices: Record<string, string>;
+      chosen_node: CanvasNode;
+      dimmed_count: number;
+    }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/choose-branch`,
+      { parent_node_id: parentNodeId, chosen_child_id: chosenChildId }
+    ),
+
+  commitCanvas: (projectId: string) =>
+    request<ConceptResponse & { committed_at: string }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/commit`,
+      {}
+    ),
+
+  // --- v1.7 Branch Simulation ---
+  runSimulation: (projectId: string, description: string) =>
+    request<BranchSimulationReport>("POST", `/v1/projects/${encodeURIComponent(projectId)}/branches/simulate`, { description }),
+
+  getSimulationHistory: (projectId: string) =>
+    request<SimulationHistoryItem[]>("GET", `/v1/projects/${encodeURIComponent(projectId)}/branches/history`),
+
+  // --- Stage4 exemptions + sf-log + precheck ---
+  listExemptions: (projectId: string, status: "pending" | "approved" | "rejected" = "pending") =>
+    request<ExemptionRequest[]>("GET", `/v1/projects/${projectId}/exemptions?status=${status}`),
+
+  approveExemption: (projectId: string, id: string, approvedBy: string = "user_default") =>
+    request<{ id: string; status: string }>("PUT", `/v1/projects/${projectId}/exemptions/${id}/approve?approved_by=${encodeURIComponent(approvedBy)}`),
+
+  rejectExemption: (projectId: string, id: string, reason: string) =>
+    request<{ id: string; status: string }>("PUT", `/v1/projects/${projectId}/exemptions/${id}/reject?reason=${encodeURIComponent(reason)}`),
+
+  getExemptionAntipatterns: (projectId: string, id: string) =>
+    request<ExemptionAntipattern[]>("GET", `/v1/projects/${projectId}/exemptions/${id}/antipatterns`),
+
+  suggestSFLogChanges: (projectId: string, sceneId: string, original: string, modified: string) =>
+    request<SFLogDiffReport>("POST", `/v1/projects/${projectId}/scenes/${sceneId}/sf-log-suggestions`,
+      { original_text: original, modified_text: modified }),
+
+  applySFLogSuggestions: (projectId: string, sceneId: string, text: string, suggestions: SFLogSuggestion[]) =>
+    request<{ updated_text: string }>("PUT", `/v1/projects/${projectId}/scenes/${sceneId}/sf-logs`,
+      { text, suggestions }),
 };
 
 export { ApiError };

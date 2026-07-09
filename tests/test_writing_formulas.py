@@ -108,7 +108,7 @@ class TestWritingFormulaAnalyzer:
 
     def test_check_compliance_emo_beats_passed_when_zero(self, analyzer):
         """LLM unavailable -> emotional beat metrics default passed."""
-        stats = WritingFormulaStats()  # all zeros
+        stats = WritingFormulaStats()  # all zeros, llm_available=False
         results = analyzer.check_compliance(stats, SAMPLE_FORMULA)
         emo = next(r for r in results if r.metric == "emotional_beat_density")
         assert emo.passed is True
@@ -116,6 +116,60 @@ class TestWritingFormulaAnalyzer:
         assert sat.passed is True
         sus = next(r for r in results if r.metric == "suspense_hook_present")
         assert sus.passed is True
+
+    def test_check_compliance_llm_available_density_zero_fails(self, analyzer):
+        """BUG REGRESSION: LLM was available and returned density=0
+        (chapter really has no emotional beats). The check must FAIL,
+        not silently auto-pass.
+        """
+        stats = WritingFormulaStats(
+            llm_available=True,
+            emotional_beat_density=0.0,
+        )
+        results = analyzer.check_compliance(stats, SAMPLE_FORMULA)
+        emo = next(r for r in results if r.metric == "emotional_beat_density")
+        assert emo.passed is False, (
+            "When LLM is available and reports density=0, the check must fail. "
+            "Auto-passing here would silently mask chapters with no emotional beats."
+        )
+
+    def test_check_compliance_llm_available_satisfaction_zero_fails(self, analyzer):
+        """BUG REGRESSION: LLM available + count=0 must fail (real zero, not LLM down)."""
+        stats = WritingFormulaStats(
+            llm_available=True,
+            satisfaction_beat_count=0,
+        )
+        results = analyzer.check_compliance(stats, SAMPLE_FORMULA)
+        sat = next(r for r in results if r.metric == "satisfaction_beat_count")
+        assert sat.passed is False
+
+    def test_check_compliance_llm_available_hook_absent_fails(self, analyzer):
+        """BUG REGRESSION: LLM available + no hook must fail."""
+        stats = WritingFormulaStats(
+            llm_available=True,
+            suspense_hook_present=False,
+        )
+        results = analyzer.check_compliance(stats, SAMPLE_FORMULA)
+        sus = next(r for r in results if r.metric == "suspense_hook_present")
+        assert sus.passed is False
+
+    def test_check_compliance_all_pass_with_llm_available(self, analyzer):
+        """All metrics pass when LLM is available and all values meet thresholds."""
+        stats = WritingFormulaStats(
+            avg_sentence_length=25.0,
+            short_ratio=0.35,
+            long_ratio=0.15,
+            dialogue_ratio=0.30,
+            max_consecutive_dialogue=4,
+            max_para_sentences=3,
+            max_para_words=200,
+            llm_available=True,
+            emotional_beat_density=2.0,
+            satisfaction_beat_count=4,
+            suspense_hook_present=True,
+        )
+        results = analyzer.check_compliance(stats, SAMPLE_FORMULA)
+        assert all(r.passed for r in results)
 
     def test_check_compliance_empty_formula(self, analyzer):
         stats = WritingFormulaStats()
@@ -133,11 +187,12 @@ class TestWritingFormulaAnalyzer:
     # --- LLM-assisted tests (sync fallback behavior only) ---
 
     def test_analyze_sync_sets_llm_fields_to_zero(self, analyzer, sample_text):
-        """Sync analysis should leave LLM fields at default (0/False)."""
+        """Sync analysis should leave LLM fields at default (0/False/llm_unavailable)."""
         stats = analyzer.analyze_sync([sample_text])
         assert stats.emotional_beat_density == 0.0
         assert stats.satisfaction_beat_count == 0
         assert stats.suspense_hook_present is False
+        assert stats.llm_available is False  # no LLM attempt in sync path
 
     @pytest.mark.asyncio
     async def test_analyze_llm_falls_back_gracefully(self, analyzer, sample_text):

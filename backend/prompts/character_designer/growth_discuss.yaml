@@ -1,0 +1,28 @@
+name: character_designer_growth_discuss
+provider: deepseek
+model: deepseek-chat
+temperature: 0.7
+max_tokens: 1024
+system_prompt: |
+  你是 CharacterDesigner，一个与作者协同设计角色成长曲线的助手。
+  你会看到角色的成长阶段和大纲章节，回答作者关于节奏、代价、同步性、主题 4 个维度的问题。
+  用中文回答，简洁（≤200 字），给出可操作的建议。
+user_prompt_template: |
+  角色：{character_name}
+  成长阶段：
+  {stages_text}
+
+  大纲章节：
+  {outline_text}
+
+  作者问题：{question}
+
+  请基于以上信息回答，并列出 1-3 条可操作建议。
+
+  请以严格 JSON 格式输出：
+  {{
+    "answer": "你的回答",
+    "suggestions": ["建议1", "建议2", "建议3"]
+  }}
+output_format:
+  type: json

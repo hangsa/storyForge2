@@ -76,6 +76,15 @@ export default {
         body: ["Inter", "sans-serif"],
         mono: ['"JetBrains Mono"', "monospace"],
       },
+      keyframes: {
+        slideDown: {
+          "0%": { transform: "translateY(-8px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+      },
+      animation: {
+        slideDown: "slideDown 150ms ease-out",
+      },
     },
   },
   plugins: [],

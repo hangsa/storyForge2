@@ -52,3 +52,10 @@ class FileManager:
 
     def project_exists(self, project_id: str) -> bool:
         return self.project_path(project_id, "project.json").exists()
+
+    def delete_project(self, project_id: str) -> bool:
+        project_dir = self.projects_dir / project_id
+        if not project_dir.exists():
+            return False
+        shutil.rmtree(project_dir)
+        return True

@@ -4,8 +4,9 @@ import api, { World, Character, CharacterSet, GrowthEventType } from "../api/cli
 import GlassPanel from "../components/shared/GlassPanel";
 import { setNestedValue } from "../utils/nested";
 import TagEditor from "../components/shared/TagEditor";
+import GrowthWorkshop from "../components/stage2/GrowthWorkshop";
 
-type Tab = "world" | "character";
+type Tab = "world" | "character" | "workshop";
 
 const CHARACTER_TYPES: { value: string; label: string; icon: string }[] = [
   { value: "protagonist", label: "主角", icon: "star" },
@@ -810,14 +811,15 @@ export default function Stage2Page() {
   const tabs: { key: Tab; label: string; icon: string }[] = [
     { key: "world", label: "世界观", icon: "public" },
     { key: "character", label: "角色设定", icon: "person" },
+    { key: "workshop", label: "成长工坊", icon: "timeline" },
   ];
 
   return (
-    <div className="max-w-5xl mx-auto py-8 space-y-6">
+    <div className="max-w-5xl mx-auto py-5 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-primary-container">世界观与角色</h1>
-          <p className="font-body-ui text-system-log mt-1">
+          <h1 className="text-3xl font-bold text-primary-container">世界观与角色</h1>
+          <p className="font-body-ui text-system-log mt-0.5 text-sm">
             构建故事世界的基础规则与核心角色设定
           </p>
         </div>
@@ -845,7 +847,7 @@ export default function Stage2Page() {
           <button
             key={key}
             onClick={() => { setActiveTab(key); setEditingField(null); setEditValue(""); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-body-ui text-sm transition-colors ${
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-md font-body-ui text-sm transition-colors ${
               activeTab === key
                 ? "bg-primary-container text-surface-container-low"
                 : "text-system-log hover:text-primary"
@@ -859,9 +861,9 @@ export default function Stage2Page() {
 
       {/* World Tab */}
       {activeTab === "world" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {!world ? (
-            <div className="text-center py-16">
+            <div className="text-center py-8">
               <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
                 public
               </span>
@@ -1188,9 +1190,9 @@ export default function Stage2Page() {
 
       {/* Character Tab */}
       {activeTab === "character" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {characters.length === 0 ? (
-            <div className="text-center py-16">
+            <div className="text-center py-8">
               <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
                 person
               </span>
@@ -1279,6 +1281,23 @@ export default function Stage2Page() {
               {/* Selected character detail */}
               {selectedCharacter && <CharacterDetail key={selectedCharacter.id} character={selectedCharacter} onCharacterUpdate={handleCharacterSave} saving={saving} />}
             </>
+          )}
+        </div>
+      )}
+
+      {/* Workshop Tab */}
+      {activeTab === "workshop" && (
+        <div className="space-y-4">
+          {selectedCharacter ? (
+            <GrowthWorkshop projectId={projectId} character={selectedCharacter} />
+          ) : (
+            <div className="text-center py-8">
+              <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
+                timeline
+              </span>
+              <p className="font-body-ui text-system-log mb-2">成长工坊</p>
+              <p className="font-body-ui text-system-log/50 text-sm">请先在「角色设定」标签选择一个角色</p>
+            </div>
           )}
         </div>
       )}

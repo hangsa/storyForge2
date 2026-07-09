@@ -439,7 +439,8 @@ def _advance_to_stage6(client, proj_id: str):
     })
     assert resp.status_code == 200, f"STAGE1→STAGE2 failed: {resp.json()}"
 
-    # STAGE2 → STAGE3: needs characters.json + world.json
+    # STAGE2 → STAGE3: needs characters.json + world.json (novel_outline is
+    # generated inside STAGE3, not a precondition for entering it)
     _write_prereq_file(proj_dir, "characters.json", {
         "characters": [{"id": "char_001", "name": "测试角色"}],
     })

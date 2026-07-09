@@ -28,6 +28,18 @@ from backend.models.progress import (
 from backend.models.checkpoint import (
     Checkpoint, RecoveryState, SceneDraft,
 )
+from backend.models.creative_os import (
+    IdeaCategory, Idea,
+    Trope,
+    MutationOp, MutationResult,
+    ContradictionTemplate, ContradictionExpansion,
+    NoveltyScore,
+    WhatIfNode,
+    FusionAnalysis,
+)
+from backend.models.branch_simulation import (
+    LLMInference, BranchSimulationReport,
+)
 
 __all__ = [
     "Project", "Concept", "StoryDNA", "ConceptAndDNA", "InitialIntent", "StageTransition",
@@ -42,4 +54,12 @@ __all__ = [
     "WritingContext", "Stage1To3Context", "NarrativeRole", "BeatType",
     "ProgressFile", "ChapterProgress", "SceneProgress", "CircuitBreakerEvent",
     "Checkpoint", "RecoveryState", "SceneDraft",
+    "IdeaCategory", "Idea",
+    "Trope",
+    "MutationOp", "MutationResult",
+    "ContradictionTemplate", "ContradictionExpansion",
+    "NoveltyScore",
+    "WhatIfNode",
+    "FusionAnalysis",
+    "LLMInference", "BranchSimulationReport",
 ]

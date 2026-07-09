@@ -1,13 +1,19 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import api, { Outline, ScenePlan } from "../api/client";
+import api, { Outline, NovelOutline, ScenePlan } from "../api/client";
 import GlassPanel from "../components/shared/GlassPanel";
+import NovelOutlinePanel from "../components/stage3/NovelOutlinePanel";
 
-export default function Stage3Page() {
+interface Stage3PageProps {
+  initialTab?: "novel-outline" | "outline";
+}
+
+export default function Stage3Page({ initialTab = "novel-outline" }: Stage3PageProps) {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
 
   const [outline, setOutline] = useState<Outline | null>(null);
+  const [novelOutline, setNovelOutline] = useState<NovelOutline | null>(null);
   const [loading, setLoading] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,6 +21,11 @@ export default function Stage3Page() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<"novel-outline" | "outline">(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Load existing outline on mount
   useEffect(() => {
@@ -22,21 +33,29 @@ export default function Stage3Page() {
     api.getOutline(projectId)
       .then((data) => { if (data && Object.keys(data).length > 0) setOutline(data); })
       .catch(() => {});
+    api.getNovelOutline(projectId)
+      .then((data) => {
+        if (data && Object.keys(data).length > 0) setNovelOutline(data);
+      })
+      .catch(() => {});
   }, [projectId]);
 
-  const handleGenerate = useCallback(async () => {
+  const nextChapterNumber = outline ? outline.chapters.length + 1 : 1;
+
+  const handleGenerate = useCallback(async (chapterNumber?: number) => {
     if (!projectId) return;
     setLoading(true);
     setError(null);
     try {
-      const result = await api.generateOutline(projectId);
+      const chapterNum = chapterNumber ?? nextChapterNumber;
+      const result = await api.generateOutline(projectId, chapterNum);
       setOutline(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "大纲生成失败");
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, nextChapterNumber]);
 
   const handleEditStart = (field: string, value: string) => {
     setEditingField(field);
@@ -91,7 +110,10 @@ export default function Stage3Page() {
 
   if (!projectId) return null;
 
-  const canAdvance = outline && outline.chapters.length > 0;
+  const hasNovelOutline =
+    novelOutline !== null &&
+    (novelOutline.core_conflict_theme.length > 0 || novelOutline.volumes.length > 0);
+  const canAdvance = outline && outline.chapters.length > 0 && hasNovelOutline;
 
   const narrativeRoleLabels: Record<ScenePlan["narrative_role"], string> = {
     setup: "铺垫",
@@ -108,35 +130,19 @@ export default function Stage3Page() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-primary-container">情节头脑风暴</h1>
-          <p className="font-body-ui text-system-log mt-1">
-            规划章节结构与场景节奏，设计叙事弧线
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="space-y-4">
+      {canAdvance && (
+        <div className="flex justify-end">
           <button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+            onClick={handleAdvance}
+            disabled={advancing}
+            className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
                        rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
           >
-            {loading ? "生成中..." : outline ? "重新生成" : "生成大纲"}
+            {advancing ? "推进中..." : "进入写作中心 →"}
           </button>
-          {canAdvance && (
-            <button
-              onClick={handleAdvance}
-              disabled={advancing}
-              className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
-                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-            >
-              {advancing ? "推进中..." : "进入写作中心 →"}
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
@@ -144,7 +150,44 @@ export default function Stage3Page() {
         </div>
       )}
 
-      {outline && outline.chapters.length > 0 ? (
+      {activeTab === "novel-outline" && (
+        <NovelOutlinePanel
+          projectId={projectId}
+          data={novelOutline}
+          onChange={setNovelOutline}
+          onError={(msg) => setError(msg || null)}
+        />
+      )}
+
+      {activeTab === "outline" && (
+        <>
+          {!hasNovelOutline && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded text-amber-300 font-body-ui text-xs">
+              建议先生成"全书大纲"以让后续章节与全本骨架保持一致。完成后即可进入写作中心。
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3">
+            {outline && outline.chapters.length > 0 && (
+              <span className="font-label-mono text-system-log text-xs">
+                已生成 {outline.chapters.length} 章
+              </span>
+            )}
+            <button
+              onClick={() => handleGenerate()}
+              disabled={loading}
+              className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+            >
+              {loading
+                ? `正在生成第${nextChapterNumber}章...`
+                : outline
+                  ? `生成第${nextChapterNumber}章`
+                  : "生成大纲"}
+            </button>
+          </div>
+
+          {outline && outline.chapters.length > 0 ? (
         <div className="space-y-8">
           {outline.chapters.map((chapter) => (
             <div key={chapter.chapter_number}>
@@ -376,7 +419,7 @@ export default function Stage3Page() {
           ))}
         </div>
       ) : (
-        <div className="text-center py-16">
+        <div className="text-center py-8">
           <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
             account_tree
           </span>
@@ -385,12 +428,14 @@ export default function Stage3Page() {
       )}
 
       {!outline && !loading && (
-        <div className="text-center py-16">
+        <div className="text-center py-8">
           <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
             account_tree
           </span>
           <p className="font-body-ui text-system-log">点击"生成大纲"开始阶段 3</p>
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -5,7 +5,7 @@ interface UseConductorReturn {
   currentStage: string;
   loading: boolean;
   error: string | null;
-  advance: (projectId: string) => Promise<AdvanceResponse | null>;
+  advance: (projectId: string, targetStage: string) => Promise<AdvanceResponse | null>;
   setCurrentStage: (stage: string) => void;
   clearError: () => void;
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Outlet, useParams, useLocation, useMatch, useNavigate } from "react-router-dom";
 import TopHeader from "./TopHeader";
 import SideNavBar from "./SideNavBar";
+import { useSidebar } from "../../hooks/useSidebar";
 import api from "../../api/client";
 
 const STAGE_FROM_PATH: Record<string, string> = {
@@ -16,6 +17,9 @@ const STAGE_FROM_PATH: Record<string, string> = {
   review: "REVIEW",
   impact: "IMPACT",
   storyos: "STORYOS",
+  "stage1/canvas": "STAGE1",
+  "stage3/outline": "STAGE3",
+  "stage3/branches": "STAGE3",
 };
 
 const STAGE_TO_PATH: Record<string, string> = {
@@ -41,12 +45,15 @@ export default function MainLayout() {
 
   const [projectName, setProjectName] = useState("");
 
-  const pathStage = location.pathname.split("/").pop() || "";
+  const pathStage = match?.params["*"] || "";
   const currentStage = STAGE_FROM_PATH[pathStage] || "INIT";
+
+  const { collapsed, width, setWidthLive, commitWidth, toggle } = useSidebar();
 
   useEffect(() => {
     if (!projectId) return;
-    api.getProjectStatus(projectId)
+    api
+      .getProjectStatus(projectId)
       .then((status) => {
         if (status?.title) setProjectName(status.title);
       })
@@ -74,9 +81,21 @@ export default function MainLayout() {
         currentStage={currentStage}
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={collapsed}
+        onToggleSidebar={toggle}
       />
-      <SideNavBar currentStage={currentStage} onNavigate={handleNavigate} />
-      <main className="ml-[280px] mt-16 p-6">
+      <SideNavBar
+        currentStage={currentStage}
+        onNavigate={handleNavigate}
+        collapsed={collapsed}
+        width={width}
+        onLiveWidthChange={setWidthLive}
+        onCommitWidth={commitWidth}
+      />
+      <main
+        style={{ marginLeft: collapsed ? 0 : width }}
+        className="mt-16 p-6 transition-all duration-200"
+      >
         <Outlet />
       </main>
     </div>

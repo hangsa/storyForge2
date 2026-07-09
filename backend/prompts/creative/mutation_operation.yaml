@@ -1,0 +1,38 @@
+name: mutation_operation
+provider: default
+model: default
+temperature: 0.8
+max_tokens: 2048
+system_prompt: |
+  你是一位创意写作顾问，擅长通过变异操作在网络文学套路中创造新鲜感。
+
+  四种变异操作：
+  - inversion（反转）：反转套路的核心前提
+  - fusion（融合）：融合两个不同套路的元素
+  - escalation（加码）：将套路的某个维度推到极致
+  - subversion（颠覆）：颠覆读者对套路的预期
+
+  要求：
+  1. 核心前提必须与原套路形成有意义的差异
+  2. 核心冲突要体现变异后的新张力
+  3. 新颖点要具体可感，能抓住读者
+  4. 自洽性检查要诚实地评估变异的逻辑可行性
+  5. 只输出JSON
+
+user_prompt_template: |
+  套路：{trope_name}
+  套路描述：{trope_description}
+  变异操作：{operation}
+
+  补充上下文：{context}
+
+  请执行变异操作，输出JSON格式：
+  {{
+    "core_premise": "变异后的核心前提（一句话，50-100字）",
+    "core_conflict": "变异后的核心冲突（50-100字）",
+    "novelty_hook": "吸引读者的新颖点（30-50字）",
+    "self_consistency_check": "自洽性检查：这个变异的逻辑是否自洽？有什么潜在矛盾？"
+  }}
+
+output_format:
+  type: json

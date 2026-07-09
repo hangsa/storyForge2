@@ -1,13 +1,62 @@
-import { useState, useCallback, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import api, { ParsedLog, CheckResult, ProgressFile, ChapterReviewData } from "../api/client";
+import api, { ParsedLog, CheckResult, ProgressFile, ChapterReviewData, ExemptionRequest, SandboxParams, SavedStyleConfig } from "../api/client";
 import { useStage4Writing } from "../hooks/useStage4Writing";
+import { useStage4Precheck } from "../hooks/useStage4Precheck";
+import { useStage4Impact } from "../hooks/useStage4Impact";
+import { useStage4Exemptions } from "../hooks/useStage4Exemptions";
+import { useStage4Suggestions } from "../hooks/useStage4Suggestions";
+import { useToast } from "../hooks/useToast";
 import GlassPanel from "../components/shared/GlassPanel";
 import ChapterProgress from "../components/stage4/ChapterProgress";
 import ReaderOSGauges from "../components/shared/ReaderOSGauges";
 import WritingFormulaTable from "../components/shared/WritingFormulaTable";
+import Stage4Drawer from "../components/stage4/Stage4Drawer";
+import PrecheckTab from "../components/stage4/PrecheckTab";
+import ImpactTab from "../components/stage4/ImpactTab";
+import ExemptionTab from "../components/stage4/ExemptionTab";
+import ExemptionApprovalModal from "../components/stage4/ExemptionApprovalModal";
+import SFLogSuggestionsTab from "../components/stage4/SFLogSuggestionsTab";
+import type { DrawerTab } from "../types/stage4";
+import { APPROVER_DEFAULT } from "../auth";
+import { uiStrings } from "../uiStrings";
+
+function computeDefaultChapterScene(p: ProgressFile): { chapter: number; scene: number } {
+  const chapters = [...(p.chapters || [])].sort(
+    (a, b) => b.chapter_number - a.chapter_number,
+  );
+  for (const ch of chapters) {
+    const planned = ch.total_scenes || ch.scenes?.length || 0;
+    if (planned <= 0) continue;
+    const doneSet = new Set(
+      (ch.scenes || [])
+        .filter(
+          (s) =>
+            s.status === "completed" ||
+            s.status === "force_passed" ||
+            s.status === "skipped",
+        )
+        .map((s) => s.scene_number),
+    );
+    const nextScene = Array.from({ length: planned }, (_, i) => i + 1).find(
+      (n) => !doneSet.has(n),
+    );
+    if (nextScene !== undefined) {
+      return { chapter: ch.chapter_number, scene: nextScene };
+    }
+  }
+  const lastChapter = chapters[0];
+  if (lastChapter) {
+    const planned = lastChapter.total_scenes || lastChapter.scenes?.length || 0;
+    return {
+      chapter: lastChapter.chapter_number,
+      scene: planned > 0 ? planned : 1,
+    };
+  }
+  return { chapter: p.current_chapter || 1, scene: 1 };
+}
 
 const LOG_TYPE_LABELS: Record<string, string> = {
   character_relation_change: "角色关系",
@@ -25,6 +74,7 @@ const LOG_TYPE_LABELS: Record<string, string> = {
 
 export default function Stage4Page() {
   const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
   const { state, writeScene, forcePass, skipScene, loadDraft, reset } = useStage4Writing();
 
   const [chapterNum, setChapterNum] = useState(1);
@@ -37,20 +87,47 @@ export default function Stage4Page() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [reviewData, setReviewData] = useState<ChapterReviewData | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [preEditText, setPreEditText] = useState("");
+  const [activeTab, setActiveTab] = useState<DrawerTab | null>(null);
+  const [approvalItem, setApprovalItem] = useState<ExemptionRequest | null>(null);
+  const [useCustomStyle, setUseCustomStyle] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<SandboxParams | null>(null);
+  const [savedStyles, setSavedStyles] = useState<SavedStyleConfig[]>([]);
 
-  const loadProgress = useCallback(async () => {
+  const precheck = useStage4Precheck();
+  const impact = useStage4Impact(projectId || "");
+  const exemptions = useStage4Exemptions(projectId || "");
+  const suggestions = useStage4Suggestions(projectId || "", `${chapterNum}_${sceneNum}`);
+  const toast = useToast();
+
+  const loadProgress = useCallback(async (opts: { syncChapter?: boolean } = {}) => {
     if (!projectId) return;
     try {
       const p = await api.getStage4Progress(projectId);
       setProgress(p);
-      if (p.current_chapter) setChapterNum(p.current_chapter);
+      // Only sync chapterNum/sceneNum on the initial mount and after explicit
+      // chapter advancement. Otherwise we override the user's manual chapter
+      // selection on every writeScene/forcePass/skip refresh — which made the
+      // 本章场景 bar appear stuck (because the user got silently sent back to
+      // the chapter indicated by current_chapter).
+      //
+      // On sync, jump to the latest chapter that still has unfinished work,
+      // and within it the next scene to write. If everything is done, fall
+      // back to the last chapter's last scene. This matches what users
+      // expect after a refresh: "show me where I left off".
+      if (opts.syncChapter) {
+        const { chapter, scene } = computeDefaultChapterScene(p);
+        setChapterNum(chapter);
+        setSceneNum(scene);
+        await loadDraft(projectId, chapter, scene);
+      }
     } catch {
       // silent fail on progress load
     }
-  }, [projectId]);
+  }, [projectId, loadDraft]);
 
   useEffect(() => {
-    loadProgress();
+    loadProgress({ syncChapter: true });
   }, [loadProgress]);
 
   useEffect(() => {
@@ -64,9 +141,53 @@ export default function Stage4Page() {
     return () => { cancelled = true; };
   }, [projectId, chapterNum]);
 
+  // Mount + scene change: refresh exemptions.
+  useEffect(() => {
+    if (!projectId) return;
+    void exemptions.refresh();
+  }, [projectId, chapterNum, sceneNum, exemptions]);
+
+  // Scene change: clear per-scene data.
+  useEffect(() => {
+    precheck.clear();
+    suggestions.clear();
+  }, [chapterNum, sceneNum, precheck, suggestions]);
+
+  // Auto-open on exemption (action-required only).
+  useEffect(() => {
+    if (exemptions.items.length > 0 && activeTab === null) {
+      setActiveTab("exemption");
+    }
+  }, [exemptions.items.length, activeTab]);
+
+  // Load saved style configs when checkbox is enabled.
+  useEffect(() => {
+    if (!useCustomStyle || !projectId) return;
+    let cancelled = false;
+    api.styleSandboxListConfigs(projectId)
+      .then((r) => { if (!cancelled) setSavedStyles(r.configs || []); })
+      .catch(() => { if (!cancelled) setSavedStyles([]); });
+    return () => { cancelled = true; };
+  }, [useCustomStyle, projectId]);
+
+  const counts = useMemo(() => ({
+    precheck: precheck.data?.suggestions.length ?? 0,
+    impact: impact.report ? impact.report.summary.P0 + impact.report.summary.P1 : 0,
+    exemption: exemptions.items.length,
+    sfLogSuggestions: suggestions.report?.suggestions.length ?? 0,
+  }), [precheck.data, impact.report, exemptions.items.length, suggestions.report]);
+
   const handleWrite = async () => {
     if (!projectId) return;
-    await writeScene(projectId, chapterNum, sceneNum);
+    const customStyleConfig = useCustomStyle ? selectedStyle : null;
+    const result = await writeScene(projectId, chapterNum, sceneNum, customStyleConfig);
+    if (result?.precheck_result) {
+      precheck.setData(result.precheck_result);
+      toast.show(
+        uiStrings.toasts.precheckReady(result.precheck_result.suggestions.length),
+        { onClick: () => setActiveTab("precheck") },
+      );
+    }
     loadProgress();
   };
 
@@ -121,6 +242,7 @@ export default function Stage4Page() {
   };
 
   const handleDraftEditStart = () => {
+    setPreEditText(state.draftText || "");
     setDraftEditValue(state.draftText || "");
     setEditingDraft(true);
   };
@@ -137,6 +259,16 @@ export default function Stage4Page() {
       });
       setEditingDraft(false);
       loadDraft(projectId, chapterNum, sceneNum);
+      const newText = draftEditValue;
+      void (async () => {
+        await suggestions.analyze(preEditText, newText, []);
+        if (suggestions.report) {
+          toast.show(
+            uiStrings.toasts.suggestionsReady(suggestions.report.suggestions.length),
+            { onClick: () => setActiveTab("sfLogSuggestions") },
+          );
+        }
+      })();
     } catch {
       // silent fail
     } finally {
@@ -153,7 +285,8 @@ export default function Stage4Page() {
     setAdvancing(true);
     try {
       await api.advanceChapter(projectId);
-      loadProgress();
+      // Advance flips current_chapter to the new chapter, so sync chapterNum.
+      loadProgress({ syncChapter: true });
     } catch {
       // silent fail
     } finally {
@@ -230,18 +363,6 @@ export default function Stage4Page() {
       {/* Controls bar */}
       <div className="flex items-center gap-4 p-4 bg-surface-container rounded-lg flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="font-label-mono text-system-log text-xs">章节</span>
-          <input
-            type="number"
-            min={1}
-            max={totalChapters}
-            value={chapterNum}
-            onChange={(e) => handleChapterNumChange(Number(e.target.value))}
-            className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
-                       font-body-ui text-primary text-sm focus:outline-none focus:border-primary-container"
-          />
-        </div>
-        <div className="flex items-center gap-2">
           <span className="font-label-mono text-system-log text-xs">场景</span>
           <input
             type="number"
@@ -249,6 +370,18 @@ export default function Stage4Page() {
             max={totalScenes || 1}
             value={sceneNum}
             onChange={(e) => handleSceneChange(Number(e.target.value))}
+            className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                       font-body-ui text-primary text-sm focus:outline-none focus:border-primary-container"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-label-mono text-system-log text-xs">章节</span>
+          <input
+            type="number"
+            min={1}
+            max={totalChapters}
+            value={chapterNum}
+            onChange={(e) => handleChapterNumChange(Number(e.target.value))}
             className="w-16 bg-surface-container-low border border-outline-variant rounded px-2 py-1
                        font-body-ui text-primary text-sm focus:outline-none focus:border-primary-container"
           />
@@ -265,6 +398,36 @@ export default function Stage4Page() {
           >
             状态: {sceneFromProgress.status}
           </span>
+        )}
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={useCustomStyle}
+            onChange={(e) => {
+              setUseCustomStyle(e.target.checked);
+              if (!e.target.checked) setSelectedStyle(null);
+            }}
+            className="accent-primary-container"
+          />
+          使用自定义风格
+        </label>
+        {useCustomStyle && (
+          <select
+            value={selectedStyle ? JSON.stringify(selectedStyle) : ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedStyle(v ? (JSON.parse(v) as SandboxParams) : null);
+            }}
+            className="border border-outline-variant rounded px-2 py-1 text-sm bg-surface-container-low text-primary"
+            aria-label="选择自定义风格"
+          >
+            <option value="">— 请选择 —</option>
+            {savedStyles.map((s) => (
+              <option key={s.name} value={JSON.stringify(s.params)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
         )}
         {state.status !== "idle" && (
           <span className="text-xs px-2 py-0.5 bg-primary-container/20 text-primary-container rounded font-label-mono">
@@ -634,6 +797,73 @@ export default function Stage4Page() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Stage4 Drawer (bottom slide-out panel) + approval modal */}
+      <Stage4Drawer
+        counts={counts}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onCollapse={() => setActiveTab(null)}
+      >
+        {{
+          precheck: <PrecheckTab data={precheck.data} loading={precheck.loading} error={precheck.error} />,
+          impact: (
+            <ImpactTab
+              report={impact.report}
+              loading={impact.loading}
+              error={impact.error}
+              onRun={impact.run}
+              onViewFull={() => {
+                if (projectId) navigate(`/project/${projectId}/impact`);
+              }}
+            />
+          ),
+          exemption: (
+            <ExemptionTab
+              items={exemptions.items}
+              loading={exemptions.loading}
+              error={exemptions.error}
+              onSelect={setApprovalItem}
+              onRefresh={exemptions.refresh}
+            />
+          ),
+          sfLogSuggestions: (
+            <SFLogSuggestionsTab
+              data={suggestions.report}
+              loading={suggestions.loading}
+              error={suggestions.error}
+              onApply={async (selected) => {
+                const currentText = state.draftText || "";
+                const { updated_text } = await suggestions.apply(selected, currentText);
+                await api.updateSceneDraft({
+                  project_id: projectId!,
+                  chapter_number: chapterNum,
+                  scene_number: sceneNum,
+                  draft_text: updated_text,
+                });
+                loadDraft(projectId!, chapterNum, sceneNum);
+                suggestions.clear();
+              }}
+              onDismiss={suggestions.clear}
+            />
+          ),
+        }}
+      </Stage4Drawer>
+      {approvalItem && (
+        <ExemptionApprovalModal
+          item={approvalItem}
+          onFetchAntipatterns={exemptions.getAntipatterns}
+          onApprove={async () => {
+            await exemptions.approve(approvalItem.id, APPROVER_DEFAULT);
+            setApprovalItem(null);
+          }}
+          onReject={async (reason) => {
+            await exemptions.reject(approvalItem.id, reason);
+            setApprovalItem(null);
+          }}
+          onClose={() => setApprovalItem(null)}
+        />
       )}
     </div>
   );

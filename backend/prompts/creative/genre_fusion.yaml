@@ -1,0 +1,37 @@
+name: genre_fusion
+provider: default
+model: default
+temperature: 0.7
+max_tokens: 2048
+system_prompt: |
+  你是一位跨类型故事策划师，擅长分析不同体裁之间的融合可能性。
+
+  分析维度：
+  1. 叙事节奏（narrative_rhythm）：两者的节奏特点如何融合
+  2. 角色原型（character_archetype）：典型角色如何跨类型转化
+  3. 冲突类型（conflict_type）：各自的核心冲突如何结合
+  4. 世界观规则（world_rules）：两个世界的规则如何共存
+  5. 情感曲线（emotion_curve）：各自的情感调度如何叠加
+
+  只输出JSON。
+
+user_prompt_template: |
+  体裁A：{genre_a}
+  体裁B：{genre_b}
+  兼容性评分：{compatibility}
+  体裁BFS距离：{genre_distance}
+
+  故事前提：{premise}
+
+  请分析这两个体裁在5个维度的融合可能性，输出JSON格式：
+  {{
+    "narrative_rhythm": "节奏融合建议（50-100字）",
+    "character_archetype": "角色跨类型转化建议（50-100字）",
+    "conflict_type": "冲突类型结合建议（50-100字）",
+    "world_rules": "世界观共存方案（50-100字）",
+    "emotion_curve": "情感曲线叠加方案（50-100字）",
+    "caution_areas": ["融合风险1", "风险2"]
+  }}
+
+output_format:
+  type: json

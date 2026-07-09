@@ -1,6 +1,24 @@
+from pathlib import Path
 from typing import Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse
+
+
+def _build_custom_style_desc(custom_style_config) -> str:
+    """Convert a custom_style_config dict (SandboxParams shape) into a Chinese
+    description for the writer prompt. Returns "" on None or invalid input.
+    """
+    if not custom_style_config:
+        return ""
+    try:
+        from backend.style_engine.sandbox_models import SandboxParams
+        from backend.style_engine.sandbox_renderer import _build_params_description
+
+        if isinstance(custom_style_config, SandboxParams):
+            return _build_params_description(custom_style_config)
+        return _build_params_description(SandboxParams(**custom_style_config))
+    except Exception:
+        return ""
 
 
 class WriterAgent(BaseAgent):
@@ -71,6 +89,7 @@ class WriterAgent(BaseAgent):
         l4_context: str = "",
         growth_stage_hint: str = "",
         character_growth_context: str = "",
+        custom_style_config_desc: str = "",
     ) -> dict:
         core_contradiction = concept.get("story_dna", {}).get(
             "core_contradiction", {}
@@ -127,6 +146,7 @@ class WriterAgent(BaseAgent):
             "l4_context": l4_context,
             "growth_stage_hint": growth_stage_hint,
             "character_growth_context": character_growth_context,
+            "custom_style_config_desc": custom_style_config_desc,
         }
 
     async def write_scene(
@@ -147,6 +167,7 @@ class WriterAgent(BaseAgent):
         style_template: Optional[dict] = None,
         storyos_state: Optional[dict] = None,
         reader_os_warnings: str = "",
+        custom_style_config=None,
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
@@ -154,6 +175,7 @@ class WriterAgent(BaseAgent):
             l0_context, l1_context,
             l2_context, l3_context, l4_context, growth_stage_hint,
             character_growth_context,
+            custom_style_config_desc=_build_custom_style_desc(custom_style_config),
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         return await self.generate_from_template(
@@ -178,6 +200,7 @@ class WriterAgent(BaseAgent):
         growth_stage_hint: str = "",
         character_growth_context: str = "",
         reader_os_warnings: str = "",
+        custom_style_config=None,
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
@@ -185,6 +208,7 @@ class WriterAgent(BaseAgent):
             l0_context, l1_context,
             l2_context, l3_context, l4_context, growth_stage_hint,
             character_growth_context,
+            custom_style_config_desc=_build_custom_style_desc(custom_style_config),
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["retry_hints"] = retry_hints
@@ -192,3 +216,35 @@ class WriterAgent(BaseAgent):
         return await self.generate_from_template(
             "scene_rewrite", **template_vars, **kwargs
         )
+
+    def submit_exemption_if_conflict(
+        self,
+        *,
+        scene_id: str,
+        rule_conflict: dict,
+        creative_intent: str,
+        expected_effect: str,
+        project_dir: Path,
+    ) -> Optional[dict]:
+        """If Writer detects a rule conflict with a defensible creative intent,
+        submit an ExemptionRequest via ExemptionManager. Returns the request dict
+        (status=pending) or None if intent is empty.
+        """
+        from backend.models.exemption import ExemptionManager, ExemptionRequest
+
+        if not creative_intent or not creative_intent.strip():
+            return None
+
+        # Deterministic-ish ID from scene + rule_id + epoch ms (low collision risk)
+        import time
+        req_id = f"ex_{scene_id}_{rule_conflict.get('rule_id', 'unknown')}_{int(time.time() * 1000)}"
+        req = ExemptionRequest(
+            id=req_id,
+            scene_id=scene_id,
+            rule_to_break=rule_conflict,
+            creative_intent=creative_intent,
+            expected_effect=expected_effect,
+        )
+        mgr = ExemptionManager(Path(project_dir))
+        mgr.submit(req)
+        return {"id": req.id, "status": req.status, "scene_id": req.scene_id}

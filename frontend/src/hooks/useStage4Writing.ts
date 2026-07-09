@@ -4,6 +4,7 @@ import api, {
   CheckResult,
   ParsedLog,
   ApiError,
+  SandboxParams,
 } from "../api/client";
 
 type PipelineStatus =
@@ -71,8 +72,9 @@ interface UseStage4WritingReturn {
   writeScene: (
     projectId: string,
     chapterNumber: number,
-    sceneNumber: number
-  ) => Promise<void>;
+    sceneNumber: number,
+    customStyleConfig?: SandboxParams | null
+  ) => Promise<WriteSceneResponse | null>;
   forcePass: (projectId: string, sceneNumber: number) => Promise<void>;
   skipScene: (projectId: string, sceneNumber: number) => Promise<void>;
   loadDraft: (projectId: string, chapterNumber: number, sceneNumber: number) => Promise<void>;
@@ -104,7 +106,8 @@ export function useStage4Writing(): UseStage4WritingReturn {
     async (
       projectId: string,
       chapterNumber: number,
-      sceneNumber: number
+      sceneNumber: number,
+      customStyleConfig: SandboxParams | null = null
     ) => {
       setState((prev) => ({
         ...prev,
@@ -118,6 +121,7 @@ export function useStage4Writing(): UseStage4WritingReturn {
           project_id: projectId,
           chapter_number: chapterNumber,
           scene_number: sceneNumber,
+          custom_style_config: customStyleConfig,
         });
 
         const newStatus: PipelineStatus =
@@ -140,12 +144,14 @@ export function useStage4Writing(): UseStage4WritingReturn {
           circuitBreakerTriggered: resp.status === "circuit_breaker_triggered",
           compatibilityNote: resp.compatibility_note || null,
         }));
+        return resp;
       } catch (e) {
         setState((prev) => ({
           ...prev,
           status: "idle",
           error: e instanceof ApiError ? e.message : "写作失败",
         }));
+        return null;
       }
     },
     []

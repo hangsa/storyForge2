@@ -1,11 +1,12 @@
 import json
 import logging
+from dataclasses import asdict
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
-from backend.conductor.state_machine import StageStateMachine, Stage
+from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.conductor.circuit_breaker import CircuitBreaker
 from backend.conductor.checkpoint import CheckpointManager
 from backend.agents.writer import WriterAgent
@@ -17,10 +18,42 @@ from backend.memory_os.l1_hot import L1Hot
 from backend.memory_os.l2_warm import L2WarmMemory
 from backend.memory_os.memory_coordinator import MemoryCoordinator
 from backend.reader_os.calculator import ReaderOS
+from backend.semantic_precheck.prechecker import PrecheckResult
 
-router = APIRouter(prefix="/api/stage4", tags=["stage4"])
+stage4_router = APIRouter(prefix="/api/stage4", tags=["stage4"])
 fm = FileManager(settings.projects_dir)
 logger = logging.getLogger(__name__)
+
+# Top-level router combining stage4 + v1.7 exemptions routes. main.py and tests import `router`.
+router = APIRouter()
+
+
+async def _run_semantic_precheck(
+    scene_text: str,
+    scene_plan: dict,
+    character_names: list[str],
+) -> PrecheckResult:
+    """Module-level async wrapper so tests can patch it cleanly.
+
+    Returns precheck_passed=True with empty suggestions on any failure.
+    Never raises — the precheck is advisory.
+    """
+    try:
+        from backend.llm.model_router import get_model_router
+        from backend.semantic_precheck.prechecker import SemanticPrechecker
+
+        router = get_model_router()
+        if router is None:
+            return PrecheckResult(precheck_passed=True, skipped_reason="no router")
+        prechecker = SemanticPrechecker(model_router=router)
+        return await prechecker.check(
+            scene_text=scene_text,
+            scene_plan=scene_plan or {},
+            character_names=character_names or [],
+        )
+    except Exception as e:
+        logger.warning("Semantic precheck skipped: %s", e)
+        return PrecheckResult(precheck_passed=True, skipped_reason=f"error: {e}")
 
 
 def _load_context(project_id: str, chapter_number: Optional[int] = None) -> dict:
@@ -63,7 +96,7 @@ def _load_context(project_id: str, chapter_number: Optional[int] = None) -> dict
     }
 
 
-@router.get("/scene-plan/{scene_num}")
+@stage4_router.get("/scene-plan/{scene_num}")
 async def get_scene_plan(scene_num: int, project_id: str):
     ctx = _load_context(project_id)
     scenes = ctx["chapter"].get("scene_plan", [])
@@ -81,7 +114,7 @@ async def get_scene_plan(scene_num: int, project_id: str):
     )
 
 
-@router.get("/scene-draft")
+@stage4_router.get("/scene-draft")
 async def get_scene_draft(project_id: str, chapter_number: int = 1, scene_number: int = 1):
     """Load a previously saved scene draft from disk."""
     if not project_id:
@@ -121,7 +154,7 @@ async def get_scene_draft(project_id: str, chapter_number: int = 1, scene_number
     }
 
 
-@router.put("/scene-draft")
+@stage4_router.put("/scene-draft")
 async def update_scene_draft(data: dict):
     """Save manually edited scene draft text to disk."""
     project_id = data.get("project_id", "")
@@ -148,11 +181,12 @@ async def update_scene_draft(data: dict):
     }
 
 
-@router.post("/write-scene")
+@stage4_router.post("/write-scene")
 async def write_scene(data: dict):
     project_id = data.get("project_id", "")
     chapter_number = data.get("chapter_number", 1)
     scene_number = data.get("scene_number", 1)
+    custom_style_config = data.get("custom_style_config") or None
 
     if not project_id:
         raise HTTPException(
@@ -162,7 +196,7 @@ async def write_scene(data: dict):
 
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
-    if current != Stage.STAGE4:
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE4):
         raise HTTPException(
             status_code=400,
             detail={
@@ -241,6 +275,7 @@ async def write_scene(data: dict):
             growth_stage_hint=ctx_mem.growth_stage_hint,
             character_growth_context=character_growth_context,
             reader_os_warnings=reader_warnings_str,
+            custom_style_config=custom_style_config,
         )
     except ValueError as e:
         raise HTTPException(
@@ -261,12 +296,34 @@ async def write_scene(data: dict):
     attempt = 1
     current_draft = draft_text
 
+    # --- v1.7: Semantic precheck (advisory, runs once per scene) ---
+    char_names = [c.get("name", "") for c in ctx.get("characters", []) if c.get("name")]
+    precheck_result = await _run_semantic_precheck(
+        scene_text=current_draft,
+        scene_plan=scene_plan,
+        character_names=char_names,
+    )
+    if precheck_result.tokens_used:
+        try:
+            from backend.llm.base_provider import LLMResponse
+            synth = LLMResponse(
+                text="",
+                tokens_in=precheck_result.tokens_used,
+                tokens_out=0,
+                model="semantic_precheck",
+                provider="semantic_precheck",
+            )
+            writer.log_usage("semantic_precheck_tokens", synth)
+        except Exception as e:
+            logger.warning("Failed to log semantic precheck tokens (non-blocking): %s", e)
+
     while True:
         fg_result = reviewer.run_fact_guard(
             draft_text=current_draft,
             characters=ctx["characters"],
             world_rules=ctx["world"],
             scene_plan=scene_plan,
+            precheck_result=precheck_result,
         )
 
         breaker_result = breaker.check(
@@ -305,6 +362,7 @@ async def write_scene(data: dict):
                     growth_stage_hint=ctx_mem.growth_stage_hint,
                     character_growth_context=character_growth_context,
                     reader_os_warnings=reader_warnings_str,
+                    custom_style_config=custom_style_config,
                 )
             except ValueError as e:
                 raise HTTPException(
@@ -368,6 +426,20 @@ async def write_scene(data: dict):
             "cascade_executed": registry_report.cascade_executed,
         },
         "style_guard_violations": style_violations,
+        "precheck_result": {
+            "precheck_passed": precheck_result.precheck_passed,
+            "suggestions": [
+                {
+                    "event_type": s.event_type,
+                    "location_hint": s.location_hint,
+                    "suggested_tag": s.suggested_tag,
+                    "reason": s.reason,
+                }
+                for s in (precheck_result.suggestions or [])
+            ],
+            "tokens_used": precheck_result.tokens_used,
+            "skipped_reason": getattr(precheck_result, "skipped_reason", ""),
+        },
     }
     fm.write_json(project_id, f"chapters/{meta_filename}", scene_meta)
 
@@ -480,11 +552,25 @@ async def write_scene(data: dict):
                 "scene": scene_number,
                 "goal": scene_plan.get("goal", ""),
             },
+            "precheck_result": {
+                "precheck_passed": precheck_result.precheck_passed,
+                "suggestions": [
+                    {
+                        "event_type": s.event_type,
+                        "location_hint": s.location_hint,
+                        "suggested_tag": s.suggested_tag,
+                        "reason": s.reason,
+                    }
+                    for s in (precheck_result.suggestions or [])
+                ],
+                "tokens_used": precheck_result.tokens_used,
+                "skipped_reason": getattr(precheck_result, "skipped_reason", ""),
+            },
         },
     }
 
 
-@router.post("/force-pass")
+@stage4_router.post("/force-pass")
 async def force_pass(data: dict):
     project_id = data.get("project_id", "")
     scene_number = data.get("scene_number", 1)
@@ -512,7 +598,7 @@ async def force_pass(data: dict):
     }
 
 
-@router.post("/skip-scene")
+@stage4_router.post("/skip-scene")
 async def skip_scene(data: dict):
     project_id = data.get("project_id", "")
     scene_number = data.get("scene_number", 1)
@@ -557,7 +643,7 @@ async def skip_scene(data: dict):
     }
 
 
-@router.get("/progress")
+@stage4_router.get("/progress")
 async def get_progress(project_id: str):
     # v1.6 Phase 3b: ensure baseline manifest exists on first STAGE 4 entry
     from backend.conductor.impact_analyzer import ImpactAnalyzer
@@ -600,7 +686,7 @@ async def get_progress(project_id: str):
     }
 
 
-@router.post("/advance-chapter")
+@stage4_router.post("/advance-chapter")
 async def advance_chapter(data: dict):
     """推进到下一章：触发 Summary Archiver + ReaderOS + L2 更新"""
     project_id = data.get("project_id", "")
@@ -613,7 +699,7 @@ async def advance_chapter(data: dict):
 
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
-    if current != Stage.STAGE4:
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE4):
         raise HTTPException(
             status_code=400,
             detail={"error": True, "code": "STAGE_NOT_READY", "message": f"当前阶段为 {current.value}，无法推进章节", "detail": {}},
@@ -749,7 +835,7 @@ async def advance_chapter(data: dict):
 # --- v1.6 Phase 3a: Chapter Review API ---
 
 
-@router.get("/chapter-reviews")
+@stage4_router.get("/chapter-reviews")
 async def list_chapter_reviews(project_id: str):
     """List all available chapter reviews for a project."""
     from pathlib import Path
@@ -776,7 +862,7 @@ async def list_chapter_reviews(project_id: str):
     }
 
 
-@router.get("/chapter-review")
+@stage4_router.get("/chapter-review")
 async def get_chapter_review(project_id: str, chapter: int):
     """Get chapter review data. Returns 404 if not yet generated."""
     from backend.conductor.chapter_review import ChapterReviewBuilder
@@ -802,7 +888,7 @@ async def get_chapter_review(project_id: str, chapter: int):
     }
 
 
-@router.post("/chapter-review/decide")
+@stage4_router.post("/chapter-review/decide")
 async def decide_chapter_review(data: dict):
     """Author decision on chapter review.
     Request: {project_id, chapter_number, decision: "approved"|"revise", feedback?: string}
@@ -844,3 +930,178 @@ async def decide_chapter_review(data: dict):
         "message": f"Decision '{decision}' recorded for chapter {chapter_number}",
         "detail": {"status": "ok"},
     }
+
+
+# --- v1.7: Creative Exemption API (T3.8) ---
+
+from backend.models.exemption import ExemptionRequest, ExemptionManager
+
+# Separate sub-router so the URL prefix doesn't collide with the existing /api/stage4 prefix.
+exemptions_router = APIRouter(prefix="/api/v1/projects/{project_id}/exemptions", tags=["exemptions"])
+
+
+@exemptions_router.post("")
+def submit_exemption(project_id: str, request: ExemptionRequest) -> dict:
+    """Writer submits a creative exemption request. Persists to progress.json."""
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    mgr.submit(request)
+    return {"id": request.id, "status": request.status}
+
+
+@exemptions_router.put("/{exemption_id}/approve")
+def approve_exemption(project_id: str, exemption_id: str, approved_by: str) -> dict:
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    mgr.approve(exemption_id, approved_by=approved_by)
+    return {"id": exemption_id, "status": "approved"}
+
+
+@exemptions_router.put("/{exemption_id}/reject")
+def reject_exemption(project_id: str, exemption_id: str, reason: str) -> dict:
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    mgr.reject(exemption_id, reason=reason)
+    return {"id": exemption_id, "status": "rejected"}
+
+
+@exemptions_router.put("/{exemption_id}/outcome")
+def set_exemption_outcome(project_id: str, exemption_id: str, outcome: str) -> dict:
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    mgr.evaluate_outcome(exemption_id, outcome)
+    return {"id": exemption_id, "status": "evaluated", "outcome": outcome}
+
+
+@exemptions_router.get("/{exemption_id}/antipatterns")
+def get_exemption_antipatterns(
+    project_id: str, exemption_id: str
+) -> list[dict]:
+    project_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(project_dir)
+    ex = mgr.get(exemption_id)
+    if ex is None:
+        return []
+    rule_id = ex.rule_to_break.get("rule_id", "")
+    matches = mgr.check_antipatterns(rule_id, ex.creative_intent)
+    return [
+        {
+            "rule_id": m.rule_id,
+            "creative_intent_pattern": m.creative_intent_pattern,
+            "count": m.count,
+            "representative_case": m.representative_case,
+        }
+        for m in matches
+    ]
+
+
+@exemptions_router.get("")
+def list_exemptions(project_id: str, status: str = "pending") -> list[dict]:
+    """List exemption requests for a project, filtered by status."""
+    proj_dir = settings.projects_dir / project_id
+    mgr = ExemptionManager(proj_dir)
+    items = mgr.list_all()
+    out = [asdict(e) for e in items if e.status == status]
+    return out
+
+
+# Mount both sub-routers into the top-level `router` so main.py and tests get all routes.
+router.include_router(stage4_router)
+router.include_router(exemptions_router)
+
+
+# --- v1.7: User Edit Assist API (T3.10) ---
+
+from backend.agents.storyos_agent import SFLogSuggestionEngine
+
+
+sf_logs_router = APIRouter(prefix="/api/v1/projects/{project_id}/scenes/{scene_id}")
+
+
+@sf_logs_router.post("/sf-log-suggestions")
+async def analyze_sf_log_diff(
+    project_id: str,
+    scene_id: str,
+    payload: dict,
+) -> dict:
+    """Analyze user edits to a Scene and propose SF_LOG changes.
+
+    Body: { original_text: str, modified_text: str }
+    Returns: SFLogDiffReport as dict
+    """
+    original = payload.get("original_text", "")
+    modified = payload.get("modified_text", "")
+
+    try:
+        from backend.llm.model_router import get_model_router
+        router = get_model_router()
+    except Exception:
+        router = None
+
+    engine = SFLogSuggestionEngine(model_router=router)
+    report = await engine.analyze_diff(
+        original_text=original,
+        modified_text=modified,
+        existing_sf_logs=[],
+        character_names=[],
+    )
+    return {
+        "scene_id": scene_id,
+        "original_text": report.original_text,
+        "modified_text": report.modified_text,
+        "deleted_logs": report.deleted_logs,
+        "suggestions": [
+            {
+                "type": s.type,
+                "severity": s.severity,
+                "event_type": s.event_type,
+                "suggested_tag": s.suggested_tag,
+                "location_hint": s.location_hint,
+                "reason": s.reason,
+            }
+            for s in report.suggestions
+        ],
+        "tokens_used": report.tokens_used,
+    }
+
+
+@sf_logs_router.put("/sf-logs")
+def apply_sf_log_suggestions(
+    project_id: str,
+    scene_id: str,
+    payload: dict,
+) -> dict:
+    """Batch-apply suggested SF_LOG tags to the modified text.
+
+    Body: { text: str, suggestions: [SFLogSuggestion] }
+    Returns: { updated_text: str }
+    """
+    from backend.agents.storyos_agent import SFLogSuggestion
+
+    text = payload.get("text", "")
+    raw_suggestions = payload.get("suggestions", []) or []
+    from backend.utils.regex_patterns import SF_LOG_PATTERN, VALID_LOG_TYPES
+    suggestions = []
+    for s in raw_suggestions:
+        if not isinstance(s, dict):
+            continue
+        event_type = s.get("event_type", "")
+        if event_type not in VALID_LOG_TYPES:
+            continue  # silently drop unknown types
+        suggested_tag = s.get("suggested_tag", "")
+        if not SF_LOG_PATTERN.search(suggested_tag):
+            continue  # silently drop malformed tags
+        suggestions.append(SFLogSuggestion(
+            type=s.get("type", "missing"),
+            severity=s.get("severity", "suggestion"),
+            event_type=event_type,
+            suggested_tag=suggested_tag,
+            location_hint=s.get("location_hint", ""),
+            reason=s.get("reason", ""),
+        ))
+    engine = SFLogSuggestionEngine(model_router=None)
+    updated = engine.apply_suggestions(text, suggestions)
+    return {"scene_id": scene_id, "updated_text": updated}
+
+
+router.include_router(sf_logs_router)

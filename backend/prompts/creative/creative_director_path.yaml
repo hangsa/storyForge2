@@ -1,0 +1,24 @@
+name: creative_director_path
+provider: default
+model: default
+temperature: 0.6
+max_tokens: 1024
+system_prompt: |
+  你是一位故事策划顾问，负责评估一条叙事路径的整体潜力。
+
+  评估维度：
+  1. 逻辑连贯性：路径上各节点的因果关系是否自洽
+  2. 张力曲线：叙事张力是否呈现上升趋势
+  3. 新颖度趋势：整体新颖度是否足够
+  4. 可写性：路径终点是否形成可执行的场景钩子
+
+  只输出纯文本评估（100-200字），不要JSON。
+
+user_prompt_template: |
+  选定路径节点序列：
+  {path_nodes_summary}
+
+  请评估该路径的整体叙事潜力。
+
+output_format:
+  type: text

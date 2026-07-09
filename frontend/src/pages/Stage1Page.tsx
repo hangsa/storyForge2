@@ -92,34 +92,27 @@ export default function Stage1Page() {
   const canAdvance = concept && storyDna;
 
   return (
-    <div className="max-w-5xl mx-auto py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-primary-container">概念讨论</h1>
-          <p className="font-body-ui text-system-log mt-1">
-            生成故事概念与核心矛盾，构建小说的叙事基础
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="space-y-4">
+      {/* Action row — generate / advance buttons. Title + tabs live in Stage1Layout. */}
+      <div className="flex items-center justify-end gap-3">
+        <button
+          onClick={handleGenerate}
+          disabled={loading}
+          className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+                     rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+        >
+          {loading ? "生成中..." : concept ? "重新生成" : "生成概念"}
+        </button>
+        {canAdvance && (
           <button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui
+            onClick={handleAdvance}
+            disabled={advancing}
+            className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
                        rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
           >
-            {loading ? "生成中..." : concept ? "重新生成" : "生成概念"}
+            {advancing ? "推进中..." : "进入世界观+角色 →"}
           </button>
-          {canAdvance && (
-            <button
-              onClick={handleAdvance}
-              disabled={advancing}
-              className="px-5 py-2.5 bg-tertiary-container text-surface-container-low font-body-ui
-                         rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-            >
-              {advancing ? "推进中..." : "进入世界观+角色 →"}
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {error && (
@@ -288,7 +281,7 @@ export default function Stage1Page() {
       )}
 
       {!concept && !loading && (
-        <div className="text-center py-16">
+        <div className="text-center py-8">
           <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">
             lightbulb
           </span>

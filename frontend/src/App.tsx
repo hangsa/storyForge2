@@ -3,8 +3,11 @@ import { Routes, Route, useParams } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
 import ProjectListPage from "./pages/ProjectListPage";
 import StageErrorBoundary from "./components/shared/StageErrorBoundary";
+import { ToastProvider } from "./hooks/useToast";
+import ToastContainer from "./components/shared/ToastContainer";
 
 const Stage1Page = lazy(() => import("./pages/Stage1Page"));
+const Stage1Layout = lazy(() => import("./components/layout/Stage1Layout"));
 const Stage2Page = lazy(() => import("./pages/Stage2Page"));
 const Stage3Page = lazy(() => import("./pages/Stage3Page"));
 const Stage4Page = lazy(() => import("./pages/Stage4Page"));
@@ -15,6 +18,9 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ChapterReviewPage = lazy(() => import("./pages/ChapterReviewPage"));
 const ImpactAnalysisPage = lazy(() => import("./pages/ImpactAnalysisPage"));
 const StoryOSPage = lazy(() => import("./pages/StoryOSPage"));
+const CreativeCanvasPage = lazy(() => import("./pages/CreativeCanvasPage"));
+const BranchSimulationPage = lazy(() => import("./pages/BranchSimulationPage"));
+const Stage3Layout = lazy(() => import("./components/layout/Stage3Layout"));
 
 function StageWrapper({ children, name }: { children: React.ReactNode; name: string }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -37,7 +43,8 @@ function LoadingFallback() {
 
 function App() {
   return (
-    <Routes>
+    <ToastProvider>
+      <Routes>
       <Route path="/" element={<ProjectListPage />} />
       <Route element={<MainLayout />}>
         <Route
@@ -45,11 +52,30 @@ function App() {
           element={
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="stage1">
-                <Stage1Page />
+                <Stage1Layout />
               </StageWrapper>
             </Suspense>
           }
-        />
+        >
+          <Route
+            index
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <Stage1Page />
+              </Suspense>
+            }
+          />
+          <Route
+            path="canvas"
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <StageWrapper name="stage1-canvas">
+                  <CreativeCanvasPage />
+                </StageWrapper>
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="/project/:projectId/stage2"
           element={
@@ -65,11 +91,38 @@ function App() {
           element={
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="stage3">
-                <Stage3Page />
+                <Stage3Layout />
               </StageWrapper>
             </Suspense>
           }
-        />
+        >
+          <Route
+            index
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <Stage3Page initialTab="novel-outline" />
+              </Suspense>
+            }
+          />
+          <Route
+            path="outline"
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <Stage3Page initialTab="outline" />
+              </Suspense>
+            }
+          />
+          <Route
+            path="branches"
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <StageWrapper name="stage3-branches">
+                  <BranchSimulationPage />
+                </StageWrapper>
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="/project/:projectId/stage4"
           element={
@@ -151,7 +204,9 @@ function App() {
           }
         />
       </Route>
-    </Routes>
+      </Routes>
+      <ToastContainer />
+    </ToastProvider>
   );
 }
 

@@ -1,0 +1,463 @@
+# StoryForge v1.7 — 套路模板目录
+# 50+ 网文常见套路，含市场饱和度基线（0.0-1.0，越高越饱和）
+# market_saturation 值参考：>0.7 红海，0.4-0.7 中等，<0.4 蓝海
+
+tropes:
+  # === 成长类 ===
+  - id: trope_001
+    name: "废柴逆袭"
+    category: "成长"
+    description: "主角从底层/废物起步，通过机遇或努力逐步成长为强者"
+    market_saturation: 0.85
+    sub_tropes: ["天赋觉醒", "前世记忆", "神秘师父"]
+    common_combinations: ["trope_003", "trope_012"]
+    novelty_penalty_weight: 1.2
+
+  - id: trope_002
+    name: "天才流"
+    category: "成长"
+    description: "主角天赋异禀，快速突破境界，碾压同级"
+    market_saturation: 0.75
+    sub_tropes: ["全系精通", "创新功法", "越级挑战"]
+    common_combinations: ["trope_007", "trope_015"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_003
+    name: "重生复仇"
+    category: "成长"
+    description: "主角重生回到过去，利用前世记忆复仇和改变命运"
+    market_saturation: 0.90
+    sub_tropes: ["前世记忆", "仇人名单", "步步先机"]
+    common_combinations: ["trope_001", "trope_020"]
+    novelty_penalty_weight: 1.5
+
+  - id: trope_004
+    name: "退婚流"
+    category: "成长"
+    description: "主角被退婚/被羞辱后觉醒，开启逆袭之路"
+    market_saturation: 0.70
+    sub_tropes: ["被退婚", "三年之约", "打脸逆袭"]
+    common_combinations: ["trope_001", "trope_006"]
+    novelty_penalty_weight: 1.1
+
+  - id: trope_005
+    name: "扮猪吃虎"
+    category: "成长"
+    description: "主角隐藏实力，在关键时刻展露真正实力震惊众人"
+    market_saturation: 0.78
+    sub_tropes: ["隐藏修为", "低调行事", "一招制敌"]
+    common_combinations: ["trope_007", "trope_022"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_006
+    name: "废材变天才"
+    category: "成长"
+    description: "主角从无法修炼到觉醒特殊体质/血脉，实力暴涨"
+    market_saturation: 0.82
+    sub_tropes: ["特殊体质", "血脉觉醒", "灵根修复"]
+    common_combinations: ["trope_002", "trope_012"]
+    novelty_penalty_weight: 1.1
+
+  # === 世界设定类 ===
+  - id: trope_007
+    name: "灵气复苏"
+    category: "世界设定"
+    description: "现代世界突然出现灵气/超自然力量，秩序重建"
+    market_saturation: 0.72
+    sub_tropes: ["灵异入侵", "全民修炼", "秩序崩塌"]
+    common_combinations: ["trope_010", "trope_025"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_008
+    name: "末世生存"
+    category: "世界设定"
+    description: "末日降临，主角在废土中求生并建立势力"
+    market_saturation: 0.65
+    sub_tropes: ["丧尸危机", "废土重建", "基地经营"]
+    common_combinations: ["trope_013", "trope_032"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_009
+    name: "穿越异界"
+    category: "世界设定"
+    description: "主角从现代穿越到奇幻/修仙/魔幻世界"
+    market_saturation: 0.80
+    sub_tropes: ["魂穿", "身穿", "系统辅助"]
+    common_combinations: ["trope_001", "trope_027"]
+    novelty_penalty_weight: 1.2
+
+  - id: trope_010
+    name: "修仙宗门"
+    category: "世界设定"
+    description: "以修仙宗门为舞台，展现修炼体系和宗门斗争"
+    market_saturation: 0.75
+    sub_tropes: ["内门外门", "宗门大比", "秘境探险"]
+    common_combinations: ["trope_002", "trope_011"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_011
+    name: "学院流"
+    category: "世界设定"
+    description: "主角进入特殊学院学习，学院内竞争与成长并行"
+    market_saturation: 0.68
+    sub_tropes: ["入学考核", "学院排名", "师生情谊"]
+    common_combinations: ["trope_002", "trope_005"]
+    novelty_penalty_weight: 0.9
+
+  - id: trope_012
+    name: "血脉世家"
+    category: "世界设定"
+    description: "以血脉/家族为核心的权力体系，世家争斗"
+    market_saturation: 0.70
+    sub_tropes: ["血脉等级", "家族内斗", "联姻政治"]
+    common_combinations: ["trope_006", "trope_020"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_013
+    name: "无限流"
+    category: "世界设定"
+    description: "主角进入无限循环的任务空间，在不同世界完成任务"
+    market_saturation: 0.60
+    sub_tropes: ["副本任务", "点数兑换", "团队合作"]
+    common_combinations: ["trope_019", "trope_032"]
+    novelty_penalty_weight: 0.8
+
+  - id: trope_014
+    name: "游戏异界"
+    category: "世界设定"
+    description: "主角进入游戏世界或现实游戏化，遵循游戏规则"
+    market_saturation: 0.55
+    sub_tropes: ["等级系统", "技能树", "隐藏任务"]
+    common_combinations: ["trope_009", "trope_013"]
+    novelty_penalty_weight: 0.7
+
+  # === 势力争斗类 ===
+  - id: trope_015
+    name: "王朝争霸"
+    category: "势力争斗"
+    description: "主角参与王朝/帝国的权力争夺，合纵连横"
+    market_saturation: 0.62
+    sub_tropes: ["皇位之争", "军师谋略", "铁血征战"]
+    common_combinations: ["trope_020", "trope_033"]
+    novelty_penalty_weight: 0.9
+
+  - id: trope_016
+    name: "门派争锋"
+    category: "势力争斗"
+    description: "多个门派/势力之间的明争暗斗和资源争夺"
+    market_saturation: 0.68
+    sub_tropes: ["正邪对立", "资源争夺", "门派大比"]
+    common_combinations: ["trope_010", "trope_031"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_017
+    name: "种田流"
+    category: "势力争斗"
+    description: "主角从零开始建设领地/势力，稳步发展壮大"
+    market_saturation: 0.45
+    sub_tropes: ["领地经营", "科技种田", "人口招募"]
+    common_combinations: ["trope_009", "trope_034"]
+    novelty_penalty_weight: 0.7
+
+  - id: trope_018
+    name: "商会经营"
+    category: "势力争斗"
+    description: "主角建立商业帝国，通过经济手段影响世界格局"
+    market_saturation: 0.35
+    sub_tropes: ["商业谋略", "资源垄断", "经济战"]
+    common_combinations: ["trope_017", "trope_024"]
+    novelty_penalty_weight: 0.5
+
+  # === 情感关系类 ===
+  - id: trope_019
+    name: "宿命之敌"
+    category: "情感关系"
+    description: "主角与宿敌的对抗贯穿全文，亦敌亦友的复杂关系"
+    market_saturation: 0.58
+    sub_tropes: ["命运对决", "惺惺相惜", "最终和解"]
+    common_combinations: ["trope_028", "trope_042"]
+    novelty_penalty_weight: 0.9
+
+  - id: trope_020
+    name: "家族恩怨"
+    category: "情感关系"
+    description: "家族间的仇恨和纠葛驱动故事主线"
+    market_saturation: 0.72
+    sub_tropes: ["血海深仇", "家族联姻", "世代恩怨"]
+    common_combinations: ["trope_012", "trope_015"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_021
+    name: "师徒情深"
+    category: "情感关系"
+    description: "师徒关系的建立、考验和升华，传承与背叛"
+    market_saturation: 0.55
+    sub_tropes: ["拜师学艺", "师门试炼", "背叛师门"]
+    common_combinations: ["trope_010", "trope_038"]
+    novelty_penalty_weight: 0.8
+
+  - id: trope_022
+    name: "红颜知己"
+    category: "情感关系"
+    description: "主角与多位女性角色的情感纠葛和成长陪伴"
+    market_saturation: 0.78
+    sub_tropes: ["青梅竹马", "患难与共", "身份悬殊"]
+    common_combinations: ["trope_001", "trope_007"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_023
+    name: "兄弟义气"
+    category: "情感关系"
+    description: "主角与兄弟/伙伴之间的深厚情谊和共同成长"
+    market_saturation: 0.62
+    sub_tropes: ["歃血为盟", "并肩作战", "生死相托"]
+    common_combinations: ["trope_004", "trope_015"]
+    novelty_penalty_weight: 0.9
+
+  # === 身份秘密类 ===
+  - id: trope_024
+    name: "身世之谜"
+    category: "身份秘密"
+    description: "主角身世隐藏重大秘密，逐步揭开真相"
+    market_saturation: 0.74
+    sub_tropes: ["被遗弃的皇子", "神族后裔", "血统追查"]
+    common_combinations: ["trope_003", "trope_012"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_025
+    name: "卧底无间"
+    category: "身份秘密"
+    description: "主角潜伏敌对势力内部，身份暴露风险贯穿始终"
+    market_saturation: 0.48
+    sub_tropes: ["双重身份", "身份即将暴露", "取得信任"]
+    common_combinations: ["trope_016", "trope_040"]
+    novelty_penalty_weight: 0.7
+
+  - id: trope_026
+    name: "隐藏大佬"
+    category: "身份秘密"
+    description: "主角表面平凡实则身份显赫/实力超群，逐渐揭开身份"
+    market_saturation: 0.70
+    sub_tropes: ["退役强者", "隐藏身份", "被认出"]
+    common_combinations: ["trope_005", "trope_030"]
+    novelty_penalty_weight: 1.0
+
+  - id: trope_027
+    name: "分身/马甲"
+    category: "身份秘密"
+    description: "主角拥有多重身份/马甲，不同身份间切换制造戏剧冲突"
+    market_saturation: 0.42
+    sub_tropes: ["多重马甲", "身份切换", "自导自演"]
+    common_combinations: ["trope_025", "trope_035"]
+    novelty_penalty_weight: 0.6
+
+  # === 力量体系类 ===
+  - id: trope_028
+    name: "双生力量"
+    category: "力量体系"
+    description: "主角掌握两种对立力量（光暗/冰火/正邪），平衡与冲突"
+    market_saturation: 0.50
+    sub_tropes: ["光暗同体", "力量平衡", "融合突破"]
+    common_combinations: ["trope_006", "trope_019"]
+    novelty_penalty_weight: 0.8
+
+  - id: trope_029
+    name: "科技修仙"
+    category: "力量体系"
+    description: "用科学方法解析修炼体系，科技与修仙的碰撞"
+    market_saturation: 0.38
+    sub_tropes: ["科学修真", "技术改造", "文明碰撞"]
+    common_combinations: ["trope_014", "trope_017"]
+    novelty_penalty_weight: 0.5
+
+  - id: trope_030
+    name: "诅咒之力"
+    category: "力量体系"
+    description: "主角获得的力量伴随诅咒/代价，用得越多代价越大"
+    market_saturation: 0.40
+    sub_tropes: ["力量代价", "诅咒反噬", "寿命燃烧"]
+    common_combinations: ["trope_028", "trope_036"]
+    novelty_penalty_weight: 0.6
+
+  - id: trope_031
+    name: "吞噬进化"
+    category: "力量体系"
+    description: "主角通过吞噬/吸收他人力量或资源进化自身"
+    market_saturation: 0.65
+    sub_tropes: ["吞噬万物", "进化路线", "基因融合"]
+    common_combinations: ["trope_001", "trope_013"]
+    novelty_penalty_weight: 0.9
+
+  - id: trope_032
+    name: "规则之力"
+    category: "力量体系"
+    description: "主角理解并掌控世界规则/法则，凌驾于常规力量之上"
+    market_saturation: 0.55
+    sub_tropes: ["法则领悟", "规则破坏", "万物规律"]
+    common_combinations: ["trope_010", "trope_028"]
+    novelty_penalty_weight: 0.8
+
+  # === 剧情结构类 ===
+  - id: trope_033
+    name: "战争史诗"
+    category: "剧情结构"
+    description: "大规模战争作为故事主线，展现战略和个人命运"
+    market_saturation: 0.52
+    sub_tropes: ["两国交战", "联军组成", "关键战役"]
+    common_combinations: ["trope_015", "trope_016"]
+    novelty_penalty_weight: 0.8
+
+  - id: trope_034
+    name: "文明碰撞"
+    category: "剧情结构"
+    description: "两种不同文明/种族/世界的碰撞与融合"
+    market_saturation: 0.30
+    sub_tropes: ["异族入侵", "文化冲击", "共存之路"]
+    common_combinations: ["trope_007", "trope_029"]
+    novelty_penalty_weight: 0.4
+
+  - id: trope_035
+    name: "解谜探索"
+    category: "剧情结构"
+    description: "以解谜/探索为核心驱动，真相层层剥开"
+    market_saturation: 0.42
+    sub_tropes: ["悬疑线索", "逐步推理", "反转真相"]
+    common_combinations: ["trope_024", "trope_025"]
+    novelty_penalty_weight: 0.6
+
+  - id: trope_036
+    name: "时间循环"
+    category: "剧情结构"
+    description: "主角被困于时间循环中，通过反复尝试寻找出路"
+    market_saturation: 0.32
+    sub_tropes: ["循环破局", "每次不同选择", "循环源头"]
+    common_combinations: ["trope_003", "trope_035"]
+    novelty_penalty_weight: 0.4
+
+  - id: trope_037
+    name: "群像叙事"
+    category: "剧情结构"
+    description: "多主角/多视角并行叙事，展现复杂人物关系网"
+    market_saturation: 0.40
+    sub_tropes: ["多线并进", "人物交织", "视角切换"]
+    common_combinations: ["trope_033", "trope_044"]
+    novelty_penalty_weight: 0.6
+
+  # === 主题深度类 ===
+  - id: trope_038
+    name: "代价与牺牲"
+    category: "主题深度"
+    description: "主角每进一步都付出代价，强调成长的沉重"
+    market_saturation: 0.45
+    sub_tropes: ["以命换命", "牺牲伙伴", "失去人性"]
+    common_combinations: ["trope_030", "trope_042"]
+    novelty_penalty_weight: 0.7
+
+  - id: trope_039
+    name: "秩序与自由"
+    category: "主题深度"
+    description: "现有秩序的正当性质疑，自由意志与体制的对抗"
+    market_saturation: 0.35
+    sub_tropes: ["体制压迫", "反抗之路", "新秩序建立"]
+    common_combinations: ["trope_015", "trope_025"]
+    novelty_penalty_weight: 0.5
+
+  - id: trope_040
+    name: "正义的代价"
+    category: "主题深度"
+    description: "主角追求正义过程中面临道德困境，正义的灰色地带"
+    market_saturation: 0.38
+    sub_tropes: ["以恶制恶", "两难选择", "堕落的正义"]
+    common_combinations: ["trope_025", "trope_038"]
+    novelty_penalty_weight: 0.5
+
+  - id: trope_041
+    name: "人性的边界"
+    category: "主题深度"
+    description: "极端环境下人性的试探，何以为人的终极追问"
+    market_saturation: 0.42
+    sub_tropes: ["人性考验", "非人化", "最后的良知"]
+    common_combinations: ["trope_008", "trope_013"]
+    novelty_penalty_weight: 0.6
+
+  - id: trope_042
+    name: "宿命与选择"
+    category: "主题深度"
+    description: "命运是否可改变？自由意志与宿命的对抗"
+    market_saturation: 0.55
+    sub_tropes: ["预言应验", "逆天改命", "选择的代价"]
+    common_combinations: ["trope_019", "trope_036"]
+    novelty_penalty_weight: 0.8
+
+  - id: trope_043
+    name: "传承与创新"
+    category: "主题深度"
+    description: "旧时代与新时代的碰撞，传统需要被继承还是打破"
+    market_saturation: 0.30
+    sub_tropes: ["古老传承", "改革派vs保守派", "开辟新路"]
+    common_combinations: ["trope_029", "trope_039"]
+    novelty_penalty_weight: 0.4
+
+  # === 特殊类型 ===
+  - id: trope_044
+    name: "反套路"
+    category: "特殊类型"
+    description: "刻意颠覆常见套路，制造意外和新鲜感"
+    market_saturation: 0.25
+    sub_tropes: ["套路反转", "打破第四面墙", "元叙事"]
+    common_combinations: ["trope_005", "trope_027"]
+    novelty_penalty_weight: 0.3
+
+  - id: trope_045
+    name: "非遗文化"
+    category: "特殊类型"
+    description: "融入中国非物质文化遗产元素的世界观和力量体系"
+    market_saturation: 0.15
+    sub_tropes: ["传统技艺", "文化传承", "古今融合"]
+    common_combinations: ["trope_029", "trope_043"]
+    novelty_penalty_weight: 0.2
+
+  - id: trope_046
+    name: "克苏鲁修仙"
+    category: "特殊类型"
+    description: "将克苏鲁式的不可名状恐怖融入修仙世界观"
+    market_saturation: 0.10
+    sub_tropes: ["不可名状", "san值", "禁忌知识"]
+    common_combinations: ["trope_010", "trope_030"]
+    novelty_penalty_weight: 0.1
+
+  - id: trope_047
+    name: "星际修仙"
+    category: "特殊类型"
+    description: "修仙文明走向星空，宇宙尺度的修炼与探索"
+    market_saturation: 0.18
+    sub_tropes: ["星际传送阵", "星球级修炼", "宇宙秘境"]
+    common_combinations: ["trope_034", "trope_029"]
+    novelty_penalty_weight: 0.2
+
+  - id: trope_048
+    name: "赛博修仙"
+    category: "特殊类型"
+    description: "修仙与赛博朋克技术融合，义体+灵力，AI+天劫"
+    market_saturation: 0.12
+    sub_tropes: ["义体修真", "AI天劫", "数字元神"]
+    common_combinations: ["trope_029", "trope_039"]
+    novelty_penalty_weight: 0.15
+
+  - id: trope_049
+    name: "国运流"
+    category: "特殊类型"
+    description: "主角代表国家参与国运游戏/竞赛，国家命运系于一身"
+    market_saturation: 0.55
+    sub_tropes: ["国运游戏", "文明竞赛", "集体力量"]
+    common_combinations: ["trope_013", "trope_033"]
+    novelty_penalty_weight: 0.8
+
+  - id: trope_050
+    name: "职业文"
+    category: "特殊类型"
+    description: "以特定职业（医生/律师/厨师/工匠）为核心的穿越或现实题材"
+    market_saturation: 0.35
+    sub_tropes: ["专业技能", "职业成长", "行业故事"]
+    common_combinations: ["trope_009", "trope_017"]
+    novelty_penalty_weight: 0.5

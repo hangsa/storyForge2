@@ -5,6 +5,7 @@ import SideNavBar from "../components/layout/SideNavBar";
 import CircuitBreaker from "../components/shared/CircuitBreaker";
 import SFLogFeed from "../components/shared/SFLogFeed";
 import StageErrorBoundary from "../components/shared/StageErrorBoundary";
+import type { ParsedLog } from "../api/client";
 
 describe("TopHeader", () => {
   it("renders StoryForge branding", () => {
@@ -14,6 +15,8 @@ describe("TopHeader", () => {
         currentStage="STAGE1"
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.getByText("StoryForge")).toBeInTheDocument();
@@ -27,6 +30,8 @@ describe("TopHeader", () => {
         currentStage="STAGE3"
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.getByText("STAGE3")).toBeInTheDocument();
@@ -39,6 +44,8 @@ describe("TopHeader", () => {
         currentStage="INIT"
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.getByText("实时写作")).toBeInTheDocument();
@@ -51,6 +58,8 @@ describe("TopHeader", () => {
         currentStage="INIT"
         collaborationMode="discuss"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.getByText("讨论模式")).toBeInTheDocument();
@@ -63,9 +72,57 @@ describe("TopHeader", () => {
         currentStage="INIT"
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.queryByText("/")).not.toBeInTheDocument();
+  });
+});
+
+describe("TopHeader - sidebar toggle", () => {
+  it("renders the hamburger button", () => {
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
+      />
+    );
+    expect(screen.getByRole("button", { name: "收起侧边栏" })).toBeInTheDocument();
+  });
+
+  it("clicking the hamburger calls onToggleSidebar", () => {
+    const onToggleSidebar = vi.fn();
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={onToggleSidebar}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "收起侧边栏" }));
+    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows expanded label when collapsed is true", () => {
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+        collapsed={true}
+        onToggleSidebar={() => {}}
+      />
+    );
+    expect(screen.getByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
   });
 });
 
@@ -73,8 +130,17 @@ describe("SideNavBar", () => {
   const onNavigate = vi.fn();
 
   it("renders all stage navigation items", () => {
-    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
-    expect(screen.getByText("项目初始化")).toBeInTheDocument();
+    render(
+      <SideNavBar
+        currentStage="INIT"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
+    expect(screen.getByText("项目中心")).toBeInTheDocument();
     expect(screen.getByText("概念讨论")).toBeInTheDocument();
     expect(screen.getByText("世界观+角色")).toBeInTheDocument();
     expect(screen.getByText("情节头脑风暴")).toBeInTheDocument();
@@ -82,28 +148,96 @@ describe("SideNavBar", () => {
   });
 
   it("highlights the active stage", () => {
-    render(<SideNavBar currentStage="STAGE4" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="STAGE4"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     const activeButton = screen.getByText("写作中心").closest("button");
     expect(activeButton).toHaveClass("border-primary-container");
   });
 
   it("renders disabled workspace items", () => {
-    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="INIT"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     const inspirationBtn = screen.getByText("灵感库").closest("button");
     expect(inspirationBtn).toBeDisabled();
   });
 
   it("calls onNavigate when stage clicked", () => {
-    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="INIT"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     fireEvent.click(screen.getByText("概念讨论"));
     expect(onNavigate).toHaveBeenCalledWith("STAGE1");
   });
 
   it("renders section headers", () => {
-    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="INIT"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     expect(screen.getByText("项目")).toBeInTheDocument();
     expect(screen.getByText("叙事阶段")).toBeInTheDocument();
     expect(screen.getByText("工作区")).toBeInTheDocument();
+  });
+});
+
+describe("SideNavBar - collapsed", () => {
+  it("returns null when collapsed is true", () => {
+    const onNavigate = vi.fn();
+    const { container } = render(
+      <SideNavBar
+        currentStage="STAGE4"
+        onNavigate={onNavigate}
+        collapsed={true}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders ResizeHandle when expanded", () => {
+    const onNavigate = vi.fn();
+    render(
+      <SideNavBar
+        currentStage="STAGE4"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
+    expect(screen.getByTestId("resize-handle")).toBeInTheDocument();
   });
 });
 
@@ -183,14 +317,16 @@ describe("SFLogFeed", () => {
   });
 
   it("renders log entries with Chinese labels", () => {
-    const logs = [
+    const logs: ParsedLog[] = [
       {
         type: "conflict_escalate",
         params: { id: "cf_001", new_intensity: "critical" },
+        raw_text: "",
       },
       {
         type: "knowledge_gain",
         params: { char: "林峰", content: "秘密联络记录" },
+        raw_text: "",
       },
     ];
     render(<SFLogFeed logs={logs} />);
@@ -199,16 +335,17 @@ describe("SFLogFeed", () => {
   });
 
   it("falls back to raw type for unknown log types", () => {
-    const logs = [{ type: "custom_event", params: { key: "val" } }];
+    const logs: ParsedLog[] = [{ type: "custom_event", params: { key: "val" }, raw_text: "" }];
     render(<SFLogFeed logs={logs} />);
     expect(screen.getByText("custom_event")).toBeInTheDocument();
   });
 
   it("shows up to 3 params per log entry", () => {
-    const logs = [
+    const logs: ParsedLog[] = [
       {
         type: "character_emotion",
         params: { a: "1", b: "2", c: "3", d: "4" },
+        raw_text: "",
       },
     ];
     render(<SFLogFeed logs={logs} />);

@@ -1,0 +1,56 @@
+name: canvas_to_concept
+provider: deepseek
+model: deepseek-chat
+temperature: 0.7
+max_tokens: 4096
+system_prompt: |
+  你是一位资深的网络小说策划顾问。你会收到一份"创意画布"的产物——一条经过多轮细化或变异的前提交链路。
+  你的任务是把这条链路翻译成与"快速生成"阶段同样格式的【故事概念 + Story DNA】。
+
+  输入说明：
+  - 链路是按深度顺序排列的多个节点，每个节点代表作者在画布上的一次推进（细化 / 变异 / 重新选择）
+  - 节点顺序自上而下：根节点是原始前提，越往下越具体
+  - 节点可能有 `mutation_context` 字段，标记为 `mut: <operation>` 的节点是经过变异操作（inversion / escalation / subversion）派生的，含有 core_premise / core_conflict / novelty_hook 等结构化元数据
+  - 你要"提炼"整条链路的最终落点，不要逐字复述每一层
+
+  要求：
+  1. 概念要有明确的市场定位（类型、基调、主题、目标读者）
+  2. Story DNA 必须包含一个有深度和冲突张力的核心矛盾（core_contradiction）
+  3. 核心矛盾要有两个对立的立场（side_a vs side_b），体现价值观冲突
+  4. 价值层级（value_stack）至少3组价值对立，从具体到抽象递进
+  5. premise 用一句话说清故事的独特卖点
+  6. 用中文输出，保持专业性和创意性
+  7. 只输出JSON，不要输出任何其他内容
+
+user_prompt_template: |
+  画布创意链路（已按 selected_path 顺序整理）：
+
+  {canvas_summary}
+
+  目标类型：{genre}
+
+  请基于这条链路提炼故事概念，输出与 concept_generation 同样的JSON结构：
+
+  {{
+    "concept": {{
+      "title": "故事标题",
+      "genre": "类型",
+      "premise": "一句话前提（独特卖点）",
+      "tone": "基调（如：热血、黑暗、轻松、史诗）",
+      "theme": "主题（如：成长、复仇、救赎、自由）",
+      "target_audience": "目标读者"
+    }},
+    "story_dna": {{
+      "core_contradiction": {{
+        "statement": "核心矛盾的完整表述",
+        "side_a": "立场A的描述",
+        "side_b": "立场B的描述"
+      }},
+      "value_stack": [
+        {{"value_a": "价值A", "value_b": "价值B", "level": "层级说明"}}
+      ]
+    }}
+  }}
+
+output_format:
+  type: json

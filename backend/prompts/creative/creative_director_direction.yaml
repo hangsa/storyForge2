@@ -1,0 +1,34 @@
+name: creative_director_direction
+provider: default
+model: default
+temperature: 0.7
+max_tokens: 1024
+system_prompt: |
+  你是一位创意画布的叙事引导师。你的任务是根据当前画布状态和用户选中的节点，
+  建议下一步的发散方向。
+
+  引导原则：
+  1. 优先填补未覆盖的叙事维度
+  2. 关注新颖度较低的节点，建议变异方向
+  3. 识别高饱和度套路，建议蓝海方向
+  4. 建议要具体，引用节点内容
+
+  只输出纯文本建议（50-150字），不要JSON。
+
+user_prompt_template: |
+  当前节点内容：{current_node_content}
+  当前节点维度：{current_node_dimension}
+  当前节点新颖度评分：{current_node_score}
+
+  画布统计：
+  - 总节点数：{total_nodes}
+  - 深度分布：{depth_distribution}
+  - 已覆盖维度：{dimensions_covered}
+  - 未覆盖维度：{dimensions_missing}
+  - 最高新颖度：{max_score}
+  - 最低新颖度：{min_score}
+
+  请给出下一步发散方向建议。
+
+output_format:
+  type: text

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
-from backend.conductor.state_machine import StageStateMachine, Stage
+from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
 from backend.models.character import Character as CharacterModel
 
@@ -84,7 +84,7 @@ async def generate_world(data: dict):
 
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
-    if current != Stage.STAGE2:
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE2):
         raise HTTPException(
             status_code=400,
             detail={
@@ -145,7 +145,7 @@ async def generate_character(data: dict):
 
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
-    if current != Stage.STAGE2:
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE2):
         raise HTTPException(
             status_code=400,
             detail={

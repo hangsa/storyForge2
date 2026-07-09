@@ -36,6 +36,12 @@ class WritingFormulaStats:
     emotional_beat_density: float = 0.0
     satisfaction_beat_count: int = 0
     suspense_hook_present: bool = False
+    # Whether the LLM-assisted fields above were actually produced by a live
+    # LLM call. False means the values are default zeros (either because the
+    # sync path ran, or because the LLM call raised). Used by check_compliance
+    # to auto-pass these checks only on genuine LLM unavailability, NOT when
+    # the LLM legitimately reported zero emotional beats / no hook.
+    llm_available: bool = False
 
 
 class WritingFormulaAnalyzer:
@@ -106,20 +112,30 @@ class WritingFormulaAnalyzer:
         )
 
     async def analyze_async(self, scene_texts: list[str]) -> WritingFormulaStats:
-        """Run full analysis (deterministic + LLM-assisted). LLM failures are silent."""
-        stats = self.analyze_sync(scene_texts)
+        """Run full analysis (deterministic + LLM-assisted). LLM failures are silent.
+
+        `llm_available` is True only when BOTH LLM-assisted calls succeed.
+        A successful emotional-beat call but a failed suspense-hook call leaves
+        it False — the chain is all-or-nothing so check_compliance doesn't
+        report a false alarm based on partial LLM coverage.
+        """
+        stats = self.analyze_sync(scene_texts)  # llm_available=False here
         merged = "\n\n".join(scene_texts)
         if not merged.strip():
             return stats
 
         try:
-            emo_stats = await self._detect_emotional_beats(merged)
+            emo_stats, emo_ok = await self._detect_emotional_beats(merged)
             stats.emotional_beat_density = emo_stats.get("density", 0.0)
             stats.satisfaction_beat_count = emo_stats.get("count", 0)
 
-            stats.suspense_hook_present = await self._detect_suspense_hook(merged)
+            hook_present, hook_ok = await self._detect_suspense_hook(merged)
+            stats.suspense_hook_present = hook_present
+
+            stats.llm_available = emo_ok and hook_ok
         except Exception as e:
             logger.warning("WritingFormulaAnalyzer LLM unavailable: %s", e)
+            # stats.llm_available stays False
 
         return stats
 
@@ -193,33 +209,36 @@ class WritingFormulaAnalyzer:
                 passed=stats.max_para_words <= para["max_words"],
             ))
 
-        # Emotional beat checks (LLM-assisted; default passed if unavailable)
+        # Emotional beat checks (LLM-assisted; auto-pass only when LLM was
+        # genuinely unavailable, not when LLM legitimately reports zero).
         emo = formula.get("emotional_beat", {})
         if "min_per_1k" in emo:
+            llm_ok = stats.llm_available
             results.append(ComplianceResult(
                 metric="emotional_beat_density",
                 expected=f"≥{emo['min_per_1k']}/千字",
                 actual=f"{stats.emotional_beat_density}/千字",
-                passed=stats.emotional_beat_density == 0.0 or stats.emotional_beat_density >= emo["min_per_1k"],
+                passed=stats.emotional_beat_density >= emo["min_per_1k"] or not llm_ok,
             ))
 
         sat = formula.get("satisfaction_beat", {})
         if "min_count" in sat:
+            llm_ok = stats.llm_available
             results.append(ComplianceResult(
                 metric="satisfaction_beat_count",
                 expected=f"≥{sat['min_count']}",
                 actual=str(stats.satisfaction_beat_count),
-                passed=stats.satisfaction_beat_count == 0 or stats.satisfaction_beat_count >= sat["min_count"],
+                passed=stats.satisfaction_beat_count >= sat["min_count"] or not llm_ok,
             ))
 
         hook = formula.get("suspense_hook", {})
         if "required" in hook:
-            # Auto-pass if LLM was unavailable (emotional_beat_density still at default 0.0)
+            llm_ok = stats.llm_available
             results.append(ComplianceResult(
                 metric="suspense_hook_present",
                 expected="true",
                 actual=str(stats.suspense_hook_present).lower(),
-                passed=not hook["required"] or stats.suspense_hook_present or stats.emotional_beat_density == 0.0,
+                passed=not hook["required"] or stats.suspense_hook_present or not llm_ok,
             ))
 
         return results
@@ -237,8 +256,14 @@ class WritingFormulaAnalyzer:
                 current_run = 0
         return max_run
 
-    async def _detect_emotional_beats(self, text: str) -> dict:
-        """Use Tier 3 LLM to detect emotional beats (satisfaction points)."""
+    async def _detect_emotional_beats(self, text: str) -> tuple[dict, bool]:
+        """Use Tier 3 LLM to detect emotional beats (satisfaction points).
+
+        Returns (result, success):
+            result: {"density": float, "count": int}
+            success: True iff the LLM call completed and produced a parseable
+                     response. False on any exception or parse error.
+        """
         try:
             from backend.llm.model_router import get_model_router
 
@@ -272,14 +297,20 @@ class WritingFormulaAnalyzer:
             parsed = json.loads(content) if isinstance(content, str) else content
             density = float(parsed.get("emotional_beat_density", 0))
             beats = parsed.get("satisfaction_beats", [])
-            return {"density": density, "count": len(beats)}
+            return {"density": density, "count": len(beats)}, True
 
         except Exception as e:
             logger.warning("Emotional beat detection failed: %s", e)
-            return {"density": 0.0, "count": 0}
+            return {"density": 0.0, "count": 0}, False
 
-    async def _detect_suspense_hook(self, text: str) -> bool:
-        """Use Tier 3 LLM to detect chapter-end suspense hook."""
+    async def _detect_suspense_hook(self, text: str) -> tuple[bool, bool]:
+        """Use Tier 3 LLM to detect chapter-end suspense hook.
+
+        Returns (present, success):
+            present: True if the LLM detected a hook
+            success: True iff the LLM call completed and produced a parseable
+                     response. False on any exception or parse error.
+        """
         try:
             from backend.llm.model_router import get_model_router
 
@@ -309,8 +340,8 @@ class WritingFormulaAnalyzer:
 
             content = result.get("content", "")
             parsed = json.loads(content) if isinstance(content, str) else content
-            return bool(parsed.get("suspense_hook_present", False))
+            return bool(parsed.get("suspense_hook_present", False)), True
 
         except Exception as e:
             logger.warning("Suspense hook detection failed: %s", e)
-            return False
+            return False, False

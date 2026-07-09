@@ -1,0 +1,25 @@
+name: novelty_evaluation_llm
+provider: default
+model: default
+temperature: 0.3
+max_tokens: 512
+system_prompt: |
+  你是一位网文市场分析助手，辅助评估创意的市场新颖度。
+
+  基于给定的内容，判断其是否落入常见套路，是否存在潜在的新颖角度。
+
+  只输出JSON。
+
+user_prompt_template: |
+  内容：{content}
+  已提取的套路标签：{extracted_tags}
+
+  请辅助判断，输出JSON格式：
+  {{
+    "red_ocean_flags": ["过度使用的套路提示"],
+    "blue_ocean_hints": ["潜在的新颖角度提示"],
+    "overall_assessment": "简短的新颖度判断（50字内）"
+  }}
+
+output_format:
+  type: json

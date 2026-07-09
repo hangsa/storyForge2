@@ -94,7 +94,7 @@ interface UseSidebarReturn {
 **API 行为：**
 - `setWidthLive(w)`：`w` clamp 后 `setState`，**不写 localStorage**（拖拽中可能 60 次/秒）
 - `commitWidth(w)`：`w` clamp 后 `setState` + 写 localStorage
-- `toggle()`：翻转 `collapsed`，写 localStorage（含当前 `width`，使展开后还原）
+- `toggle()`：用 functional update 翻转 `collapsed` (`setCollapsed(prev => !prev)`)；写入 localStorage 时取**最新** width（解构 `width` 自当前 state，确保展开后还原到拖拽结束时的值）
 
 ---
 
@@ -111,11 +111,13 @@ interface ResizeHandleProps {
 ```
 
 **实现要点：**
-- `absolute right-0 top-0 h-full w-1`（命中区 4px，视觉 1px 竖线）
+- 定位：`absolute inset-y-0 right-0 w-1`（命中区 4px，视觉 1px 竖线；`inset-y-0` 避免 `h-full` 在 flex+overflow 父容器下的高度歧义）
 - `cursor-col-resize`
-- `onPointerDown`：记录初始 clientX 与 navRect.left（用于计算宽度），`setPointerCapture`，挂全局 `document.body.style.cursor = 'col-resize'` 与 `userSelect = 'none'`
-- `onPointerMove`：计算 `e.clientX - rect.left`，调用 `onLiveChange`
+- 拖拽中：维护 ref 存 `initialClientX` 与 `initialWidth`（避免每像素 setState）
+- `onPointerDown`：记录 initialClientX/initialWidth，`setPointerCapture`，挂全局 `document.body.style.cursor = 'col-resize'` 与 `userSelect = 'none'`
+- `onPointerMove`：计算 `width = initialWidth + (e.clientX - initialClientX)`，调用 `onLiveChange`
 - `onPointerUp`：调用 `onCommit(currentWidth)`，释放 capture，恢复 body 样式
+- `useEffect` cleanup：组件 unmount（如收起时）也强制还原 body cursor / userSelect，防止 leak
 - clamp 在 hook 层完成，handle 只发值
 
 ### `SidebarToggleButton`（`frontend/src/components/layout/SidebarToggleButton.tsx`）
@@ -138,6 +140,7 @@ interface SidebarToggleButtonProps {
 
 新增：
 ```ts
+collapsed: boolean;
 width: number;
 onLiveWidthChange: (w: number) => void;
 onCommitWidth: (w: number) => void;
@@ -146,7 +149,8 @@ onCommitWidth: (w: number) => void;
 行为变化：
 - `collapsed=true` → 组件返回 `null`（无 DOM 节点；main 配合 marginLeft=0 占满）
 - `collapsed=false` → 原内容 + 末尾挂载 `<ResizeHandle>`
-- 根 className 由 `w-[280px]` 改为 `style={{ width }}` 或动态 className
+- 根节点：原 className 中的 `w-[280px]` 替换为 `style={{ width }}`；同时在 className 中加 `transition-all duration-200`（与 main 的过渡同步）
+- 根节点保留原有 `fixed left-0 top-16 h-[calc(100vh-64px)] ... overflow-y-auto` 等
 
 ### `TopHeader` props 变化
 
@@ -172,6 +176,7 @@ const { collapsed, width, setWidthLive, commitWidth, toggle } = useSidebar();
 />
 <SideNavBar
   ...
+  collapsed={collapsed}
   width={width}
   onLiveWidthChange={setWidthLive}
   onCommitWidth={commitWidth}
@@ -199,8 +204,9 @@ const { collapsed, width, setWidthLive, commitWidth, toggle } = useSidebar();
 - 释放时还原
 
 动画：
-- `transition-all duration-200`
-- SideNavBar 宽度 / main marginLeft / 汉堡按钮位置 同步过渡
+- `transition-all duration-200`（SideNavBar 与 main 都需带此 class，否则宽度 / marginLeft 跳变而另一边平滑）
+- 同步过渡的属性：SideNavBar 的 `width` + main 的 `marginLeft`
+- 汉堡按钮本身不动（始终在 TopHeader 固定位置），因此不参与此过渡
 
 ---
 

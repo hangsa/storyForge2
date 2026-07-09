@@ -131,6 +131,8 @@ export interface WorldRulesSummary {
 export interface World {
   era: string;
   geography: string;
+  era_social_structure?: string | null;   // v1.8 [新增] 社会结构
+  era_cultural_history?: string | null;   // v1.8 [新增] 历史文化
   power_system: {
     name: string;
     description: string;

@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, useParams } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
-import ProjectListPage from "./pages/ProjectListPage";
+import HomePage from "./pages/HomePage";
 import StageErrorBoundary from "./components/shared/StageErrorBoundary";
 import { ToastProvider } from "./hooks/useToast";
 import ToastContainer from "./components/shared/ToastContainer";
@@ -45,7 +45,7 @@ function App() {
   return (
     <ToastProvider>
       <Routes>
-      <Route path="/" element={<ProjectListPage />} />
+      <Route path="/" element={<HomePage />} />
       <Route element={<MainLayout />}>
         <Route
           path="/project/:projectId/stage1"

@@ -35,6 +35,8 @@ class WorldRulesSummary(BaseModel):
 class World(BaseModel):
     era: str = ""
     geography: str = ""
+    era_social_structure: Optional[str] = None  # v1.8 [新增] 社会结构
+    era_cultural_history: Optional[str] = None  # v1.8 [新增] 历史文化
     power_system: PowerSystem = Field(default_factory=PowerSystem)
     factions: list[Faction] = []
     core_rules: list[str] = []

@@ -111,8 +111,8 @@ describe("TopHeader - sidebar toggle", () => {
     expect(onToggleSidebar).toHaveBeenCalledTimes(1);
   });
 
-  it("hamburger label flips when collapsed", () => {
-    const { rerender } = render(
+  it("shows expanded label when collapsed is true", () => {
+    render(
       <TopHeader
         projectName=""
         currentStage="INIT"

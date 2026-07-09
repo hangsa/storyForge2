@@ -7,6 +7,8 @@ const STAGE_COLORS: Record<string, string> = {
   STAGE2: "bg-purple-500/20 text-purple-300",
   STAGE3: "bg-amber-500/20 text-amber-300",
   STAGE4: "bg-primary-container/20 text-primary-container",
+  STAGE5: "bg-pink-500/20 text-pink-300",
+  STAGE6: "bg-emerald-500/20 text-emerald-300",
   COMPLETED: "bg-green-500/20 text-green-300",
 };
 
@@ -16,6 +18,8 @@ const STAGE_LABELS: Record<string, string> = {
   STAGE2: "世界观",
   STAGE3: "大纲",
   STAGE4: "工作台",
+  STAGE5: "诊断",
+  STAGE6: "导出",
   COMPLETED: "已完成",
 };
 

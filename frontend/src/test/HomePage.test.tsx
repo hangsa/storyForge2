@@ -127,15 +127,13 @@ describe("HomePage create flow", () => {
 });
 
 describe("HomePage refresh", () => {
-  it("refreshing re-fetches both /stats and /list", async () => {
+  it("refreshing re-fetches /stats", async () => {
     renderPage();
     await screen.findByTestId("stats-sidebar");
     mockApi.getProjectStats.mockClear();
-    mockApi.listProjects.mockClear();
     await act(async () => {
       screen.getByTestId("qa-refresh").click();
     });
     expect(mockApi.getProjectStats).toHaveBeenCalled();
-    expect(mockApi.listProjects).toHaveBeenCalled();
   });
 });

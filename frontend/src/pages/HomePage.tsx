@@ -13,7 +13,6 @@ export default function HomePage() {
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [shelfRefreshKey, setShelfRefreshKey] = useState(0);
 
   const handleCreate = useCallback(
     async (data: { intent: string; title?: string; genre: string; min_words: number }) => {
@@ -45,9 +44,6 @@ export default function HomePage() {
     setRefreshing(true);
     try {
       await refresh();
-      // Bumping the key remounts BookShelf so its own mount effect re-runs
-      // listProjects(), giving the user an up-to-date shelf alongside fresh stats.
-      setShelfRefreshKey((k) => k + 1);
     } finally {
       setRefreshing(false);
     }
@@ -73,7 +69,7 @@ export default function HomePage() {
           submitting={submitting}
           error={createError}
         />
-        <BookShelf key={shelfRefreshKey} mtimes={mtimes} />
+        <BookShelf mtimes={mtimes} />
       </main>
     </div>
   );

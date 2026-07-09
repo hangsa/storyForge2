@@ -80,6 +80,13 @@ export interface BulkDeleteResult {
   failed_count: number;
 }
 
+export interface ProjectStats {
+  total_books: number;
+  total_chapters: number;
+  total_words: number;
+  stage_distribution: Record<string, number>;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -685,6 +692,9 @@ export const api = {
       "/project/bulk-delete",
       { project_ids: projectIds },
     ),
+
+  getProjectStats: () =>
+    request<ProjectStats>("GET", "/project/stats"),
 
   createProject: (data: { intent: string; genre: string; min_words: number; title?: string }) =>
     request<Project>("POST", "/project/create", data),

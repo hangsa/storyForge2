@@ -15,6 +15,8 @@ describe("TopHeader", () => {
         currentStage="STAGE1"
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.getByText("StoryForge")).toBeInTheDocument();
@@ -28,6 +30,8 @@ describe("TopHeader", () => {
         currentStage="STAGE3"
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.getByText("STAGE3")).toBeInTheDocument();
@@ -40,6 +44,8 @@ describe("TopHeader", () => {
         currentStage="INIT"
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.getByText("实时写作")).toBeInTheDocument();
@@ -52,6 +58,8 @@ describe("TopHeader", () => {
         currentStage="INIT"
         collaborationMode="discuss"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.getByText("讨论模式")).toBeInTheDocument();
@@ -64,9 +72,57 @@ describe("TopHeader", () => {
         currentStage="INIT"
         collaborationMode="live"
         autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
       />
     );
     expect(screen.queryByText("/")).not.toBeInTheDocument();
+  });
+});
+
+describe("TopHeader - sidebar toggle", () => {
+  it("renders the hamburger button", () => {
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={() => {}}
+      />
+    );
+    expect(screen.getByRole("button", { name: "收起侧边栏" })).toBeInTheDocument();
+  });
+
+  it("clicking the hamburger calls onToggleSidebar", () => {
+    const onToggleSidebar = vi.fn();
+    render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+        collapsed={false}
+        onToggleSidebar={onToggleSidebar}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "收起侧边栏" }));
+    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+  });
+
+  it("hamburger label flips when collapsed", () => {
+    const { rerender } = render(
+      <TopHeader
+        projectName=""
+        currentStage="INIT"
+        collaborationMode="live"
+        autoSaveStatus="saved"
+        collapsed={true}
+        onToggleSidebar={() => {}}
+      />
+    );
+    expect(screen.getByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
   });
 });
 

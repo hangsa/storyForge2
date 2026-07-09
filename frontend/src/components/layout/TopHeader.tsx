@@ -1,8 +1,12 @@
+import SidebarToggleButton from "./SidebarToggleButton";
+
 interface TopHeaderProps {
   projectName: string;
   currentStage: string;
   collaborationMode: string;
   autoSaveStatus: "saved" | "saving" | "error";
+  collapsed: boolean;
+  onToggleSidebar: () => void;
 }
 
 export default function TopHeader({
@@ -10,10 +14,13 @@ export default function TopHeader({
   currentStage,
   collaborationMode,
   autoSaveStatus,
+  collapsed,
+  onToggleSidebar,
 }: TopHeaderProps) {
   return (
     <header className="fixed top-0 left-0 w-full z-50 h-16 bg-surface-container-low border-b border-outline-variant flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
+        <SidebarToggleButton collapsed={collapsed} onToggle={onToggleSidebar} />
         <span className="font-display text-lg text-primary-container font-semibold">
           StoryForge
         </span>
@@ -36,7 +43,9 @@ export default function TopHeader({
           <span className="material-symbols-outlined text-lg">search</span>
         </button>
         <button className="font-body-ui text-system-log hover:text-primary transition-colors">
-          <span className="material-symbols-outlined text-lg">notifications</span>
+          <span className="material-symbols-outlined text-lg">
+            notifications
+          </span>
         </button>
         <div className="w-8 h-8 rounded-full bg-primary-container/20 flex items-center justify-center">
           <span className="material-symbols-outlined text-primary-container text-sm">

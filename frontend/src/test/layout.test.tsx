@@ -74,7 +74,16 @@ describe("SideNavBar", () => {
   const onNavigate = vi.fn();
 
   it("renders all stage navigation items", () => {
-    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="INIT"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     expect(screen.getByText("项目中心")).toBeInTheDocument();
     expect(screen.getByText("概念讨论")).toBeInTheDocument();
     expect(screen.getByText("世界观+角色")).toBeInTheDocument();
@@ -83,28 +92,96 @@ describe("SideNavBar", () => {
   });
 
   it("highlights the active stage", () => {
-    render(<SideNavBar currentStage="STAGE4" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="STAGE4"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     const activeButton = screen.getByText("写作中心").closest("button");
     expect(activeButton).toHaveClass("border-primary-container");
   });
 
   it("renders disabled workspace items", () => {
-    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="INIT"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     const inspirationBtn = screen.getByText("灵感库").closest("button");
     expect(inspirationBtn).toBeDisabled();
   });
 
   it("calls onNavigate when stage clicked", () => {
-    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="INIT"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     fireEvent.click(screen.getByText("概念讨论"));
     expect(onNavigate).toHaveBeenCalledWith("STAGE1");
   });
 
   it("renders section headers", () => {
-    render(<SideNavBar currentStage="INIT" onNavigate={onNavigate} />);
+    render(
+      <SideNavBar
+        currentStage="INIT"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
     expect(screen.getByText("项目")).toBeInTheDocument();
     expect(screen.getByText("叙事阶段")).toBeInTheDocument();
     expect(screen.getByText("工作区")).toBeInTheDocument();
+  });
+});
+
+describe("SideNavBar - collapsed", () => {
+  it("returns null when collapsed is true", () => {
+    const onNavigate = vi.fn();
+    const { container } = render(
+      <SideNavBar
+        currentStage="STAGE4"
+        onNavigate={onNavigate}
+        collapsed={true}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders ResizeHandle when expanded", () => {
+    const onNavigate = vi.fn();
+    render(
+      <SideNavBar
+        currentStage="STAGE4"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
+    expect(screen.getByTestId("resize-handle")).toBeInTheDocument();
   });
 });
 

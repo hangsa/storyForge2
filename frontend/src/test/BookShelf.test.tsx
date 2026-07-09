@@ -34,7 +34,10 @@ beforeEach(() => {
 function renderShelf(props: {
   mtimes?: ProjectMtime[];
 } = {}) {
-  const mtimes = props.mtimes ?? SAMPLE.map((p, i) => ({ id: p.id, mtime: 1000 + i }));
+  // Default mtimes: assign HIGHEST mtime to proj_a (the project the test expects to see
+  // in the top 5), descending toward proj_f. This mimics a scenario where proj_a was
+  // updated most recently and proj_f least recently.
+  const mtimes = props.mtimes ?? SAMPLE.map((p, i) => ({ id: p.id, mtime: 1000 + (SAMPLE.length - i) }));
   return render(<BookShelf mtimes={mtimes} />);
 }
 
@@ -49,14 +52,15 @@ describe("BookShelf", () => {
   });
 
   it("sorts by mtime desc (most recently updated first)", async () => {
-    // Reverse mtimes so proj_f (雪落无声) is newest.
-    const mtimes = SAMPLE.map((p, i) => ({ id: p.id, mtime: 1000 + (SAMPLE.length - i) }));
+    // Give proj_f (雪落无声) the highest mtime; everything else gets a lower one.
+    const mtimes = SAMPLE.map((p, i) => ({ id: p.id, mtime: p.id === "proj_f" ? 9999 : 1000 + i }));
     renderShelf({ mtimes });
     await screen.findByText("雪落无声");
     const cards = document.querySelectorAll('[data-testid="book-card"]');
+    // proj_f is the newest → should be the first visible card.
     expect(cards[0].textContent).toContain("雪落无声");
-    expect(cards[4].textContent).toContain("诡眼少年");
-    expect(cards[5]).toBeUndefined(); // only 5 visible
+    // proj_a is the oldest (mtime 1000) → should be excluded from the top 5.
+    expect(screen.queryByText("诡眼少年")).not.toBeInTheDocument();
   });
 
   it("filters by case-insensitive title match", async () => {

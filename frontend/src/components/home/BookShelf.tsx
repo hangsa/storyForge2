@@ -80,8 +80,9 @@ export default function BookShelf({ mtimes }: BookShelfProps) {
     return [...projects].sort((a, b) => {
       const ma = mtimeById.get(a.id) ?? 0;
       const mb = mtimeById.get(b.id) ?? 0;
-      if (ma !== mb) return ma - mb;
-      // Fall back to created_at desc.
+      // Primary: mtime DESC (most recently updated first).
+      if (ma !== mb) return mb - ma;
+      // Fallback: created_at DESC (most recently created first).
       return (b.created_at || "").localeCompare(a.created_at || "");
     });
   }, [projects, mtimeById]);

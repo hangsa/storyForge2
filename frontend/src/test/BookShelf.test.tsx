@@ -150,7 +150,9 @@ describe("BookShelf", () => {
     }
   });
 
-  it("non-INIT book click navigates to stage1", async () => {
+  it("STAGE2 (世界观) book click navigates to the wizard deep-link", async () => {
+    // A book that's mid-wizard (concept done, world step in progress) should
+    // re-enter the init wizard — not the standalone /stage1 concept page.
     const assignSpy = vi.fn();
     const original = window.location.assign;
     Object.defineProperty(window, "location", {
@@ -164,7 +166,30 @@ describe("BookShelf", () => {
       await act(async () => {
         card.click();
       });
-      expect(assignSpy).toHaveBeenCalledWith("/project/proj_a/stage1");
+      expect(assignSpy).toHaveBeenCalledWith("/project/proj_a/wizard");
+    } finally {
+      Object.defineProperty(window, "location", {
+        value: { ...window.location, assign: original },
+        writable: true,
+      });
+    }
+  });
+
+  it("STAGE4 (工作台) book click navigates to stage1 — wizard already finished", async () => {
+    const assignSpy = vi.fn();
+    const original = window.location.assign;
+    Object.defineProperty(window, "location", {
+      value: { ...window.location, assign: assignSpy },
+      writable: true,
+    });
+    try {
+      renderShelf();
+      await screen.findByText("数据星河"); // proj_d has current_stage "STAGE4"
+      const card = screen.getByText("数据星河").closest('[data-testid="book-card"]')!;
+      await act(async () => {
+        card.click();
+      });
+      expect(assignSpy).toHaveBeenCalledWith("/project/proj_d/stage1");
     } finally {
       Object.defineProperty(window, "location", {
         value: { ...window.location, assign: original },

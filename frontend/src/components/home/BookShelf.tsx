@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import api, { ProjectSummary } from "../../api/client";
 import BookShelfModal from "./BookShelfModal";
+import { isPreWizardStage } from "./stages";
 
 const STAGE_COLORS: Record<string, string> = {
   INIT: "bg-system-log/20 text-system-log",
@@ -341,12 +342,13 @@ function BookCard({ project, selectMode, selected, onToggle }: BookCardProps) {
       onToggle();
       return;
     }
-    // INIT-stage projects haven't started setup yet — open the wizard so the
-    // user can continue from the latest step they reached.
-    const href =
-      project.current_stage === "INIT"
-        ? `/project/${encodeURIComponent(project.id)}/wizard`
-        : `/project/${encodeURIComponent(project.id)}/stage1`;
+    // Pre-wizard stages (INIT, STAGE1, STAGE2, STAGE3) are mid-initialization —
+    // open the wizard so the user can continue from the latest step they
+    // reached. Only STAGE4+ means the wizard finished and we should drop the
+    // user into the workspace.
+    const href = isPreWizardStage(project.current_stage)
+      ? `/project/${encodeURIComponent(project.id)}/wizard`
+      : `/project/${encodeURIComponent(project.id)}/stage1`;
     window.location.assign(href);
   };
 

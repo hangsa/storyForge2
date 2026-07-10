@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { ProjectSummary } from "../../api/client";
+import { isPreWizardStage } from "./stages";
 
 const STAGE_COLORS: Record<string, string> = {
   INIT: "bg-system-log/20 text-system-log",
@@ -85,10 +86,9 @@ export default function BookShelfModal({ projects, onClose }: BookShelfModalProp
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filtered.map((p) => {
-              const href =
-                p.current_stage === "INIT"
-                  ? `/project/${encodeURIComponent(p.id)}/wizard`
-                  : `/project/${encodeURIComponent(p.id)}/stage1`;
+              const href = isPreWizardStage(p.current_stage)
+                ? `/project/${encodeURIComponent(p.id)}/wizard`
+                : `/project/${encodeURIComponent(p.id)}/stage1`;
               return (
               <a
                 key={p.id}

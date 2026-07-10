@@ -1,6 +1,7 @@
 import { useState } from "react";
 import api, { World } from "../../api/client";
 import { useWizard } from "./WizardContext";
+import TagEditor from "../shared/TagEditor";
 
 interface WorldStepProps {
   projectId: string;
@@ -15,6 +16,8 @@ const EMPTY_WORLD: World = {
   factions: [],
   core_rules: [],
 };
+
+type FactionField = "name" | "type" | "goal" | "relations";
 
 export default function WorldStep({ projectId }: WorldStepProps) {
   const wizard = useWizard();
@@ -45,6 +48,29 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const setPowerSystemField = <K extends "name" | "description" | "cost_system">(
+    key: K,
+    value: World["power_system"][K],
+  ) => {
+    setWorld({ ...world, power_system: { ...world.power_system, [key]: value } });
+  };
+
+  const updateFaction = (index: number, field: FactionField, value: string) => {
+    const next = world.factions.map((f, i) => (i === index ? { ...f, [field]: value } : f));
+    setWorld({ ...world, factions: next });
+  };
+
+  const addFaction = () => {
+    setWorld({
+      ...world,
+      factions: [...world.factions, { name: "", type: "", goal: "", relations: "" }],
+    });
+  };
+
+  const removeFaction = (index: number) => {
+    setWorld({ ...world, factions: world.factions.filter((_, i) => i !== index) });
   };
 
   return (
@@ -80,6 +106,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
 
       {(wizard.status === "completed" || wizard.data.world) && (
         <div data-testid="world-form" className="space-y-4">
+          {/* 时代与地理 */}
           <div className="border border-outline-variant rounded-lg p-4">
             <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider mb-3">时代与地理</div>
             <div className="space-y-3">
@@ -128,6 +155,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
             </div>
           </div>
 
+          {/* 力量体系 */}
           <div className="border border-outline-variant rounded-lg p-4">
             <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider mb-3">力量体系</div>
             <div className="space-y-3">
@@ -135,7 +163,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                 <label className="block font-label-mono text-system-log mb-1 text-xs">体系名称</label>
                 <input
                   value={world.power_system.name}
-                  onChange={(e) => setWorld({ ...world, power_system: { ...world.power_system, name: e.target.value } })}
+                  onChange={(e) => setPowerSystemField("name", e.target.value)}
                   className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
                 />
               </div>
@@ -143,19 +171,143 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                 <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
                 <textarea
                   value={world.power_system.description}
-                  onChange={(e) => setWorld({ ...world, power_system: { ...world.power_system, description: e.target.value } })}
+                  onChange={(e) => setPowerSystemField("description", e.target.value)}
                   rows={2}
                   className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
                 />
               </div>
               <div>
+                <label className="block font-label-mono text-system-log mb-1 text-xs">阶段划分</label>
+                <div data-testid="world-power-stages">
+                  <TagEditor
+                    items={world.power_system.stages ?? []}
+                    onItemsChange={(items) => setPowerSystemField("stages", items)}
+                    saving={busy}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-label-mono text-system-log mb-1 text-xs">体系规则</label>
+                <div data-testid="world-power-rules">
+                  <TagEditor
+                    items={world.power_system.core_rules ?? []}
+                    onItemsChange={(items) => setPowerSystemField("core_rules", items)}
+                    saving={busy}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-label-mono text-system-log mb-1 text-xs">力量上限</label>
+                <div data-testid="world-power-ceilings">
+                  <TagEditor
+                    items={world.power_system.ceilings ?? []}
+                    onItemsChange={(items) => setPowerSystemField("ceilings", items)}
+                    saving={busy}
+                  />
+                </div>
+              </div>
+              <div>
                 <label className="block font-label-mono text-system-log mb-1 text-xs">代价系统</label>
                 <input
                   value={world.power_system.cost_system ?? ""}
-                  onChange={(e) => setWorld({ ...world, power_system: { ...world.power_system, cost_system: e.target.value } })}
+                  onChange={(e) => setPowerSystemField("cost_system", e.target.value)}
                   className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* 世界规则 */}
+          <div className="border border-outline-variant rounded-lg p-4">
+            <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider mb-3">世界规则</div>
+            <div data-testid="world-core-rules">
+              <TagEditor
+                items={world.core_rules ?? []}
+                onItemsChange={(items) => setWorld({ ...world, core_rules: items })}
+                saving={busy}
+              />
+            </div>
+          </div>
+
+          {/* 势力分布 */}
+          <div className="border border-outline-variant rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">势力分布</div>
+              <button
+                type="button"
+                data-testid="world-faction-add"
+                onClick={addFaction}
+                disabled={busy}
+                className="flex items-center gap-1 px-2 py-1 text-xs border border-dashed
+                           border-system-log/30 rounded text-system-log/60
+                           hover:text-primary-container hover:border-primary-container/50
+                           transition-colors disabled:opacity-30"
+              >
+                <span className="material-symbols-outlined text-xs">add</span>
+                添加势力
+              </button>
+            </div>
+            <div data-testid="world-factions" className="space-y-3">
+              {world.factions.length === 0 && (
+                <p className="font-body-ui text-system-log/40 text-xs text-center py-3">暂无势力</p>
+              )}
+              {world.factions.map((f, i) => (
+                <div
+                  key={i}
+                  data-testid={`world-faction-${i}`}
+                  className="border border-outline-variant rounded p-3 space-y-2 relative"
+                >
+                  <button
+                    type="button"
+                    data-testid={`world-faction-${i}-remove`}
+                    onClick={() => removeFaction(i)}
+                    disabled={busy}
+                    aria-label="删除势力"
+                    className="absolute top-2 right-2 text-system-log/40 hover:text-error transition-colors disabled:opacity-30"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                  <div className="grid grid-cols-2 gap-2 pr-6">
+                    <div>
+                      <label className="block font-label-mono text-system-log mb-1 text-[10px]">名称</label>
+                      <input
+                        data-testid={`world-faction-${i}-name`}
+                        value={f.name}
+                        onChange={(e) => updateFaction(i, "name", e.target.value)}
+                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-label-mono text-system-log mb-1 text-[10px]">类型</label>
+                      <input
+                        data-testid={`world-faction-${i}-type`}
+                        value={f.type}
+                        onChange={(e) => updateFaction(i, "type", e.target.value)}
+                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-label-mono text-system-log mb-1 text-[10px]">目标</label>
+                    <textarea
+                      data-testid={`world-faction-${i}-goal`}
+                      value={f.goal}
+                      onChange={(e) => updateFaction(i, "goal", e.target.value)}
+                      rows={2}
+                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-label-mono text-system-log mb-1 text-[10px]">关系</label>
+                    <input
+                      data-testid={`world-faction-${i}-relations`}
+                      value={f.relations}
+                      onChange={(e) => updateFaction(i, "relations", e.target.value)}
+                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

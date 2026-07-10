@@ -281,4 +281,57 @@ describe("CharacterStep", () => {
     const voice = screen.getByTestId("character-c1-voice");
     expect(voice.textContent).toContain("—");
   });
+
+  it("ignores prior characters in cumulative response (regression: 6×李玄阳)", async () => {
+    // The backend returns the cumulative characters.json on every call —
+    // call 2 returns [c1, c2], call 3 returns [c1, c2, c3], etc. The wizard
+    // must take only the newly-created character (the last one) from each
+    // response, otherwise the user sees 1+2+3+4+5+6 = 21 cards.
+    const cumulative: ReturnType<typeof makeChar>[] = [];
+    let i = 0;
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, t: string) => {
+      i += 1;
+      const newChar = makeChar(`c${i}`, t);
+      cumulative.push(newChar);
+      return { characters: [...cumulative], current: null };
+    });
+    setup();
+    await act(async () => {
+      screen.getByTestId("character-start").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+    expect(api.generateCharacter).toHaveBeenCalledTimes(6);
+    // Exactly 6 cards, not 21.
+    expect(screen.getByTestId("character-list").children).toHaveLength(6);
+    // The card IDs match the freshly-generated ones (c1..c6).
+    for (let n = 1; n <= 6; n++) {
+      expect(screen.getByTestId(`character-c${n}`)).toBeInTheDocument();
+    }
+  });
+
+  it("manual add takes only the new character from a cumulative response", async () => {
+    // Start with one character via single-start (mock returns single-char list).
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({
+      characters: [makeChar("c1", "protagonist", "林峰")],
+      current: null,
+    }));
+    setup();
+    await act(async () => {
+      screen.getByTestId("character-type-protagonist").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(1));
+    // Now mock the next call to return the cumulative list [c1, c2].
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({
+      characters: [makeChar("c1", "protagonist", "林峰"), makeChar("c2", "supporting", "苏晓晓")],
+      current: null,
+    }));
+    await act(async () => {
+      screen.getByTestId("character-add-supporting").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(2));
+    // c1 must still be 林峰 (the wizard must not duplicate it from the
+    // cumulative response); c2 is the new 苏晓晓.
+    expect(screen.getByTestId("character-c1").textContent).toContain("林峰");
+    expect(screen.getByTestId("character-c2").textContent).toContain("苏晓晓");
+  });
 });

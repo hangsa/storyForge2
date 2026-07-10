@@ -22,10 +22,16 @@ const DEFAULT_BATCH: Character["character_type"][] = [
   "supporting",
 ];
 
-function mergeCharacters(prev: CharacterSet | null, additions: Character[]): CharacterSet {
-  const existing = prev?.characters ?? [];
-  const current = prev?.current ?? additions[0];
-  return { characters: [...existing, ...additions], current };
+/**
+ * The backend's `/stage2/generate-character` endpoint reads characters.json,
+ * appends the new character, and returns the cumulative list. The new
+ * character is always the last entry; earlier entries are whatever was on
+ * disk before this call. Callers must NOT merge the full response — that
+ * would double-count on the second call of a batch.
+ */
+function pickNewlyCreated(result: CharacterSet): Character | null {
+  const list = result.characters ?? [];
+  return list.length > 0 ? list[list.length - 1] : null;
 }
 
 export default function CharacterStep({ projectId }: CharacterStepProps) {
@@ -33,19 +39,22 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   const [characters, setCharacters] = useState<CharacterSet | null>(wizard.data.characters ?? null);
   const [busy, setBusy] = useState(false);
 
-  const generateOne = async (type: Character["character_type"]): Promise<Character[]> => {
-    const result = await api.generateCharacter(projectId, type);
-    return result.characters ?? [];
-  };
-
   const handleBatchStart = async () => {
     wizard.startStep(3);
     setBusy(true);
     try {
-      const results = await Promise.all(DEFAULT_BATCH.map(generateOne));
-      const all = results.flat();
-      if (all.length === 0) throw new Error("生成结果为空");
-      setCharacters({ characters: all, current: all[0] });
+      // Sequential, not parallel: the backend's generate-character is a
+      // read-append-write race, and the LLM prompt relies on
+      // existing_characters for differentiation. Parallel calls cause both
+      // to fail (6 cards named the same; see "6×李玄阳" diagnosis).
+      const newChars: Character[] = [];
+      for (const type of DEFAULT_BATCH) {
+        const result = await api.generateCharacter(projectId, type);
+        const fresh = pickNewlyCreated(result);
+        if (!fresh) throw new Error("生成结果为空");
+        newChars.push(fresh);
+      }
+      setCharacters({ characters: newChars, current: newChars[0] });
       wizard.setStatus("completed");
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色生成失败");
@@ -58,9 +67,10 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     wizard.startStep(3);
     setBusy(true);
     try {
-      const added = await generateOne(type);
-      if (added.length === 0) throw new Error("生成结果为空");
-      setCharacters(mergeCharacters(null, added));
+      const result = await api.generateCharacter(projectId, type);
+      const fresh = pickNewlyCreated(result);
+      if (!fresh) throw new Error("生成结果为空");
+      setCharacters({ characters: [fresh], current: fresh });
       wizard.setStatus("completed");
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色生成失败");
@@ -72,9 +82,12 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   const handleAddOne = async (type: Character["character_type"]) => {
     setBusy(true);
     try {
-      const added = await generateOne(type);
-      if (added.length === 0) throw new Error("生成结果为空");
-      setCharacters(mergeCharacters(characters, added));
+      const result = await api.generateCharacter(projectId, type);
+      const fresh = pickNewlyCreated(result);
+      if (!fresh) throw new Error("生成结果为空");
+      const existing = characters?.characters ?? [];
+      const current = characters?.current ?? fresh;
+      setCharacters({ characters: [...existing, fresh], current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色添加失败");
     } finally {

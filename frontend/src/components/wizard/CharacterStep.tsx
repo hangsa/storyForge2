@@ -1,33 +1,82 @@
 import { useState } from "react";
-import api, { CharacterSet } from "../../api/client";
+import api, { Character, CharacterSet } from "../../api/client";
 import { useWizard } from "./WizardContext";
 
 interface CharacterStepProps {
   projectId: string;
 }
 
-const CHARACTER_TYPES: { value: string; label: string }[] = [
+const CHARACTER_TYPES: { value: Character["character_type"]; label: string }[] = [
   { value: "protagonist", label: "主角" },
   { value: "antagonist", label: "反派" },
   { value: "supporting", label: "配角" },
   { value: "mentor", label: "导师" },
 ];
 
+const DEFAULT_BATCH: Character["character_type"][] = [
+  "protagonist",
+  "antagonist",
+  "antagonist",
+  "supporting",
+  "supporting",
+  "supporting",
+];
+
+function mergeCharacters(prev: CharacterSet | null, additions: Character[]): CharacterSet {
+  const existing = prev?.characters ?? [];
+  const current = prev?.current ?? additions[0];
+  return { characters: [...existing, ...additions], current };
+}
+
 export default function CharacterStep({ projectId }: CharacterStepProps) {
   const wizard = useWizard();
   const [characters, setCharacters] = useState<CharacterSet | null>(wizard.data.characters ?? null);
-  const [characterType, setCharacterType] = useState("protagonist");
   const [busy, setBusy] = useState(false);
 
-  const handleStart = async () => {
+  const generateOne = async (type: Character["character_type"]): Promise<Character[]> => {
+    const result = await api.generateCharacter(projectId, type);
+    return result.characters ?? [];
+  };
+
+  const handleBatchStart = async () => {
     wizard.startStep(3);
     setBusy(true);
     try {
-      const result = await api.generateCharacter(projectId, characterType);
-      setCharacters(result);
+      const results = await Promise.all(DEFAULT_BATCH.map(generateOne));
+      const all = results.flat();
+      if (all.length === 0) throw new Error("生成结果为空");
+      setCharacters({ characters: all, current: all[0] });
       wizard.setStatus("completed");
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色生成失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSingleStart = async (type: Character["character_type"]) => {
+    wizard.startStep(3);
+    setBusy(true);
+    try {
+      const added = await generateOne(type);
+      if (added.length === 0) throw new Error("生成结果为空");
+      setCharacters(mergeCharacters(null, added));
+      wizard.setStatus("completed");
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "角色生成失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAddOne = async (type: Character["character_type"]) => {
+    setBusy(true);
+    try {
+      const added = await generateOne(type);
+      if (added.length === 0) throw new Error("生成结果为空");
+      setCharacters(mergeCharacters(characters, added));
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "角色添加失败");
     } finally {
       setBusy(false);
     }
@@ -52,40 +101,10 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     }
   };
 
+  const hasCharacters = !!characters && characters.characters.length > 0;
+
   return (
     <div data-testid="character-step" className="space-y-4">
-      {wizard.status === "idle" && (
-        <div data-testid="character-idle" className="text-center py-12 space-y-4">
-          <span className="material-symbols-outlined text-5xl text-system-log/30 block">person</span>
-          <p className="font-body-ui text-system-log">选择要生成的角色类型</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {CHARACTER_TYPES.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                data-testid={`character-type-${value}`}
-                onClick={() => setCharacterType(value)}
-                className={`px-3 py-1.5 rounded-full border text-sm font-body-ui transition-colors ${
-                  characterType === value
-                    ? "bg-primary-container text-surface-container-low border-primary-container"
-                    : "bg-surface-container text-system-log border-outline-variant hover:border-primary-container"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <button
-            data-testid="character-start"
-            onClick={handleStart}
-            disabled={busy}
-            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui rounded-lg hover:opacity-90 disabled:opacity-40"
-          >
-            {busy ? "生成中…" : "开始生成"}
-          </button>
-        </div>
-      )}
-
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
@@ -96,17 +115,51 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       {wizard.status === "error" && (
         <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
           {wizard.errorMessage}
-          <button onClick={handleStart} className="ml-3 px-3 py-1 bg-surface-container text-primary rounded text-xs">重试</button>
+          <button onClick={handleBatchStart} className="ml-3 px-3 py-1 bg-surface-container text-primary rounded text-xs">重试</button>
         </div>
       )}
 
-      {characters && characters.characters.length > 0 && (
+      {!hasCharacters && wizard.status !== "generating" && wizard.status !== "error" && (
+        <div data-testid="character-idle" className="text-center py-10 space-y-5">
+          <span className="material-symbols-outlined text-5xl text-system-log/30 block">person</span>
+          <p className="font-body-ui text-system-log">选择生成方式</p>
+          <button
+            data-testid="character-start"
+            onClick={handleBatchStart}
+            disabled={busy}
+            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui rounded-lg hover:opacity-90 disabled:opacity-40"
+          >
+            {busy ? "生成中…" : "开始生成（默认 1主角 + 2反派 + 3配角）"}
+          </button>
+          <div className="space-y-2">
+            <p className="font-label-mono text-system-log/70 text-xs">或单独生成一个：</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {CHARACTER_TYPES.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  data-testid={`character-type-${value}`}
+                  onClick={() => handleSingleStart(value)}
+                  disabled={busy}
+                  className="px-3 py-1.5 rounded-full border text-sm font-body-ui
+                             bg-surface-container text-system-log border-outline-variant
+                             hover:border-primary-container transition-colors disabled:opacity-40"
+                >
+                  仅生成{label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasCharacters && (
         <div data-testid="character-form" className="space-y-3">
           <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
-            已生成 {characters.characters.length} 个角色
+            已生成 {characters!.characters.length} 个角色
           </div>
-          <ul className="space-y-2">
-            {characters.characters.map((c) => (
+          <ul data-testid="character-list" className="space-y-2">
+            {characters!.characters.map((c) => (
               <li
                 key={c.id}
                 data-testid={`character-${c.id}`}
@@ -122,16 +175,40 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
               </li>
             ))}
           </ul>
+
+          <div className="border-t border-outline-variant pt-3 space-y-2">
+            <p className="font-label-mono text-system-log/70 text-xs">手动添加更多角色：</p>
+            <div className="flex flex-wrap gap-2">
+              {CHARACTER_TYPES.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  data-testid={`character-add-${value}`}
+                  onClick={() => handleAddOne(value)}
+                  disabled={busy}
+                  className="px-3 py-1.5 rounded-full border border-dashed text-sm font-body-ui
+                             border-outline-variant text-system-log/70
+                             hover:text-primary-container hover:border-primary-container/50
+                             transition-colors disabled:opacity-40"
+                >
+                  + {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <p className="font-body-ui text-system-log/60 text-xs">
             角色详情可在工作台的角色标签页内继续编辑。
           </p>
+
           <div className="flex justify-between pt-2">
             <button
-              onClick={handleStart}
+              data-testid="character-regenerate"
+              onClick={handleBatchStart}
               disabled={busy}
               className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
             >
-              再生成一个
+              重新生成
             </button>
             <button
               data-testid="character-next"

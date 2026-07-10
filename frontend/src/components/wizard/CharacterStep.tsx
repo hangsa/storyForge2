@@ -38,6 +38,12 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     setBusy(true);
     try {
       await api.updateCharacter(projectId, characters);
+      try {
+        await api.advance(projectId, "STAGE3");
+      } catch {
+        // best-effort: STAGE3 needs both world.json and characters.json — if user
+        // skipped WorldStep or went back without re-running it, advance fails.
+      }
       wizard.saveStep(3, { characters });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色保存失败");

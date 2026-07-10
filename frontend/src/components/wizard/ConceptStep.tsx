@@ -40,6 +40,11 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
     setBusy(true);
     try {
       await api.updateConcept(projectId, concept, dna);
+      try {
+        await api.advance(projectId, "STAGE2");
+      } catch {
+        // best-effort: preconditions may not be met if user goes back and re-saves
+      }
       wizard.saveStep(1, { concept, story_dna: dna });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念保存失败");

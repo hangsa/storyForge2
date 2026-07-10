@@ -57,18 +57,7 @@ function setupInModal() {
 }
 
 describe("ConceptStep", () => {
-  it("renders idle state with '开始生成' button initially", () => {
-    render(
-      <WizardProvider projectId="proj_x">
-        <Harness projectId="proj_x" />
-      </WizardProvider>
-    );
-    expect(screen.getByTestId("concept-step")).toBeInTheDocument();
-    expect(screen.getByTestId("concept-start")).toBeInTheDocument();
-    expect(screen.getByText("开始生成")).toBeInTheDocument();
-  });
-
-  it("clicking start calls generateConcept and shows completed form", async () => {
+  it("auto-triggers generateConcept on mount (no '开始生成' button)", async () => {
     (api.generateConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
       concept: { title: "T", genre: "cool_novel", premise: "P", tone: "n", theme: "t", target_audience: "a", style_template: "s" },
       story_dna: { core_contradiction: { statement: "C", side_a: "A", side_b: "B" }, value_stack: [] },
@@ -78,37 +67,45 @@ describe("ConceptStep", () => {
         <Harness projectId="proj_x" />
       </WizardProvider>
     );
-    await act(async () => {
-      screen.getByTestId("concept-start").click();
-    });
-    expect(api.generateConcept).toHaveBeenCalledWith("proj_x");
-    await waitFor(() => expect(screen.getByTestId("concept-form")).toBeInTheDocument());
-    expect((screen.getByTestId("concept-title") as HTMLInputElement).value).toBe("T");
+    expect(screen.queryByTestId("concept-start")).not.toBeInTheDocument();
+    await waitFor(() => expect(api.generateConcept).toHaveBeenCalledWith("proj_x"));
   });
 
-  it("shows error banner when generation fails", async () => {
-    (api.generateConcept as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("LLM 失败"));
+  it("after auto-trigger the completed form is shown populated", async () => {
+    (api.generateConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
+      concept: { title: "T", genre: "cool_novel", premise: "P", tone: "n", theme: "t", target_audience: "a", style_template: "s" },
+      story_dna: { core_contradiction: { statement: "C", side_a: "A", side_b: "B" }, value_stack: [] },
+    });
     render(
       <WizardProvider projectId="proj_x">
         <Harness projectId="proj_x" />
       </WizardProvider>
     );
-    await act(async () => {
-      screen.getByTestId("concept-start").click();
-    });
-    expect(await screen.findByTestId("concept-error")).toHaveTextContent("LLM 失败");
+    expect(await screen.findByTestId("concept-form")).toBeInTheDocument();
+    expect((screen.getByTestId("concept-title") as HTMLInputElement).value).toBe("T");
   });
 
-  it("'确认修改并继续' in modal footer calls updateConcept and advances to STAGE2", async () => {
+  it("error state shows the error banner with no '重试' button, but footer '重新生成' is enabled", async () => {
+    (api.generateConcept as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("LLM 失败"));
+    render(
+      <MemoryRouter>
+        <InitWizardModal projectId="proj_x" onDismiss={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("concept-error")).toHaveTextContent("LLM 失败");
+    expect(screen.queryByText("重试")).not.toBeInTheDocument();
+    // Footer "重新生成" is the retry affordance; it's enabled when status is "error".
+    const regen = await screen.findByTestId("wizard-regenerate");
+    expect(regen).not.toBeDisabled();
+  });
+
+  it("'确认修改并继续' in modal footer calls updateConcept and advances to STAGE2 (no resave → steps 2..6 untouched)", async () => {
     (api.generateConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
       concept: { title: "T", genre: "cool_novel", premise: "P", tone: "n", theme: "t", target_audience: "a", style_template: "s" },
       story_dna: { core_contradiction: { statement: "C", side_a: "A", side_b: "B" }, value_stack: [] },
     });
     (api.updateConcept as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setupInModal();
-    await act(async () => {
-      screen.getByTestId("concept-start").click();
-    });
     await screen.findByTestId("concept-form");
     await act(async () => {
       screen.getByTestId("wizard-next").click();

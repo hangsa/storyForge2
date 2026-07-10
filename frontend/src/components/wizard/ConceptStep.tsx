@@ -60,12 +60,29 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
     }
   };
 
+  // Auto-trigger generation on mount if no concept has been generated yet.
+  // Errors keep the error UI visible so the user can hit "重新生成" in the footer.
+  useEffect(() => {
+    if (
+      !wizard.data.concept &&
+      wizard.status !== "generating" &&
+      wizard.status !== "error"
+    ) {
+      handleStart();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
   // just registers the handlers and the current busy state.
   useEffect(() => {
-    const showForm = wizard.status === "completed" || !!wizard.data.concept;
-    wizard.setRegenerateHandler(showForm ? handleStart : null, busy);
-    wizard.setNextHandler(showForm ? handleNext : null, busy);
+    const canRegenerate =
+      !!wizard.data.concept ||
+      wizard.status === "completed" ||
+      wizard.status === "error";
+    const canSave = wizard.status === "completed" || !!wizard.data.concept;
+    wizard.setRegenerateHandler(canRegenerate ? handleStart : null, busy);
+    wizard.setNextHandler(canSave ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
       wizard.setNextHandler(null, false);
@@ -75,21 +92,6 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
 
   return (
     <div data-testid="concept-step" className="space-y-4">
-      {wizard.status === "idle" && (
-        <div data-testid="concept-idle" className="text-center py-12">
-          <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">lightbulb</span>
-          <p className="font-body-ui text-system-log mb-6">点击下方按钮生成故事概念与 Story DNA</p>
-          <button
-            data-testid="concept-start"
-            onClick={handleStart}
-            disabled={busy}
-            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-          >
-            {busy ? "生成中…" : "开始生成"}
-          </button>
-        </div>
-      )}
-
       {wizard.status === "generating" && (
         <div data-testid="concept-loading" className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
@@ -100,12 +102,6 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       {wizard.status === "error" && (
         <div data-testid="concept-error" className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
           {wizard.errorMessage}
-          <button
-            onClick={handleStart}
-            className="ml-3 px-3 py-1 bg-surface-container text-primary rounded text-xs"
-          >
-            重试
-          </button>
         </div>
       )}
 

@@ -27,6 +27,17 @@ const EMPTY_DATA: WizardData = {
   chapter1_outline: null,
 };
 
+// Maps each wizard data key to the step that owns it. step 4 (Map) owns no
+// data. Used by the STEP_COMPLETED reducer to clear downstream keys on resave.
+const STEP_DATA_KEY_TO_STEP: Partial<Record<keyof WizardData, number>> = {
+  concept: 1,
+  story_dna: 1,
+  world: 2,
+  characters: 3,
+  novel_outline: 5,
+  chapter1_outline: 6,
+};
+
 interface WizardState {
   currentStep: number;
   completedSteps: number[];
@@ -93,16 +104,36 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
     case "START_STEP":
       return { ...state, currentStep: action.step, status: "generating", errorMessage: null };
-    case "STEP_COMPLETED":
+    case "STEP_COMPLETED": {
+      const { step, patch } = action;
+      const isResave = state.completedSteps.includes(step);
+      let nextCompleted: number[];
+      let nextData: WizardData;
+      if (isResave) {
+        // Resave of an already-completed step: drop everything past `step`
+        // from completedSteps and clear their data keys. The current step's
+        // data is replaced by the new patch.
+        nextCompleted = state.completedSteps.filter((s) => s <= step);
+        const cleared: WizardData = { ...EMPTY_DATA };
+        for (const [key, value] of Object.entries(state.data)) {
+          const ownerStep = STEP_DATA_KEY_TO_STEP[key as keyof WizardData];
+          if (ownerStep === undefined || ownerStep <= step) {
+            (cleared as unknown as Record<string, unknown>)[key] = value;
+          }
+        }
+        nextData = { ...cleared, ...patch };
+      } else {
+        nextCompleted = [...state.completedSteps, step].sort((a, b) => a - b);
+        nextData = { ...state.data, ...patch };
+      }
       return {
         ...state,
         status: "completed",
-        completedSteps: state.completedSteps.includes(action.step)
-          ? state.completedSteps
-          : [...state.completedSteps, action.step].sort((a, b) => a - b),
-        currentStep: Math.min(action.step + 1, TOTAL_STEPS),
-        data: { ...state.data, ...action.patch },
+        completedSteps: nextCompleted,
+        currentStep: Math.min(step + 1, TOTAL_STEPS),
+        data: nextData,
       };
+    }
     case "STEP_SKIPPED":
       return {
         ...state,

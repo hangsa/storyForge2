@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { World } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
@@ -23,6 +23,13 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   const wizard = useWizard();
   const [world, setWorld] = useState<World>(wizard.data.world ?? EMPTY_WORLD);
   const [busy, setBusy] = useState(false);
+  // Mirror the latest `world` and `busy` so handlers registered in the
+  // modal footer (with limited deps) always read fresh values, not the
+  // snapshot from when the useEffect last ran.
+  const worldRef = useRef(world);
+  worldRef.current = world;
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
 
   const handleStart = async () => {
     wizard.startStep(2);
@@ -41,8 +48,8 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   const handleNext = async () => {
     setBusy(true);
     try {
-      await api.updateWorld(projectId, world);
-      wizard.saveStep(2, { world });
+      await api.updateWorld(projectId, worldRef.current);
+      wizard.saveStep(2, { world: worldRef.current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "世界观保存失败");
     } finally {
@@ -72,6 +79,19 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   const removeFaction = (index: number) => {
     setWorld({ ...world, factions: world.factions.filter((_, i) => i !== index) });
   };
+
+  // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
+  // just registers the handlers and the current busy state.
+  useEffect(() => {
+    const showForm = wizard.status === "completed" || !!wizard.data.world;
+    wizard.setRegenerateHandler(showForm ? handleStart : null, busy);
+    wizard.setNextHandler(showForm ? handleNext : null, busy);
+    return () => {
+      wizard.setRegenerateHandler(null, false);
+      wizard.setNextHandler(null, false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizard.status, !!wizard.data.world, busy]);
 
   return (
     <div data-testid="world-step" className="space-y-4">
@@ -311,24 +331,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
             </div>
           </div>
 
-          <div className="flex justify-between pt-2">
-            <button
-              data-testid="world-regenerate"
-              onClick={handleStart}
-              disabled={busy}
-              className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
-            >
-              重新生成
-            </button>
-            <button
-              data-testid="world-next"
-              onClick={handleNext}
-              disabled={busy}
-              className="px-5 py-2 bg-tertiary-container text-surface-container-low text-sm rounded-lg hover:opacity-90 disabled:opacity-40"
-            >
-              {busy ? "保存中…" : "下一步"}
-            </button>
-          </div>
+          {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
         </div>
       )}
     </div>

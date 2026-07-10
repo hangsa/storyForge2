@@ -33,6 +33,18 @@ interface WizardState {
   status: WizardStatus;
   data: WizardData;
   errorMessage: string | null;
+  /**
+   * The current step's "next" action — handled by the modal footer. Each step
+   * registers its own handler via useEffect and clears it on unmount.
+   */
+  nextHandler: (() => void) | null;
+  nextDisabled: boolean;
+  /**
+   * The current step's "regenerate" action — same lifecycle as nextHandler.
+   * null when the step doesn't have a regenerate affordance.
+   */
+  regenerateHandler: (() => void) | null;
+  regenerateDisabled: boolean;
 }
 
 type WizardAction =
@@ -53,6 +65,16 @@ type WizardAction =
       completedSteps: number[];
       data: Partial<WizardData>;
       nextStep: number;
+    }
+  | {
+      type: "SET_NEXT_HANDLER";
+      handler: (() => void) | null;
+      disabled: boolean;
+    }
+  | {
+      type: "SET_REGENERATE_HANDLER";
+      handler: (() => void) | null;
+      disabled: boolean;
     };
 
 const initialState: WizardState = {
@@ -61,6 +83,10 @@ const initialState: WizardState = {
   status: "idle",
   data: EMPTY_DATA,
   errorMessage: null,
+  nextHandler: null,
+  nextDisabled: false,
+  regenerateHandler: null,
+  regenerateDisabled: false,
 };
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
@@ -120,6 +146,10 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
         currentStep: action.nextStep,
       };
     }
+    case "SET_NEXT_HANDLER":
+      return { ...state, nextHandler: action.handler, nextDisabled: action.disabled };
+    case "SET_REGENERATE_HANDLER":
+      return { ...state, regenerateHandler: action.handler, regenerateDisabled: action.disabled };
     default:
       return state;
   }
@@ -141,6 +171,10 @@ function loadPersisted(projectId: string): WizardState | null {
         status: parsed.status || "idle",
         data: { ...EMPTY_DATA, ...parsed.data },
         errorMessage: parsed.errorMessage || null,
+        nextHandler: null,
+        nextDisabled: false,
+        regenerateHandler: null,
+        regenerateDisabled: false,
       };
     }
     return null;
@@ -162,6 +196,12 @@ interface WizardContextValue extends WizardState {
     nextStep: number,
   ) => void;
   reset: () => void;
+  /**
+   * Each step registers its "next" and "regenerate" handlers here so the
+   * modal footer can render them. Pass null on unmount to clear.
+   */
+  setNextHandler: (handler: (() => void) | null, disabled?: boolean) => void;
+  setRegenerateHandler: (handler: (() => void) | null, disabled?: boolean) => void;
 }
 
 const WizardContext = createContext<WizardContextValue | null>(null);
@@ -177,13 +217,30 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
     initialState,
     (init) => loadPersisted(projectId) || init
   );
-  const justResetRef = useRef(false);
+  // Track whether the provider has ever written a non-empty state. Used to
+  // tell apart "first mount, nothing happened" (we DO save the empty state
+  // so the close button preserves it) from "post-reset" (we DON'T save —
+  // reset already cleared sessionStorage, and writing it back undoes the
+  // reset). Empty state = initialState shape; non-empty = anything else.
+  const hasProgressedRef = useRef(false);
 
   useEffect(() => {
-    if (justResetRef.current) {
-      justResetRef.current = false;
+    const isEmpty =
+      state.currentStep === 1 &&
+      state.completedSteps.length === 0 &&
+      state.status === "idle" &&
+      state.errorMessage === null;
+
+    if (isEmpty && hasProgressedRef.current) {
+      // Post-reset: the reset() handler cleared sessionStorage synchronously.
+      // Don't write the empty state back — that's the bug.
       return;
     }
+
+    if (!isEmpty) {
+      hasProgressedRef.current = true;
+    }
+
     try {
       sessionStorage.setItem(
         getSessionKey(projectId),
@@ -211,13 +268,16 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
       dispatch({ type: "HYDRATE_FROM_FILES", completedSteps, data }),
     hydrateFromFilesAndAdvance: (completedSteps, data, nextStep) =>
       dispatch({ type: "HYDRATE_FROM_FILES_AND_ADVANCE", completedSteps, data, nextStep }),
+    setNextHandler: (handler, disabled = false) =>
+      dispatch({ type: "SET_NEXT_HANDLER", handler, disabled }),
+    setRegenerateHandler: (handler, disabled = false) =>
+      dispatch({ type: "SET_REGENERATE_HANDLER", handler, disabled }),
     reset: () => {
       try {
         sessionStorage.removeItem(getSessionKey(projectId));
       } catch {
         // ignore
       }
-      justResetRef.current = true;
       dispatch({ type: "RESET" });
     },
   };

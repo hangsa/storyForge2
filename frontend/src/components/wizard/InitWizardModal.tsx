@@ -162,10 +162,11 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           )}
         </main>
 
-        {/* Footer intentionally has only "上一步": each step component owns
-            its own forward action (next/save/finish). This avoids the duplicate
-            "完成 → 进入工作台" buttons that previously appeared on step 6. */}
-        <footer className="flex items-center justify-end px-6 py-4 border-t border-outline-variant">
+        {/* Footer: 上一步 on the left; the current step's 重新生成 and
+            确认修改并继续 (registered via setNextHandler / setRegenerateHandler
+            in WizardContext) on the right. ChapterOutlineStep keeps its own
+            "完成 → 进入工作台" inside the form for now. */}
+        <footer className="flex items-center justify-between px-6 py-4 border-t border-outline-variant">
           <button
             data-testid="wizard-prev"
             type="button"
@@ -175,6 +176,30 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           >
             上一步
           </button>
+          <div className="flex items-center gap-2">
+            {wizard.regenerateHandler && (
+              <button
+                data-testid="wizard-regenerate"
+                type="button"
+                onClick={wizard.regenerateHandler}
+                disabled={wizard.regenerateDisabled}
+                className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
+              >
+                重新生成
+              </button>
+            )}
+            {wizard.nextHandler && (
+              <button
+                data-testid="wizard-next"
+                type="button"
+                onClick={wizard.nextHandler}
+                disabled={wizard.nextDisabled}
+                className="px-5 py-2 bg-tertiary-container text-surface-container-low text-sm rounded-lg hover:opacity-90 disabled:opacity-40"
+              >
+                确认修改并继续
+              </button>
+            )}
+          </div>
         </footer>
       </div>
     </div>

@@ -1,28 +1,58 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, fireEvent } from "@testing-library/react";
+import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../api/client", () => ({
   default: {
     generateWorld: vi.fn(),
     updateWorld: vi.fn(),
+    getConcept: vi.fn(),
+    getWorld: vi.fn(),
+    getCharacter: vi.fn(),
+    getNovelOutline: vi.fn(),
+    getOutline: vi.fn(),
   },
 }));
 
 import api from "../api/client";
-import { WizardProvider } from "../components/wizard/WizardContext";
-import WorldStep from "../components/wizard/WorldStep";
+import InitWizardModal from "../components/wizard/InitWizardModal";
+import { getSessionKey } from "../components/wizard/WizardContext";
+
+const PROJECT = "proj_x";
+const KEY = getSessionKey(PROJECT);
 
 beforeEach(() => {
   (api.generateWorld as ReturnType<typeof vi.fn>).mockReset();
   (api.updateWorld as ReturnType<typeof vi.fn>).mockReset();
+  (api.getConcept as ReturnType<typeof vi.fn>).mockReset();
+  (api.getWorld as ReturnType<typeof vi.fn>).mockReset();
+  (api.getCharacter as ReturnType<typeof vi.fn>).mockReset();
+  (api.getNovelOutline as ReturnType<typeof vi.fn>).mockReset();
+  (api.getOutline as ReturnType<typeof vi.fn>).mockReset();
   sessionStorage.clear();
 });
 
+// Lands the modal on step 2 (WorldStep) by pre-seeding sessionStorage as if
+// step 1 had just been completed.
 function setup() {
+  sessionStorage.setItem(
+    KEY,
+    JSON.stringify({
+      currentStep: 2,
+      completedSteps: [1],
+      status: "idle",
+      data: {
+        concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+        story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+        world: null, characters: null, novel_outline: null, chapter1_outline: null,
+      },
+      errorMessage: null,
+    }),
+  );
   return render(
-    <WizardProvider projectId="proj_x">
-      <WorldStep projectId="proj_x" />
-    </WizardProvider>
+    <MemoryRouter>
+      <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} />
+    </MemoryRouter>,
   );
 }
 
@@ -70,7 +100,7 @@ describe("WorldStep", () => {
     expect((screen.getByTestId("world-era-cultural-history") as HTMLTextAreaElement).value).toBe("");
   });
 
-  it("'下一步' calls updateWorld and persists the new fields", async () => {
+  it("'确认修改并继续' in modal footer calls updateWorld and persists the new fields", async () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
@@ -87,9 +117,9 @@ describe("WorldStep", () => {
     });
     await screen.findByTestId("world-form");
     await act(async () => {
-      screen.getByTestId("world-next").click();
+      screen.getByTestId("wizard-next").click();
     });
-    expect(api.updateWorld).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.updateWorld).toHaveBeenCalledTimes(1));
     const call = (api.updateWorld as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[1].era_social_structure).toBe("分封制");
     expect(call[1].era_cultural_history).toBe("百家争鸣");
@@ -165,7 +195,7 @@ describe("WorldStep", () => {
     expect(screen.getByTestId("world-faction-0-relations")).toBeInTheDocument();
   });
 
-  it("typing into faction fields then '下一步' persists the faction data", async () => {
+  it("typing into faction fields then '确认修改并继续' persists the faction data", async () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
@@ -182,13 +212,16 @@ describe("WorldStep", () => {
     await act(async () => {
       screen.getByTestId("world-faction-add").click();
     });
-    fireEvent.change(screen.getByTestId("world-faction-0-name"), { target: { value: "青云宗" } });
-    fireEvent.change(screen.getByTestId("world-faction-0-type"), { target: { value: "修仙门派" } });
-    fireEvent.change(screen.getByTestId("world-faction-0-goal"), { target: { value: "飞升" } });
-    fireEvent.change(screen.getByTestId("world-faction-0-relations"), { target: { value: "与魔道对立" } });
     await act(async () => {
-      screen.getByTestId("world-next").click();
+      fireEvent.change(screen.getByTestId("world-faction-0-name"), { target: { value: "青云宗" } });
+      fireEvent.change(screen.getByTestId("world-faction-0-type"), { target: { value: "修仙门派" } });
+      fireEvent.change(screen.getByTestId("world-faction-0-goal"), { target: { value: "飞升" } });
+      fireEvent.change(screen.getByTestId("world-faction-0-relations"), { target: { value: "与魔道对立" } });
     });
+    await act(async () => {
+      screen.getByTestId("wizard-next").click();
+    });
+    await waitFor(() => expect(api.updateWorld).toHaveBeenCalledTimes(1));
     const call = (api.updateWorld as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[1].factions).toEqual([
       { name: "青云宗", type: "修仙门派", goal: "飞升", relations: "与魔道对立" },

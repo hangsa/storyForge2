@@ -1,31 +1,60 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../api/client", () => ({
   default: {
     generateCharacter: vi.fn(),
     updateCharacter: vi.fn(),
     advance: vi.fn(),
+    getConcept: vi.fn(),
+    getWorld: vi.fn(),
+    getCharacter: vi.fn(),
+    getNovelOutline: vi.fn(),
+    getOutline: vi.fn(),
   },
 }));
 
 import api from "../api/client";
-import { WizardProvider } from "../components/wizard/WizardContext";
-import CharacterStep from "../components/wizard/CharacterStep";
+import InitWizardModal from "../components/wizard/InitWizardModal";
+import { getSessionKey } from "../components/wizard/WizardContext";
+
+const PROJECT = "proj_x";
+const KEY = getSessionKey(PROJECT);
 
 beforeEach(() => {
   (api.generateCharacter as ReturnType<typeof vi.fn>).mockReset();
   (api.updateCharacter as ReturnType<typeof vi.fn>).mockReset();
   (api.advance as ReturnType<typeof vi.fn>).mockReset();
   (api.advance as ReturnType<typeof vi.fn>).mockResolvedValue({ current_stage: "STAGE3" });
+  (api.getConcept as ReturnType<typeof vi.fn>).mockReset();
+  (api.getWorld as ReturnType<typeof vi.fn>).mockReset();
+  (api.getCharacter as ReturnType<typeof vi.fn>).mockReset();
+  (api.getNovelOutline as ReturnType<typeof vi.fn>).mockReset();
+  (api.getOutline as ReturnType<typeof vi.fn>).mockReset();
   sessionStorage.clear();
 });
 
 function setup() {
+  // Pre-seed sessionStorage so the modal boots on step 3 with the same
+  // "carried over from step 2" state the original tests relied on.
+  sessionStorage.setItem(
+    KEY,
+    JSON.stringify({
+      currentStep: 3,
+      completedSteps: [1, 2],
+      status: "idle",
+      data: {
+        concept: null, story_dna: null, world: null,
+        characters: null, novel_outline: null, chapter1_outline: null,
+      },
+      errorMessage: null,
+    }),
+  );
   return render(
-    <WizardProvider projectId="proj_x">
-      <CharacterStep projectId="proj_x" />
-    </WizardProvider>,
+    <MemoryRouter>
+      <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} />
+    </MemoryRouter>,
   );
 }
 
@@ -47,10 +76,8 @@ function makeChar(id: string, type: string, name = "C" + id, overrides: Partial<
 
 describe("CharacterStep", () => {
   it("shows generate buttons on first entry even when wizard status is 'completed' (carry-over from step 2)", () => {
-    // Pre-seed sessionStorage so the provider boots with status='completed'
-    // and currentStep=3 — i.e., user just finished WorldStep and stepped in.
     sessionStorage.setItem(
-      "storyforge.wizard.state.proj_x",
+      KEY,
       JSON.stringify({
         currentStep: 3,
         completedSteps: [1, 2],
@@ -126,7 +153,7 @@ describe("CharacterStep", () => {
     expect(api.generateCharacter).toHaveBeenLastCalledWith("proj_x", "supporting");
   });
 
-  it("'重新生成' discards existing characters and starts a fresh batch", async () => {
+  it("'重新生成' in modal footer discards existing characters and starts a fresh batch", async () => {
     let callIdx = 0;
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, t: string) => {
       callIdx += 1;
@@ -140,13 +167,13 @@ describe("CharacterStep", () => {
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
     // Click regenerate — should call generateCharacter 6 more times, replace list.
     await act(async () => {
-      screen.getByTestId("character-regenerate").click();
+      screen.getByTestId("wizard-regenerate").click();
     });
     await waitFor(() => expect(api.generateCharacter).toHaveBeenCalledTimes(12));
     expect(screen.getByTestId("character-list").children).toHaveLength(6);
   });
 
-  it("'下一步' calls updateCharacter with the merged list", async () => {
+  it("'确认修改并继续' in modal footer calls updateCharacter with the merged list", async () => {
     let callIdx = 0;
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, t: string) => {
       callIdx += 1;
@@ -159,7 +186,7 @@ describe("CharacterStep", () => {
     });
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     await act(async () => {
-      screen.getByTestId("character-next").click();
+      screen.getByTestId("wizard-next").click();
     });
     await waitFor(() => expect(api.updateCharacter).toHaveBeenCalledTimes(1));
     const call = (api.updateCharacter as ReturnType<typeof vi.fn>).mock.calls[0];

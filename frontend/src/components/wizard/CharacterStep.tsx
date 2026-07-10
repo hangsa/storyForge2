@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api, { Character, CharacterSet } from "../../api/client";
 import { useWizard } from "./WizardContext";
 
@@ -38,6 +38,9 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   const wizard = useWizard();
   const [characters, setCharacters] = useState<CharacterSet | null>(wizard.data.characters ?? null);
   const [busy, setBusy] = useState(false);
+  // Mirror latest state for handlers registered in the modal footer (limited deps).
+  const charactersRef = useRef(characters);
+  charactersRef.current = characters;
 
   const handleBatchStart = async () => {
     wizard.startStep(3);
@@ -96,17 +99,18 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   };
 
   const handleNext = async () => {
-    if (!characters) return;
+    const current = charactersRef.current;
+    if (!current) return;
     setBusy(true);
     try {
-      await api.updateCharacter(projectId, characters);
+      await api.updateCharacter(projectId, current);
       try {
         await api.advance(projectId, "STAGE3");
       } catch {
         // best-effort: STAGE3 needs both world.json and characters.json — if user
         // skipped WorldStep or went back without re-running it, advance fails.
       }
-      wizard.saveStep(3, { characters });
+      wizard.saveStep(3, { characters: current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色保存失败");
     } finally {
@@ -137,6 +141,18 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     if (status === "enemy") return "bg-error/10 text-error";
     return "bg-surface-container-low text-system-log";
   };
+
+  // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
+  // just registers the handlers and the current busy state.
+  useEffect(() => {
+    wizard.setRegenerateHandler(hasCharacters ? handleBatchStart : null, busy);
+    wizard.setNextHandler(hasCharacters ? handleNext : null, busy);
+    return () => {
+      wizard.setRegenerateHandler(null, false);
+      wizard.setNextHandler(null, false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCharacters, busy]);
 
   return (
     <div data-testid="character-step" className="space-y-4">
@@ -311,24 +327,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
             角色详情可在工作台的角色标签页内继续编辑。
           </p>
 
-          <div className="flex justify-between pt-2">
-            <button
-              data-testid="character-regenerate"
-              onClick={handleBatchStart}
-              disabled={busy}
-              className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
-            >
-              重新生成
-            </button>
-            <button
-              data-testid="character-next"
-              onClick={handleNext}
-              disabled={busy}
-              className="px-5 py-2 bg-tertiary-container text-surface-container-low text-sm rounded-lg hover:opacity-90 disabled:opacity-40"
-            >
-              {busy ? "保存中…" : "下一步"}
-            </button>
-          </div>
+          {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
         </div>
       )}
     </div>

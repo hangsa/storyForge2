@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { Concept, StoryDNA } from "../../api/client";
 import { useWizard } from "./WizardContext";
 
@@ -20,6 +20,13 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
   const [concept, setConcept] = useState<Concept>(wizard.data.concept ?? EMPTY_CONCEPT);
   const [dna, setDna] = useState<StoryDNA>(wizard.data.story_dna ?? EMPTY_DNA);
   const [busy, setBusy] = useState(false);
+  // Mirror the latest state so handlers registered in the modal footer
+  // (with limited deps) read fresh values, not the snapshot from when the
+  // useEffect last ran.
+  const conceptRef = useRef(concept);
+  conceptRef.current = concept;
+  const dnaRef = useRef(dna);
+  dnaRef.current = dna;
 
   const handleStart = async () => {
     wizard.startStep(1);
@@ -39,19 +46,32 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
   const handleNext = async () => {
     setBusy(true);
     try {
-      await api.updateConcept(projectId, concept, dna);
+      await api.updateConcept(projectId, conceptRef.current, dnaRef.current);
       try {
         await api.advance(projectId, "STAGE2");
       } catch {
         // best-effort: preconditions may not be met if user goes back and re-saves
       }
-      wizard.saveStep(1, { concept, story_dna: dna });
+      wizard.saveStep(1, { concept: conceptRef.current, story_dna: dnaRef.current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念保存失败");
     } finally {
       setBusy(false);
     }
   };
+
+  // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
+  // just registers the handlers and the current busy state.
+  useEffect(() => {
+    const showForm = wizard.status === "completed" || !!wizard.data.concept;
+    wizard.setRegenerateHandler(showForm ? handleStart : null, busy);
+    wizard.setNextHandler(showForm ? handleNext : null, busy);
+    return () => {
+      wizard.setRegenerateHandler(null, false);
+      wizard.setNextHandler(null, false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizard.status, !!wizard.data.concept, busy]);
 
   return (
     <div data-testid="concept-step" className="space-y-4">
@@ -176,24 +196,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
             </div>
           </div>
 
-          <div className="flex justify-between pt-2">
-            <button
-              data-testid="concept-regenerate"
-              onClick={handleStart}
-              disabled={busy}
-              className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
-            >
-              重新生成
-            </button>
-            <button
-              data-testid="concept-next"
-              onClick={handleNext}
-              disabled={busy}
-              className="px-5 py-2 bg-tertiary-container text-surface-container-low text-sm rounded-lg hover:opacity-90 disabled:opacity-40"
-            >
-              {busy ? "保存中…" : "下一步"}
-            </button>
-          </div>
+          {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { Outline } from "../../api/client";
 import { useWizard } from "./WizardContext";
 
@@ -12,6 +12,11 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
   const wizard = useWizard();
   const [outline, setOutline] = useState<Outline | null>(wizard.data.chapter1_outline ?? null);
   const [busy, setBusy] = useState(false);
+  // Mirror latest state for handlers registered in the modal footer.
+  const outlineRef = useRef(outline);
+  outlineRef.current = outline;
+  const onFinishRef = useRef(onFinish);
+  onFinishRef.current = onFinish;
 
   const handleStart = async () => {
     wizard.startStep(6);
@@ -34,18 +39,30 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
   };
 
   const handleFinish = async () => {
-    if (!outline) return;
+    const current = outlineRef.current;
+    if (!current) return;
     setBusy(true);
     try {
-      await api.updateOutline(projectId, outline);
-      wizard.saveStep(6, { chapter1_outline: outline });
-      onFinish();
+      await api.updateOutline(projectId, current);
+      wizard.saveStep(6, { chapter1_outline: current });
+      onFinishRef.current();
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "章节大纲保存失败");
     } finally {
       setBusy(false);
     }
   };
+
+  // 重新生成 moves to the modal footer. 完成 → 进入工作台 stays in the
+  // form per current spec (not part of the 下一步/重新生成 rename).
+  useEffect(() => {
+    const showForm = !!outline && outline.chapters.length > 0;
+    wizard.setRegenerateHandler(showForm ? handleStart : null, busy);
+    return () => {
+      wizard.setRegenerateHandler(null, false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!outline, outline?.chapters.length, busy]);
 
   return (
     <div data-testid="chapter-outline-step" className="space-y-4">
@@ -106,14 +123,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
           <p className="font-body-ui text-system-log/60 text-xs">
             场景级详情可在工作台的大纲标签页内编辑。
           </p>
-          <div className="flex justify-between pt-2">
-            <button
-              onClick={handleStart}
-              disabled={busy}
-              className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
-            >
-              重新生成
-            </button>
+          <div className="flex justify-end pt-2">
             <button
               data-testid="chapter-outline-finish"
               onClick={handleFinish}
@@ -123,6 +133,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
               {busy ? "保存中…" : "完成 → 进入工作台"}
             </button>
           </div>
+          {/* 重新生成 moved to modal footer (see useEffect above). */}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { NovelOutline } from "../../api/client";
 import { useWizard } from "./WizardContext";
 
@@ -19,6 +19,9 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
   const wizard = useWizard();
   const [outline, setOutline] = useState<NovelOutline>(wizard.data.novel_outline ?? EMPTY_OUTLINE);
   const [busy, setBusy] = useState(false);
+  // Mirror latest state for handlers registered in the modal footer.
+  const outlineRef = useRef(outline);
+  outlineRef.current = outline;
 
   const handleStart = async () => {
     wizard.startStep(5);
@@ -37,7 +40,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
   const handleNext = async () => {
     setBusy(true);
     try {
-      const saved = await api.updateNovelOutline(projectId, outline);
+      const saved = await api.updateNovelOutline(projectId, outlineRef.current);
       wizard.saveStep(5, { novel_outline: saved });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "大纲保存失败");
@@ -45,6 +48,19 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       setBusy(false);
     }
   };
+
+  // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
+  // just registers the handlers and the current busy state.
+  useEffect(() => {
+    const showForm = wizard.status === "completed" || !!wizard.data.novel_outline;
+    wizard.setRegenerateHandler(showForm ? handleStart : null, busy);
+    wizard.setNextHandler(showForm ? handleNext : null, busy);
+    return () => {
+      wizard.setRegenerateHandler(null, false);
+      wizard.setNextHandler(null, false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizard.status, !!wizard.data.novel_outline, busy]);
 
   return (
     <div data-testid="outline-step" className="space-y-4">
@@ -94,23 +110,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
           <p className="font-body-ui text-system-log/60 text-xs">
             详细分卷/情节点编辑可在工作台的大纲标签页内进行。
           </p>
-          <div className="flex justify-between pt-2">
-            <button
-              onClick={handleStart}
-              disabled={busy}
-              className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
-            >
-              重新生成
-            </button>
-            <button
-              data-testid="outline-next"
-              onClick={handleNext}
-              disabled={busy}
-              className="px-5 py-2 bg-tertiary-container text-surface-container-low text-sm rounded-lg hover:opacity-90 disabled:opacity-40"
-            >
-              {busy ? "保存中…" : "下一步"}
-            </button>
-          </div>
+          {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
         </div>
       )}
     </div>

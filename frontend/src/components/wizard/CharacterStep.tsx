@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import api, { Character, CharacterSet } from "../../api/client";
 import { useWizard } from "./WizardContext";
 
@@ -103,6 +103,28 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
 
   const hasCharacters = !!characters && characters.characters.length > 0;
 
+  const nameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of characters?.characters ?? []) m.set(c.id, c.name || c.id);
+    return m;
+  }, [characters]);
+
+  const renderTags = (items: string[] | undefined) =>
+    (items ?? []).map((t, i) => (
+      <span
+        key={i}
+        className="inline-block px-2 py-0.5 bg-surface-container-low rounded text-[11px] font-body-narrative text-primary"
+      >
+        {t}
+      </span>
+    ));
+
+  const relationStatusStyle = (status: string) => {
+    if (status === "ally") return "bg-primary-container/20 text-primary-container";
+    if (status === "enemy") return "bg-error/10 text-error";
+    return "bg-surface-container-low text-system-log";
+  };
+
   return (
     <div data-testid="character-step" className="space-y-4">
       {wizard.status === "generating" && (
@@ -163,13 +185,88 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
               <li
                 key={c.id}
                 data-testid={`character-${c.id}`}
-                className="p-3 bg-surface-container rounded-lg flex items-center justify-between"
+                className="p-3 bg-surface-container rounded-lg space-y-3"
               >
-                <div>
-                  <div className="font-display text-primary">{c.name || "未命名"}</div>
-                  <div className="font-label-mono text-system-log text-xs">
-                    {CHARACTER_TYPES.find((t) => t.value === c.character_type)?.label || c.character_type}
-                    {c.is_core_character ? " · 核心角色" : ""}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-display text-primary">{c.name || "未命名"}</div>
+                    <div className="font-label-mono text-system-log text-xs">
+                      {CHARACTER_TYPES.find((t) => t.value === c.character_type)?.label || c.character_type}
+                      {c.is_core_character ? " · 核心角色" : ""}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-outline-variant pt-3">
+                  {/* 人格层 */}
+                  <div data-testid={`character-${c.id}-personality`} className="space-y-2">
+                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">人格层</div>
+                    {([
+                      ["core_traits", "核心特质"],
+                      ["beliefs", "信念"],
+                      ["desires", "欲望"],
+                      ["fears", "恐惧"],
+                      ["values", "价值观"],
+                    ] as const).map(([key, label]) => (
+                      <div key={key}>
+                        <div className="font-label-mono text-system-log/80 text-[10px]">{label}</div>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {renderTags(c.personality?.[key])}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 声音签名 */}
+                  <div data-testid={`character-${c.id}-voice`} className="space-y-2">
+                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音签名</div>
+                    <div>
+                      <div className="font-label-mono text-system-log/80 text-[10px]">语言风格</div>
+                      <p className="font-body-narrative text-primary text-xs mt-0.5">
+                        {c.voice_signature?.speech_style || <span className="text-system-log/40">—</span>}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="font-label-mono text-system-log/80 text-[10px]">思维模式</div>
+                      <p className="font-body-narrative text-primary text-xs mt-0.5">
+                        {c.voice_signature?.thought_patterns || <span className="text-system-log/40">—</span>}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="font-label-mono text-system-log/80 text-[10px]">行为禁忌</div>
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {renderTags(c.voice_signature?.taboos)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 角色关系 */}
+                  <div data-testid={`character-${c.id}-relations`} className="space-y-2">
+                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色关系</div>
+                    {Object.keys(c.relations ?? {}).length === 0 ? (
+                      <p className="font-body-ui text-system-log/40 text-xs">暂无</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {Object.entries(c.relations ?? {}).map(([targetId, rel]) => (
+                          <li
+                            key={targetId}
+                            className="flex items-center justify-between gap-2 p-1.5 bg-surface-container-low rounded"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-label-mono text-primary text-xs truncate">
+                                {nameById.get(targetId) || targetId}
+                              </div>
+                              <div className="font-body-ui text-system-log/70 text-[10px]">
+                                第{rel.last_update_chapter}章更新
+                              </div>
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-body-ui shrink-0 ${relationStatusStyle(rel.status)}`}>
+                              {rel.status}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </div>
               </li>

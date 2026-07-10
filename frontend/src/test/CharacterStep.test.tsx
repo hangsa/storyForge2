@@ -29,7 +29,7 @@ function setup() {
   );
 }
 
-function makeChar(id: string, type: string, name = "C" + id) {
+function makeChar(id: string, type: string, name = "C" + id, overrides: Partial<ReturnType<typeof makeChar>> = {}) {
   return {
     id,
     name,
@@ -41,6 +41,7 @@ function makeChar(id: string, type: string, name = "C" + id) {
     unknown_to_character: [],
     relations: {},
     growth_curve: null,
+    ...overrides,
   };
 }
 
@@ -174,5 +175,110 @@ describe("CharacterStep", () => {
     });
     await waitFor(() => expect(screen.getByText(/LLM down/)).toBeInTheDocument());
     expect(screen.getByText("重试")).toBeInTheDocument();
+  });
+
+  it("each character card exposes 人格层, 声音签名, 角色关系 sections", async () => {
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
+      characters: [makeChar("c1", "protagonist", "林峰", {
+        personality: {
+          core_traits: ["坚毅", "聪明"],
+          beliefs: ["正道必胜"],
+          desires: ["守护苍生"],
+          fears: ["失去同伴"],
+          values: ["义"],
+        },
+        voice_signature: {
+          speech_style: "沉稳、简洁",
+          thought_patterns: "三思后行",
+          taboos: ["撒谎"],
+        },
+        relations: {
+          c2: { status: "ally", history: [], last_update_chapter: 3 },
+        },
+      })],
+      current: null,
+    });
+    setup();
+    await act(async () => {
+      screen.getByTestId("character-type-protagonist").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+    expect(screen.getByTestId("character-c1-personality")).toBeInTheDocument();
+    expect(screen.getByTestId("character-c1-voice")).toBeInTheDocument();
+    expect(screen.getByTestId("character-c1-relations")).toBeInTheDocument();
+    // Personality tags are visible
+    expect(screen.getByTestId("character-c1-personality").textContent).toContain("坚毅");
+    expect(screen.getByTestId("character-c1-personality").textContent).toContain("正道必胜");
+    // Voice signature is visible
+    expect(screen.getByTestId("character-c1-voice").textContent).toContain("沉稳、简洁");
+    expect(screen.getByTestId("character-c1-voice").textContent).toContain("三思后行");
+    // Relation status text appears
+    expect(screen.getByTestId("character-c1-relations").textContent).toContain("ally");
+  });
+
+  it("relation card resolves target id to character name when present in the cast", async () => {
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id: string, type: string) => {
+        if (type === "protagonist") {
+          return {
+            characters: [makeChar("c1", "protagonist", "林峰", {
+              relations: { c2: { status: "ally", history: [], last_update_chapter: 5 } },
+            })],
+            current: null,
+          };
+        }
+        if (type === "supporting") {
+          return {
+            characters: [makeChar("c2", "supporting", "苏晓晓", {
+              relations: { c1: { status: "ally", history: [], last_update_chapter: 5 } },
+            })],
+            current: null,
+          };
+        }
+        return { characters: [], current: null };
+      },
+    );
+    setup();
+    await act(async () => {
+      screen.getByTestId("character-type-protagonist").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+    await act(async () => {
+      screen.getByTestId("character-add-supporting").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(2));
+    const c1Relations = screen.getByTestId("character-c1-relations");
+    expect(c1Relations.textContent).toContain("苏晓晓");
+    expect(c1Relations.textContent).toContain("第5章更新");
+    const c2Relations = screen.getByTestId("character-c2-relations");
+    expect(c2Relations.textContent).toContain("林峰");
+  });
+
+  it("'角色关系' section shows '暂无' when the character has no relations", async () => {
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
+      characters: [makeChar("c1", "protagonist", "林峰")],
+      current: null,
+    });
+    setup();
+    await act(async () => {
+      screen.getByTestId("character-type-protagonist").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+    const relations = screen.getByTestId("character-c1-relations");
+    expect(relations.textContent).toContain("暂无");
+  });
+
+  it("empty voice_signature fields render an em-dash placeholder, not the literal empty string", async () => {
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
+      characters: [makeChar("c1", "supporting", "路人甲")],
+      current: null,
+    });
+    setup();
+    await act(async () => {
+      screen.getByTestId("character-type-supporting").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+    const voice = screen.getByTestId("character-c1-voice");
+    expect(voice.textContent).toContain("—");
   });
 });

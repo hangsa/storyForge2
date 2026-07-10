@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../../api/client";
-import { useWizard } from "./WizardContext";
+import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
+import { useWizard, type WizardData } from "./WizardContext";
 import WizardSteps from "./WizardSteps";
 import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
@@ -53,37 +53,30 @@ export default function InitWizardModal({ projectId, onDismiss }: InitWizardModa
         ]);
         if (cancelled) return;
         const completed: number[] = [];
-        const data: {
-          concept?: unknown;
-          world?: unknown;
-          characters?: unknown;
-          novel_outline?: unknown;
-          chapter1_outline?: unknown;
-        } = {};
-        if (concept.status === "fulfilled" && hasContent(concept.value)) {
+        const data: Partial<WizardData> = {};
+        const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
+        if (conceptPayload && hasContent(conceptPayload)) {
           completed.push(1);
-          if ((concept.value as { concept?: unknown }).concept) {
-            data.concept = (concept.value as { concept: unknown }).concept;
-          }
-          if ((concept.value as { story_dna?: unknown }).story_dna) {
-            data.concept = { ...((data.concept as object) ?? {}), story_dna: (concept.value as { story_dna: unknown }).story_dna };
-          }
+          const c = (conceptPayload as { concept?: unknown }).concept as Concept | undefined;
+          const dna = (conceptPayload as { story_dna?: unknown }).story_dna as StoryDNA | undefined;
+          if (c) data.concept = c;
+          if (dna) data.story_dna = dna;
         }
         if (world.status === "fulfilled" && hasContent(world.value)) {
           completed.push(2);
-          data.world = world.value;
+          data.world = world.value as World;
         }
         if (chars.status === "fulfilled" && hasContent(chars.value)) {
           completed.push(3);
-          data.characters = chars.value;
+          data.characters = chars.value as CharacterSet;
         }
         if (novel.status === "fulfilled" && hasContent(novel.value)) {
           completed.push(4);
-          data.novel_outline = novel.value;
+          data.novel_outline = novel.value as NovelOutline;
         }
         if (outline.status === "fulfilled" && hasContent(outline.value)) {
           completed.push(5);
-          data.chapter1_outline = outline.value;
+          data.chapter1_outline = outline.value as Outline;
         }
         if (completed.length > 0) {
           wizard.hydrateFromFiles(completed, data);

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, useParams } from "react-router-dom";
+import { Routes, Route, useParams, Navigate } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
 import HomePage from "./pages/HomePage";
 import StageErrorBoundary from "./components/shared/StageErrorBoundary";
@@ -22,6 +22,7 @@ const CreativeCanvasPage = lazy(() => import("./pages/CreativeCanvasPage"));
 const BranchSimulationPage = lazy(() => import("./pages/BranchSimulationPage"));
 const Stage3Layout = lazy(() => import("./components/layout/Stage3Layout"));
 const WizardDeepLinkPage = lazy(() => import("./pages/WizardDeepLinkPage"));
+const WorkspacePage = lazy(() => import("./pages/WorkspacePage"));
 
 function StageWrapper({ children, name }: { children: React.ReactNode; name: string }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -132,6 +133,29 @@ function App() {
             }
           />
         </Route>
+        {/* Stage4–6 redirects → /workspace. Use replace, not push, so back-button goes to caller. */}
+        <Route
+          path="/project/:projectId/stage4"
+          element={<Navigate to="/project/:projectId/workspace?mode=manual" replace />}
+        />
+        <Route
+          path="/project/:projectId/stage5"
+          element={<Navigate to="/project/:projectId/workspace?mode=manual&panel=diagnosis" replace />}
+        />
+        <Route
+          path="/project/:projectId/stage6"
+          element={<Navigate to="/project/:projectId/workspace?mode=manual&panel=export" replace />}
+        />
+        <Route
+          path="/project/:projectId/workspace"
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <StageWrapper name="workspace">
+                <WorkspacePage />
+              </StageWrapper>
+            </Suspense>
+          }
+        />
         <Route
           path="/project/:projectId/stage4"
           element={

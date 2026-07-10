@@ -53,11 +53,31 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
     }
   };
 
-  // 重新生成 moves to the modal footer. 完成 → 进入工作台 stays in the
-  // form per current spec (not part of the 下一步/重新生成 rename).
+  // Auto-trigger generation on first mount when there is no existing outline
+  // and the wizard isn't already mid-run or in error. v1.8 drops the manual
+  // "开始生成" button to match the other wizard steps.
   useEffect(() => {
-    const showForm = !!outline && outline.chapters.length > 0;
-    wizard.setRegenerateHandler(showForm ? handleStart : null, busy);
+    if (
+      !outline &&
+      wizard.status !== "generating" &&
+      wizard.status !== "error"
+    ) {
+      handleStart();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 重新生成 moves to the modal footer. 完成 → 进入工作台 stays in the
+  // form per current spec (not part of the 下一步/重新生成 rename). The
+  // regenerate button is enabled for the form, the completed state, and
+  // the error state so the user can recover from a generation failure.
+  useEffect(() => {
+    const hasOutline = !!outline && outline.chapters.length > 0;
+    const canRegenerate =
+      hasOutline ||
+      wizard.status === "completed" ||
+      wizard.status === "error";
+    wizard.setRegenerateHandler(canRegenerate ? handleStart : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
     };
@@ -66,25 +86,6 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
 
   return (
     <div data-testid="chapter-outline-step" className="space-y-4">
-      {wizard.status === "idle" && (
-        <div data-testid="chapter-outline-idle" className="text-center py-12">
-          <span className="material-symbols-outlined text-5xl text-system-log/30 mb-4 block">subject</span>
-          <p className="font-body-ui text-system-log mb-6">
-            点击下方按钮生成第 1 章的详细场景大纲
-            <br />
-            <span className="text-xs text-system-log/60">后续章节大纲可在工作台内补做</span>
-          </p>
-          <button
-            data-testid="chapter-outline-start"
-            onClick={handleStart}
-            disabled={busy}
-            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui rounded-lg hover:opacity-90 disabled:opacity-40"
-          >
-            {busy ? "生成中…" : "开始生成"}
-          </button>
-        </div>
-      )}
-
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
@@ -95,7 +96,6 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       {wizard.status === "error" && (
         <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
           {wizard.errorMessage}
-          <button onClick={handleStart} className="ml-3 px-3 py-1 bg-surface-container text-primary rounded text-xs">重试</button>
         </div>
       )}
 

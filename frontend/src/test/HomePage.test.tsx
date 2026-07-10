@@ -114,7 +114,9 @@ describe("HomePage create flow", () => {
       intent: "一个故事",
       title: undefined,
       genre: "cool_novel",
-      min_words: 4000,
+      min_words: 2000,
+      target_total_words: 1_000_000,
+      target_length_category: "标准商业连载",
     });
     expect(mockApi.advance).toHaveBeenCalledWith("proj_new", "STAGE1");
   });
@@ -123,6 +125,40 @@ describe("HomePage create flow", () => {
     renderPage();
     const submit = screen.getByTestId("create-submit") as HTMLButtonElement;
     expect(submit).toBeDisabled();
+  });
+
+  it("renders the 3 length options with new labels and defaults to 标准商业连载", () => {
+    renderPage();
+    expect(screen.getByTestId("length-短篇快穿")).toBeInTheDocument();
+    expect(screen.getByTestId("length-标准商业连载")).toBeInTheDocument();
+    expect(screen.getByTestId("length-宏大史诗巨著")).toBeInTheDocument();
+    // 默认选中标准商业连载（index=1）；className 含 bg-primary-container/10
+    const medium = screen.getByTestId("length-标准商业连载");
+    expect(medium.className).toContain("border-primary-container");
+  });
+
+  it("clicking a different length option sends its total/category to createProject", async () => {
+    mockApi.createProject.mockResolvedValue({ id: "proj_long" });
+    mockApi.advance.mockResolvedValue({ current_stage: "STAGE1" });
+
+    renderPage();
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("intent-input"), { target: { value: "一个长篇" } });
+    });
+    await act(async () => {
+      screen.getByTestId("length-宏大史诗巨著").click();
+    });
+    await act(async () => {
+      screen.getByTestId("create-submit").click();
+    });
+
+    expect(mockApi.createProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target_total_words: 3_000_000,
+        target_length_category: "宏大史诗巨著",
+        min_words: 2000,
+      }),
+    );
   });
 
   it("shows the create error on failure", async () => {

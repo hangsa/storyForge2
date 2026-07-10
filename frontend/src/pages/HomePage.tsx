@@ -15,7 +15,14 @@ export default function HomePage() {
   const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
 
   const handleCreate = useCallback(
-    async (data: { intent: string; title?: string; genre: string; min_words: number }) => {
+    async (data: {
+      intent: string;
+      title?: string;
+      genre: string;
+      min_words: number;
+      target_total_words: number;
+      target_length_category: string;
+    }) => {
       setSubmitting(true);
       setCreateError(null);
       try {
@@ -23,6 +30,8 @@ export default function HomePage() {
           intent: data.intent,
           genre: data.genre,
           min_words: data.min_words,
+          target_total_words: data.target_total_words,
+          target_length_category: data.target_length_category,
           title: data.title,
         });
         try {

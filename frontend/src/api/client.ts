@@ -71,6 +71,8 @@ export interface ProjectSummary {
   current_stage: string;
   created_at: string;
   min_words: number;
+  target_total_words: number;
+  target_length_category: string;
 }
 
 export interface BulkDeleteResult {
@@ -92,6 +94,8 @@ export interface Project {
   title: string;
   genre: string;
   min_words: number;
+  target_total_words: number;
+  target_length_category: string;
   initial_intent: { free_text: string; inspiration_source?: string };
   current_stage: string;
   stage_history: Array<{ from: string; to: string; timestamp: string }>;
@@ -698,8 +702,14 @@ export const api = {
   getProjectStats: () =>
     request<ProjectStats>("GET", "/project/stats"),
 
-  createProject: (data: { intent: string; genre: string; min_words: number; title?: string }) =>
-    request<Project>("POST", "/project/create", data),
+  createProject: (data: {
+    intent: string;
+    genre: string;
+    min_words: number;
+    target_total_words: number;
+    target_length_category: string;
+    title?: string;
+  }) => request<Project>("POST", "/project/create", data),
 
   getProjectStatus: (id: string) =>
     request<ProjectStatus>("GET", `/project/${id}/status`),

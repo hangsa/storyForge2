@@ -396,7 +396,9 @@ function BookCard({ project, selectMode, selected, onToggle }: BookCardProps) {
       <div className="flex items-center gap-2 text-xs font-label-mono text-system-log">
         <span>{GENRES[project.genre] || project.genre}</span>
         <span>·</span>
-        <span>{project.min_words.toLocaleString()} 字</span>
+        <span>
+          {project.target_length_category || `${(project.target_total_words / 10000).toFixed(0)}万字`}
+        </span>
         {project.created_at && (
           <>
             <span>·</span>

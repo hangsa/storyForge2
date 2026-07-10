@@ -250,27 +250,27 @@ def _make_char(cid: str, name: str, ctype: str, **overrides) -> dict:
 
 
 class TestLengthCategoryFor:
-    """Per-chapter min_words → user-facing length category.
+    """Target total word count → user-facing length category.
     Threshold table must match the LENGTHS options in CreateProjectCard.tsx
-    (短篇 ≤ 4000, 中篇 ≤ 10000, 长篇 above)."""
+    (短篇快穿 30万 / 标准商业连载 100万 / 宏大史诗巨著 300万)."""
 
     def test_short(self):
         from backend.agents.planner import length_category_for
-        assert length_category_for(4000) == "短篇"
-        assert length_category_for(2000) == "短篇"
-        assert length_category_for(1) == "短篇"
+        assert length_category_for(300_000) == "短篇快穿"
+        assert length_category_for(100_000) == "短篇快穿"
+        assert length_category_for(1) == "短篇快穿"
 
     def test_medium(self):
         from backend.agents.planner import length_category_for
-        assert length_category_for(5000) == "中篇"
-        assert length_category_for(10000) == "中篇"
-        assert length_category_for(4001) == "中篇"
+        assert length_category_for(500_000) == "标准商业连载"
+        assert length_category_for(1_000_000) == "标准商业连载"
+        assert length_category_for(500_001) == "标准商业连载"
 
     def test_long(self):
         from backend.agents.planner import length_category_for
-        assert length_category_for(20000) == "长篇"
-        assert length_category_for(100000) == "长篇"
-        assert length_category_for(10001) == "长篇"
+        assert length_category_for(2_000_001) == "宏大史诗巨著"
+        assert length_category_for(3_000_000) == "宏大史诗巨著"
+        assert length_category_for(10_000_000) == "宏大史诗巨著"
 
 
 class TestPickOutlineCast:
@@ -433,7 +433,7 @@ class TestGenerateNovelOutlineContext:
             story_dna={"core_contradiction": {}},
             world={"era": "异世界", "power_system": {"name": "灵力"}, "core_rules": []},
             characters=characters,
-            min_words=10000,
+            target_total_words=1_000_000,
         )
         ctx = _stub_template
         assert ctx["template_name"] == "novel_outline_generation"
@@ -442,6 +442,9 @@ class TestGenerateNovelOutlineContext:
         parsed = _json.loads(ctx["characters_context"])
         assert len(parsed) == 6
         assert [c["role"] for c in parsed] == ["主角", "反派", "反派", "配角", "配角", "配角"]
+        # Length category derived from target_total_words.
+        assert ctx["length_category"] == "标准商业连载"
+        assert ctx["target_total_words"] == 1_000_000
 
     @pytest.mark.asyncio
     async def test_passes_length_category_label(self, _stub_template):
@@ -451,10 +454,10 @@ class TestGenerateNovelOutlineContext:
         await agent.generate_novel_outline(
             concept={}, story_dna={}, world={},
             characters=[_make_char("p1", "林峰", "protagonist")],
-            min_words=20000,
+            target_total_words=3_000_000,
         )
-        assert _stub_template["length_category"] == "长篇"
-        assert _stub_template["min_words"] == 20000
+        assert _stub_template["length_category"] == "宏大史诗巨著"
+        assert _stub_template["target_total_words"] == 3_000_000
 
     @pytest.mark.asyncio
     async def test_passes_map_data_when_present(self, _stub_template):
@@ -464,7 +467,7 @@ class TestGenerateNovelOutlineContext:
         await agent.generate_novel_outline(
             concept={}, story_dna={}, world={},
             characters=[_make_char("p1", "林峰", "protagonist")],
-            min_words=4000,
+            target_total_words=1_000_000,
             map_data={"regions": [{"name": "中原", "factions": ["林家"]}]},
         )
         import json as _json
@@ -482,7 +485,7 @@ class TestGenerateNovelOutlineContext:
         await agent.generate_novel_outline(
             concept={}, story_dna={}, world={},
             characters=[_make_char("p1", "林峰", "protagonist")],
-            min_words=4000,
+            target_total_words=1_000_000,
             map_data=None,
         )
         assert "暂无" in _stub_template["map_context"]

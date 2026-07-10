@@ -198,7 +198,8 @@ async def generate_novel_outline(data: dict):
     characters = characters_data.get("characters", [])
 
     project = fm.read_json(project_id, "project.json")
-    min_words = project.get("min_words", 4000) if project else 4000
+    min_words = project.get("min_words", 2000) if project else 2000
+    target_total_words = project.get("target_total_words", 1_000_000) if project else 1_000_000
 
     # Map system is optional — MapStep is a placeholder today. The file may
     # not exist; read_json returns None and the agent skips the section.
@@ -211,6 +212,7 @@ async def generate_novel_outline(data: dict):
             story_dna=concept_and_dna.get("story_dna", {}),
             world=world,
             characters=characters,
+            target_total_words=target_total_words,
             min_words=min_words,
             map_data=map_data,
         )

@@ -8,10 +8,14 @@ const GENRES: Array<{ value: string; label: string }> = [
   { value: "kehuan", label: "科幻" },
 ];
 
-const LENGTHS: Array<{ value: number; label: string }> = [
-  { value: 4000, label: "短篇" },
-  { value: 10000, label: "中篇" },
-  { value: 20000, label: "长篇" },
+// Per-chapter target is uniform across all length options — see CLAUDE.md
+// for context. Total word count is what differentiates the three categories.
+const WORDS_PER_CHAPTER = 2000;
+
+const LENGTHS: Array<{ value: number; label: string; totalLabel: string }> = [
+  { value: 300_000, label: "短篇快穿", totalLabel: "约30万字" },
+  { value: 1_000_000, label: "标准商业连载", totalLabel: "约100万字" },
+  { value: 3_000_000, label: "宏大史诗巨著", totalLabel: "约300万字" },
 ];
 
 interface CreateProjectCardProps {
@@ -20,6 +24,8 @@ interface CreateProjectCardProps {
     title?: string;
     genre: string;
     min_words: number;
+    target_total_words: number;
+    target_length_category: string;
   }) => Promise<void>;
   submitting: boolean;
   error: string | null;
@@ -29,8 +35,13 @@ export default function CreateProjectCard({ onSubmit, submitting, error }: Creat
   const [intent, setIntent] = useState("");
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("cool_novel");
-  const [minWords, setMinWords] = useState(4000);
+  // Index into LENGTHS — keeps a single source of truth for the selection.
+  const [lengthIdx, setLengthIdx] = useState(1); // default: 标准商业连载
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const selectedLength = LENGTHS[lengthIdx];
+  const targetTotalWords = selectedLength.value;
+  const chapterCount = Math.max(1, Math.round(targetTotalWords / WORDS_PER_CHAPTER));
 
   const submit = async () => {
     if (!intent.trim() || submitting) return;
@@ -38,7 +49,9 @@ export default function CreateProjectCard({ onSubmit, submitting, error }: Creat
       intent: intent.trim(),
       title: title.trim() || undefined,
       genre,
-      min_words: minWords,
+      min_words: WORDS_PER_CHAPTER,
+      target_total_words: targetTotalWords,
+      target_length_category: selectedLength.label,
     });
   };
 
@@ -102,13 +115,13 @@ export default function CreateProjectCard({ onSubmit, submitting, error }: Creat
         <div>
           <label className="block font-label-mono text-system-log mb-2 text-xs">目标篇幅</label>
           <div className="flex gap-2">
-            {LENGTHS.map((l) => {
-              const selected = minWords === l.value;
+            {LENGTHS.map((l, i) => {
+              const selected = lengthIdx === i;
               return (
                 <button
-                  key={l.value}
+                  key={l.label}
                   type="button"
-                  onClick={() => setMinWords(l.value)}
+                  onClick={() => setLengthIdx(i)}
                   data-testid={`length-${l.label}`}
                   className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-colors
                     ${selected
@@ -116,10 +129,10 @@ export default function CreateProjectCard({ onSubmit, submitting, error }: Creat
                       : "border-outline-variant bg-surface-container text-system-log hover:text-primary"
                     }`}
                 >
-                  {l.label}
-                  <span className="ml-1 text-xs font-label-mono text-system-log">
-                    {l.value.toLocaleString()}
-                  </span>
+                  <div>{l.label}</div>
+                  <div className="text-[11px] font-label-mono text-system-log mt-0.5">
+                    {l.totalLabel}
+                  </div>
                 </button>
               );
             })}
@@ -144,7 +157,7 @@ export default function CreateProjectCard({ onSubmit, submitting, error }: Creat
                 <label className="block font-label-mono text-system-log mb-1 text-xs">章节数</label>
                 <input
                   type="number"
-                  value={Math.max(1, Math.round(minWords / 4000))}
+                  value={chapterCount}
                   disabled
                   className="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-sm text-system-log/60"
                 />
@@ -153,13 +166,13 @@ export default function CreateProjectCard({ onSubmit, submitting, error }: Creat
                 <label className="block font-label-mono text-system-log mb-1 text-xs">每章字数</label>
                 <input
                   type="number"
-                  value={4000}
+                  value={WORDS_PER_CHAPTER}
                   disabled
                   className="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1 text-sm text-system-log/60"
                 />
               </div>
               <div className="col-span-2 text-[10px] font-label-mono text-system-log/60">
-                自动按篇幅计算，后续可在工作台内调整
+                章节数 = 目标总字数 ÷ 每章字数；后续可在工作台内调整
               </div>
             </div>
           )}

@@ -18,7 +18,12 @@ class Project(BaseModel):
     id: str
     title: str = ""
     genre: str = "cool_novel"
-    min_words: int = 4000
+    min_words: int = 2000
+    # Target novel length picked at create time. The label mirrors the
+    # CreateProjectCard LENGTHS options (短篇快穿 / 标准商业连载 / 宏大史诗巨著);
+    # chapter count is derived as target_total_words / min_words.
+    target_total_words: int = 1_000_000
+    target_length_category: str = "标准商业连载"
     initial_intent: InitialIntent = Field(default_factory=InitialIntent)
     current_stage: str = "INIT"
     stage_history: list[StageTransition] = []

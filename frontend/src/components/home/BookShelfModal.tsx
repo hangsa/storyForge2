@@ -105,7 +105,9 @@ export default function BookShelfModal({ projects, onClose }: BookShelfModalProp
                 <div className="flex items-center gap-2 text-xs font-label-mono text-system-log">
                   <span>{GENRES[p.genre] || p.genre}</span>
                   <span>·</span>
-                  <span>{p.min_words.toLocaleString()} 字</span>
+                  <span>
+                    {p.target_length_category || `${(p.target_total_words / 10000).toFixed(0)}万字`}
+                  </span>
                 </div>
               </a>
               );

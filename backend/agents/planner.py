@@ -29,22 +29,28 @@ OUTLINE_CAST_CAPS = {
     "mentor": 6,  # cap loosely; rarely present
 }
 
-# Per-chapter word count → user-facing length category. Mirrors the LENGTHS
-# options in CreateProjectCard.tsx (短篇/中篇/长篇).
+# Target total word count → user-facing length category. Mirrors the LENGTHS
+# options in CreateProjectCard.tsx (短篇快穿 / 标准商业连载 / 宏大史诗巨著).
+# Thresholds sit at the midpoints between the user-facing options so a
+# slightly custom total (e.g. 60万) falls into the intended bucket.
 LENGTH_CATEGORY_THRESHOLDS = (
-    (4000, "短篇"),
-    (10000, "中篇"),
+    (500_000, "短篇快穿"),
+    (2_000_000, "标准商业连载"),
 )
 
 
-def length_category_for(min_words: int) -> str:
-    """Map per-chapter `min_words` (from project.json) to a length category
-    the LLM can reason about. Anything above the highest threshold is 长篇.
+def length_category_for(target_total_words: int) -> str:
+    """Map `project.target_total_words` to the user-facing length category
+    the LLM can reason about. Anything above the highest threshold is 宏大史诗巨著.
+
+    Thresholds are exclusive on the lower bound (strict `<`), so a value
+    exactly at a midpoint (e.g. 50万 between 短篇快穿 and 标准商业连载) falls
+    into the upper bucket — matches the user-facing options (30/100/300 万).
     """
     for threshold, label in LENGTH_CATEGORY_THRESHOLDS:
-        if min_words <= threshold:
+        if target_total_words < threshold:
             return label
-    return "长篇"
+    return "宏大史诗巨著"
 
 
 def pick_outline_cast(characters: list[dict]) -> list[dict]:
@@ -251,7 +257,8 @@ class PlannerAgent(BaseAgent):
         story_dna: dict,
         world: dict,
         characters: list[dict],
-        min_words: int = 4000,
+        target_total_words: int = 1_000_000,
+        min_words: int = 2000,
         map_data: Optional[dict] = None,
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
@@ -284,7 +291,9 @@ class PlannerAgent(BaseAgent):
         else:
             map_context = "（暂无地图系统信息）"
 
-        length_category = length_category_for(min_words)
+        # Length category is derived from the project's target total, not the
+        # per-chapter min_words (all three new options share 2000 字/章).
+        length_category = length_category_for(target_total_words)
 
         result, response = await self.generate_from_template(
             "novel_outline_generation",
@@ -294,6 +303,7 @@ class PlannerAgent(BaseAgent):
             characters_context=characters_context,
             map_context=map_context,
             length_category=length_category,
+            target_total_words=target_total_words,
             min_words=min_words,
         )
         self.log_usage("novel_outline_generation", response)

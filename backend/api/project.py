@@ -32,7 +32,9 @@ async def list_projects():
                         "genre": data.get("genre", ""),
                         "current_stage": data.get("current_stage", "INIT"),
                         "created_at": data.get("created_at", ""),
-                        "min_words": data.get("min_words", 4000),
+                        "min_words": data.get("min_words", 2000),
+                        "target_total_words": data.get("target_total_words", 1_000_000),
+                        "target_length_category": data.get("target_length_category", "标准商业连载"),
                     })
             except Exception:
                 continue
@@ -50,7 +52,12 @@ async def create_project(data: dict):
     intent = data.get("intent", "")
     title = data.get("title", "") or (intent[:30] + "..." if len(intent) > 30 else intent)
     genre = data.get("genre", "cool_novel")
-    min_words = data.get("min_words", 4000)
+    # Per-chapter target is uniform across the new length options (短篇快穿 /
+    # 标准商业连载 / 宏大史诗巨著), each ~2000 字/章 — see CreateProjectCard.tsx.
+    # Old clients still send `min_words` directly; accept it but default to 2000.
+    min_words = data.get("min_words", 2000)
+    target_total_words = data.get("target_total_words", 1_000_000)
+    target_length_category = data.get("target_length_category", "标准商业连载")
     free_text = data.get("free_text", "") or intent
     inspiration_source = data.get("inspiration_source")
 
@@ -71,6 +78,8 @@ async def create_project(data: dict):
         title=title,
         genre=genre,
         min_words=min_words,
+        target_total_words=target_total_words,
+        target_length_category=target_length_category,
         initial_intent=InitialIntent(
             free_text=free_text,
             inspiration_source=inspiration_source,

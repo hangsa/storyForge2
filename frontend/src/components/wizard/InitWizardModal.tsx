@@ -120,7 +120,7 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
     }
     wizard.reset();
     onDismiss();
-    navigate(`/project/${encodeURIComponent(projectId)}/workspace?mode=manual`);
+    navigate(`/project/${encodeURIComponent(projectId)}/stage1`);
   };
 
   return (

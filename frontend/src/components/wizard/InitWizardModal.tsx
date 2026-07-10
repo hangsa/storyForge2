@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
-import { useWizard, type WizardData } from "./WizardContext";
+import { useWizard, WizardProvider, type WizardData } from "./WizardContext";
 import WizardSteps from "./WizardSteps";
 import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
@@ -32,6 +32,14 @@ function hasContent(v: unknown): boolean {
 }
 
 export default function InitWizardModal({ projectId, onDismiss }: InitWizardModalProps) {
+  return (
+    <WizardProvider projectId={projectId}>
+      <InitWizardModalInner projectId={projectId} onDismiss={onDismiss} />
+    </WizardProvider>
+  );
+}
+
+function InitWizardModalInner({ projectId, onDismiss }: InitWizardModalProps) {
   const wizard = useWizard();
   const navigate = useNavigate();
 

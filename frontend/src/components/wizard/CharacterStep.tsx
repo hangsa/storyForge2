@@ -142,11 +142,31 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     return "bg-surface-container-low text-system-log";
   };
 
+  // Auto-trigger the default batch (1 protagonist + 2 antagonists + 3 supporting)
+  // on mount when there are no characters yet and we're not already generating
+  // or in an error state. Subsequent retries use the footer "重新生成" button.
+  useEffect(() => {
+    const noCharacters = !characters || characters.characters.length === 0;
+    if (
+      noCharacters &&
+      wizard.status !== "generating" &&
+      wizard.status !== "error"
+    ) {
+      handleBatchStart();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
   // just registers the handlers and the current busy state.
   useEffect(() => {
-    wizard.setRegenerateHandler(hasCharacters ? handleBatchStart : null, busy);
-    wizard.setNextHandler(hasCharacters ? handleNext : null, busy);
+    const hasChars = !!characters && characters.characters.length > 0;
+    const canRegenerate =
+      hasChars ||
+      wizard.status === "completed" ||
+      wizard.status === "error";
+    wizard.setRegenerateHandler(canRegenerate ? handleBatchStart : null, busy);
+    wizard.setNextHandler(hasChars ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
       wizard.setNextHandler(null, false);
@@ -166,41 +186,6 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       {wizard.status === "error" && (
         <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
           {wizard.errorMessage}
-          <button onClick={handleBatchStart} className="ml-3 px-3 py-1 bg-surface-container text-primary rounded text-xs">重试</button>
-        </div>
-      )}
-
-      {!hasCharacters && wizard.status !== "generating" && wizard.status !== "error" && (
-        <div data-testid="character-idle" className="text-center py-10 space-y-5">
-          <span className="material-symbols-outlined text-5xl text-system-log/30 block">person</span>
-          <p className="font-body-ui text-system-log">选择生成方式</p>
-          <button
-            data-testid="character-start"
-            onClick={handleBatchStart}
-            disabled={busy}
-            className="px-5 py-2.5 bg-primary-container text-surface-container-low font-body-ui rounded-lg hover:opacity-90 disabled:opacity-40"
-          >
-            {busy ? "生成中…" : "开始生成（默认 1主角 + 2反派 + 3配角）"}
-          </button>
-          <div className="space-y-2">
-            <p className="font-label-mono text-system-log/70 text-xs">或单独生成一个：</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {CHARACTER_TYPES.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  data-testid={`character-type-${value}`}
-                  onClick={() => handleSingleStart(value)}
-                  disabled={busy}
-                  className="px-3 py-1.5 rounded-full border text-sm font-body-ui
-                             bg-surface-container text-system-log border-outline-variant
-                             hover:border-primary-container transition-colors disabled:opacity-40"
-                >
-                  仅生成{label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 

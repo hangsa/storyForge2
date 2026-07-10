@@ -36,8 +36,6 @@ beforeEach(() => {
 });
 
 function setup() {
-  // Pre-seed sessionStorage so the modal boots on step 3 with the same
-  // "carried over from step 2" state the original tests relied on.
   sessionStorage.setItem(
     KEY,
     JSON.stringify({
@@ -75,27 +73,6 @@ function makeChar(id: string, type: string, name = "C" + id, overrides: Partial<
 }
 
 describe("CharacterStep", () => {
-  it("shows generate buttons on first entry even when wizard status is 'completed' (carry-over from step 2)", () => {
-    sessionStorage.setItem(
-      KEY,
-      JSON.stringify({
-        currentStep: 3,
-        completedSteps: [1, 2],
-        status: "completed",
-        data: {
-          concept: null, story_dna: null, world: null,
-          characters: null, novel_outline: null, chapter1_outline: null,
-        },
-        errorMessage: null,
-      }),
-    );
-    setup();
-    expect(screen.getByTestId("character-step")).toBeInTheDocument();
-    expect(screen.getByTestId("character-idle")).toBeInTheDocument();
-    expect(screen.getByTestId("character-start")).toBeInTheDocument();
-    expect(screen.getByTestId("character-type-protagonist")).toBeInTheDocument();
-  });
-
   it("batch start calls generateCharacter 6 times (1+2+3) and renders 6 cards", async () => {
     let callIdx = 0;
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, t: string) => {
@@ -103,9 +80,6 @@ describe("CharacterStep", () => {
       return { characters: [makeChar(`c${callIdx}`, t)], current: null };
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("character-start").click();
-    });
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
     const types = (api.generateCharacter as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1]);
@@ -116,21 +90,6 @@ describe("CharacterStep", () => {
     expect(screen.getByText("已生成 6 个角色")).toBeInTheDocument();
   });
 
-  it("'仅生成主角' generates exactly 1 protagonist", async () => {
-    (api.generateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
-      characters: [makeChar("p1", "protagonist")],
-      current: null,
-    });
-    setup();
-    await act(async () => {
-      screen.getByTestId("character-type-protagonist").click();
-    });
-    await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
-    expect(api.generateCharacter).toHaveBeenCalledTimes(1);
-    expect(api.generateCharacter).toHaveBeenCalledWith("proj_x", "protagonist");
-    expect(screen.getByTestId("character-list").children).toHaveLength(1);
-  });
-
   it("manual add appends to the existing list (does not replace)", async () => {
     let callIdx = 0;
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, t: string) => {
@@ -138,18 +97,16 @@ describe("CharacterStep", () => {
       return { characters: [makeChar(`c${callIdx}`, t)], current: null };
     });
     setup();
-    // Start with 1 protagonist via batch (just click "仅生成主角" for speed).
-    await act(async () => {
-      screen.getByTestId("character-type-protagonist").click();
-    });
+    // The 6-character batch auto-triggers on mount.
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
-    expect(screen.getByTestId("character-list").children).toHaveLength(1);
-    // Add a supporting character manually.
+    expect(screen.getByTestId("character-list").children).toHaveLength(6);
+    expect(api.generateCharacter).toHaveBeenCalledTimes(6);
+    // Add an extra supporting character.
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();
     });
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(2));
-    expect(api.generateCharacter).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(7));
+    expect(api.generateCharacter).toHaveBeenCalledTimes(7);
     expect(api.generateCharacter).toHaveBeenLastCalledWith("proj_x", "supporting");
   });
 
@@ -160,9 +117,6 @@ describe("CharacterStep", () => {
       return { characters: [makeChar(`c${callIdx}`, t)], current: null };
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("character-start").click();
-    });
     await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(6));
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
     // Click regenerate — should call generateCharacter 6 more times, replace list.
@@ -181,9 +135,6 @@ describe("CharacterStep", () => {
     });
     (api.updateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
-    await act(async () => {
-      screen.getByTestId("character-start").click();
-    });
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     await act(async () => {
       screen.getByTestId("wizard-next").click();
@@ -194,59 +145,60 @@ describe("CharacterStep", () => {
     await waitFor(() => expect(api.advance).toHaveBeenCalledWith("proj_x", "STAGE3"));
   });
 
-  it("handles generateCharacter rejection by showing the error panel with a retry button", async () => {
+  it("error state shows the error banner with no '重试' button; footer '重新生成' retries", async () => {
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("LLM down"));
     setup();
-    await act(async () => {
-      screen.getByTestId("character-start").click();
-    });
-    await waitFor(() => expect(screen.getByText(/LLM down/)).toBeInTheDocument());
-    expect(screen.getByText("重试")).toBeInTheDocument();
+    expect(await screen.findByText(/LLM down/)).toBeInTheDocument();
+    expect(screen.queryByText("重试")).not.toBeInTheDocument();
+    const regen = await screen.findByTestId("wizard-regenerate");
+    expect(regen).not.toBeDisabled();
   });
 
   it("each character card exposes 人格层, 声音签名, 角色关系 sections", async () => {
-    (api.generateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
-      characters: [makeChar("c1", "protagonist", "林峰", {
-        personality: {
-          core_traits: ["坚毅", "聪明"],
-          beliefs: ["正道必胜"],
-          desires: ["守护苍生"],
-          fears: ["失去同伴"],
-          values: ["义"],
-        },
-        voice_signature: {
-          speech_style: "沉稳、简洁",
-          thought_patterns: "三思后行",
-          taboos: ["撒谎"],
-        },
-        relations: {
-          c2: { status: "ally", history: [], last_update_chapter: 3 },
-        },
-      })],
-      current: null,
+    let callIdx = 0;
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, _t: string) => {
+      callIdx += 1;
+      const charNum = callIdx;
+      const char = makeChar(`c${charNum}`, "protagonist", charNum === 1 ? "林峰" : `C${charNum}`, {
+        ...(charNum === 1 ? {
+          personality: {
+            core_traits: ["坚毅", "聪明"],
+            beliefs: ["正道必胜"],
+            desires: ["守护苍生"],
+            fears: ["失去同伴"],
+            values: ["义"],
+          },
+          voice_signature: {
+            speech_style: "沉稳、简洁",
+            thought_patterns: "三思后行",
+            taboos: ["撒谎"],
+          },
+          relations: {
+            c2: { status: "ally", history: [], last_update_chapter: 3 },
+          },
+        } : {}),
+      });
+      return { characters: [char], current: null };
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("character-type-protagonist").click();
-    });
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     expect(screen.getByTestId("character-c1-personality")).toBeInTheDocument();
     expect(screen.getByTestId("character-c1-voice")).toBeInTheDocument();
     expect(screen.getByTestId("character-c1-relations")).toBeInTheDocument();
-    // Personality tags are visible
     expect(screen.getByTestId("character-c1-personality").textContent).toContain("坚毅");
     expect(screen.getByTestId("character-c1-personality").textContent).toContain("正道必胜");
-    // Voice signature is visible
     expect(screen.getByTestId("character-c1-voice").textContent).toContain("沉稳、简洁");
     expect(screen.getByTestId("character-c1-voice").textContent).toContain("三思后行");
-    // Relation status text appears
     expect(screen.getByTestId("character-c1-relations").textContent).toContain("ally");
   });
 
   it("relation card resolves target id to character name when present in the cast", async () => {
+    let callNum = 0;
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(
       async (_id: string, type: string) => {
-        if (type === "protagonist") {
+        callNum += 1;
+        if (callNum === 1) {
+          // First batch call: protagonist c1=林峰 with relation referring to c2.
           return {
             characters: [makeChar("c1", "protagonist", "林峰", {
               relations: { c2: { status: "ally", history: [], last_update_chapter: 5 } },
@@ -254,26 +206,28 @@ describe("CharacterStep", () => {
             current: null,
           };
         }
-        if (type === "supporting") {
-          return {
-            characters: [makeChar("c2", "supporting", "苏晓晓", {
-              relations: { c1: { status: "ally", history: [], last_update_chapter: 5 } },
-            })],
-            current: null,
-          };
+        if (callNum === 7) {
+          // 7th call (manual add): cumulative response. Wizard picks c2=苏晓晓
+          // as the new character and appends it; c1's relation {c2} now resolves.
+          const c1 = makeChar("c1", "protagonist", "林峰", {
+            relations: { c2: { status: "ally", history: [], last_update_chapter: 5 } },
+          });
+          const c2 = makeChar("c2", "supporting", "苏晓晓", {
+            relations: { c1: { status: "ally", history: [], last_update_chapter: 5 } },
+          });
+          return { characters: [c1, c2], current: null };
         }
-        return { characters: [], current: null };
+        // Antagonist + supporting batch calls (2-6) — return plain unique
+        // characters so we don't collide with the c1/c2 we care about.
+        return { characters: [makeChar(`other${callNum}`, type)], current: null };
       },
     );
     setup();
-    await act(async () => {
-      screen.getByTestId("character-type-protagonist").click();
-    });
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();
     });
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(2));
+    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(7));
     const c1Relations = screen.getByTestId("character-c1-relations");
     expect(c1Relations.textContent).toContain("苏晓晓");
     expect(c1Relations.textContent).toContain("第5章更新");
@@ -282,38 +236,30 @@ describe("CharacterStep", () => {
   });
 
   it("'角色关系' section shows '暂无' when the character has no relations", async () => {
-    (api.generateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
-      characters: [makeChar("c1", "protagonist", "林峰")],
-      current: null,
+    let callIdx = 0;
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, _t: string) => {
+      callIdx += 1;
+      return { characters: [makeChar(`c${callIdx}`, "protagonist", callIdx === 1 ? "林峰" : `C${callIdx}`)], current: null };
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("character-type-protagonist").click();
-    });
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     const relations = screen.getByTestId("character-c1-relations");
     expect(relations.textContent).toContain("暂无");
   });
 
   it("empty voice_signature fields render an em-dash placeholder, not the literal empty string", async () => {
-    (api.generateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
-      characters: [makeChar("c1", "supporting", "路人甲")],
-      current: null,
+    let callIdx = 0;
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, _t: string) => {
+      callIdx += 1;
+      return { characters: [makeChar(`c${callIdx}`, "supporting", callIdx === 1 ? "路人甲" : `C${callIdx}`)], current: null };
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("character-type-supporting").click();
-    });
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     const voice = screen.getByTestId("character-c1-voice");
     expect(voice.textContent).toContain("—");
   });
 
   it("ignores prior characters in cumulative response (regression: 6×李玄阳)", async () => {
-    // The backend returns the cumulative characters.json on every call —
-    // call 2 returns [c1, c2], call 3 returns [c1, c2, c3], etc. The wizard
-    // must take only the newly-created character (the last one) from each
-    // response, otherwise the user sees 1+2+3+4+5+6 = 21 cards.
     const cumulative: ReturnType<typeof makeChar>[] = [];
     let i = 0;
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, t: string) => {
@@ -323,42 +269,40 @@ describe("CharacterStep", () => {
       return { characters: [...cumulative], current: null };
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("character-start").click();
-    });
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
-    // Exactly 6 cards, not 21.
     expect(screen.getByTestId("character-list").children).toHaveLength(6);
-    // The card IDs match the freshly-generated ones (c1..c6).
     for (let n = 1; n <= 6; n++) {
       expect(screen.getByTestId(`character-c${n}`)).toBeInTheDocument();
     }
   });
 
   it("manual add takes only the new character from a cumulative response", async () => {
-    // Start with one character via single-start (mock returns single-char list).
-    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({
-      characters: [makeChar("c1", "protagonist", "林峰")],
-      current: null,
-    }));
-    setup();
-    await act(async () => {
-      screen.getByTestId("character-type-protagonist").click();
+    const cumulative: ReturnType<typeof makeChar>[] = [];
+    let i = 0;
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, _t: string) => {
+      i += 1;
+      const newChar = makeChar(`c${i}`, "supporting", i === 1 ? "林峰" : `C${i}`);
+      cumulative.push(newChar);
+      return { characters: [...cumulative], current: null };
     });
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(1));
-    // Now mock the next call to return the cumulative list [c1, c2].
-    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({
-      characters: [makeChar("c1", "protagonist", "林峰"), makeChar("c2", "supporting", "苏晓晓")],
-      current: null,
-    }));
+    setup();
+    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(6));
+    // Manual add: backend returns cumulative list with a fresh id for the
+    // newly-created character. The wizard must pick the last entry (the new
+    // one) and append it; the existing c1=林峰 must be preserved (not replaced
+    // by the cumulative response — regression: "6×李玄阳").
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      const c1 = makeChar("c1", "protagonist", "林峰");
+      const c7 = makeChar("c7", "supporting", "苏晓晓");
+      return { characters: [c1, c7], current: null };
+    });
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();
     });
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(2));
-    // c1 must still be 林峰 (the wizard must not duplicate it from the
-    // cumulative response); c2 is the new 苏晓晓.
+    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(7));
+    // c1 (the existing 林峰) is preserved; c7 is the new 苏晓晓 appended via manual add.
     expect(screen.getByTestId("character-c1").textContent).toContain("林峰");
-    expect(screen.getByTestId("character-c2").textContent).toContain("苏晓晓");
+    expect(screen.getByTestId("character-c7").textContent).toContain("苏晓晓");
   });
 });

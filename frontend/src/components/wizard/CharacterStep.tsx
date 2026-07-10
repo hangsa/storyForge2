@@ -66,22 +66,6 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     }
   };
 
-  const handleSingleStart = async (type: Character["character_type"]) => {
-    wizard.startStep(3);
-    setBusy(true);
-    try {
-      const result = await api.generateCharacter(projectId, type);
-      const fresh = pickNewlyCreated(result);
-      if (!fresh) throw new Error("生成结果为空");
-      setCharacters({ characters: [fresh], current: fresh });
-      wizard.setStatus("completed");
-    } catch (e) {
-      wizard.setStatus("error", e instanceof Error ? e.message : "角色生成失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleAddOne = async (type: Character["character_type"]) => {
     setBusy(true);
     try {

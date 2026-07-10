@@ -57,12 +57,6 @@ function setup() {
 }
 
 describe("WorldStep", () => {
-  it("renders idle state with '开始生成' button", () => {
-    setup();
-    expect(screen.getByTestId("world-step")).toBeInTheDocument();
-    expect(screen.getByTestId("world-start")).toBeInTheDocument();
-  });
-
   it("completed state shows both new fields with [新增] accent", async () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
@@ -74,9 +68,6 @@ describe("WorldStep", () => {
       core_rules: [],
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("world-start").click();
-    });
     expect(await screen.findByTestId("world-form")).toBeInTheDocument();
     expect(screen.getByTestId("world-era-social-structure")).toBeInTheDocument();
     expect(screen.getByTestId("world-era-cultural-history")).toBeInTheDocument();
@@ -92,9 +83,6 @@ describe("WorldStep", () => {
       core_rules: [],
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("world-start").click();
-    });
     expect(await screen.findByTestId("world-form")).toBeInTheDocument();
     expect((screen.getByTestId("world-era-social-structure") as HTMLTextAreaElement).value).toBe("");
     expect((screen.getByTestId("world-era-cultural-history") as HTMLTextAreaElement).value).toBe("");
@@ -112,9 +100,6 @@ describe("WorldStep", () => {
     });
     (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
-    await act(async () => {
-      screen.getByTestId("world-start").click();
-    });
     await screen.findByTestId("world-form");
     await act(async () => {
       screen.getByTestId("wizard-next").click();
@@ -140,9 +125,6 @@ describe("WorldStep", () => {
       core_rules: ["弱肉强食"],
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("world-start").click();
-    });
     await screen.findByTestId("world-form");
     expect(screen.getByTestId("world-power-stages")).toBeInTheDocument();
     expect(screen.getByTestId("world-power-rules")).toBeInTheDocument();
@@ -163,9 +145,6 @@ describe("WorldStep", () => {
       core_rules: [],
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("world-start").click();
-    });
     await screen.findByTestId("world-form");
     expect(screen.getByTestId("world-factions")).toBeInTheDocument();
     expect(screen.getByTestId("world-factions").textContent).toContain("暂无势力");
@@ -180,9 +159,6 @@ describe("WorldStep", () => {
       core_rules: [],
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("world-start").click();
-    });
     await screen.findByTestId("world-form");
     await act(async () => {
       screen.getByTestId("world-faction-add").click();
@@ -205,9 +181,6 @@ describe("WorldStep", () => {
     });
     (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
-    await act(async () => {
-      screen.getByTestId("world-start").click();
-    });
     await screen.findByTestId("world-form");
     await act(async () => {
       screen.getByTestId("world-faction-add").click();
@@ -240,9 +213,6 @@ describe("WorldStep", () => {
       core_rules: [],
     });
     setup();
-    await act(async () => {
-      screen.getByTestId("world-start").click();
-    });
     await screen.findByTestId("world-form");
     expect(screen.getByTestId("world-faction-1")).toBeInTheDocument();
     await act(async () => {

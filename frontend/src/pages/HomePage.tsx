@@ -1,18 +1,18 @@
 import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import StatsSidebar from "../components/home/StatsSidebar";
 import ManifestoHeader from "../components/home/ManifestoHeader";
 import CreateProjectCard from "../components/home/CreateProjectCard";
 import BookShelf from "../components/home/BookShelf";
+import InitWizardModal from "../components/wizard/InitWizardModal";
 import { useProjectStats } from "../hooks/useProjectStats";
 
 export default function HomePage() {
-  const navigate = useNavigate();
   const { stats, loading: statsLoading, refresh } = useProjectStats();
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
 
   const handleCreate = useCallback(
     async (data: { intent: string; title?: string; genre: string; min_words: number }) => {
@@ -28,16 +28,16 @@ export default function HomePage() {
         try {
           await api.advance(project.id, "STAGE1");
         } catch {
-          // proceed even if advance fails (mirrors ProjectListPage behavior)
+          // proceed even if advance fails (mirrors prior behavior)
         }
-        navigate(`/project/${encodeURIComponent(project.id)}/stage1`);
+        setWizardProjectId(project.id);
       } catch (e) {
         setCreateError(e instanceof Error ? e.message : "创建项目失败");
       } finally {
         setSubmitting(false);
       }
     },
-    [navigate]
+    []
   );
 
   const handleRefresh = useCallback(async () => {
@@ -49,9 +49,6 @@ export default function HomePage() {
     }
   }, [refresh]);
 
-  // mtimes is intentionally a stable empty list here; the existing /api/project/list
-  // endpoint does not expose file mtime, so shelf items fall back to created_at desc.
-  // Future: pass actual mtimes once the list endpoint is extended.
   const mtimes: { id: string; mtime: number }[] = [];
 
   return (
@@ -71,6 +68,12 @@ export default function HomePage() {
         />
         <BookShelf mtimes={mtimes} />
       </main>
+      {wizardProjectId && (
+        <InitWizardModal
+          projectId={wizardProjectId}
+          onDismiss={() => setWizardProjectId(null)}
+        />
+      )}
     </div>
   );
 }

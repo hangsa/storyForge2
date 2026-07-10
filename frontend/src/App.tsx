@@ -21,6 +21,7 @@ const StoryOSPage = lazy(() => import("./pages/StoryOSPage"));
 const CreativeCanvasPage = lazy(() => import("./pages/CreativeCanvasPage"));
 const BranchSimulationPage = lazy(() => import("./pages/BranchSimulationPage"));
 const Stage3Layout = lazy(() => import("./components/layout/Stage3Layout"));
+const WizardDeepLinkPage = lazy(() => import("./pages/WizardDeepLinkPage"));
 
 function StageWrapper({ children, name }: { children: React.ReactNode; name: string }) {
   const { projectId } = useParams<{ projectId: string }>();
@@ -46,6 +47,14 @@ function App() {
     <ToastProvider>
       <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route
+        path="/project/:projectId/wizard"
+        element={
+          <Suspense fallback={<LoadingFallback />}>
+            <WizardDeepLinkPage />
+          </Suspense>
+        }
+      />
       <Route element={<MainLayout />}>
         <Route
           path="/project/:projectId/stage1"

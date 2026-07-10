@@ -8,6 +8,11 @@ const { mockApi } = vi.hoisted(() => ({
     createProject: vi.fn(),
     getProjectStats: vi.fn(),
     advance: vi.fn(),
+    getConcept: vi.fn(),
+    getWorld: vi.fn(),
+    getCharacter: vi.fn(),
+    getNovelOutline: vi.fn(),
+    getOutline: vi.fn(),
   },
 }));
 
@@ -25,6 +30,7 @@ vi.mock("../api/client", () => ({
 }));
 
 import HomePage from "../pages/HomePage";
+import { WizardProvider } from "../components/wizard/WizardContext";
 
 const SAMPLE_STATS = {
   total_books: 3,
@@ -43,12 +49,20 @@ beforeEach(() => {
   mockApi.getProjectStats.mockResolvedValue(SAMPLE_STATS);
   mockApi.createProject.mockReset();
   mockApi.advance.mockReset();
+  // Stub wizard data fetches so mounting InitWizardModal doesn't throw.
+  mockApi.getConcept.mockResolvedValue(null);
+  mockApi.getWorld.mockResolvedValue(null);
+  mockApi.getCharacter.mockResolvedValue(null);
+  mockApi.getNovelOutline.mockResolvedValue(null);
+  mockApi.getOutline.mockResolvedValue(null);
 });
 
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/"]}>
-      <HomePage />
+      <WizardProvider projectId="proj_new">
+        <HomePage />
+      </WizardProvider>
     </MemoryRouter>
   );
 }

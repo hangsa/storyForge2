@@ -33,6 +33,14 @@ function StageWrapper({ children, name }: { children: React.ReactNode; name: str
   );
 }
 
+function StageRedirect({ to }: { to: string }) {
+  // Builds a destination URL from the matched :projectId param.
+  // Use this instead of <Navigate to={`/project/:projectId/${to}`} /> —
+  // React Router does NOT interpolate URL params into string `to` props.
+  const { projectId } = useParams<{ projectId: string }>();
+  return <Navigate to={`/project/${encodeURIComponent(projectId ?? "")}/${to}`} replace />;
+}
+
 function LoadingFallback() {
   return (
     <div className="flex items-center justify-center py-24">
@@ -136,15 +144,15 @@ function App() {
         {/* Stage4–6 redirects → /workspace. Use replace, not push, so back-button goes to caller. */}
         <Route
           path="/project/:projectId/stage4"
-          element={<Navigate to="/project/:projectId/workspace?mode=manual" replace />}
+          element={<StageRedirect to="workspace?mode=manual" />}
         />
         <Route
           path="/project/:projectId/stage5"
-          element={<Navigate to="/project/:projectId/workspace?mode=manual&panel=diagnosis" replace />}
+          element={<StageRedirect to="workspace?mode=manual&panel=diagnosis" />}
         />
         <Route
           path="/project/:projectId/stage6"
-          element={<Navigate to="/project/:projectId/workspace?mode=manual&panel=export" replace />}
+          element={<StageRedirect to="workspace?mode=manual&panel=export" />}
         />
         <Route
           path="/project/:projectId/workspace"

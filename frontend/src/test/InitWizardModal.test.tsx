@@ -74,14 +74,62 @@ describe("InitWizardModal", () => {
     }
   });
 
-  it("shows the close button but it is disabled", () => {
-    renderModal();
+  it("shows the close button enabled, clicking it dismisses without resetting", async () => {
+    const onDismiss = vi.fn();
+    renderModal(PROJECT, onDismiss);
     const closeBtn = screen.getByTestId("wizard-close");
-    expect(closeBtn).toBeDisabled();
+    expect(closeBtn).not.toBeDisabled();
+    await act(async () => {
+      closeBtn.click();
+    });
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    // sessionStorage must be preserved so the user can resume later
+    expect(sessionStorage.getItem(KEY)).not.toBeNull();
   });
 
   it("renders ConceptStep on mount (step 1)", () => {
     renderModal();
+    expect(screen.getByTestId("concept-step")).toBeInTheDocument();
+  });
+
+  it("resume mode: hydrates from files and jumps to next uncompleted step", async () => {
+    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
+      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
+    });
+    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
+      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      factions: [], core_rules: [],
+    });
+    // No character/novel/outline files → steps 1, 2 completed, next is step 3.
+    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    render(
+      <MemoryRouter>
+        <WizardProvider projectId={PROJECT}>
+          <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} resume />
+        </WizardProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByTestId("character-step")).toBeInTheDocument());
+  });
+
+  it("resume=false (default): hydrates from files but stays on step 1", async () => {
+    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
+      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
+    });
+    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    renderModal(); // default resume=false
+    // ConceptStep stays mounted (step 1) even though the concept file exists.
     expect(screen.getByTestId("concept-step")).toBeInTheDocument();
   });
 

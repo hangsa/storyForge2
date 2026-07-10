@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
-import { useWizard, WizardProvider, type WizardData } from "./WizardContext";
+import { useWizard, WizardProvider, TOTAL_STEPS, type WizardData } from "./WizardContext";
 import WizardSteps from "./WizardSteps";
 import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
@@ -12,8 +12,16 @@ import ChapterOutlineStep from "./ChapterOutlineStep";
 
 interface InitWizardModalProps {
   projectId: string;
-  /** Called when the wizard finishes; the modal also dismisses itself. */
+  /** Called when the wizard finishes or the user closes the modal. */
   onDismiss: () => void;
+  /**
+   * When true, the modal resumes an in-progress initialization: after the
+   * prefill marks steps completed from the persisted files, the modal jumps
+   * to the next uncompleted step. Used by the `/project/:id/wizard` deep
+   * link so an INIT-stage book opens at the latest stage the user reached.
+   * Defaults to false (fresh start — HomePage create flow).
+   */
+  resume?: boolean;
 }
 
 const STEP_TITLES: Record<number, string> = {
@@ -31,15 +39,15 @@ function hasContent(v: unknown): boolean {
   return Object.values(o).some((x) => x !== null && x !== undefined && x !== "");
 }
 
-export default function InitWizardModal({ projectId, onDismiss }: InitWizardModalProps) {
+export default function InitWizardModal({ projectId, onDismiss, resume = false }: InitWizardModalProps) {
   return (
     <WizardProvider projectId={projectId}>
-      <InitWizardModalInner projectId={projectId} onDismiss={onDismiss} />
+      <InitWizardModalInner projectId={projectId} onDismiss={onDismiss} resume={resume} />
     </WizardProvider>
   );
 }
 
-function InitWizardModalInner({ projectId, onDismiss }: InitWizardModalProps) {
+function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalProps) {
   const wizard = useWizard();
   const navigate = useNavigate();
 
@@ -87,7 +95,12 @@ function InitWizardModalInner({ projectId, onDismiss }: InitWizardModalProps) {
           data.chapter1_outline = outline.value as Outline;
         }
         if (completed.length > 0) {
-          wizard.hydrateFromFiles(completed, data);
+          if (resume) {
+            const nextStep = Math.min(Math.max(...completed) + 1, TOTAL_STEPS);
+            wizard.hydrateFromFilesAndAdvance(completed, data, nextStep);
+          } else {
+            wizard.hydrateFromFiles(completed, data);
+          }
         }
       } catch {
         // ignore prefill failures (e.g., 404 on first ever entry)
@@ -123,10 +136,10 @@ function InitWizardModalInner({ projectId, onDismiss }: InitWizardModalProps) {
           <button
             type="button"
             data-testid="wizard-close"
-            disabled
-            aria-label="关闭向导（不可关闭）"
-            title="为防止数据丢失，向导运行期间不可关闭"
-            className="text-system-log/40 cursor-not-allowed"
+            onClick={onDismiss}
+            aria-label="关闭向导（已保存进度）"
+            title="已完成的步骤会自动保存，下次可从书架继续"
+            className="text-system-log hover:text-primary transition-colors"
           >
             <span className="material-symbols-outlined">close</span>
           </button>

@@ -47,6 +47,12 @@ type WizardAction =
       type: "HYDRATE_FROM_FILES";
       completedSteps: number[];
       data: Partial<WizardData>;
+    }
+  | {
+      type: "HYDRATE_FROM_FILES_AND_ADVANCE";
+      completedSteps: number[];
+      data: Partial<WizardData>;
+      nextStep: number;
     };
 
 const initialState: WizardState = {
@@ -103,6 +109,17 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
         data: { ...state.data, ...action.data },
       };
     }
+    case "HYDRATE_FROM_FILES_AND_ADVANCE": {
+      const mergedCompleted = Array.from(
+        new Set([...state.completedSteps, ...action.completedSteps]),
+      ).sort((a, b) => a - b);
+      return {
+        ...state,
+        completedSteps: mergedCompleted,
+        data: { ...state.data, ...action.data },
+        currentStep: action.nextStep,
+      };
+    }
     default:
       return state;
   }
@@ -139,6 +156,11 @@ interface WizardContextValue extends WizardState {
   jumpToStep: (step: number) => void;
   setStatus: (status: WizardStatus, errorMessage?: string | null) => void;
   hydrateFromFiles: (completedSteps: number[], data: Partial<WizardData>) => void;
+  hydrateFromFilesAndAdvance: (
+    completedSteps: number[],
+    data: Partial<WizardData>,
+    nextStep: number,
+  ) => void;
   reset: () => void;
 }
 
@@ -187,6 +209,8 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
     setStatus: (status, errorMessage) => dispatch({ type: "STATUS", status, errorMessage }),
     hydrateFromFiles: (completedSteps, data) =>
       dispatch({ type: "HYDRATE_FROM_FILES", completedSteps, data }),
+    hydrateFromFilesAndAdvance: (completedSteps, data, nextStep) =>
+      dispatch({ type: "HYDRATE_FROM_FILES_AND_ADVANCE", completedSteps, data, nextStep }),
     reset: () => {
       try {
         sessionStorage.removeItem(getSessionKey(projectId));

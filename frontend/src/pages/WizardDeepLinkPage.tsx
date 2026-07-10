@@ -9,8 +9,9 @@ export default function WizardDeepLinkPage() {
     <div className="min-h-screen bg-canvas-bg">
       <InitWizardModal
         projectId={projectId}
+        resume
         onDismiss={() => {
-          window.location.assign(`/project/${encodeURIComponent(projectId)}/workspace?mode=manual`);
+          window.location.assign("/");
         }}
       />
     </div>

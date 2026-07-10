@@ -337,8 +337,17 @@ interface BookCardProps {
 
 function BookCard({ project, selectMode, selected, onToggle }: BookCardProps) {
   const handleClick = () => {
-    if (selectMode) onToggle();
-    else window.location.assign(`/project/${encodeURIComponent(project.id)}/stage1`);
+    if (selectMode) {
+      onToggle();
+      return;
+    }
+    // INIT-stage projects haven't started setup yet — open the wizard so the
+    // user can continue from the latest step they reached.
+    const href =
+      project.current_stage === "INIT"
+        ? `/project/${encodeURIComponent(project.id)}/wizard`
+        : `/project/${encodeURIComponent(project.id)}/stage1`;
+    window.location.assign(href);
   };
 
   return (

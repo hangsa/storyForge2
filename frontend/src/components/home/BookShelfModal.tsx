@@ -84,10 +84,15 @@ export default function BookShelfModal({ projects, onClose }: BookShelfModalProp
 
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filtered.map((p) => (
+            {filtered.map((p) => {
+              const href =
+                p.current_stage === "INIT"
+                  ? `/project/${encodeURIComponent(p.id)}/wizard`
+                  : `/project/${encodeURIComponent(p.id)}/stage1`;
+              return (
               <a
                 key={p.id}
-                href={`/project/${encodeURIComponent(p.id)}/stage1`}
+                href={href}
                 className="block bg-surface-container-low border border-outline-variant rounded-lg p-4
                            hover:border-primary-container/40 transition-colors"
               >
@@ -103,7 +108,8 @@ export default function BookShelfModal({ projects, onClose }: BookShelfModalProp
                   <span>{p.min_words.toLocaleString()} 字</span>
                 </div>
               </a>
-            ))}
+              );
+            })}
           </div>
           {filtered.length === 0 && (
             <div className="text-center py-12 text-system-log">未找到匹配项目</div>

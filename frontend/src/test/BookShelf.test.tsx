@@ -126,4 +126,50 @@ describe("BookShelf", () => {
       expect.arrayContaining(["proj_a", "proj_b"]),
     );
   });
+
+  it("INIT-stage book click navigates to the wizard deep-link", async () => {
+    const assignSpy = vi.fn();
+    const original = window.location.assign;
+    Object.defineProperty(window, "location", {
+      value: { ...window.location, assign: assignSpy },
+      writable: true,
+    });
+    try {
+      renderShelf();
+      await screen.findByText("测试小说"); // proj_b has current_stage "INIT"
+      const initCard = screen.getByText("测试小说").closest('[data-testid="book-card"]')!;
+      await act(async () => {
+        initCard.click();
+      });
+      expect(assignSpy).toHaveBeenCalledWith("/project/proj_b/wizard");
+    } finally {
+      Object.defineProperty(window, "location", {
+        value: { ...window.location, assign: original },
+        writable: true,
+      });
+    }
+  });
+
+  it("non-INIT book click navigates to stage1", async () => {
+    const assignSpy = vi.fn();
+    const original = window.location.assign;
+    Object.defineProperty(window, "location", {
+      value: { ...window.location, assign: assignSpy },
+      writable: true,
+    });
+    try {
+      renderShelf();
+      await screen.findByText("诡眼少年"); // proj_a has current_stage "STAGE2"
+      const card = screen.getByText("诡眼少年").closest('[data-testid="book-card"]')!;
+      await act(async () => {
+        card.click();
+      });
+      expect(assignSpy).toHaveBeenCalledWith("/project/proj_a/stage1");
+    } finally {
+      Object.defineProperty(window, "location", {
+        value: { ...window.location, assign: original },
+        writable: true,
+      });
+    }
+  });
 });

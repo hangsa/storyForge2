@@ -97,14 +97,10 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       const mergedCompleted = Array.from(
         new Set([...state.completedSteps, ...action.completedSteps]),
       ).sort((a, b) => a - b);
-      const targetStep = action.completedSteps.length
-        ? Math.min(Math.max(...action.completedSteps) + 1, TOTAL_STEPS)
-        : state.currentStep;
       return {
         ...state,
         completedSteps: mergedCompleted,
         data: { ...state.data, ...action.data },
-        currentStep: Math.max(state.currentStep, targetStep),
       };
     }
     default:

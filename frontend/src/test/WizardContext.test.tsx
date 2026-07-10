@@ -202,7 +202,7 @@ describe("WizardContext", () => {
       })
     );
     expect(result.current.completedSteps).toEqual([1, 2, 3]);
-    expect(result.current.currentStep).toBe(4); // advances to one past max completed
+    expect(result.current.currentStep).toBe(1); // prefill marks steps completed but does not advance — resume uses sessionStorage's currentStep
     expect(result.current.data.concept?.title).toBe("From File");
   });
 

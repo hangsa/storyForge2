@@ -225,3 +225,289 @@ class TestStateMachinePreconditions:
 
         result = sm.transition_check(proj_id, Stage.STAGE3)
         assert result.allowed, f"Should pass: missing={result.missing_files} failed={result.failed_checks}"
+
+
+def _make_char(cid: str, name: str, ctype: str, **overrides) -> dict:
+    """Minimal Character-shaped dict for pick_outline_cast tests."""
+    base = {
+        "id": cid,
+        "name": name,
+        "character_type": ctype,
+        "is_core_character": ctype == "protagonist",
+        "personality": {
+            "core_traits": ["坚毅"],
+            "beliefs": [],
+            "desires": [],
+            "fears": [],
+            "values": [],
+        },
+        "current_state": {"location": "起点", "physical_condition": "正常", "emotional": "平静"},
+        "voice_signature": {"speech_style": "简练"},
+        "relations": {},
+    }
+    base.update(overrides)
+    return base
+
+
+class TestLengthCategoryFor:
+    """Per-chapter min_words → user-facing length category.
+    Threshold table must match the LENGTHS options in CreateProjectCard.tsx
+    (短篇 ≤ 4000, 中篇 ≤ 10000, 长篇 above)."""
+
+    def test_short(self):
+        from backend.agents.planner import length_category_for
+        assert length_category_for(4000) == "短篇"
+        assert length_category_for(2000) == "短篇"
+        assert length_category_for(1) == "短篇"
+
+    def test_medium(self):
+        from backend.agents.planner import length_category_for
+        assert length_category_for(5000) == "中篇"
+        assert length_category_for(10000) == "中篇"
+        assert length_category_for(4001) == "中篇"
+
+    def test_long(self):
+        from backend.agents.planner import length_category_for
+        assert length_category_for(20000) == "长篇"
+        assert length_category_for(100000) == "长篇"
+        assert length_category_for(10001) == "长篇"
+
+
+class TestPickOutlineCast:
+    """6-character selection for the novel-outline LLM context.
+    Mirrors the wizard default batch (1P + 2A + 3S) and is the cap."""
+
+    def test_empty_input_returns_empty(self):
+        from backend.agents.planner import pick_outline_cast
+        assert pick_outline_cast([]) == []
+
+    def test_picks_1p_2a_3s_from_default_batch(self):
+        from backend.agents.planner import pick_outline_cast
+        chars = [
+            _make_char("p1", "林峰", "protagonist"),
+            _make_char("a1", "赵无极", "antagonist"),
+            _make_char("a2", "魔尊", "antagonist"),
+            _make_char("s1", "苏晓晓", "supporting"),
+            _make_char("s2", "王大锤", "supporting"),
+            _make_char("s3", "陈二狗", "supporting"),
+        ]
+        cast = pick_outline_cast(chars)
+        assert len(cast) == 6
+        by_role = {c["character_type"] for c in cast}
+        assert by_role == {"protagonist", "antagonist", "supporting"}
+        roles = [c["role"] for c in cast]
+        assert roles == ["主角", "反派", "反派", "配角", "配角", "配角"]
+        # Protagonist is first.
+        assert cast[0]["name"] == "林峰"
+        assert cast[0]["is_core"] is True
+
+    def test_caps_each_role(self):
+        from backend.agents.planner import pick_outline_cast
+        chars = (
+            [_make_char(f"p{i}", f"p{i}", "protagonist") for i in range(3)]
+            + [_make_char(f"a{i}", f"a{i}", "antagonist") for i in range(5)]
+            + [_make_char(f"s{i}", f"s{i}", "supporting") for i in range(7)]
+        )
+        cast = pick_outline_cast(chars)
+        assert len(cast) == 6
+        assert sum(1 for c in cast if c["character_type"] == "protagonist") == 1
+        assert sum(1 for c in cast if c["character_type"] == "antagonist") == 2
+        assert sum(1 for c in cast if c["character_type"] == "supporting") == 3
+
+    def test_preserves_input_order_within_role(self):
+        from backend.agents.planner import pick_outline_cast
+        chars = [
+            _make_char("a1", "a-1", "antagonist"),
+            _make_char("a2", "a-2", "antagonist"),
+            _make_char("a3", "a-3", "antagonist"),
+        ]
+        cast = pick_outline_cast(chars)
+        # First two antagonists kept in order; third dropped by the 2-cap.
+        assert [c["name"] for c in cast] == ["a-1", "a-2"]
+
+    def test_mentor_appended_after_default_three_roles(self):
+        from backend.agents.planner import pick_outline_cast
+        chars = [
+            _make_char("p1", "林峰", "protagonist"),
+            _make_char("a1", "赵无极", "antagonist"),
+            _make_char("s1", "苏晓晓", "supporting"),
+            _make_char("m1", "师父", "mentor"),
+        ]
+        cast = pick_outline_cast(chars)
+        assert [c["character_type"] for c in cast] == ["protagonist", "antagonist", "supporting", "mentor"]
+
+    def test_handles_missing_role_buckets(self):
+        """A project with only a protagonist + 3 supporting (no antagonists)
+        should still return a 4-character cast without crashing."""
+        from backend.agents.planner import pick_outline_cast
+        chars = [
+            _make_char("p1", "林峰", "protagonist"),
+            _make_char("s1", "苏晓晓", "supporting"),
+            _make_char("s2", "王大锤", "supporting"),
+            _make_char("s3", "陈二狗", "supporting"),
+        ]
+        cast = pick_outline_cast(chars)
+        assert len(cast) == 4
+        assert [c["character_type"] for c in cast] == ["protagonist", "supporting", "supporting", "supporting"]
+
+    def test_unknown_character_type_treated_as_supporting(self):
+        from backend.agents.planner import pick_outline_cast
+        chars = [
+            _make_char("p1", "林峰", "protagonist"),
+            _make_char("x1", "神秘人", "unknown_role"),
+        ]
+        cast = pick_outline_cast(chars)
+        # "unknown_role" is not in OUTLINE_CAST_PRIORITY so it's skipped, not
+        # bucketed into supporting. Documenting that behavior here.
+        assert [c["name"] for c in cast] == ["林峰"]
+
+    def test_includes_role_label_relations_and_state(self):
+        """Each picked entry must surface the fields the LLM needs to design
+        volumes and key plot points: role label, name, is_core, personality,
+        current_state, relations."""
+        from backend.agents.planner import pick_outline_cast
+        chars = [
+            _make_char(
+                "p1", "林峰", "protagonist",
+                relations={"a1": {"status": "enemy"}},
+            ),
+        ]
+        cast = pick_outline_cast(chars)
+        entry = cast[0]
+        assert entry["role"] == "主角"
+        assert entry["is_core"] is True
+        assert "personality" in entry
+        assert "current_state" in entry
+        assert entry["relations"] == {"a1": {"status": "enemy"}}
+
+
+class TestGenerateNovelOutlineContext:
+    """End-to-end: verify the agent builds the right context and passes it to
+    the prompt template. Mocks generate_from_template to capture kwargs."""
+
+    @pytest.fixture
+    def _stub_template(self, monkeypatch):
+        from backend.agents import planner as planner_mod
+        from backend.llm.base_provider import LLMResponse
+
+        captured: dict = {}
+
+        async def fake_generate_from_template(self, template_name, **kwargs):
+            captured["template_name"] = template_name
+            captured.update(kwargs)
+            # log_usage() in PlannerAgent.generate_novel_outline inspects
+            # response.provider etc., so the response can't be None here.
+            return (
+                SAMPLE_NOVEL_OUTLINE,
+                LLMResponse(
+                    text="<unused — json mode parsed>",
+                    tokens_in=0,
+                    tokens_out=0,
+                    model="test-model",
+                    provider="test",
+                ),
+            )
+
+        monkeypatch.setattr(
+            planner_mod.PlannerAgent,
+            "generate_from_template",
+            fake_generate_from_template,
+        )
+        return captured
+
+    @pytest.mark.asyncio
+    async def test_passes_six_characters_to_prompt(self, _stub_template):
+        from backend.agents.planner import PlannerAgent
+
+        characters = [
+            _make_char("p1", "林峰", "protagonist"),
+            _make_char("a1", "赵无极", "antagonist"),
+            _make_char("a2", "魔尊", "antagonist"),
+            _make_char("s1", "苏晓晓", "supporting"),
+            _make_char("s2", "王大锤", "supporting"),
+            _make_char("s3", "陈二狗", "supporting"),
+        ]
+        agent = PlannerAgent("proj_x")
+        await agent.generate_novel_outline(
+            concept={"title": "测试"},
+            story_dna={"core_contradiction": {}},
+            world={"era": "异世界", "power_system": {"name": "灵力"}, "core_rules": []},
+            characters=characters,
+            min_words=10000,
+        )
+        ctx = _stub_template
+        assert ctx["template_name"] == "novel_outline_generation"
+        # 6 entries JSON-stringified.
+        import json as _json
+        parsed = _json.loads(ctx["characters_context"])
+        assert len(parsed) == 6
+        assert [c["role"] for c in parsed] == ["主角", "反派", "反派", "配角", "配角", "配角"]
+
+    @pytest.mark.asyncio
+    async def test_passes_length_category_label(self, _stub_template):
+        from backend.agents.planner import PlannerAgent
+
+        agent = PlannerAgent("proj_x")
+        await agent.generate_novel_outline(
+            concept={}, story_dna={}, world={},
+            characters=[_make_char("p1", "林峰", "protagonist")],
+            min_words=20000,
+        )
+        assert _stub_template["length_category"] == "长篇"
+        assert _stub_template["min_words"] == 20000
+
+    @pytest.mark.asyncio
+    async def test_passes_map_data_when_present(self, _stub_template):
+        from backend.agents.planner import PlannerAgent
+
+        agent = PlannerAgent("proj_x")
+        await agent.generate_novel_outline(
+            concept={}, story_dna={}, world={},
+            characters=[_make_char("p1", "林峰", "protagonist")],
+            min_words=4000,
+            map_data={"regions": [{"name": "中原", "factions": ["林家"]}]},
+        )
+        import json as _json
+        parsed = _json.loads(_stub_template["map_context"])
+        assert "regions" in parsed
+
+    @pytest.mark.asyncio
+    async def test_map_data_absent_yields_placeholder(self, _stub_template):
+        """MapStep is a placeholder today, so map_data is typically None.
+        The agent must not crash and must surface a clear placeholder so the
+        LLM knows the section was intentionally empty."""
+        from backend.agents.planner import PlannerAgent
+
+        agent = PlannerAgent("proj_x")
+        await agent.generate_novel_outline(
+            concept={}, story_dna={}, world={},
+            characters=[_make_char("p1", "林峰", "protagonist")],
+            min_words=4000,
+            map_data=None,
+        )
+        assert "暂无" in _stub_template["map_context"]
+
+
+class TestApiMapDataDefensiveRead:
+    """The /api/stage3/generate-novel-outline endpoint must tolerate a missing
+    map.json (MapStep is a placeholder today) without 500ing."""
+
+    def test_api_handles_missing_map_json(self, client, project_data, monkeypatch):
+        from backend.config import settings
+        monkeypatch.setattr(settings, "projects_dir", settings.projects_dir)
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _seed_project(settings.projects_dir, proj_id)
+        # Intentionally do NOT write map.json.
+
+        with patch("backend.agents.planner.PlannerAgent.generate_novel_outline", new_callable=AsyncMock) as mock:
+            mock.return_value = (SAMPLE_NOVEL_OUTLINE, None)
+            resp = client.post("/api/stage3/generate-novel-outline", json={"project_id": proj_id})
+
+        assert resp.status_code == 200, resp.text
+        # The agent should have been called with map_data=None.
+        call_kwargs = mock.call_args.kwargs
+        assert call_kwargs["map_data"] is None
+        # And the full character list, not just [0].
+        assert len(call_kwargs["characters"]) == 1
+        assert call_kwargs["characters"][0]["name"] == "林峰"

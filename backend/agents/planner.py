@@ -4,6 +4,86 @@ from typing import Optional
 from backend.agents.base_agent import BaseAgent, LLMResponse
 
 
+# Role labels surfaced to the LLM. Must match the user-facing wizard labels
+# (CharacterStep.tsx CHARACTER_TYPES) so the LLM's output is consistent with
+# what the user sees when reviewing.
+CHARACTER_ROLE_LABELS = {
+    "protagonist": "主角",
+    "antagonist": "反派",
+    "supporting": "配角",
+    "mentor": "导师",
+}
+
+# Order in which character types are picked for the outline prompt. The wizard
+# default batch (1P + 2A + 3S) defines the "core cast"; if more roles exist
+# (e.g. a mentor), they extend the list past 6.
+OUTLINE_CAST_PRIORITY = ["protagonist", "antagonist", "supporting", "mentor"]
+
+# Per-role cap when picking the cast for the outline prompt. 1+2+3 = 6, which
+# matches the wizard's "1 主角 + 2 反派 + 3 配角" default batch and keeps the
+# prompt within its ~8K token budget even with full character data.
+OUTLINE_CAST_CAPS = {
+    "protagonist": 1,
+    "antagonist": 2,
+    "supporting": 3,
+    "mentor": 6,  # cap loosely; rarely present
+}
+
+# Per-chapter word count → user-facing length category. Mirrors the LENGTHS
+# options in CreateProjectCard.tsx (短篇/中篇/长篇).
+LENGTH_CATEGORY_THRESHOLDS = (
+    (4000, "短篇"),
+    (10000, "中篇"),
+)
+
+
+def length_category_for(min_words: int) -> str:
+    """Map per-chapter `min_words` (from project.json) to a length category
+    the LLM can reason about. Anything above the highest threshold is 长篇.
+    """
+    for threshold, label in LENGTH_CATEGORY_THRESHOLDS:
+        if min_words <= threshold:
+            return label
+    return "长篇"
+
+
+def pick_outline_cast(characters: list[dict]) -> list[dict]:
+    """Pick up to 6 characters (1 protagonist + 2 antagonists + 3 supporting,
+    plus any mentors) for the novel-outline LLM context. Preserves input order
+    within each role bucket so the wizard's generation order is respected.
+
+    Each returned entry is a compact, role-labeled view of the character
+    containing only the fields the LLM needs to design volumes and key plot
+    points: role, name, is_core, personality, current_state, relations.
+    Voice signature and growth curve are excluded — the former is scene-level,
+    the latter is derived from the outline post-hoc.
+    """
+    if not characters:
+        return []
+
+    by_type: dict[str, list[dict]] = {role: [] for role in OUTLINE_CAST_PRIORITY}
+    for c in characters:
+        role = c.get("character_type", "supporting")
+        if role not in by_type:
+            by_type[role] = []
+        by_type[role].append(c)
+
+    picked: list[dict] = []
+    for role in OUTLINE_CAST_PRIORITY:
+        cap = OUTLINE_CAST_CAPS.get(role, 6)
+        for c in by_type.get(role, [])[:cap]:
+            picked.append({
+                "role": CHARACTER_ROLE_LABELS.get(role, role),
+                "character_type": role,
+                "name": c.get("name", ""),
+                "is_core": bool(c.get("is_core_character", False)),
+                "personality": c.get("personality", {}),
+                "current_state": c.get("current_state", {}),
+                "relations": c.get("relations", {}),
+            })
+    return picked
+
+
 class PlannerAgent(BaseAgent):
     agent_name = "planner"
 
@@ -170,8 +250,9 @@ class PlannerAgent(BaseAgent):
         concept: dict,
         story_dna: dict,
         world: dict,
-        character: dict,
+        characters: list[dict],
         min_words: int = 4000,
+        map_data: Optional[dict] = None,
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
         story_dna_context = json.dumps(story_dna, ensure_ascii=False, indent=2)
@@ -186,19 +267,33 @@ class PlannerAgent(BaseAgent):
             indent=2,
         )
 
-        char_summary = {
-            "name": character.get("name", ""),
-            "personality": character.get("personality", {}),
-            "current_state": character.get("current_state", {}),
-        }
-        character_context = json.dumps(char_summary, ensure_ascii=False, indent=2)
+        # 6-character cast: 1 protagonist + 2 antagonists + 3 supporting, with
+        # mentors and any extras appended. See pick_outline_cast() above.
+        cast = pick_outline_cast(characters)
+        characters_context = json.dumps(
+            cast,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+        # Map system context is optional — MapStep is a placeholder today, so
+        # the file may not exist. When present, pass the raw dict; the prompt
+        # notes the field is optional and the LLM ignores an empty value.
+        if map_data:
+            map_context = json.dumps(map_data, ensure_ascii=False, indent=2)
+        else:
+            map_context = "（暂无地图系统信息）"
+
+        length_category = length_category_for(min_words)
 
         result, response = await self.generate_from_template(
             "novel_outline_generation",
             concept_context=concept_context,
             story_dna_context=story_dna_context,
             world_context=world_context,
-            character_context=character_context,
+            characters_context=characters_context,
+            map_context=map_context,
+            length_category=length_category,
             min_words=min_words,
         )
         self.log_usage("novel_outline_generation", response)

@@ -196,10 +196,13 @@ async def generate_novel_outline(data: dict):
         )
 
     characters = characters_data.get("characters", [])
-    character = characters[0] if characters else {}
 
     project = fm.read_json(project_id, "project.json")
     min_words = project.get("min_words", 4000) if project else 4000
+
+    # Map system is optional — MapStep is a placeholder today. The file may
+    # not exist; read_json returns None and the agent skips the section.
+    map_data = fm.read_json(project_id, "map.json")
 
     agent = PlannerAgent(project_id)
     try:
@@ -207,8 +210,9 @@ async def generate_novel_outline(data: dict):
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
             world=world,
-            character=character,
+            characters=characters,
             min_words=min_words,
+            map_data=map_data,
         )
     except ValueError as e:
         raise HTTPException(

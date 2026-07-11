@@ -110,7 +110,7 @@ describe("ChapterOutlineStep", () => {
     await waitFor(() => expect(api.updateOutline).toHaveBeenCalled());
     await waitFor(() => expect(api.advance).toHaveBeenCalledWith(PROJECT, "STAGE4"));
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/stage1`),
+      expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/workspace?mode=managed`),
     );
   });
 });

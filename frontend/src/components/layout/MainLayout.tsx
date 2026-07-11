@@ -20,6 +20,10 @@ const STAGE_FROM_PATH: Record<string, string> = {
   "stage1/canvas": "STAGE1",
   "stage3/outline": "STAGE3",
   "stage3/branches": "STAGE3",
+  workspace: "WORKSPACE",
+  "workspace?mode=manual": "WORKSPACE",
+  "workspace?mode=manual&panel=diagnosis": "WORKSPACE_DIAGNOSIS",
+  "workspace?mode=manual&panel=export": "WORKSPACE_EXPORT",
 };
 
 const STAGE_TO_PATH: Record<string, string> = {
@@ -34,6 +38,9 @@ const STAGE_TO_PATH: Record<string, string> = {
   REVIEW: "review",
   IMPACT: "impact",
   STORYOS: "storyos",
+  WORKSPACE: "workspace",
+  WORKSPACE_DIAGNOSIS: "workspace",
+  WORKSPACE_EXPORT: "workspace",
 };
 
 export default function MainLayout() {
@@ -64,6 +71,14 @@ export default function MainLayout() {
     (stage: string) => {
       if (stage === "dashboard") {
         navigate("/");
+        return;
+      }
+      if (stage === "WORKSPACE" || stage === "WORKSPACE_DIAGNOSIS" || stage === "WORKSPACE_EXPORT") {
+        if (!projectId) return;
+        let url = `/project/${projectId}/workspace`;
+        if (stage === "WORKSPACE_DIAGNOSIS") url += "?mode=manual&panel=diagnosis";
+        if (stage === "WORKSPACE_EXPORT") url += "?mode=manual&panel=export";
+        navigate(url);
         return;
       }
       const path = STAGE_TO_PATH[stage];

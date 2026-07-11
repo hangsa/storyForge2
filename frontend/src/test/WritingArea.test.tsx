@@ -1,0 +1,100 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import WritingArea from "../components/workspace/WritingArea";
+
+const CURRENT = {
+  chapter_number: 1,
+  chapter_title: "第一章",
+  scene_id: "1-1",
+  scene_title: "开场",
+  outline_summary: "主角踏上旅途",
+};
+
+describe("WritingArea", () => {
+  it("renders chapter + scene title and outline summary", () => {
+    render(
+      <WritingArea
+        current={CURRENT}
+        content="已写的场景文本"
+        onContentChange={() => {}}
+        onSaveDraft={async () => {}}
+        onRegenerate={async () => {}}
+        onFactGuard={async () => {}}
+        busy={false}
+      />,
+    );
+    expect(screen.getByTestId("writing-chapter-title").textContent).toContain("第一章");
+    expect(screen.getByTestId("writing-scene-title").textContent).toContain("开场");
+    expect(screen.getByTestId("writing-outline-summary").textContent).toContain("主角踏上旅途");
+  });
+
+  it("typing into the editor calls onContentChange", () => {
+    const onContentChange = vi.fn();
+    render(
+      <WritingArea
+        current={CURRENT}
+        content=""
+        onContentChange={onContentChange}
+        onSaveDraft={async () => {}}
+        onRegenerate={async () => {}}
+        onFactGuard={async () => {}}
+        busy={false}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("editor-body"), { target: { value: "新的文本" } });
+    expect(onContentChange).toHaveBeenCalledWith("新的文本");
+  });
+
+  it("保存草稿 button calls onSaveDraft", () => {
+    const onSaveDraft = vi.fn().mockResolvedValue(undefined);
+    render(
+      <WritingArea
+        current={CURRENT}
+        content="x"
+        onContentChange={() => {}}
+        onSaveDraft={onSaveDraft}
+        onRegenerate={async () => {}}
+        onFactGuard={async () => {}}
+        busy={false}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("editor-save"));
+    expect(onSaveDraft).toHaveBeenCalled();
+  });
+
+  it("当 current=null 时显示 empty-state：'本章节尚未生成大纲' + '前往生成大纲' 按钮", () => {
+    const onNavigateToOutline = vi.fn();
+    render(
+      <WritingArea
+        current={null}
+        content=""
+        onContentChange={() => {}}
+        onSaveDraft={async () => {}}
+        onRegenerate={async () => {}}
+        onFactGuard={async () => {}}
+        busy={false}
+        onNavigateToOutline={onNavigateToOutline}
+      />,
+    );
+    expect(screen.getByTestId("writing-empty")).toBeInTheDocument();
+    expect(screen.getByText(/本章节尚未生成大纲/)).toBeInTheDocument();
+    const btn = screen.getByTestId("writing-empty-go-to-outline");
+    fireEvent.click(btn);
+    expect(onNavigateToOutline).toHaveBeenCalled();
+  });
+
+  it("empty-state 在未提供 onNavigateToOutline 时不渲染按钮", () => {
+    render(
+      <WritingArea
+        current={null}
+        content=""
+        onContentChange={() => {}}
+        onSaveDraft={async () => {}}
+        onRegenerate={async () => {}}
+        onFactGuard={async () => {}}
+        busy={false}
+      />,
+    );
+    expect(screen.queryByTestId("writing-empty-go-to-outline")).not.toBeInTheDocument();
+  });
+});

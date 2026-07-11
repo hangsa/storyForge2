@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 
 vi.mock("../../api/client", () => ({
@@ -48,11 +48,11 @@ describe("Workspace routing", () => {
   it("renders /workspace with mode=managed by default", () => {
     withPath("/workspace");
     expect(screen.getByTestId("workspace-page")).toBeInTheDocument();
-    expect(screen.getByTestId("workspace-mode").textContent).toBe("managed");
+    expect(screen.getByTestId("mode-managed").className).toContain("bg-primary-container");
   });
   it("renders /workspace?mode=manual", () => {
     withPath("/workspace?mode=manual");
-    expect(screen.getByTestId("workspace-mode").textContent).toBe("manual");
+    expect(screen.getByTestId("mode-manual").className).toContain("bg-primary-container");
   });
   it("redirects /stage4 → /workspace?mode=manual", () => {
     withPath("/stage4");
@@ -68,5 +68,12 @@ describe("Workspace routing", () => {
     withPath("/stage6");
     expect(globalThis.__lastLocation?.pathname).toBe("/workspace");
     expect(globalThis.__lastLocation?.search).toBe("?mode=manual&panel=export");
+  });
+  it("clicking the manual switcher opens confirm modal; confirming persists 'manual' to localStorage", () => {
+    withPath("/workspace");
+    fireEvent.click(screen.getByTestId("mode-manual"));
+    expect(screen.getByTestId("mode-switch-confirm")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("confirm-confirm"));
+    expect(localStorage.getItem("storyforge.workspace.mode")).toBe("manual");
   });
 });

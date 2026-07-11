@@ -16,22 +16,38 @@ fm = FileManager(settings.projects_dir)
 async def list_projects():
     projects = []
     projects_dir = settings.projects_dir
+    # Use a fresh FileManager so the current settings.projects_dir is honored
+    # (the module-level `fm` is bound at import time and would not pick up
+    # test-time changes to settings.projects_dir).
+    fm_local = FileManager(projects_dir)
     if projects_dir.exists():
-        for proj_dir in sorted(projects_dir.iterdir(), reverse=True):
-            if not proj_dir.is_dir():
-                continue
+        proj_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
+        proj_dirs.sort(key=lambda d: d.name, reverse=True)
+        for proj_dir in proj_dirs:
             proj_file = proj_dir / "project.json"
             if not proj_file.exists():
                 continue
             try:
-                data = fm.read_json(proj_dir.name, "project.json")
+                data = fm_local.read_json(proj_dir.name, "project.json")
                 if data:
+                    latest_mtime = proj_file.stat().st_mtime
+                    for entry in proj_dir.iterdir():
+                        try:
+                            if entry.is_file():
+                                latest_mtime = max(latest_mtime, entry.stat().st_mtime)
+                            elif entry.is_dir():
+                                for sub in entry.rglob("*"):
+                                    if sub.is_file():
+                                        latest_mtime = max(latest_mtime, sub.stat().st_mtime)
+                        except OSError:
+                            continue
                     projects.append({
                         "id": data.get("id", proj_dir.name),
                         "title": data.get("title", "未命名"),
                         "genre": data.get("genre", ""),
                         "current_stage": data.get("current_stage", "INIT"),
                         "created_at": data.get("created_at", ""),
+                        "updated_at": latest_mtime,
                         "min_words": data.get("min_words", 2000),
                         "target_total_words": data.get("target_total_words", 1_000_000),
                         "target_length_category": data.get("target_length_category", "标准商业连载"),

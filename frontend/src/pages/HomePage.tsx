@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import api from "../api/client";
 import StatsSidebar from "../components/home/StatsSidebar";
 import ManifestoHeader from "../components/home/ManifestoHeader";
@@ -58,7 +58,19 @@ export default function HomePage() {
     }
   }, [refresh]);
 
-  const mtimes: { id: string; mtime: number }[] = [];
+  const [mtimes, setMtimes] = useState<{ id: string; mtime: number }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.listProjects()
+      .then((list) => {
+        if (cancelled) return;
+        const items = Array.isArray(list) ? list : [];
+        setMtimes(items.map((p) => ({ id: p.id, mtime: p.updated_at })));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="min-h-screen bg-canvas-bg flex">

@@ -70,6 +70,7 @@ export interface ProjectSummary {
   genre: string;
   current_stage: string;
   created_at: string;
+  updated_at: number;       // Unix seconds — from GET /api/project/list
   min_words: number;
   target_total_words: number;
   target_length_category: string;

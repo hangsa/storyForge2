@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../api/client", () => ({
   default: {
@@ -12,12 +13,12 @@ import api from "../api/client";
 import BookShelf from "../components/home/BookShelf";
 
 const SAMPLE = [
-  { id: "proj_a", title: "诡眼少年", genre: "cool_novel", current_stage: "STAGE2", created_at: "2026-06-29T00:00:00", min_words: 4000 },
-  { id: "proj_b", title: "测试小说", genre: "cool_novel", current_stage: "INIT", created_at: "2026-06-28T00:00:00", min_words: 4000 },
-  { id: "proj_c", title: "一部城隍成长史", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-27T00:00:00", min_words: 6000 },
-  { id: "proj_d", title: "数据星河", genre: "kehuan", current_stage: "STAGE4", created_at: "2026-06-26T00:00:00", min_words: 8000 },
-  { id: "proj_e", title: "山野笔记", genre: "dushi", current_stage: "STAGE1", created_at: "2026-06-25T00:00:00", min_words: 5000 },
-  { id: "proj_f", title: "雪落无声", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-24T00:00:00", min_words: 5000 },
+  { id: "proj_a", title: "诡眼少年", genre: "cool_novel", current_stage: "STAGE2", created_at: "2026-06-29T00:00:00", updated_at: 1000, min_words: 4000 },
+  { id: "proj_b", title: "测试小说", genre: "cool_novel", current_stage: "INIT", created_at: "2026-06-28T00:00:00", updated_at: 2000, min_words: 4000 },
+  { id: "proj_c", title: "一部城隍成长史", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-27T00:00:00", updated_at: 3000, min_words: 6000 },
+  { id: "proj_d", title: "数据星河", genre: "kehuan", current_stage: "STAGE4", created_at: "2026-06-26T00:00:00", updated_at: 4000, min_words: 8000 },
+  { id: "proj_e", title: "山野笔记", genre: "dushi", current_stage: "STAGE1", created_at: "2026-06-25T00:00:00", updated_at: 5000, min_words: 5000 },
+  { id: "proj_f", title: "雪落无声", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-24T00:00:00", updated_at: 6000, min_words: 5000 },
 ];
 
 interface ProjectMtime {
@@ -196,5 +197,43 @@ describe("BookShelf", () => {
         writable: true,
       });
     }
+  });
+});
+
+// --- Integration: HomePage wires listProjects → BookShelf.mtimes ---
+
+import HomePage from "../pages/HomePage";
+import { WizardProvider } from "../components/wizard/WizardContext";
+
+describe("HomePage → BookShelf wiring", () => {
+  it("HomePage derives BookShelf.mtimes from listProjects updated_at", async () => {
+    // Older project has a much later created_at but a smaller updated_at than the
+    // newer one — only the new BookShelf mtime sort will surface "新" first.
+    (api.listProjects as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: "old", title: "旧", genre: "cool_novel", current_stage: "STAGE4",
+        created_at: "2026-06-30T00:00:00", updated_at: 100, min_words: 4000,
+        target_total_words: 4000, target_length_category: "",
+      },
+      {
+        id: "new", title: "新", genre: "cool_novel", current_stage: "STAGE4",
+        created_at: "2026-01-01T00:00:00", updated_at: 999, min_words: 4000,
+        target_total_words: 4000, target_length_category: "",
+      },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <WizardProvider projectId="new">
+          <HomePage />
+        </WizardProvider>
+      </MemoryRouter>,
+    );
+
+    // Wait for the shelf to render the first project.
+    expect(await screen.findByText("新")).toBeInTheDocument();
+    const cards = screen.getAllByTestId("book-card");
+    expect(cards[0]).toHaveTextContent("新");
+    expect(cards[1]).toHaveTextContent("旧");
   });
 });

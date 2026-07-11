@@ -88,7 +88,7 @@ export default function BookShelfModal({ projects, onClose }: BookShelfModalProp
             {filtered.map((p) => {
               const href = isPreWizardStage(p.current_stage)
                 ? `/project/${encodeURIComponent(p.id)}/wizard`
-                : `/project/${encodeURIComponent(p.id)}/stage1`;
+                : `/project/${encodeURIComponent(p.id)}/workspace?mode=managed`;
               return (
               <a
                 key={p.id}

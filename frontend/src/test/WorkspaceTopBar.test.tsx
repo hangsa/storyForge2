@@ -30,4 +30,26 @@ describe("WorkspaceTopBar", () => {
     expect(screen.getByTestId("topbar-progress")).toBeInTheDocument();
     expect(screen.getByTestId("topbar-ai-tools")).toBeDisabled();
   });
+
+  // v1.8.1: workspace is now top-level — TopBar must offer a way back to /.
+  it("renders a '← 项目中心' back button that navigates to /", () => {
+    const assignSpy = vi.fn();
+    const original = window.location.assign;
+    Object.defineProperty(window, "location", {
+      value: { ...window.location, assign: assignSpy },
+      writable: true,
+    });
+    try {
+      render(<WorkspaceTopBar projectName="X" mode="managed" onModeChange={() => {}} />);
+      const back = screen.getByTestId("topbar-back-home");
+      expect(back).toBeInTheDocument();
+      fireEvent.click(back);
+      expect(assignSpy).toHaveBeenCalledWith("/");
+    } finally {
+      Object.defineProperty(window, "location", {
+        value: { ...window.location, assign: original },
+        writable: true,
+      });
+    }
+  });
 });

@@ -77,3 +77,20 @@ describe("Workspace routing", () => {
     expect(localStorage.getItem("storyforge.workspace.mode")).toBe("manual");
   });
 });
+
+// v1.8.1: /workspace is now a top-level route (no MainLayout). The page must
+// be self-contained — no SideNavBar wrapper, but the in-page
+// "← 项目中心" back button replaces it.
+describe("/workspace top-level route (no MainLayout)", () => {
+  it("renders workspace-page without SideNavBar wrapping it", () => {
+    withPath("/workspace");
+    expect(screen.getByTestId("workspace-page")).toBeInTheDocument();
+    // If SideNavBar is present, MainLayout is wrapping us again.
+    expect(screen.queryByTestId("side-nav-bar")).not.toBeInTheDocument();
+  });
+
+  it("renders the in-page back-to-home button as the navigation entry", () => {
+    withPath("/workspace");
+    expect(screen.getByTestId("topbar-back-home")).toBeInTheDocument();
+  });
+});

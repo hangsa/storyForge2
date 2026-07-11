@@ -20,10 +20,14 @@ const STAGE_FROM_PATH: Record<string, string> = {
   "stage1/canvas": "STAGE1",
   "stage3/outline": "STAGE3",
   "stage3/branches": "STAGE3",
-  workspace: "WORKSPACE",
-  "workspace?mode=manual": "WORKSPACE",
-  "workspace?mode=manual&panel=diagnosis": "WORKSPACE_DIAGNOSIS",
-  "workspace?mode=manual&panel=export": "WORKSPACE_EXPORT",
+  // v1.8.1: /workspace is a top-level route (no longer nested under
+  // MainLayout), so these mappings are dead. Kept commented for the
+  // duration of this release in case the v1.9 plan reintroduces a
+  // workspace-aware sidebar — remove entirely in v1.9 if not.
+  // workspace: "WORKSPACE",
+  // "workspace?mode=manual": "WORKSPACE",
+  // "workspace?mode=manual&panel=diagnosis": "WORKSPACE_DIAGNOSIS",
+  // "workspace?mode=manual&panel=export": "WORKSPACE_EXPORT",
 };
 
 const STAGE_TO_PATH: Record<string, string> = {
@@ -38,9 +42,10 @@ const STAGE_TO_PATH: Record<string, string> = {
   REVIEW: "review",
   IMPACT: "impact",
   STORYOS: "storyos",
-  WORKSPACE: "workspace",
-  WORKSPACE_DIAGNOSIS: "workspace",
-  WORKSPACE_EXPORT: "workspace",
+  // v1.8.1: same as above — dead until v1.9 decides otherwise.
+  // WORKSPACE: "workspace",
+  // WORKSPACE_DIAGNOSIS: "workspace",
+  // WORKSPACE_EXPORT: "workspace",
 };
 
 export default function MainLayout() {
@@ -73,14 +78,9 @@ export default function MainLayout() {
         navigate("/");
         return;
       }
-      if (stage === "WORKSPACE" || stage === "WORKSPACE_DIAGNOSIS" || stage === "WORKSPACE_EXPORT") {
-        if (!projectId) return;
-        let url = `/project/${projectId}/workspace`;
-        if (stage === "WORKSPACE_DIAGNOSIS") url += "?mode=manual&panel=diagnosis";
-        if (stage === "WORKSPACE_EXPORT") url += "?mode=manual&panel=export";
-        navigate(url);
-        return;
-      }
+      // v1.8.1: WORKSPACE* branches removed — workspace is a top-level route
+      // not reachable through MainLayout. Sidebar's STAGES list no longer
+      // emits these keys, so this branch was dead code.
       const path = STAGE_TO_PATH[stage];
       if (path && projectId) {
         navigate(`/project/${projectId}/${path}`);

@@ -27,6 +27,19 @@ export default function WorkspaceTopBar({
       className="flex items-center justify-between gap-4 px-6 py-3 border-b border-outline-variant bg-surface-container-low"
     >
       <div className="flex items-center gap-3 min-w-0">
+        {/* v1.8.1: workspace is top-level — give users a way back to the
+            project list. Full-page assign (not SPA navigate) so the home
+            page re-fetches project stats. */}
+        <button
+          type="button"
+          data-testid="topbar-back-home"
+          onClick={() => window.location.assign("/")}
+          className="flex items-center gap-1 text-system-log hover:text-primary
+                     transition-colors shrink-0"
+        >
+          <span className="material-symbols-outlined text-lg">arrow_back</span>
+          <span className="text-sm font-body-ui">项目中心</span>
+        </button>
         <h1 data-testid="topbar-project-name" className="font-display text-primary truncate">
           {projectName}
         </h1>

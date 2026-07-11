@@ -138,7 +138,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   };
 
   return (
-    <div data-testid="workspace-page" className="h-full flex flex-col">
+    <div data-testid="workspace-page" className="h-screen flex flex-col bg-canvas-bg">
       <WorkspaceTopBar
         projectName={projectName}
         mode={mode}

@@ -61,6 +61,21 @@ function App() {
           </Suspense>
         }
       />
+      {/* v1.8.1: /workspace is a top-level route (NOT nested in MainLayout).
+          The workspace is the project's day-to-day hub — it has its own
+          WorkspaceTopBar + h-screen layout, so it shouldn't inherit the
+          SideNavBar / TopHeader / p-6 chrome that MainLayout wraps around
+          legacy stage pages. */}
+      <Route
+        path="/project/:projectId/workspace"
+        element={
+          <Suspense fallback={<LoadingFallback />}>
+            <StageWrapper name="workspace">
+              <WorkspacePage />
+            </StageWrapper>
+          </Suspense>
+        }
+      />
       <Route element={<MainLayout />}>
         <Route
           path="/project/:projectId/stage1"
@@ -150,16 +165,6 @@ function App() {
         <Route
           path="/project/:projectId/stage6"
           element={<StageRedirect to="workspace?mode=manual&panel=export" />}
-        />
-        <Route
-          path="/project/:projectId/workspace"
-          element={
-            <Suspense fallback={<LoadingFallback />}>
-              <StageWrapper name="workspace">
-                <WorkspacePage />
-              </StageWrapper>
-            </Suspense>
-          }
         />
         <Route
           path="/project/:projectId/style"

@@ -17,11 +17,11 @@ interface StageItem {
 }
 
 const STAGES: StageItem[] = [
-  // Stage1/2/3 are absorbed into the Init Wizard (deep-link /project/:id/wizard).
-  // Stage4/5/6 are absorbed into /workspace; the panel query param pre-selects the right tab.
-  { key: "WORKSPACE", label: "工作台", icon: "edit_note" },
-  { key: "WORKSPACE_DIAGNOSIS", label: "全书诊断", icon: "clinical_notes" },
-  { key: "WORKSPACE_EXPORT", label: "导出中心", icon: "download" },
+  // v1.8.1: /workspace is a top-level route, so SideNavBar cannot link to
+  // it. The workspace is the project's day-to-day hub and is reached from
+  // the bookshelf on the home page. Stage1/2/3 are absorbed into the Init
+  // Wizard deep-link. This sidebar now only hosts the legacy sub-pages
+  // reachable from MainLayout (style/review/impact/storyos/settings).
 ];
 
 export default function SideNavBar({
@@ -36,6 +36,7 @@ export default function SideNavBar({
 
   return (
     <nav
+      data-testid="side-nav-bar"
       style={{ width }}
       className="fixed left-0 top-16 h-[calc(100vh-64px)] bg-surface-container-low border-r border-outline-variant flex flex-col py-4 overflow-y-auto transition-all duration-200"
     >
@@ -57,7 +58,10 @@ export default function SideNavBar({
 
       <div className="border-t border-outline-variant mx-4 mb-4" />
 
-      {/* Stage navigation */}
+      {/* Stage navigation — empty in v1.8.1 since /workspace is top-level
+          and Stage1/2/3 live under the Init Wizard deep-link. Kept as a
+          wrapper so future re-introduction is a one-line change to STAGES. */}
+      {STAGES.length > 0 && (
       <div className="px-4 mb-4">
         <div className="font-label-mono text-system-log uppercase tracking-wider mb-2">
           叙事阶段
@@ -109,6 +113,7 @@ export default function SideNavBar({
           );
         })}
       </div>
+      )}
 
       <div className="border-t border-outline-variant mx-4 mb-4" />
 

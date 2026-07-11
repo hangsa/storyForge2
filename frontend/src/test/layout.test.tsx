@@ -129,10 +129,10 @@ describe("TopHeader - sidebar toggle", () => {
 describe("SideNavBar", () => {
   const onNavigate = vi.fn();
 
-  it("renders workspace navigation items (post-Stage1/2/3 merge)", () => {
+  it("renders project-center entry + workspace items (灵感库 disabled; style/review/impact/storyos enabled)", () => {
     render(
       <SideNavBar
-        currentStage="WORKSPACE"
+        currentStage="STYLE"
         onNavigate={onNavigate}
         collapsed={false}
         width={280}
@@ -141,15 +141,18 @@ describe("SideNavBar", () => {
       />
     );
     expect(screen.getByText("项目中心")).toBeInTheDocument();
-    expect(screen.getByText("工作台")).toBeInTheDocument();
-    expect(screen.getByText("全书诊断")).toBeInTheDocument();
-    expect(screen.getByText("导出中心")).toBeInTheDocument();
+    expect(screen.getByText("风格沙盒")).toBeInTheDocument();
+    expect(screen.getByText("章节审查")).toBeInTheDocument();
+    expect(screen.getByText("影响分析")).toBeInTheDocument();
+    expect(screen.getByText("资产中心")).toBeInTheDocument();
   });
 
-  it("highlights the active stage", () => {
+  // v1.8.1: /workspace is a top-level route, so SideNavBar cannot link to
+  // 工作台 / 全书诊断 / 导出中心. Those entries are gone.
+  it("does NOT render the workspace entry (workspace is top-level)", () => {
     render(
       <SideNavBar
-        currentStage="WORKSPACE"
+        currentStage="STYLE"
         onNavigate={onNavigate}
         collapsed={false}
         width={280}
@@ -157,14 +160,30 @@ describe("SideNavBar", () => {
         onCommitWidth={() => {}}
       />
     );
-    const activeButton = screen.getByText("工作台").closest("button");
+    expect(screen.queryByText("工作台")).not.toBeInTheDocument();
+    expect(screen.queryByText("全书诊断")).not.toBeInTheDocument();
+    expect(screen.queryByText("导出中心")).not.toBeInTheDocument();
+  });
+
+  it("highlights the active stage", () => {
+    render(
+      <SideNavBar
+        currentStage="STYLE"
+        onNavigate={onNavigate}
+        collapsed={false}
+        width={280}
+        onLiveWidthChange={() => {}}
+        onCommitWidth={() => {}}
+      />
+    );
+    const activeButton = screen.getByText("风格沙盒").closest("button");
     expect(activeButton).toHaveClass("border-primary-container");
   });
 
   it("renders disabled workspace items", () => {
     render(
       <SideNavBar
-        currentStage="WORKSPACE"
+        currentStage="STYLE"
         onNavigate={onNavigate}
         collapsed={false}
         width={280}
@@ -179,7 +198,7 @@ describe("SideNavBar", () => {
   it("calls onNavigate when stage clicked", () => {
     render(
       <SideNavBar
-        currentStage="WORKSPACE"
+        currentStage="STYLE"
         onNavigate={onNavigate}
         collapsed={false}
         width={280}
@@ -187,11 +206,13 @@ describe("SideNavBar", () => {
         onCommitWidth={() => {}}
       />
     );
-    fireEvent.click(screen.getByText("工作台"));
-    expect(onNavigate).toHaveBeenCalledWith("WORKSPACE");
+    fireEvent.click(screen.getByText("风格沙盒"));
+    expect(onNavigate).toHaveBeenCalledWith("STYLE");
   });
 
-  it("renders section headers", () => {
+  // v1.8.1: STAGES is empty so the 叙事阶段 header is hidden; only 项目
+  // and 工作区 sections render.
+  it("renders 项目 and 工作区 section headers (no 叙事阶段 since STAGES is empty)", () => {
     render(
       <SideNavBar
         currentStage="INIT"
@@ -203,7 +224,7 @@ describe("SideNavBar", () => {
       />
     );
     expect(screen.getByText("项目")).toBeInTheDocument();
-    expect(screen.getByText("叙事阶段")).toBeInTheDocument();
+    expect(screen.queryByText("叙事阶段")).not.toBeInTheDocument();
     expect(screen.getByText("工作区")).toBeInTheDocument();
   });
 });

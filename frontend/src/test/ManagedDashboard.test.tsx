@@ -52,4 +52,27 @@ describe("ManagedDashboard", () => {
     expect(onAdd).toHaveBeenCalled();
     expect(onRefresh).toHaveBeenCalled();
   });
+
+  // v1.8.1: workspace defaults to "stopped"; user explicitly starts/stops.
+  it("renders '▶ 启动托管' when stopped; clicking it fires onToggleAutopilot", () => {
+    const onToggle = vi.fn();
+    render(
+      <ManagedDashboard chapters={chapters} autopilotActive={false} onChapterClick={() => {}} onAddChapter={() => {}} onRefresh={() => {}} onToggleAutopilot={onToggle} />,
+    );
+    const btn = screen.getByTestId("autopilot-toggle");
+    expect(btn.textContent).toContain("启动");
+    fireEvent.click(btn);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders '⏸ 停止托管' when running; clicking it fires onToggleAutopilot", () => {
+    const onToggle = vi.fn();
+    render(
+      <ManagedDashboard chapters={chapters} autopilotActive={true} currentTask="生成第 5 章" onChapterClick={() => {}} onAddChapter={() => {}} onRefresh={() => {}} onToggleAutopilot={onToggle} />,
+    );
+    const btn = screen.getByTestId("autopilot-toggle");
+    expect(btn.textContent).toContain("停止");
+    fireEvent.click(btn);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
 });

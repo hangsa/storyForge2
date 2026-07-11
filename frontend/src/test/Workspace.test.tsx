@@ -42,6 +42,24 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("ai-control-panel")).toBeInTheDocument();
   });
 
+  // v1.8.1: workspace enters in "stopped" managed state — user must opt in
+  // to start the autopilot. Status strip (current task) stays hidden until
+  // the user clicks "启动托管".
+  it("managed mode defaults to autopilot stopped (no status strip, toggle shows 启动)", () => {
+    setup("/project/p1/workspace");
+    expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
+    const toggle = screen.getByTestId("autopilot-toggle");
+    expect(toggle.textContent).toContain("启动");
+  });
+
+  it("clicking autopilot-toggle shows status strip and switches button to 停止", () => {
+    setup("/project/p1/workspace");
+    fireEvent.click(screen.getByTestId("autopilot-toggle"));
+    expect(screen.getByTestId("status-strip")).toBeInTheDocument();
+    const toggle = screen.getByTestId("autopilot-toggle");
+    expect(toggle.textContent).toContain("停止");
+  });
+
   it("?mode=manual renders ChapterTreePanel + WritingArea + ContextPanel", () => {
     setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
     expect(screen.getByTestId("workspace-layout").getAttribute("data-mode")).toBe("manual");

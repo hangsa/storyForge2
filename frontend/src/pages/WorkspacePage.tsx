@@ -22,7 +22,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const { setPanel } = useWorkspacePanel();
 
   const [projectName, setProjectName] = useState("加载中…");
-  const [autopilotActive] = useState(true); // mock — wired to backend in v1.9
+  // v1.8.1: workspace enters in stopped managed state — user must explicitly
+  // start the autopilot. Prevents an immediate chapter generation from
+  // firing the moment a user opens a project they're just inspecting.
+  const [autopilotActive, setAutopilotActive] = useState(false); // mock — wired to backend in v1.9
   const [currentTask] = useState("生成第 7 章");
 
   const [chapters, setChapters] = useState<DashboardChapter[]>([
@@ -157,6 +160,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
               onChapterClick={onDashboardChapterClick}
               onAddChapter={() => setChapters((cs) => [...cs, { chapter_number: cs.length + 1, status: "planned" }])}
               onRefresh={() => {}}
+              onToggleAutopilot={() => setAutopilotActive((a) => !a)}
             />
           ) : (
             <ChapterTreePanel

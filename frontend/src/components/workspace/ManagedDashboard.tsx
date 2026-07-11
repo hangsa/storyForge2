@@ -14,6 +14,9 @@ interface Props {
   onChapterClick: (chapter_number: number, status: ChapterStatus) => void;
   onAddChapter: () => void;
   onRefresh: () => void;
+  /** Toggle the managed-mode autopilot. Workspace enters in stopped state,
+   *  so this is the user's primary on/off control for the AI loop. */
+  onToggleAutopilot: () => void;
 }
 
 const STATUS_CLASS: Record<ChapterStatus, string> = {
@@ -31,7 +34,7 @@ const STATUS_LABEL: Record<ChapterStatus, string> = {
 };
 
 export default function ManagedDashboard({
-  chapters, autopilotActive, currentTask, onChapterClick, onAddChapter, onRefresh,
+  chapters, autopilotActive, currentTask, onChapterClick, onAddChapter, onRefresh, onToggleAutopilot,
 }: Props) {
   return (
     <div data-testid="managed-dashboard" className="space-y-4 p-6">
@@ -40,6 +43,18 @@ export default function ManagedDashboard({
       <div className="flex items-center justify-between">
         <h2 className="font-display text-primary text-lg">章节目录</h2>
         <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="autopilot-toggle"
+            onClick={onToggleAutopilot}
+            className={
+              autopilotActive
+                ? "px-3 py-1.5 text-sm rounded-lg bg-error/90 text-surface-container-low hover:opacity-90"
+                : "px-3 py-1.5 text-sm rounded-lg bg-primary-container text-surface-container-low hover:opacity-90"
+            }
+          >
+            {autopilotActive ? "⏸ 停止托管" : "▶ 启动托管"}
+          </button>
           <button
             type="button"
             data-testid="refresh"
@@ -52,7 +67,7 @@ export default function ManagedDashboard({
             type="button"
             data-testid="add-chapter"
             onClick={onAddChapter}
-            className="px-3 py-1.5 text-sm rounded-lg bg-primary-container text-surface-container-low hover:opacity-90"
+            className="px-3 py-1.5 text-sm rounded-lg bg-surface-container text-system-log hover:bg-surface-container-low"
           >
             + 新章节
           </button>

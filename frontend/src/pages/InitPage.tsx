@@ -30,7 +30,7 @@ export default function InitPage() {
       } catch {
         // proceed even if advance fails — user can advance manually
       }
-      navigate(`/project/${project.id}/stage1`);
+      navigate(`/project/${project.id}/workspace?mode=managed`);
     } catch {
       // error handled by hook
     }

@@ -189,7 +189,7 @@ describe("BookShelf", () => {
       await act(async () => {
         card.click();
       });
-      expect(assignSpy).toHaveBeenCalledWith("/project/proj_d/stage1");
+      expect(assignSpy).toHaveBeenCalledWith("/project/proj_d/workspace?mode=managed");
     } finally {
       Object.defineProperty(window, "location", {
         value: { ...window.location, assign: original },

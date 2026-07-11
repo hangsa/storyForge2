@@ -345,10 +345,11 @@ function BookCard({ project, selectMode, selected, onToggle }: BookCardProps) {
     // Pre-wizard stages (INIT, STAGE1, STAGE2, STAGE3) are mid-initialization —
     // open the wizard so the user can continue from the latest step they
     // reached. Only STAGE4+ means the wizard finished and we should drop the
-    // user into the workspace.
+    // user into the workspace (v1.8: /workspace is the project's day-to-day
+    // hub — /stage1 only exists for the inline concept editor).
     const href = isPreWizardStage(project.current_stage)
       ? `/project/${encodeURIComponent(project.id)}/wizard`
-      : `/project/${encodeURIComponent(project.id)}/stage1`;
+      : `/project/${encodeURIComponent(project.id)}/workspace?mode=managed`;
     window.location.assign(href);
   };
 

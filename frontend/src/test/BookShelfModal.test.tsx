@@ -27,4 +27,20 @@ describe("BookShelfModal navigation", () => {
     const link = screen.getByRole("link", { name: /未完成/ });
     expect(link.getAttribute("href")).toBe("/project/proj_pre/wizard");
   });
+
+  it("links STAGE5 (diagnosis) projects to /stage5 instead of the workspace", () => {
+    renderModal([
+      { id: "diag", title: "诊断项目", genre: "cool_novel", current_stage: "STAGE5", created_at: "2026-07-12T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "" },
+    ]);
+    const link = screen.getByRole("link", { name: /诊断项目/ });
+    expect(link.getAttribute("href")).toBe("/project/diag/stage5");
+  });
+
+  it("links STAGE6 (export) projects to /stage6 instead of the workspace", () => {
+    renderModal([
+      { id: "export", title: "导出项目", genre: "cool_novel", current_stage: "STAGE6", created_at: "2026-07-12T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "" },
+    ]);
+    const link = screen.getByRole("link", { name: /导出项目/ });
+    expect(link.getAttribute("href")).toBe("/project/export/stage6");
+  });
 });

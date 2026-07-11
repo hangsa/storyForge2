@@ -37,6 +37,16 @@ interface BookShelfModalProps {
   onClose: () => void;
 }
 
+function projectHref(currentStage: string, projectId: string) {
+  const encoded = encodeURIComponent(projectId);
+  if (isPreWizardStage(currentStage)) {
+    return `/project/${encoded}/wizard`;
+  }
+  if (currentStage === "STAGE5") return `/project/${encoded}/stage5`;
+  if (currentStage === "STAGE6") return `/project/${encoded}/stage6`;
+  return `/project/${encoded}/workspace?mode=managed`;
+}
+
 export default function BookShelfModal({ projects, onClose }: BookShelfModalProps) {
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
@@ -86,9 +96,7 @@ export default function BookShelfModal({ projects, onClose }: BookShelfModalProp
         <div className="flex-1 overflow-y-auto p-6">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filtered.map((p) => {
-              const href = isPreWizardStage(p.current_stage)
-                ? `/project/${encodeURIComponent(p.id)}/wizard`
-                : `/project/${encodeURIComponent(p.id)}/workspace?mode=managed`;
+              const href = projectHref(p.current_stage, p.id);
               return (
               <a
                 key={p.id}

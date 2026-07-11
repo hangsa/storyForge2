@@ -93,7 +93,8 @@ vi.mock("../hooks/useStage4Writing", () => ({
 import Stage1Page from "../pages/Stage1Page";
 import Stage2Page from "../pages/Stage2Page";
 import Stage3Page from "../pages/Stage3Page";
-import Stage4Page from "../pages/Stage4Page";
+// Stage4Page deleted in v1.8 — its assertions migrated to WritingArea.test.tsx
+// and Workspace.test.tsx.
 import StyleSandboxPage from "../pages/StyleSandboxPage";
 import Stage1Layout from "../components/layout/Stage1Layout";
 import Stage3Layout from "../components/layout/Stage3Layout";
@@ -256,25 +257,10 @@ describe("Stage3Page", () => {
   });
 });
 
-describe("Stage4Page", () => {
-  it("renders title and idle state", () => {
-    renderPage(<Stage4Page />);
-    expect(screen.getByText("写作中心")).toBeInTheDocument();
-    expect(screen.getByText("点击「开始写作」生成场景草稿")).toBeInTheDocument();
-  });
-
-  it("renders controls bar", () => {
-    renderPage(<Stage4Page />);
-    expect(screen.getByText("章节")).toBeInTheDocument();
-    expect(screen.getByText("场景")).toBeInTheDocument();
-    expect(screen.getByText("跳过场景")).toBeInTheDocument();
-  });
-
-  it("renders start writing button", () => {
-    renderPage(<Stage4Page />);
-    expect(screen.getByText("开始写作")).toBeInTheDocument();
-  });
-});
+// Stage4Page was migrated into WritingArea + ContextPanel as part of the v1.8
+// /workspace refactor. The legacy idle-state / controls-bar / 开始写作 asserts
+// below are covered by WritingArea.test.tsx and the new Workspace.test.tsx
+// integration smoke; this section intentionally left empty.
 
 describe("StyleSandboxPage", () => {
   it("renders ParamSliders and the style sandbox section", async () => {

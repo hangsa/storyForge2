@@ -129,10 +129,10 @@ describe("TopHeader - sidebar toggle", () => {
 describe("SideNavBar", () => {
   const onNavigate = vi.fn();
 
-  it("renders all stage navigation items", () => {
+  it("renders workspace navigation items (post-Stage1/2/3 merge)", () => {
     render(
       <SideNavBar
-        currentStage="INIT"
+        currentStage="WORKSPACE"
         onNavigate={onNavigate}
         collapsed={false}
         width={280}
@@ -141,16 +141,15 @@ describe("SideNavBar", () => {
       />
     );
     expect(screen.getByText("项目中心")).toBeInTheDocument();
-    expect(screen.getByText("概念讨论")).toBeInTheDocument();
-    expect(screen.getByText("世界观+角色")).toBeInTheDocument();
-    expect(screen.getByText("情节头脑风暴")).toBeInTheDocument();
-    expect(screen.getByText("写作中心")).toBeInTheDocument();
+    expect(screen.getByText("工作台")).toBeInTheDocument();
+    expect(screen.getByText("全书诊断")).toBeInTheDocument();
+    expect(screen.getByText("导出中心")).toBeInTheDocument();
   });
 
   it("highlights the active stage", () => {
     render(
       <SideNavBar
-        currentStage="STAGE4"
+        currentStage="WORKSPACE"
         onNavigate={onNavigate}
         collapsed={false}
         width={280}
@@ -158,14 +157,14 @@ describe("SideNavBar", () => {
         onCommitWidth={() => {}}
       />
     );
-    const activeButton = screen.getByText("写作中心").closest("button");
+    const activeButton = screen.getByText("工作台").closest("button");
     expect(activeButton).toHaveClass("border-primary-container");
   });
 
   it("renders disabled workspace items", () => {
     render(
       <SideNavBar
-        currentStage="INIT"
+        currentStage="WORKSPACE"
         onNavigate={onNavigate}
         collapsed={false}
         width={280}
@@ -180,7 +179,7 @@ describe("SideNavBar", () => {
   it("calls onNavigate when stage clicked", () => {
     render(
       <SideNavBar
-        currentStage="INIT"
+        currentStage="WORKSPACE"
         onNavigate={onNavigate}
         collapsed={false}
         width={280}
@@ -188,8 +187,8 @@ describe("SideNavBar", () => {
         onCommitWidth={() => {}}
       />
     );
-    fireEvent.click(screen.getByText("概念讨论"));
-    expect(onNavigate).toHaveBeenCalledWith("STAGE1");
+    fireEvent.click(screen.getByText("工作台"));
+    expect(onNavigate).toHaveBeenCalledWith("WORKSPACE");
   });
 
   it("renders section headers", () => {

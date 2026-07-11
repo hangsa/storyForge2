@@ -10,9 +10,6 @@ const Stage1Page = lazy(() => import("./pages/Stage1Page"));
 const Stage1Layout = lazy(() => import("./components/layout/Stage1Layout"));
 const Stage2Page = lazy(() => import("./pages/Stage2Page"));
 const Stage3Page = lazy(() => import("./pages/Stage3Page"));
-const Stage4Page = lazy(() => import("./pages/Stage4Page"));
-const Stage5Page = lazy(() => import("./pages/Stage5Page"));
-const Stage6Page = lazy(() => import("./pages/Stage6Page"));
 const StyleSandboxPage = lazy(() => import("./pages/StyleSandboxPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ChapterReviewPage = lazy(() => import("./pages/ChapterReviewPage"));
@@ -160,36 +157,6 @@ function App() {
             <Suspense fallback={<LoadingFallback />}>
               <StageWrapper name="workspace">
                 <WorkspacePage />
-              </StageWrapper>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/project/:projectId/stage4"
-          element={
-            <Suspense fallback={<LoadingFallback />}>
-              <StageWrapper name="stage4">
-                <Stage4Page />
-              </StageWrapper>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/project/:projectId/stage5"
-          element={
-            <Suspense fallback={<LoadingFallback />}>
-              <StageWrapper name="stage5">
-                <Stage5Page />
-              </StageWrapper>
-            </Suspense>
-          }
-        />
-        <Route
-          path="/project/:projectId/stage6"
-          element={
-            <Suspense fallback={<LoadingFallback />}>
-              <StageWrapper name="stage6">
-                <Stage6Page />
               </StageWrapper>
             </Suspense>
           }

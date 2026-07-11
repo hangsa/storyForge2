@@ -328,4 +328,65 @@ describe("WizardContext", () => {
     expect(result.current.completedSteps).toEqual([1, 2, 3, 4, 5, 6]);
     expect(result.current.data.chapter1_outline?.chapters?.[0]?.title).toBe("T2");
   });
+
+  // v1.8.1: regression for design-doc F1.8.1.2 — lock independent
+  // preservation of story_dna vs concept across hydrate and partial save.
+  it("hydrateFromFiles preserves top-level story_dna independent of concept", () => {
+    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    act(() =>
+      result.current.hydrateFromFiles([1], {
+        concept: {
+          title: "X",
+          genre: "cool_novel",
+          premise: "",
+          tone: "",
+          theme: "",
+          target_audience: "",
+          style_template: "",
+        },
+        story_dna: {
+          core_contradiction: { statement: "灭世与守护", side_a: "灭世者", side_b: "守护者" },
+          value_stack: [],
+        },
+      })
+    );
+    // Both fields must reach display intact — never merge one into the other.
+    expect(result.current.data.concept?.title).toBe("X");
+    expect(result.current.data.story_dna?.core_contradiction.statement).toBe("灭世与守护");
+    expect(result.current.data.story_dna?.core_contradiction.side_a).toBe("灭世者");
+    expect(result.current.data.story_dna?.core_contradiction.side_b).toBe("守护者");
+  });
+
+  it("saveStep with only concept patch leaves story_dna intact", () => {
+    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    // Seed story_dna first via hydrate (covers the realistic path: user
+    // resumes from saved files, then edits concept only).
+    act(() =>
+      result.current.hydrateFromFiles([1], {
+        story_dna: {
+          core_contradiction: { statement: "旧矛盾", side_a: "A", side_b: "B" },
+          value_stack: [],
+        },
+      })
+    );
+    act(() => result.current.startStep(1));
+    act(() =>
+      result.current.saveStep(1, {
+        concept: {
+          title: "新标题",
+          genre: "cool_novel",
+          premise: "",
+          tone: "",
+          theme: "",
+          target_audience: "",
+          style_template: "",
+        },
+      })
+    );
+    expect(result.current.data.concept?.title).toBe("新标题");
+    // story_dna must be untouched by the partial patch.
+    expect(result.current.data.story_dna?.core_contradiction.statement).toBe("旧矛盾");
+    expect(result.current.data.story_dna?.core_contradiction.side_a).toBe("A");
+    expect(result.current.data.story_dna?.core_contradiction.side_b).toBe("B");
+  });
 });

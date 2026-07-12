@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import api from "../api/client";
+import api, { type ProjectSummary } from "../api/client";
 import StatsSidebar from "../components/home/StatsSidebar";
 import ManifestoHeader from "../components/home/ManifestoHeader";
 import CreateProjectCard from "../components/home/CreateProjectCard";
@@ -13,6 +13,30 @@ export default function HomePage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
+
+  // v1.8.2: single source of truth for the project list. BookShelf used to
+  // fetch /api/project/list on its own, doubling the round-trip on every
+  // home-page mount. Now HomePage fetches once and passes the result down.
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProjectsLoading(true);
+    api.listProjects()
+      .then((list) => {
+        if (cancelled) return;
+        setProjects(Array.isArray(list) ? list : []);
+      })
+      .catch(() => { if (!cancelled) setProjects([]); })
+      .finally(() => { if (!cancelled) setProjectsLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleProjectsDeleted = useCallback((deletedIds: string[]) => {
+    if (deletedIds.length === 0) return;
+    setProjects((prev) => prev.filter((p) => !deletedIds.includes(p.id)));
+  }, []);
 
   const handleCreate = useCallback(
     async (data: {
@@ -58,20 +82,6 @@ export default function HomePage() {
     }
   }, [refresh]);
 
-  const [mtimes, setMtimes] = useState<{ id: string; mtime: number }[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.listProjects()
-      .then((list) => {
-        if (cancelled) return;
-        const items = Array.isArray(list) ? list : [];
-        setMtimes(items.map((p) => ({ id: p.id, mtime: p.updated_at })));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
   return (
     <div className="min-h-screen bg-canvas-bg flex">
       <StatsSidebar
@@ -87,7 +97,11 @@ export default function HomePage() {
           submitting={submitting}
           error={createError}
         />
-        <BookShelf mtimes={mtimes} />
+        <BookShelf
+          projects={projects}
+          loading={projectsLoading}
+          onProjectsDeleted={handleProjectsDeleted}
+        />
       </main>
       {wizardProjectId && (
         <InitWizardModal

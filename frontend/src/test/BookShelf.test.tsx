@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
+// v1.8.2: BookShelf is now controlled — it no longer calls listProjects itself,
+// but HomePage (which still does) shares the same mock module.
 vi.mock("../api/client", () => ({
   default: {
     listProjects: vi.fn(),
@@ -12,34 +14,35 @@ vi.mock("../api/client", () => ({
 import api from "../api/client";
 import BookShelf from "../components/home/BookShelf";
 
+// v1.8.2: BookShelf now sorts by `updated_at` DESC directly from each project,
+// so the SAMPLE fixture orders updated_at descending — proj_a is newest, proj_f
+// is oldest and falls below the visible top-5 window.
 const SAMPLE = [
-  { id: "proj_a", title: "诡眼少年", genre: "cool_novel", current_stage: "STAGE2", created_at: "2026-06-29T00:00:00", updated_at: 1000, min_words: 4000 },
-  { id: "proj_b", title: "测试小说", genre: "cool_novel", current_stage: "INIT", created_at: "2026-06-28T00:00:00", updated_at: 2000, min_words: 4000 },
-  { id: "proj_c", title: "一部城隍成长史", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-27T00:00:00", updated_at: 3000, min_words: 6000 },
-  { id: "proj_d", title: "数据星河", genre: "kehuan", current_stage: "STAGE4", created_at: "2026-06-26T00:00:00", updated_at: 4000, min_words: 8000 },
-  { id: "proj_e", title: "山野笔记", genre: "dushi", current_stage: "STAGE1", created_at: "2026-06-25T00:00:00", updated_at: 5000, min_words: 5000 },
-  { id: "proj_f", title: "雪落无声", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-24T00:00:00", updated_at: 6000, min_words: 5000 },
+  { id: "proj_a", title: "诡眼少年", genre: "cool_novel", current_stage: "STAGE2", created_at: "2026-06-29T00:00:00", updated_at: 9000, target_total_words: 4_000_000, target_length_category: "标准商业连载", min_words: 4000 },
+  { id: "proj_b", title: "测试小说", genre: "cool_novel", current_stage: "INIT", created_at: "2026-06-28T00:00:00", updated_at: 8000, target_total_words: 4_000_000, target_length_category: "标准商业连载", min_words: 4000 },
+  { id: "proj_c", title: "一部城隍成长史", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-27T00:00:00", updated_at: 7000, target_total_words: 6_000_000, target_length_category: "标准商业连载", min_words: 6000 },
+  { id: "proj_d", title: "数据星河", genre: "kehuan", current_stage: "STAGE4", created_at: "2026-06-26T00:00:00", updated_at: 6000, target_total_words: 8_000_000, target_length_category: "标准商业连载", min_words: 8000 },
+  { id: "proj_e", title: "山野笔记", genre: "dushi", current_stage: "STAGE1", created_at: "2026-06-25T00:00:00", updated_at: 5000, target_total_words: 5_000_000, target_length_category: "标准商业连载", min_words: 5000 },
+  { id: "proj_f", title: "雪落无声", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-24T00:00:00", updated_at: 4000, target_total_words: 5_000_000, target_length_category: "标准商业连载", min_words: 5000 },
 ];
 
-interface ProjectMtime {
-  id: string;
-  mtime: number;
-}
-
 beforeEach(() => {
-  (api.listProjects as ReturnType<typeof vi.fn>).mockReset();
-  (api.listProjects as ReturnType<typeof vi.fn>).mockResolvedValue(SAMPLE);
   (api.bulkDeleteProjects as ReturnType<typeof vi.fn>).mockReset();
 });
 
 function renderShelf(props: {
-  mtimes?: ProjectMtime[];
+  projects?: typeof SAMPLE;
+  loading?: boolean;
+  onProjectsDeleted?: (deletedIds: string[]) => void;
 } = {}) {
-  // Default mtimes: assign HIGHEST mtime to proj_a (the project the test expects to see
-  // in the top 5), descending toward proj_f. This mimics a scenario where proj_a was
-  // updated most recently and proj_f least recently.
-  const mtimes = props.mtimes ?? SAMPLE.map((p, i) => ({ id: p.id, mtime: 1000 + (SAMPLE.length - i) }));
-  return render(<BookShelf mtimes={mtimes} />);
+  const onProjectsDeleted = props.onProjectsDeleted ?? vi.fn();
+  return render(
+    <BookShelf
+      projects={props.projects ?? SAMPLE}
+      loading={props.loading ?? false}
+      onProjectsDeleted={onProjectsDeleted}
+    />,
+  );
 }
 
 describe("BookShelf", () => {
@@ -52,15 +55,20 @@ describe("BookShelf", () => {
     expect(screen.queryByText("雪落无声")).not.toBeInTheDocument();
   });
 
-  it("sorts by mtime desc (most recently updated first)", async () => {
-    // Give proj_f (雪落无声) the highest mtime; everything else gets a lower one.
-    const mtimes = SAMPLE.map((p, i) => ({ id: p.id, mtime: p.id === "proj_f" ? 9999 : 1000 + i }));
-    renderShelf({ mtimes });
+  it("sorts by updated_at desc (most recently updated first)", async () => {
+    // Build a custom set where proj_f has the highest updated_at; everything
+    // else gets a lower one. We replace the default SAMPLE so the sort test
+    // doesn't conflict with the default ordering in `renderShelf`.
+    const projects = SAMPLE.map((p, i) => ({
+      ...p,
+      updated_at: p.id === "proj_f" ? 9999 : 1000 + i,
+    }));
+    renderShelf({ projects });
     await screen.findByText("雪落无声");
     const cards = document.querySelectorAll('[data-testid="book-card"]');
     // proj_f is the newest → should be the first visible card.
     expect(cards[0].textContent).toContain("雪落无声");
-    // proj_a is the oldest (mtime 1000) → should be excluded from the top 5.
+    // proj_a is the oldest (updated_at 1000) → should be excluded from the top 5.
     expect(screen.queryByText("诡眼少年")).not.toBeInTheDocument();
   });
 
@@ -86,8 +94,7 @@ describe("BookShelf", () => {
   });
 
   it("shows empty state when no projects at all", async () => {
-    (api.listProjects as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-    renderShelf();
+    renderShelf({ projects: [] });
     expect(await screen.findByText(/还没有项目/)).toBeInTheDocument();
   });
 
@@ -105,7 +112,8 @@ describe("BookShelf", () => {
     (api.bulkDeleteProjects as ReturnType<typeof vi.fn>).mockResolvedValue({
       deleted: ["proj_a", "proj_b"], failed: [], deleted_count: 2, failed_count: 0,
     });
-    renderShelf();
+    const onProjectsDeleted = vi.fn();
+    renderShelf({ onProjectsDeleted });
     await screen.findByText("诡眼少年");
     await act(async () => {
       screen.getByRole("button", { name: /多选/ }).click();
@@ -126,6 +134,8 @@ describe("BookShelf", () => {
     expect(api.bulkDeleteProjects).toHaveBeenCalledWith(
       expect.arrayContaining(["proj_a", "proj_b"]),
     );
+    // v1.8.2: BookShelf now delegates project-list pruning to the parent.
+    expect(onProjectsDeleted).toHaveBeenCalledWith(["proj_a", "proj_b"]);
   });
 
   it("INIT-stage book click navigates to the wizard deep-link", async () => {
@@ -200,25 +210,30 @@ describe("BookShelf", () => {
   });
 });
 
-// --- Integration: HomePage wires listProjects → BookShelf.mtimes ---
+// --- Integration: HomePage owns the fetch and passes projects down to BookShelf ---
 
 import HomePage from "../pages/HomePage";
 import { WizardProvider } from "../components/wizard/WizardContext";
 
 describe("HomePage → BookShelf wiring", () => {
-  it("HomePage derives BookShelf.mtimes from listProjects updated_at", async () => {
-    // Older project has a much later created_at but a smaller updated_at than the
-    // newer one — only the new BookShelf mtime sort will surface "新" first.
+  beforeEach(() => {
+    (api.listProjects as ReturnType<typeof vi.fn>).mockReset();
+  });
+
+  it("HomePage renders projects sorted by updated_at (top card newest)", async () => {
+    // The project with the higher updated_at ("新") should appear before the
+    // one with the higher created_at ("旧") — proving the BookShelf sort uses
+    // updated_at, not created_at.
     (api.listProjects as ReturnType<typeof vi.fn>).mockResolvedValue([
       {
         id: "old", title: "旧", genre: "cool_novel", current_stage: "STAGE4",
         created_at: "2026-06-30T00:00:00", updated_at: 100, min_words: 4000,
-        target_total_words: 4000, target_length_category: "",
+        target_total_words: 4_000_000, target_length_category: "标准商业连载",
       },
       {
         id: "new", title: "新", genre: "cool_novel", current_stage: "STAGE4",
         created_at: "2026-01-01T00:00:00", updated_at: 999, min_words: 4000,
-        target_total_words: 4000, target_length_category: "",
+        target_total_words: 4_000_000, target_length_category: "标准商业连载",
       },
     ]);
 
@@ -230,10 +245,29 @@ describe("HomePage → BookShelf wiring", () => {
       </MemoryRouter>,
     );
 
-    // Wait for the shelf to render the first project.
     expect(await screen.findByText("新")).toBeInTheDocument();
     const cards = screen.getAllByTestId("book-card");
     expect(cards[0]).toHaveTextContent("新");
     expect(cards[1]).toHaveTextContent("旧");
+  });
+
+  it("HomePage fetches /api/project/list exactly once on mount (v1.8.2 dedup)", async () => {
+    // v1.8.2 contract: HomePage is the sole fetcher. BookShelf receiving the
+    // list as a prop means there should be exactly one listProjects call per
+    // mount, not two.
+    (api.listProjects as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <WizardProvider projectId="proj_new">
+          <HomePage />
+        </WizardProvider>
+      </MemoryRouter>,
+    );
+
+    // Wait for the shelf to render (loading completes).
+    expect(await screen.findByTestId("book-shelf")).toBeInTheDocument();
+
+    expect(api.listProjects).toHaveBeenCalledTimes(1);
   });
 });

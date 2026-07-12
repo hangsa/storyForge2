@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import api, { ProjectSummary } from "../../api/client";
 import BookShelfModal from "./BookShelfModal";
 import { isPreWizardStage } from "./stages";
@@ -35,19 +35,17 @@ const GENRES: Record<string, string> = {
 
 const DEFAULT_VISIBLE = 5;
 
-interface ProjectMtime {
-  id: string;
-  mtime: number;
-}
-
 interface BookShelfProps {
-  /** Caller supplies each project's file-system mtime for "recently updated" sort. */
-  mtimes: ProjectMtime[];
+  /** Caller owns the fetch — pass the resolved project list here. */
+  projects: ProjectSummary[];
+  /** True while the caller's fetch is still in flight. */
+  loading: boolean;
+  /** Called after a successful bulk-delete with the IDs the backend removed,
+   *  so the parent can prune its own copy of the project list. */
+  onProjectsDeleted: (deletedIds: string[]) => void;
 }
 
-export default function BookShelf({ mtimes }: BookShelfProps) {
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function BookShelf({ projects, loading, onProjectsDeleted }: BookShelfProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -56,37 +54,14 @@ export default function BookShelf({ mtimes }: BookShelfProps) {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const list = await api.listProjects();
-        if (!cancelled) setProjects(Array.isArray(list) ? list : []);
-      } catch {
-        if (!cancelled) setProjects([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const mtimeById = useMemo(() => {
-    const map = new Map<string, number>();
-    mtimes.forEach((m) => map.set(m.id, m.mtime));
-    return map;
-  }, [mtimes]);
-
   const sorted = useMemo(() => {
     return [...projects].sort((a, b) => {
-      const ma = mtimeById.get(a.id) ?? 0;
-      const mb = mtimeById.get(b.id) ?? 0;
-      // Primary: mtime DESC (most recently updated first).
-      if (ma !== mb) return mb - ma;
+      // Primary: updated_at DESC (most recently updated first).
+      if (a.updated_at !== b.updated_at) return b.updated_at - a.updated_at;
       // Fallback: created_at DESC (most recently created first).
       return (b.created_at || "").localeCompare(a.created_at || "");
     });
-  }, [projects, mtimeById]);
+  }, [projects]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -117,7 +92,7 @@ export default function BookShelf({ mtimes }: BookShelfProps) {
     try {
       const ids = Array.from(selectedIds);
       const result = await api.bulkDeleteProjects(ids);
-      setProjects((prev) => prev.filter((p) => !result.deleted.includes(p.id)));
+      onProjectsDeleted(result.deleted);
       setShowBulkConfirm(false);
       if (result.failed.length === 0) {
         exitSelectMode();

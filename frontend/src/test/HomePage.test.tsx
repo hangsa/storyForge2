@@ -187,3 +187,35 @@ describe("HomePage refresh", () => {
     expect(mockApi.getProjectStats).toHaveBeenCalled();
   });
 });
+
+// v1.8.2: HomePage now owns the single /api/project/list fetch. Before this,
+// both HomePage AND BookShelf fetched independently, doubling the request.
+// This test pins the contract: exactly one call per mount.
+describe("HomePage /api/project/list fetch", () => {
+  it("calls listProjects exactly once on mount", async () => {
+    renderPage();
+    // wait for the shelf to render so the useEffect has fired
+    expect(await screen.findByTestId("book-shelf")).toBeInTheDocument();
+    expect(mockApi.listProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders BookShelf cards sorted by the fetched updated_at", async () => {
+    mockApi.listProjects.mockResolvedValue([
+      {
+        id: "old", title: "旧", genre: "cool_novel", current_stage: "STAGE4",
+        created_at: "2026-06-30T00:00:00", updated_at: 100, min_words: 4000,
+        target_total_words: 4_000_000, target_length_category: "标准商业连载",
+      },
+      {
+        id: "new", title: "新", genre: "cool_novel", current_stage: "STAGE4",
+        created_at: "2026-01-01T00:00:00", updated_at: 999, min_words: 4000,
+        target_total_words: 4_000_000, target_length_category: "标准商业连载",
+      },
+    ]);
+    renderPage();
+    expect(await screen.findByText("新")).toBeInTheDocument();
+    const cards = screen.getAllByTestId("book-card");
+    expect(cards[0]).toHaveTextContent("新");
+    expect(cards[1]).toHaveTextContent("旧");
+  });
+});

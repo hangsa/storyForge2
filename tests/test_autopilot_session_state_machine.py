@@ -38,6 +38,7 @@ VALID_TRANSITIONS = [
     ("running", "circuit_open", "paused"),
     ("running", "fatal_error", "error"),
     ("paused", "resume", "running"),
+    ("paused", "start", "running"),
     ("paused", "stop", "stopped"),
     ("stopped", "start", "running"),
     ("error", "start", "running"),  # error → idle → running (collapses to running)
@@ -48,7 +49,6 @@ INVALID_TRANSITIONS = [
     ("idle", "resume"),
     ("running", "start"),
     ("running", "resume"),
-    ("paused", "start"),
     ("paused", "pause"),
     ("stopped", "resume"),
     ("stopped", "pause"),

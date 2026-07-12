@@ -134,6 +134,7 @@ _TRANSITIONS: dict = {
     (SessionState.RUNNING, "stop"): (SessionState.STOPPED, "task_complete"),
     (SessionState.RUNNING, "circuit_open"): (SessionState.PAUSED, "circuit_open"),
     (SessionState.RUNNING, "fatal_error"): (SessionState.ERROR, "task_fail"),
+    (SessionState.PAUSED, "start"): (SessionState.RUNNING, "task_start"),
     (SessionState.PAUSED, "resume"): (SessionState.RUNNING, "task_start"),
     (SessionState.PAUSED, "stop"): (SessionState.STOPPED, "task_complete"),
     (SessionState.STOPPED, "start"): (SessionState.RUNNING, "task_start"),

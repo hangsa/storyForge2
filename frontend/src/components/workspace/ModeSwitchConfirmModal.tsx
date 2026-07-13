@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAutopilotSession } from "../../hooks/useAutopilotSession";
 
 interface Props {
   open: boolean;
@@ -11,8 +12,7 @@ interface Props {
   kind?: "mode-switch" | "take-over";
   /** Required when kind="take-over". */
   chapterNumber?: number;
-  currentTask?: string;
-  queueLength?: number;
+  projectId: string;
   plannedChapters?: number;
   onCancel: () => void;
   onConfirm: (opts: { waitForCurrent: boolean; chapterNumber?: number }) => void;
@@ -22,12 +22,15 @@ export default function ModeSwitchConfirmModal({
   open,
   kind = "mode-switch",
   chapterNumber,
-  currentTask = "生成当前章节",
-  queueLength = 0,
+  projectId,
   plannedChapters = 0,
   onCancel,
   onConfirm,
 }: Props) {
+  const { session } = useAutopilotSession(projectId);
+  const currentTask = session?.current_task?.description ?? "生成当前章节";
+  const queueLength = session?.queue.length ?? 0;
+
   const [waitForCurrent, setWaitForCurrent] = useState(kind === "take-over");
   if (!open) return null;
 

@@ -22,11 +22,6 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const { setPanel } = useWorkspacePanel();
 
   const [projectName, setProjectName] = useState("加载中…");
-  // v1.9: ManagedDashboard now subscribes to useAutopilotSession directly,
-  // so this page no longer owns the autopilot on/off state. The
-  // `currentTask` string below remains — it's still consumed by
-  // ModeSwitchConfirmModal (Task 2.9 will replace that consumer).
-  const [currentTask] = useState("生成第 7 章");
 
   const [chapters, setChapters] = useState<DashboardChapter[]>([
     { chapter_number: 1, status: "completed" },
@@ -224,8 +219,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         open={confirmOpen}
         kind={confirmKind}
         chapterNumber={takeOverChapter ?? undefined}
-        currentTask={currentTask}
-        queueLength={3}
+        projectId={projectId}
         plannedChapters={chapters.filter((c) => c.status !== "completed").length}
         onCancel={() => { setConfirmOpen(false); setTakeOverChapter(null); setPendingTargetMode(null); }}
         onConfirm={onConfirmDrillDown}

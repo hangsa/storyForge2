@@ -356,6 +356,69 @@ class TestStage4:
         detail = resp.json()["detail"]
         assert detail["total_chapters"] == 5  # progress.json, not novel_outline
 
+    def test_get_progress_malformed_chapter_range_falls_back(self, client, project_data):
+        """Malformed `chapter_range` strings must not produce a misleading total."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _write_project_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "volumes": [
+                {"name": "v1", "chapter_range": "-50", "summary": "missing start"},
+                {"name": "v2", "chapter_range": "50-1", "summary": "inverted"},
+                {"name": "v3", "chapter_range": "abc", "summary": "non-numeric"},
+                {"name": "v4", "chapter_range": "1--50", "summary": "double dash"},
+            ]
+        })
+        _write_project_json(settings.projects_dir, proj_id, "outline.json", {
+            "chapters": [{"chapter_number": 1, "title": "第一章", "scene_plan": []}]
+        })
+        resp = client.get(f"/api/stage4/progress?project_id={proj_id}")
+        assert resp.status_code == 200
+        assert resp.json()["detail"]["total_chapters"] == 1
+
+    def test_get_progress_partial_malformed_uses_valid_max(self, client, project_data):
+        """When some volumes are valid and others malformed, only valid ranges count."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _write_project_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "volumes": [
+                {"name": "v1", "chapter_range": "1-50", "summary": "v1"},
+                {"name": "v2", "chapter_range": "garbage", "summary": "skip me"},
+                {"name": "v3", "chapter_range": "101-150", "summary": "v3"},
+            ]
+        })
+        resp = client.get(f"/api/stage4/progress?project_id={proj_id}")
+        assert resp.status_code == 200
+        assert resp.json()["detail"]["total_chapters"] == 150
+
+    def test_get_progress_legacy_progress_no_total_chapters(self, client, project_data):
+        """Older progress.json without total_chapters must fall through to novel_outline."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _write_project_json(settings.projects_dir, proj_id, "progress.json", {
+            "current_chapter": 1,
+            "chapters": [{"chapter_number": 1, "status": "completed"}],
+        })
+        _write_project_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "volumes": [{"name": "v1", "chapter_range": "1-200", "summary": "v1"}]
+        })
+        resp = client.get(f"/api/stage4/progress?project_id={proj_id}")
+        assert resp.status_code == 200
+        assert resp.json()["detail"]["total_chapters"] == 200
+
+    def test_get_progress_volume_missing_chapter_range_field(self, client, project_data):
+        """A volume without `chapter_range` key must be skipped gracefully."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _write_project_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "volumes": [
+                {"name": "v1", "summary": "no range yet"},
+                {"name": "v2", "chapter_range": "1-75", "summary": "ok"},
+            ]
+        })
+        resp = client.get(f"/api/stage4/progress?project_id={proj_id}")
+        assert resp.status_code == 200
+        assert resp.json()["detail"]["total_chapters"] == 75
+
 
 class TestStoryOS:
 

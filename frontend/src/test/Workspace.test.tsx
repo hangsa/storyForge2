@@ -88,6 +88,10 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   mockedGetProjectStatus.mockClear();
+  mockedGetStage4Progress.mockReset();
+  mockedGetStage4Progress.mockResolvedValue({ chapters: [], total_chapters: 0 });
+  mockedGetOutline.mockReset();
+  mockedGetOutline.mockResolvedValue({ chapters: [] });
   startFn.mockClear();
   stopFn.mockClear();
   mockSession = {
@@ -348,5 +352,39 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("scene-1-2")).toBeInTheDocument();
     expect(screen.getByTestId("scene-1-3")).toBeInTheDocument();
     expect(screen.getByTestId("scene-1-4")).toBeInTheDocument();
+  });
+
+  it("refresh that fails leaves an empty chapter list (no stale data)", async () => {
+    // First two calls (WorkspacePage mount + WorkspaceTopBar mount) succeed
+    // with 2 chapters. Third call (WorkspacePage after refresh click) rejects.
+    // The UI must show no chapter cells after the refresh, not the pre-
+    // refresh data — that's the "we don't know what's on disk" truthful state.
+    mockedGetStage4Progress
+      .mockResolvedValueOnce({
+        chapters: [
+          { chapter_number: 1, status: "completed" },
+          { chapter_number: 2, status: "in_progress" },
+        ],
+        total_chapters: 7,
+      })
+      .mockResolvedValueOnce({
+        chapters: [
+          { chapter_number: 1, status: "completed" },
+          { chapter_number: 2, status: "in_progress" },
+        ],
+        total_chapters: 7,
+      })
+      .mockRejectedValueOnce(new Error("network down"));
+    setup("/project/p1/workspace");
+    // First load renders the 2 cells.
+    expect(await screen.findByTestId("chapter-cell-1")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-cell-2")).toBeInTheDocument();
+    // Click the workspace "刷新" button.
+    fireEvent.click(screen.getByTestId("refresh"));
+    // After the failed refresh the cells are gone — stale data cleared.
+    await waitFor(() => {
+      expect(screen.queryByTestId("chapter-cell-1")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("chapter-cell-2")).not.toBeInTheDocument();
   });
 });

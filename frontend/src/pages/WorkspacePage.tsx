@@ -93,6 +93,9 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   // list is the correct "nothing to show" state.
   useEffect(() => {
     if (!projectId) return;
+    setChapters([]);  // clear stale data on every (re)load — on failure the
+                      // UI shows the truthful "we don't know" empty state
+                      // rather than presenting stale data as current
     let cancelled = false;
     api
       .getStage4Progress(projectId)
@@ -119,6 +122,9 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   // same as a successful empty payload.
   useEffect(() => {
     if (!projectId) return;
+    setManualChapters([]);  // clear stale data on every (re)load — on failure
+                            // the UI shows the truthful "we don't know"
+                            // empty state rather than presenting stale data
     let cancelled = false;
     api
       .getOutline(projectId)

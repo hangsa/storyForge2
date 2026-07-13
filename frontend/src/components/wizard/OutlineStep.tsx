@@ -95,16 +95,57 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       )}
 
       {(wizard.status === "completed" || wizard.data.novel_outline) && (
-        <div data-testid="outline-form" className="space-y-3">
+        <div data-testid="outline-form" className="space-y-4">
           <div>
             <label className="block font-label-mono text-system-log mb-1 text-xs">核心冲突与主题</label>
             <textarea
               value={outline.core_conflict_theme}
               onChange={(e) => setOutline({ ...outline, core_conflict_theme: e.target.value })}
-              rows={3}
+              rows={5}
               className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
             />
           </div>
+
+          {outline.volumes.length > 0 && (
+            <div>
+              <div className="font-label-mono text-system-log mb-2 text-[10px] uppercase tracking-wider">
+                分卷 / 阶段划分
+              </div>
+              <div data-testid="outline-volumes" className="space-y-2">
+                {outline.volumes.map((v, i) => (
+                  <div
+                    key={`${v.name}-${i}`}
+                    data-testid="outline-volume"
+                    className="bg-surface-container border border-outline-variant rounded-lg p-3"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h3 className="font-display text-primary text-sm">{v.name}</h3>
+                      <span className="font-label-mono text-system-log/60 text-xs shrink-0">
+                        第 {v.chapter_range} 章
+                      </span>
+                    </div>
+                    {v.summary && (
+                      <p className="font-body-ui text-system-log text-sm mt-1.5 leading-relaxed">{v.summary}</p>
+                    )}
+                    {v.key_events.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {v.key_events.map((e, j) => (
+                          <li
+                            key={j}
+                            className="font-body-ui text-system-log/80 text-xs flex gap-2 leading-relaxed"
+                          >
+                            <span className="text-primary-container shrink-0">•</span>
+                            <span>{e}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
             {outline.volumes.length} 个分卷 · {outline.mc_growth_arc.length} 个主角成长节点 · {outline.key_plot_points.length} 个关键情节点
           </div>

@@ -9,9 +9,25 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-import WorkspacePage from "../pages/WorkspacePage";
+vi.mock("../hooks/useAutopilotSession", () => ({
+  useAutopilotSession: vi.fn(),
+}));
 
-beforeEach(() => sessionStorage.clear());
+import WorkspacePage from "../pages/WorkspacePage";
+import { ToastProvider } from "../hooks/useToast";
+import { useAutopilotSession } from "../hooks/useAutopilotSession";
+
+const noop = vi.fn().mockResolvedValue(undefined);
+
+beforeEach(() => {
+  sessionStorage.clear();
+  vi.mocked(useAutopilotSession).mockImplementation(() => ({
+    session: { state: "stopped", current_task: null, queue: [], history: [], config: null },
+    events: [],
+    status: "idle",
+    start: noop, stop: noop, pause: noop, resume: noop, refresh: noop,
+  }));
+});
 
 /**
  * Records the post-render location into a global so tests can assert on it.
@@ -32,15 +48,17 @@ function LocationSpy() {
 function withPath(path: string) {
   globalThis.__lastLocation = undefined;
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <LocationSpy />
-      <Routes>
-        <Route path="/workspace" element={<WorkspacePage projectId="p" />} />
-        <Route path="/stage4" element={<Navigate replace to="/workspace?mode=manual" />} />
-        <Route path="/stage5" element={<Navigate replace to="/workspace?mode=manual&panel=diagnosis" />} />
-        <Route path="/stage6" element={<Navigate replace to="/workspace?mode=manual&panel=export" />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/workspace" element={<WorkspacePage projectId="p" />} />
+          <Route path="/stage4" element={<Navigate replace to="/workspace?mode=manual" />} />
+          <Route path="/stage5" element={<Navigate replace to="/workspace?mode=manual&panel=diagnosis" />} />
+          <Route path="/stage6" element={<Navigate replace to="/workspace?mode=manual&panel=export" />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   );
 }
 

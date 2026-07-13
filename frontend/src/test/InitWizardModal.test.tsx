@@ -211,6 +211,12 @@ describe("InitWizardModal", () => {
       expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/workspace?mode=managed`),
     );
     expect(onDismiss).toHaveBeenCalled();
+    // Regression v1.9: navigate MUST be called before onDismiss, so any
+    // future onDismiss implementation that does more than setState (e.g.
+    // window.location.assign) can't beat the workspace navigation.
+    expect(mockNavigate.mock.invocationCallOrder[0]).toBeLessThan(
+      onDismiss.mock.invocationCallOrder[0],
+    );
     // wizard.reset() clears sessionStorage, but currentStep=1 immediately
     // re-renders ConceptStep, whose auto-trigger (added in v1.8 Task 2) writes
     // sessionStorage again. Asserting null here would test the wrong thing:

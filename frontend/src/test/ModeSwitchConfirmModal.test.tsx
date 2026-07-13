@@ -121,6 +121,52 @@ describe("ModeSwitchConfirmModal", () => {
     expect(onConfirm.mock.calls[0][0]).toEqual({ waitForCurrent: true });
   });
 
+  it("does not crash when session is an empty object (initial backend response)", () => {
+    // Regression: queue.length was being accessed without optional chaining,
+    // so when session is an empty object (the autopilot endpoint returns
+    // `{"detail": {}}` before a session has been started) the modal threw
+    // "Cannot read properties of undefined (reading 'length')" on mount.
+    // The error boundary on /workspace caught it and rendered the
+    // CircuitBreaker page instead of the workspace — which manifested as
+    // "完成初始化向导后未自动进入工作台".
+    vi.mocked(useAutopilotSession).mockReturnValue(
+      buildHookReturn(
+        {} as unknown as typeof DEFAULT_SESSION,
+      ) as unknown as ReturnType<typeof useAutopilotSession>,
+    );
+    expect(() =>
+      render(
+        <ModeSwitchConfirmModal
+          projectId="p"
+          open={true}
+          plannedChapters={3}
+          onCancel={() => {}}
+          onConfirm={() => {}}
+        />,
+      ),
+    ).not.toThrow();
+    expect(screen.getByTestId("confirm-queue").textContent).toContain("0");
+    expect(screen.getByTestId("confirm-current-task").textContent).toBe("生成当前章节");
+  });
+
+  it("does not crash when session=null (initial load before any SSE event)", () => {
+    vi.mocked(useAutopilotSession).mockReturnValue(
+      buildHookReturn(null) as unknown as ReturnType<typeof useAutopilotSession>,
+    );
+    expect(() =>
+      render(
+        <ModeSwitchConfirmModal
+          projectId="p"
+          open={true}
+          plannedChapters={3}
+          onCancel={() => {}}
+          onConfirm={() => {}}
+        />,
+      ),
+    ).not.toThrow();
+    expect(screen.getByTestId("confirm-queue").textContent).toContain("0");
+  });
+
   it("kind='take-over' renders '立即接管' confirm button", () => {
     render(
       <ModeSwitchConfirmModal

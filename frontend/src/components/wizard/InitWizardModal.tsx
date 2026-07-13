@@ -129,8 +129,13 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
       // proceed even if advance fails (mirrors HomePage create behavior)
     }
     wizard.reset();
-    onDismiss();
+    // Navigate BEFORE onDismiss: if onDismiss ever does anything other than
+    // `setState(null)` (e.g. window.location.assign, which fires a hard
+    // reload), calling navigate first ensures the workspace URL wins.
+    // WizardDeepLinkPage's previous window.location.assign("/") bug
+    // manifested as "complete wizard → land on / instead of /workspace".
     navigate(`/project/${encodeURIComponent(projectId)}/workspace?mode=managed`);
+    onDismiss();
   };
 
   return (

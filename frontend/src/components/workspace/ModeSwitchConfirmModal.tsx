@@ -29,7 +29,7 @@ export default function ModeSwitchConfirmModal({
 }: Props) {
   const { session } = useAutopilotSession(projectId);
   const currentTask = session?.current_task?.description ?? "生成当前章节";
-  const queueLength = session?.queue.length ?? 0;
+  const queueLength = session?.queue?.length ?? 0;
 
   const [waitForCurrent, setWaitForCurrent] = useState(kind === "take-over");
   if (!open) return null;

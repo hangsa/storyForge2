@@ -216,7 +216,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
           ) : null
         }
         right={
-          mode === "managed" ? <ManagedAIControlPanel /> : <ContextPanel projectId={projectId} />
+          mode === "managed" ? <ManagedAIControlPanel projectId={projectId} /> : <ContextPanel projectId={projectId} />
         }
       />
 

@@ -18,7 +18,7 @@ from typing import Optional
 from backend.models.autopilot_session import (
     AutopilotSession, CircuitSnapshot, CurrentTask, ManagedStartConfig,
     QueueItem, SessionEvent, SessionState, SessionStateMachine,
-    complete_current_task, set_current_task,
+    add_queue_item, complete_current_task, drop_queue_item, set_current_task,
 )
 
 logger = logging.getLogger(__name__)
@@ -134,6 +134,20 @@ class AutopilotSessionManager:
     def set_current_task(self, task: CurrentTask) -> AutopilotSession:
         s = self.load() or self._empty_session()
         s2 = set_current_task(s, task)
+        self.save(s2)
+        return s2
+
+    def add_queue(self, item: QueueItem) -> AutopilotSession:
+        """Write-through convenience for the pure `add_queue_item` helper."""
+        s = self.load() or self._empty_session()
+        s2 = add_queue_item(s, item)
+        self.save(s2)
+        return s2
+
+    def drop_queue(self, item_id: str) -> AutopilotSession:
+        """Write-through convenience for the pure `drop_queue_item` helper."""
+        s = self.load() or self._empty_session()
+        s2 = drop_queue_item(s, item_id)
         self.save(s2)
         return s2
 

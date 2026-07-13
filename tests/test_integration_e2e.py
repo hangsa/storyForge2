@@ -1,5 +1,10 @@
+import json
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
+
+from backend.config import settings
 from backend.main import app
 
 
@@ -17,6 +22,17 @@ def project_data():
         "free_text": "一个少年在异世界觉醒能力，踏上强者之路",
         "inspiration_source": "web_novel",
     }
+
+
+def _write_project_json(projects_dir: Path, proj_id: str, filename: str, data: dict) -> None:
+    """Write an arbitrary JSON file into a project directory.
+
+    `TestClient` writes to `settings.projects_dir`; this helper reaches in
+    to seed `novel_outline.json` / `outline.json` for the fallback tests.
+    """
+    p = Path(projects_dir) / proj_id
+    p.mkdir(parents=True, exist_ok=True)
+    (p / filename).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 class TestProjectLifecycle:
@@ -269,6 +285,76 @@ class TestStage4:
 
         resp = client.get(f"/api/stage4/progress?project_id={proj_id}")
         assert resp.status_code == 200
+
+    def test_get_progress_falls_back_to_novel_outline_total(self, client, project_data):
+        """When progress.json is missing but novel_outline.json has 3 volumes
+        spanning 1-150, /progress must return total_chapters=150 (the user's
+        plan), not 1 (which is len(outline.json) for a project that hasn't
+        filled in chapter 1's detailed outline yet)."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+
+        # Seed novel_outline.json with 3 volumes, no progress.json, no outline.json.
+        _write_project_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "volumes": [
+                {"name": "第一卷", "chapter_range": "1-50", "summary": "v1"},
+                {"name": "第二卷", "chapter_range": "51-100", "summary": "v2"},
+                {"name": "第三卷", "chapter_range": "101-150", "summary": "v3"},
+            ]
+        })
+
+        resp = client.get(f"/api/stage4/progress?project_id={proj_id}")
+        assert resp.status_code == 200
+        detail = resp.json()["detail"]
+        assert detail["total_chapters"] == 150, (
+            f"expected total=150 from novel_outline.json fallback, got {detail.get('total_chapters')}"
+        )
+        assert detail["chapters"] == []  # no actual writing yet
+
+    def test_get_progress_novel_outline_takes_precedence_over_outline(self, client, project_data):
+        """When both novel_outline.json (3 volumes, 150ch) and outline.json
+        (1 chapter detailed outline) exist but progress.json is missing,
+        novel_outline's 150 wins (it's the user's planned total; outline.json
+        is just the detailed scene plan for chapter 1)."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+
+        _write_project_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "volumes": [{"name": "v1", "chapter_range": "1-150", "summary": "v1"}]
+        })
+        _write_project_json(settings.projects_dir, proj_id, "outline.json", {
+            "chapters": [{"chapter_number": 1, "title": "第一章", "scene_plan": []}]
+        })
+
+        resp = client.get(f"/api/stage4/progress?project_id={proj_id}")
+        assert resp.status_code == 200
+        assert resp.json()["detail"]["total_chapters"] == 150  # novel_outline, not outline
+
+    def test_get_progress_uses_progress_total_chapters_when_set(self, client, project_data):
+        """When progress.json exists with its own total_chapters (writing in
+        progress), that value wins over the novel_outline.json fallback.
+        Locks in the priority chain: progress > novel_outline > outline > 1."""
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+
+        # progress.json says "5 chapters total, 2 done" (the writing plan).
+        # novel_outline.json says "150 chapters planned". progress wins.
+        _write_project_json(settings.projects_dir, proj_id, "progress.json", {
+            "current_chapter": 2,
+            "total_chapters": 5,
+            "chapters": [
+                {"chapter_number": 1, "status": "completed"},
+                {"chapter_number": 2, "status": "in_progress"},
+            ],
+        })
+        _write_project_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "volumes": [{"name": "v1", "chapter_range": "1-150", "summary": "v1"}]
+        })
+
+        resp = client.get(f"/api/stage4/progress?project_id={proj_id}")
+        assert resp.status_code == 200
+        detail = resp.json()["detail"]
+        assert detail["total_chapters"] == 5  # progress.json, not novel_outline
 
 
 class TestStoryOS:

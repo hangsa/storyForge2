@@ -643,6 +643,37 @@ async def skip_scene(data: dict):
     }
 
 
+def _planned_chapter_total_from_novel_outline(novel_outline: Optional[dict]) -> int:
+    """Parse `novel_outline.json` volumes' `chapter_range` strings to derive
+    the user's planned total chapter count.
+
+    Each volume's `chapter_range` is a string like "1-50" (start-end).
+    Volumes are sequential, so the planned total is the max end across
+    all volumes. Returns 0 if the file is missing or unparseable — the
+    caller is expected to fall back to `outline.json`'s chapter count
+    in that case.
+    """
+    if not novel_outline or not isinstance(novel_outline, dict):
+        return 0
+    max_end = 0
+    for volume in novel_outline.get("volumes", []) or []:
+        if not isinstance(volume, dict):
+            continue
+        rng = volume.get("chapter_range", "")
+        if not isinstance(rng, str):
+            continue
+        rng = rng.strip()
+        if not rng or "-" not in rng:
+            continue
+        try:
+            end = int(rng.rsplit("-", 1)[-1].strip())
+        except ValueError:
+            continue
+        if end > max_end:
+            max_end = end
+    return max_end
+
+
 @stage4_router.get("/progress")
 async def get_progress(project_id: str):
     # v1.6 Phase 3b: ensure baseline manifest exists on first STAGE 4 entry
@@ -651,14 +682,20 @@ async def get_progress(project_id: str):
 
     progress = fm.read_json(project_id, "progress.json")
 
-    # Enrich with outline data (total chapters and scene counts per chapter)
+    # Enrich with outline data (scene counts per chapter for cells that exist)
     outline = fm.read_json(project_id, "outline.json") or {}
     outline_chapters = outline.get("chapters", [])
-    total_chapters = len(outline_chapters) if outline_chapters else 1
+    outline_total = len(outline_chapters) if outline_chapters else 1
     chapter_scene_counts = {
         ch.get("chapter_number", 0): len(ch.get("scene_plan", []))
         for ch in outline_chapters
     }
+
+    # novel_outline.json is the user's planned total (e.g., 3 volumes × 50 chapters
+    # = 150). When progress.json is empty, prefer this over outline.json's
+    # detailed chapter count, which is usually just chapter 1.
+    novel_outline = fm.read_json(project_id, "novel_outline.json") or {}
+    novel_total = _planned_chapter_total_from_novel_outline(novel_outline)
 
     if progress is None:
         return {
@@ -669,14 +706,23 @@ async def get_progress(project_id: str):
                 "project_id": project_id,
                 "current_stage": "STAGE4",
                 "chapters": [],
+                # Pre-step: surface the user's plan from novel_outline.json
+                # so the TopBar progress ring can show "0 / 150" instead of
+                # "0 / 1" (or nothing) for a brand-new project.
+                "total_chapters": novel_total or outline_total,
             },
         }
 
-    # Ensure total_chapters is correct and add scene counts
-    progress["total_chapters"] = progress.get("total_chapters", 1) or total_chapters
+    # Priority when progress.json exists: explicit total_chapters in progress >
+    # novel_outline planned total > outline.json detailed count > 1.
+    progress["total_chapters"] = (
+        progress.get("total_chapters") or novel_total or outline_total or 1
+    )
     for ch in progress.get("chapters", []):
         ch_num = ch.get("chapter_number", 0)
-        ch["total_scenes"] = chapter_scene_counts.get(ch_num, ch.get("total_scenes", 0))
+        ch["total_scenes"] = chapter_scene_counts.get(
+            ch_num, ch.get("total_scenes", 0)
+        )
 
     return {
         "error": False,

@@ -13,6 +13,15 @@ import ContextPanel from "../components/workspace/ContextPanel";
 import ModeSwitchConfirmModal from "../components/workspace/ModeSwitchConfirmModal";
 import ManagedStartModal, { type ManagedStartConfig } from "../components/workspace/ManagedStartModal";
 
+// Map progress.json's `status` field onto ManagedDashboard's chapter status.
+// `in_progress` is the writer-side term; the dashboard surfaces it as "writing".
+function mapProgressStatus(s: string): DashboardChapter["status"] {
+  if (s === "completed") return "completed";
+  if (s === "in_progress") return "writing";
+  if (s === "pending") return "planned";
+  return "pending";
+}
+
 export default function WorkspacePage({ projectId: projectIdProp }: { projectId?: string } = {}) {
   const params = useParams<{ projectId: string }>();
   const projectId = projectIdProp ?? params.projectId ?? "";
@@ -23,22 +32,11 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
 
   const [projectName, setProjectName] = useState("加载中…");
 
-  const [chapters, setChapters] = useState<DashboardChapter[]>([
-    { chapter_number: 1, status: "completed" },
-    { chapter_number: 2, status: "completed" },
-    { chapter_number: 3, status: "completed" },
-    { chapter_number: 4, status: "writing" },
-    { chapter_number: 5, status: "planned" },
-    { chapter_number: 6, status: "planned" },
-    { chapter_number: 7, status: "planned" },
-  ]);
-  const [manualChapters, setManualChapters] = useState<WorkspaceChapterNode[]>([
-    { chapter_number: 1, title: "第一章", scenes: [{ scene_id: "1-1", title: "开场" }, { scene_id: "1-2", title: "发现" }] },
-    { chapter_number: 2, title: "第二章", scenes: [{ scene_id: "2-1", title: "冲突" }] },
-    { chapter_number: 4, title: "第四章", scenes: [{ scene_id: "4-1", title: "高潮" }] },
-  ]);
+  const [chapters, setChapters] = useState<DashboardChapter[]>([]);
+  const [manualChapters, setManualChapters] = useState<WorkspaceChapterNode[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
   const [currentChapter, setCurrentChapter] = useState(1);
-  const [currentScene, setCurrentScene] = useState<string | null>("1-1");
+  const [currentScene, setCurrentScene] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -70,8 +68,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     };
   }, [projectId, navigate]);
 
-  // Read ?chapter=N&scene=M from URL on mount. Falls back to current state
-  // if values are out-of-range or invalid (spec § Error Handling).
+  // Read ?chapter=N&scene=M from URL on mount (and after the chapter tree
+  // loads — `manualChapters` starts empty until getOutline resolves). Falls
+  // back to current state if values are out-of-range or invalid (spec §
+  // Error Handling).
   useEffect(() => {
     const chParam = Number(searchParams.get("chapter"));
     const scParam = searchParams.get("scene");
@@ -85,7 +85,66 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
       setCurrentScene(ch.scenes[0]?.scene_id ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [manualChapters]);
+
+  // Load managed-mode chapter list (with status) from progress.json.
+  // Backend get_progress returns { chapters: [] } when progress.json does not
+  // exist (e.g. brand-new project) — no special-case needed here, the empty
+  // list is the correct "nothing to show" state.
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    api
+      .getStage4Progress(projectId)
+      .then((p: { chapters?: Array<{ chapter_number: number; status: string }> }) => {
+        if (cancelled) return;
+        const mapped: DashboardChapter[] = (p?.chapters ?? []).map((c) => ({
+          chapter_number: c.chapter_number,
+          status: mapProgressStatus(c.status),
+        }));
+        setChapters(mapped);
+      })
+      .catch(() => {
+        // 404 / network error → leave list empty (the UI shows no cells, which
+        // is the truthful state for "we don't know what's on disk")
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reloadKey]);
+
+  // Load manual-mode chapter tree from outline.json. scene_id is derived as
+  // ${chapter_number}-${scene_number} (the existing UI convention). Backend
+  // get_outline returns 404 if outline.json does not exist; treat that the
+  // same as a successful empty payload.
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    api
+      .getOutline(projectId)
+      .then((o: {
+        chapters?: Array<{
+          chapter_number: number;
+          title: string;
+          scene_plan?: Array<{ scene_number: number }>;
+        }>;
+      }) => {
+        if (cancelled) return;
+        const mapped: WorkspaceChapterNode[] = (o?.chapters ?? []).map((c) => ({
+          chapter_number: c.chapter_number,
+          title: c.title || `第 ${c.chapter_number} 章`,
+          scenes: (c.scene_plan ?? []).map((s) => ({
+            scene_id: `${c.chapter_number}-${s.scene_number}`,
+            title: `场景 ${c.chapter_number}-${s.scene_number}`,
+          })),
+        }));
+        setManualChapters(mapped);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reloadKey]);
 
   const handleModeChange = (next: "managed" | "manual") => {
     if (next === mode) return;
@@ -152,8 +211,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
               projectId={projectId}
               chapters={chapters}
               onChapterClick={onDashboardChapterClick}
-              onAddChapter={() => setChapters((cs) => [...cs, { chapter_number: cs.length + 1, status: "planned" }])}
-              onRefresh={() => {}}
+              // No-op: there is no backend endpoint to add a chapter outside the
+              // outline workflow. Refresh re-fetches the real list.
+              onAddChapter={() => {}}
+              onRefresh={() => setReloadKey((k) => k + 1)}
             />
           ) : (
             <ChapterTreePanel
@@ -167,8 +228,8 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                 setContent("");
               }}
               onSelectScene={(n, s) => { setCurrentChapter(n); setCurrentScene(s); }}
-              onAddChapter={() => setManualChapters((cs) => [...cs, { chapter_number: cs.length + 1, title: `第 ${cs.length + 1} 章`, scenes: [] }])}
-              onRefresh={() => {}}
+              onAddChapter={() => {}}
+              onRefresh={() => setReloadKey((k) => k + 1)}
             />
           )
         }

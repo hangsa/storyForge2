@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.api import project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing, stage5_diagnosis, stage6_export, style_extractor, conductor, storyos, settings_api, creative_canvas, growth_workshop, style_sandbox
+from backend.api import project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing, stage5_diagnosis, stage6_export, style_extractor, conductor, storyos, settings_api, creative_canvas, growth_workshop, style_sandbox, autopilot
 
 app = FastAPI(
     title="StoryForge API",
@@ -33,6 +33,7 @@ app.include_router(creative_canvas.router)
 app.include_router(growth_workshop.router)
 app.include_router(style_sandbox.router)
 app.include_router(stage3_outline.branch_router)
+app.include_router(autopilot.router)
 
 
 @app.exception_handler(Exception)

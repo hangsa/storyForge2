@@ -49,9 +49,37 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
     }
   };
 
+  // Sync local `outline` state from wizard.data.novel_outline when prefill
+  // lands. Only overwrite if the user hasn't typed anything yet (i.e., local
+  // state is still the EMPTY_OUTLINE default). Without this, a user who
+  // re-enters the wizard after closing on step 5 — where wizard.data has no
+  // novel_outline but the file exists on disk — would see an empty form
+  // because local state was initialized from the (then-null) wizard state.
+  useEffect(() => {
+    const persisted = wizard.data.novel_outline;
+    if (!persisted) return;
+    const isLocalEmpty =
+      outline.core_conflict_theme === "" &&
+      outline.volumes.length === 0 &&
+      outline.mc_growth_arc.length === 0 &&
+      outline.key_plot_points.length === 0;
+    if (isLocalEmpty) {
+      setOutline(persisted);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizard.data.novel_outline]);
+
   // Auto-trigger generation on mount if no outline has been generated yet.
   // Errors keep the error UI visible so the user can hit "重新生成" in the footer.
+  //
+  // v1.8.2: wait for prefill to finish before deciding. Without this gate,
+  // the auto-trigger fires synchronously on mount and POSTs
+  // /generate-novel-outline BEFORE the async prefill can hydrate
+  // wizard.data.novel_outline from disk. For proj_cc4ca4ae (and any project
+  // closed on step 5 without saving), that meant regenerating content the
+  // user already paid for.
   useEffect(() => {
+    if (!wizard.prefillComplete) return;
     if (
       !wizard.data.novel_outline &&
       wizard.status !== "generating" &&
@@ -60,7 +88,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       handleStart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [wizard.prefillComplete]);
 
   // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
   // just registers the handlers and the current busy state.

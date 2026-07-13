@@ -41,6 +41,9 @@ function Harness({ projectId }: { projectId: string }) {
       <span data-testid="current-step">{wizard.currentStep}</span>
       <span data-testid="status">{wizard.status}</span>
       <button data-testid="reset" onClick={wizard.reset}>reset</button>
+      <button data-testid="mark-prefill" onClick={wizard.markPrefillComplete}>
+        markPrefillComplete
+      </button>
     </>
   );
 }
@@ -67,6 +70,11 @@ describe("ConceptStep", () => {
         <Harness projectId="proj_x" />
       </WizardProvider>
     );
+    // ConceptStep now waits for prefill before auto-triggering (v1.8.2 fix
+    // for proj_cc4ca4ae). Simulate prefill landing.
+    await act(async () => {
+      screen.getByTestId("mark-prefill").click();
+    });
     expect(screen.queryByTestId("concept-start")).not.toBeInTheDocument();
     await waitFor(() => expect(api.generateConcept).toHaveBeenCalledWith("proj_x"));
   });
@@ -81,6 +89,9 @@ describe("ConceptStep", () => {
         <Harness projectId="proj_x" />
       </WizardProvider>
     );
+    await act(async () => {
+      screen.getByTestId("mark-prefill").click();
+    });
     expect(await screen.findByTestId("concept-form")).toBeInTheDocument();
     expect((screen.getByTestId("concept-title") as HTMLInputElement).value).toBe("T");
   });

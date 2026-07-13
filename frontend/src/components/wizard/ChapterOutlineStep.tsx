@@ -53,10 +53,24 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
     }
   };
 
+  // Sync local `outline` state from wizard.data when prefill lands. Only
+  // overwrite if local state is still null (no outline yet).
+  useEffect(() => {
+    const persisted = wizard.data.chapter1_outline;
+    if (persisted && persisted.chapters.length > 0 && !outline) {
+      setOutline(persisted);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizard.data.chapter1_outline]);
+
   // Auto-trigger generation on first mount when there is no existing outline
   // and the wizard isn't already mid-run or in error. v1.8 drops the manual
   // "开始生成" button to match the other wizard steps.
+  //
+  // v1.8.2: wait for prefill to finish before deciding — same race-condition
+  // fix as OutlineStep (proj_cc4ca4ae regression).
   useEffect(() => {
+    if (!wizard.prefillComplete) return;
     if (
       !outline &&
       wizard.status !== "generating" &&
@@ -65,7 +79,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       handleStart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [wizard.prefillComplete]);
 
   // 重新生成 moves to the modal footer. 完成 → 进入工作台 stays in the
   // form per current spec (not part of the 下一步/重新生成 rename). The

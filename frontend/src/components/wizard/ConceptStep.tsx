@@ -60,9 +60,30 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
     }
   };
 
+  // Sync local `concept`/`dna` state from wizard.data when prefill lands.
+  // Only overwrite if the user hasn't typed anything yet (local state still
+  // matches the EMPTY defaults). Without this, a user who re-enters the
+  // wizard with stale sessionStorage (data.concept=null but file exists on
+  // disk) would see an empty form.
+  useEffect(() => {
+    const persisted = wizard.data.concept;
+    if (persisted && concept.title === "" && concept.genre === "") {
+      setConcept(persisted);
+    }
+    const persistedDna = wizard.data.story_dna;
+    if (persistedDna && dna.core_contradiction.statement === "" && dna.value_stack.length === 0) {
+      setDna(persistedDna);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizard.data.concept, wizard.data.story_dna]);
+
   // Auto-trigger generation on mount if no concept has been generated yet.
   // Errors keep the error UI visible so the user can hit "重新生成" in the footer.
+  //
+  // v1.8.2: wait for prefill to finish before deciding — same race-condition
+  // fix as OutlineStep (proj_cc4ca4ae regression).
   useEffect(() => {
+    if (!wizard.prefillComplete) return;
     if (
       !wizard.data.concept &&
       wizard.status !== "generating" &&
@@ -71,7 +92,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       handleStart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [wizard.prefillComplete]);
 
   // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
   // just registers the handlers and the current busy state.

@@ -61,12 +61,18 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
   const wizard = useWizard();
   const navigate = useNavigate();
 
-  // Best-effort deep-link resume: if no completed steps are loaded, fetch the
-  // project's persisted files and mark steps completed via hydrateFromFiles.
-  // hydrateFromFiles is additive — a step the user just completed locally
-  // wins over the file fetch (see WizardContext.test.tsx "is additive" test).
+  // Best-effort deep-link resume: fetch the project's persisted files and
+  // mark steps completed via hydrateFromFiles. hydrateFromFiles is additive
+  // — a step the user just completed locally wins over the file fetch
+  // (see WizardContext.test.tsx "is additive" test).
+  //
+  // v1.8.2: prefill ALWAYS runs on mount, even when sessionStorage already
+  // holds a partial wizard state. The proj_cc4ca4ae regression showed that
+  // sessionStorage can be stale (user closed on step 5 before clicking
+  // "确认修改并继续", so data.novel_outline was null even though the file
+  // existed on disk). Skipping prefill in that case caused OutlineStep's
+  // auto-trigger to fire and regenerate content the user already paid for.
   useEffect(() => {
-    if (wizard.completedSteps.length > 0) return;
     let cancelled = false;
     (async () => {
       try {
@@ -96,12 +102,15 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           completed.push(3);
           data.characters = chars.value as CharacterSet;
         }
+        // Step mappings — must stay in sync with STEP_TITLES above:
+        //   5 = novel_outline.json (全书大纲)
+        //   6 = outline.json     (章节大纲 / chapter1_outline)
         if (novel.status === "fulfilled" && hasContent(novel.value)) {
-          completed.push(4);
+          completed.push(5);
           data.novel_outline = novel.value as NovelOutline;
         }
         if (outline.status === "fulfilled" && hasContent(outline.value)) {
-          completed.push(5);
+          completed.push(6);
           data.chapter1_outline = outline.value as Outline;
         }
         if (completed.length > 0) {
@@ -111,9 +120,15 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           } else {
             wizard.hydrateFromFiles(completed, data);
           }
+        } else {
+          // No files to hydrate — still mark prefill complete so steps with
+          // auto-triggers (OutlineStep etc.) can run their generation logic.
+          wizard.markPrefillComplete();
         }
       } catch {
-        // ignore prefill failures (e.g., 404 on first ever entry)
+        // ignore prefill failures (e.g., 404 on first ever entry) but still
+        // unblock auto-triggers so the user can proceed with a fresh project.
+        if (!cancelled) wizard.markPrefillComplete();
       }
     })();
     return () => {

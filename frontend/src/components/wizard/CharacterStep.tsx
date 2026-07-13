@@ -126,10 +126,24 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     return "bg-surface-container-low text-system-log";
   };
 
+  // Sync local `characters` state from wizard.data when prefill lands. Only
+  // overwrite if local state is still null (no characters yet).
+  useEffect(() => {
+    const persisted = wizard.data.characters;
+    if (persisted && persisted.characters.length > 0 && !characters) {
+      setCharacters(persisted);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizard.data.characters]);
+
   // Auto-trigger the default batch (1 protagonist + 2 antagonists + 3 supporting)
   // on mount when there are no characters yet and we're not already generating
   // or in an error state. Subsequent retries use the footer "重新生成" button.
+  //
+  // v1.8.2: wait for prefill to finish before deciding — same race-condition
+  // fix as OutlineStep (proj_cc4ca4ae regression).
   useEffect(() => {
+    if (!wizard.prefillComplete) return;
     const noCharacters = !characters || characters.characters.length === 0;
     if (
       noCharacters &&
@@ -139,10 +153,19 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       handleBatchStart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [wizard.prefillComplete]);
 
   // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
   // just registers the handlers and the current busy state.
+  //
+  // wizard.status is in the deps (matching ConceptStep's pattern) so the
+  // effect re-runs when the LLM call rejects: status goes
+  // idle → generating → error. Without wizard.status in deps, the effect
+  // only sees the initial `busy=false, hasChars=false` and the final
+  // `busy=false, hasChars=false` (busy toggles true then false inside the
+  // try/finally), so the regenerate handler never gets registered on the
+  // error path — see "error state shows the error banner" test ordering
+  // regression after the v1.8.2 prefill gate was added.
   useEffect(() => {
     const hasChars = !!characters && characters.characters.length > 0;
     const canRegenerate =
@@ -156,7 +179,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       wizard.setNextHandler(null, false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCharacters, busy]);
+  }, [hasCharacters, busy, wizard.status]);
 
   return (
     <div data-testid="character-step" className="space-y-4">

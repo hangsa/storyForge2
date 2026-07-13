@@ -7,6 +7,7 @@ vi.mock("../api/client", () => ({
     advance: vi.fn(),
     generateOutline: vi.fn(),
     generateConcept: vi.fn(),
+    generateNovelOutline: vi.fn(),
     updateOutline: vi.fn(),
     getConcept: vi.fn(),
     getWorld: vi.fn(),
@@ -245,7 +246,7 @@ describe("InitWizardModal", () => {
     expect(screen.getByTestId("wizard-step-3").getAttribute("data-state")).not.toBe("completed");
   });
 
-  it("prefill: empty {chapters:[]} does NOT mark 全书大纲 completed", async () => {
+  it("prefill: empty {chapters:[]} does NOT mark 章节大纲 completed", async () => {
     (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({});
@@ -255,17 +256,28 @@ describe("InitWizardModal", () => {
     renderModal();
     await waitFor(() => expect(api.getOutline).toHaveBeenCalled());
 
-    expect(screen.getByTestId("wizard-step-5").getAttribute("data-state")).not.toBe("completed");
+    expect(screen.getByTestId("wizard-step-6").getAttribute("data-state")).not.toBe("completed");
   });
 
-  it("prefill: populated character/novel/outline still mark the steps completed", async () => {
+  it("prefill: populated character/novel/outline mark the correct steps completed", async () => {
+    // getNovelOutline → step 5 (全书大纲); getOutline → step 6 (章节大纲).
+    // The earlier version of this test asserted step 5 was completed when
+    // getOutline returned chapters, which only "passed" because the prefill
+    // was pushing outline → step 5 instead of step 6 (off-by-one bug).
     (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
       characters: [{ name: "林峰" }],
       current: { 林峰: { role: "protagonist" } },
     });
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-50", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
     (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
       chapters: [{ chapter_number: 1, title: "第一章", summary: "x" }],
     });
@@ -275,5 +287,80 @@ describe("InitWizardModal", () => {
 
     expect(screen.getByTestId("wizard-step-3").getAttribute("data-state")).toBe("completed");
     expect(screen.getByTestId("wizard-step-5").getAttribute("data-state")).toBe("completed");
+    expect(screen.getByTestId("wizard-step-6").getAttribute("data-state")).toBe("completed");
+  });
+
+  // v1.8.2 regression for proj_cc4ca4ae: user closes the wizard on step 5
+  // BEFORE clicking "确认修改并继续". sessionStorage persists currentStep=5
+  // and completedSteps=[1..4], but data.novel_outline is null (only the
+  // local component state held the generated outline). On re-entry via the
+  // /project/:id/wizard deep-link, the modal mounts with stale wizard state.
+  // OutlineStep's auto-trigger fires synchronously and POSTs
+  // /generate-novel-outline, regenerating content the user already paid for.
+  // The fix: prefill must ALWAYS run on mount (not skip when completedSteps
+  // has any items), and auto-trigger must wait for prefill to complete.
+  it("regression proj_cc4ca4ae: re-entering wizard with stale sessionStorage loads existing outline, does NOT regenerate", async () => {
+    const existingOutline = {
+      core_conflict_theme: "已生成的核心冲突描述",
+      volumes: [
+        { name: "第一卷 觉醒", chapter_range: "1-50", summary: "阴阳眼觉醒", key_events: ["事件A"] },
+      ],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "2026-07-12T19:00:00",
+      updated_at: "2026-07-12T19:00:00",
+    };
+    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
+      concept: { title: "诡眼少年", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+    });
+    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(existingOutline);
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    // Simulate: user previously closed on step 5 without saving. The
+    // sessionStorage holds the wizard's completedSteps but NOT the
+    // generated outline (it lived only in OutlineStep's local state).
+    sessionStorage.setItem(
+      KEY,
+      JSON.stringify({
+        currentStep: 5,
+        completedSteps: [1, 2, 3, 4],
+        status: "completed",
+        data: {
+          concept: { title: "诡眼少年", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+          story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+          world: null,
+          characters: null,
+          novel_outline: null,
+          chapter1_outline: null,
+        },
+        errorMessage: null,
+      }),
+    );
+
+    // Mount via the deep-link path with resume=true so the modal jumps to
+    // the current step (5) once prefill lands.
+    render(
+      <MemoryRouter>
+        <WizardProvider projectId={PROJECT}>
+          <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} resume />
+        </WizardProvider>
+      </MemoryRouter>
+    );
+
+    // Wait for prefill to land.
+    await waitFor(() => expect(api.getNovelOutline).toHaveBeenCalled());
+
+    // Allow any async auto-trigger to fire (it shouldn't).
+    await new Promise((r) => setTimeout(r, 100));
+
+    // CRITICAL: regenerate must NOT have been called.
+    expect(api.generateNovelOutline).not.toHaveBeenCalled();
+
+    // The wizard should be on step 5 with the existing outline loaded.
+    const step5 = screen.getByTestId("wizard-step-5");
+    expect(step5.getAttribute("data-state")).toBe("completed");
   });
 });

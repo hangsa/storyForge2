@@ -1007,6 +1007,31 @@ export const api = {
   applySFLogSuggestions: (projectId: string, sceneId: string, text: string, suggestions: SFLogSuggestion[]) =>
     request<{ updated_text: string }>("PUT", `/v1/projects/${projectId}/scenes/${sceneId}/sf-logs`,
       { text, suggestions }),
+
+  // --- v1.9 AutopilotSession (Stage 1 backend + Stage 2 SSE) ---
+  getAutopilotSession: (projectId: string) =>
+    request<unknown>("GET", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session`),
+
+  startAutopilotSession: (projectId: string, config: Record<string, unknown>) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/start`, config),
+
+  stopAutopilotSession: (projectId: string) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/stop`),
+
+  pauseAutopilotSession: (projectId: string) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/pause`),
+
+  resumeAutopilotSession: (projectId: string) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/resume`),
+
+  interveneAutopilotSession: (projectId: string, action: string) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/intervene`, { action }),
+
+  getAutopilotHistory: (projectId: string, cursor?: string) =>
+    request<unknown>(
+      "GET",
+      `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`
+    ),
 };
 
 export { ApiError };

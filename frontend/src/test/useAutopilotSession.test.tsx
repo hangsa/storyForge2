@@ -166,6 +166,33 @@ describe("useAutopilotSession", () => {
     }
   });
 
+  it("status transitions to 'error' after exhausting backoff retries", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useAutopilotSession("p"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      // 6 retries exhaust the backoff table; each delayed attempt fires another error.
+      for (let i = 0; i < 6; i++) {
+        const inst = MockEventSource.instances[MockEventSource.instances.length - 1];
+        await act(async () => {
+          inst.simulateError();
+          await vi.advanceTimersByTimeAsync(31_000);
+        });
+      }
+      expect(result.current.status).toBe("error");
+      // No 7th reconnect scheduled.
+      const before = MockEventSource.instances.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+      expect(MockEventSource.instances.length).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("start() calls API and refreshes session", async () => {
     const { result } = renderHook(() => useAutopilotSession("p"));
     await waitFor(() => expect(result.current.session).not.toBeNull());

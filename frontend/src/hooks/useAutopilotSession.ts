@@ -57,11 +57,14 @@ export function useAutopilotSession(
       onOpen: () => setStatus("connected"),
       onError: () => {
         handle.close();
-        const delay =
-          BACKOFF_DELAYS_MS[
-            Math.min(reconnectAttempts.current, BACKOFF_DELAYS_MS.length - 1)
-          ];
         reconnectAttempts.current += 1;
+        if (reconnectAttempts.current >= BACKOFF_DELAYS_MS.length) {
+          // Exhausted backoff retries — give up; consumers can call refresh()
+          // to manually retry.
+          setStatus("error");
+          return;
+        }
+        const delay = BACKOFF_DELAYS_MS[reconnectAttempts.current - 1];
         setStatus("reconnecting");
         setTimeout(() => {
           if (!cancelledRef.current) open();

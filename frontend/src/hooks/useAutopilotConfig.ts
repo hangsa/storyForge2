@@ -16,16 +16,22 @@ export function useAutopilotConfig(projectId: string) {
   const [config, setConfig] = useState<ManagedStartConfig>(FALLBACK);
   const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<Error | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setLoadError(null);
     getAutopilotSession(projectId)
       .then((s) => {
         if (cancelled) return;
         if (s?.config) setConfig(s.config);
         setLoaded(true);
       })
-      .catch(() => setLoaded(true));
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err : new Error(String(err)));
+        setLoaded(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -40,5 +46,13 @@ export function useAutopilotConfig(projectId: string) {
     }
   }, [projectId, config]);
 
-  return { config, setConfig, loaded, submitting, submit, defaults: FALLBACK };
+  return {
+    config,
+    setConfig,
+    loaded,
+    submitting,
+    loadError,
+    submit,
+    defaults: FALLBACK,
+  };
 }

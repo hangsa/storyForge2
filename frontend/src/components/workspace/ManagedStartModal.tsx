@@ -1,4 +1,5 @@
 import { useAutopilotConfig } from "../../hooks/useAutopilotConfig";
+import { useToast } from "../../hooks/useToast";
 
 export interface ManagedStartConfig {
   scope: "all_planned" | "next_chapter";
@@ -19,6 +20,7 @@ export default function ManagedStartModal({
 }: Props) {
   const { config, setConfig, loaded, submitting, submit } =
     useAutopilotConfig(projectId);
+  const { show } = useToast();
 
   if (!open || !loaded) return null;
 
@@ -68,7 +70,15 @@ export default function ManagedStartModal({
             type="button"
             data-testid="start-submit"
             disabled={submitting}
-            onClick={async () => { await submit(); onStarted(); }}
+            onClick={async () => {
+              try {
+                await submit();
+                onStarted();
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                show(`启动失败：${msg}`);
+              }
+            }}
             className="px-4 py-2 text-sm rounded-lg bg-tertiary-container text-surface-container-low hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? "启动中…" : "启动托管"}

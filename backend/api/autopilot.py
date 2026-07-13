@@ -1,13 +1,16 @@
 """Autopilot REST API — v1.9 §四 F1.9.1.
 
-Note: SSE endpoint ships in Stage 2 (see backend/utils/sse_broadcaster.py + Task 2.1).
+Stage 1: REST endpoints for session lifecycle.
+Stage 2 (Task 2.2): SSE feed at /session/events.
 """
 from __future__ import annotations
-from typing import Optional
+import asyncio
+import json
+from typing import AsyncIterator, Optional
 from dataclasses import asdict
 
-from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Header, Query, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.config import settings
 from backend.conductor.autopilot_session import (
@@ -16,6 +19,10 @@ from backend.conductor.autopilot_session import (
 from backend.models.autopilot_session import (
     CurrentTask, ManagedStartConfig, QueueItem, SessionState,
 )
+from backend.utils.sse_broadcaster import SSEBroadcaster
+
+# Module-level seam — tests monkeypatch this.
+broadcaster = SSEBroadcaster()
 
 router = APIRouter(
     prefix="/api/v1/projects/{project_id}/autopilot",
@@ -149,4 +156,51 @@ async def get_history(project_id: str, cursor: Optional[str] = Query(None)):
     return _envelope({"events": events, "next_cursor": next_cursor})
 
 
-# --- (Stage 2: GET /session/events for SSE) ---
+# --- GET /session/events (SSE) ---
+
+@router.get("/session/events")
+async def session_events(
+    project_id: str,
+    request: Request,
+    last_event_id: Optional[int] = Header(None, alias="Last-Event-ID"),
+):
+    err = _ensure_project_exists(project_id)
+    if err is not None:
+        return err
+    snapshot = _read_raw_session(project_id) or _session_to_dict(_mgr(project_id).ensure_idle_session())
+
+    async def event_stream() -> AsyncIterator[bytes]:
+        yield _format_sse("snapshot", snapshot, id_=None)
+        async for ev in broadcaster.subscribe(last_event_id):
+            if ev.event == "heartbeat":
+                yield b":hb\n\n"
+                continue
+            yield _format_sse(ev.event, ev.data, id_=ev.id)
+            await asyncio.sleep(0)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _format_sse(event: str, data: dict, id_: Optional[int]) -> bytes:
+    payload = json.dumps(data, ensure_ascii=False)
+    chunks = []
+    if id_ is not None:
+        chunks.append(f"id: {id_}")
+    chunks.append(f"event: {event}")
+    chunks.append(f"data: {payload}")
+    chunks.append("")
+    chunks.append("")
+    return ("\n".join(chunks) + "\n").encode("utf-8")
+
+
+def _read_raw_session(project_id: str) -> Optional[dict]:
+    """Read session.json as raw JSON without going through the strict
+    AutopilotSession dataclass deserializer. Returns None if the file
+    doesn't exist or is unreadable."""
+    path = settings.projects_dir / project_id / "autopilot" / "session.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None

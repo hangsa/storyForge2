@@ -218,4 +218,56 @@ describe("InitWizardModal", () => {
     // unmounts the modal before ConceptStep can render; only the test, where
     // onDismiss is a vi.fn(), lets it mount and repopulate.
   });
+
+  // v1.9 fix: prefill must treat empty arrays/objects as "no content".
+  // The backend returns {"characters": [], "current": {}} for a fresh
+  // project's character set and {"chapters": []} for a fresh chapter outline.
+  // A naive truthy check (`[] !== ""`) marked 角色设计 (step 3) and
+  // 全书大纲 (step 5) as ✓ on first open — visibly wrong since the user
+  // hadn't filled either in.
+  it("prefill: empty {characters:[], current:{}} does NOT mark 角色设计 completed", async () => {
+    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({ characters: [], current: {} });
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    renderModal();
+    // Let the prefill useEffect run.
+    await waitFor(() => expect(api.getCharacter).toHaveBeenCalled());
+
+    expect(screen.getByTestId("wizard-step-3").getAttribute("data-state")).not.toBe("completed");
+  });
+
+  it("prefill: empty {chapters:[]} does NOT mark 全书大纲 completed", async () => {
+    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue({ chapters: [] });
+
+    renderModal();
+    await waitFor(() => expect(api.getOutline).toHaveBeenCalled());
+
+    expect(screen.getByTestId("wizard-step-5").getAttribute("data-state")).not.toBe("completed");
+  });
+
+  it("prefill: populated character/novel/outline still mark the steps completed", async () => {
+    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
+      characters: [{ name: "林峰" }],
+      current: { 林峰: { role: "protagonist" } },
+    });
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      chapters: [{ chapter_number: 1, title: "第一章", summary: "x" }],
+    });
+
+    renderModal();
+    await waitFor(() => expect(api.getOutline).toHaveBeenCalled());
+
+    expect(screen.getByTestId("wizard-step-3").getAttribute("data-state")).toBe("completed");
+    expect(screen.getByTestId("wizard-step-5").getAttribute("data-state")).toBe("completed");
+  });
 });

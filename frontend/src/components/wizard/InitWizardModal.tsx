@@ -36,7 +36,17 @@ const STEP_TITLES: Record<number, string> = {
 function hasContent(v: unknown): boolean {
   if (!v || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
-  return Object.values(o).some((x) => x !== null && x !== undefined && x !== "");
+  return Object.values(o).some((x) => {
+    if (x === null || x === undefined || x === "") return false;
+    // Empty array / object means the section is in its default/empty state,
+    // not actually filled in. Without this guard, the wizard prefill marks
+    // 角色设计 + 全书大纲 as completed for fresh projects — the backend
+    // returns {"characters": [], "current": {}} and {"chapters": []} as the
+    // "no content yet" payload, and `[]`/`{}` pass a naive truthy check.
+    if (Array.isArray(x) && x.length === 0) return false;
+    if (typeof x === "object" && Object.keys(x as object).length === 0) return false;
+    return true;
+  });
 }
 
 export default function InitWizardModal({ projectId, onDismiss, resume = false }: InitWizardModalProps) {

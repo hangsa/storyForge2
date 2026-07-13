@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useAutopilotConfig } from "../../hooks/useAutopilotConfig";
 
 export interface ManagedStartConfig {
   scope: "all_planned" | "next_chapter";
@@ -8,18 +8,23 @@ export interface ManagedStartConfig {
 }
 
 interface Props {
+  projectId: string;
   open: boolean;
   onCancel: () => void;
-  onStart: (cfg: ManagedStartConfig) => void;
+  onStarted: () => void;
 }
 
-export default function ManagedStartModal({ open, onCancel, onStart }: Props) {
-  const [scope, setScope] = useState<ManagedStartConfig["scope"]>("all_planned");
-  const [cadence, setCadence] = useState<ManagedStartConfig["cadence"]>("balanced");
-  const [policy, setPolicy] = useState<ManagedStartConfig["policy"]>("auto");
-  const [notify, setNotify] = useState<ManagedStartConfig["notify"]>("milestones");
+export default function ManagedStartModal({
+  projectId, open, onCancel, onStarted,
+}: Props) {
+  const { config, setConfig, loaded, submitting, submit } =
+    useAutopilotConfig(projectId);
 
-  if (!open) return null;
+  if (!open || !loaded) return null;
+
+  const setField = <K extends keyof ManagedStartConfig>(
+    key: K, value: ManagedStartConfig[K],
+  ) => setConfig({ ...config, [key]: value });
 
   return (
     <div
@@ -29,25 +34,25 @@ export default function ManagedStartModal({ open, onCancel, onStart }: Props) {
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 max-w-lg w-full space-y-4">
         <h2 className="font-display text-primary text-lg">启动托管模式</h2>
         <p className="font-body-ui text-sm text-system-log">
-          所有选项仅在本机 UI 中生效；真实 AI 调度在 v1.9+ 接入。
+          配置将写入项目会话；再次打开会自动恢复。
         </p>
 
         <Field label="推进范围">
-          <Radio name="scope" value="all_planned" current={scope} onChange={(v) => setScope(v as any)} label="所有已规划章节" />
-          <Radio name="scope" value="next_chapter" current={scope} onChange={(v) => setScope(v as any)} label="仅下一章" />
+          <Radio name="scope" value="all_planned" current={config.scope} onChange={(v) => setField("scope", v as any)} label="所有已规划章节" />
+          <Radio name="scope" value="next_chapter" current={config.scope} onChange={(v) => setField("scope", v as any)} label="仅下一章" />
         </Field>
         <Field label="推进节奏">
-          <Radio name="cadence" value="fast" current={cadence} onChange={(v) => setCadence(v as any)} label="快" />
-          <Radio name="cadence" value="balanced" current={cadence} onChange={(v) => setCadence(v as any)} label="均衡" />
-          <Radio name="cadence" value="careful" current={cadence} onChange={(v) => setCadence(v as any)} label="稳" />
+          <Radio name="cadence" value="fast" current={config.cadence} onChange={(v) => setField("cadence", v as any)} label="快" />
+          <Radio name="cadence" value="balanced" current={config.cadence} onChange={(v) => setField("cadence", v as any)} label="均衡" />
+          <Radio name="cadence" value="careful" current={config.cadence} onChange={(v) => setField("cadence", v as any)} label="稳" />
         </Field>
         <Field label="AI 决策策略">
-          <Radio name="policy" value="auto" current={policy} onChange={(v) => setPolicy(v as any)} label="自动决策" />
-          <Radio name="policy" value="ask" current={policy} onChange={(v) => setPolicy(v as any)} label="关键决策前询问" />
+          <Radio name="policy" value="auto" current={config.policy} onChange={(v) => setField("policy", v as any)} label="自动决策" />
+          <Radio name="policy" value="ask" current={config.policy} onChange={(v) => setField("policy", v as any)} label="关键决策前询问" />
         </Field>
         <Field label="通知规则">
-          <Radio name="notify" value="all" current={notify} onChange={(v) => setNotify(v as any)} label="每次事件" />
-          <Radio name="notify" value="milestones" current={notify} onChange={(v) => setNotify(v as any)} label="仅里程碑" />
+          <Radio name="notify" value="all" current={config.notify} onChange={(v) => setField("notify", v as any)} label="每次事件" />
+          <Radio name="notify" value="milestones" current={config.notify} onChange={(v) => setField("notify", v as any)} label="仅里程碑" />
         </Field>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -62,10 +67,11 @@ export default function ManagedStartModal({ open, onCancel, onStart }: Props) {
           <button
             type="button"
             data-testid="start-submit"
-            onClick={() => onStart({ scope, cadence, policy, notify })}
-            className="px-4 py-2 text-sm rounded-lg bg-tertiary-container text-surface-container-low hover:opacity-90"
+            disabled={submitting}
+            onClick={async () => { await submit(); onStarted(); }}
+            className="px-4 py-2 text-sm rounded-lg bg-tertiary-container text-surface-container-low hover:opacity-90 disabled:opacity-50"
           >
-            启动托管
+            {submitting ? "启动中…" : "启动托管"}
           </button>
         </div>
       </div>

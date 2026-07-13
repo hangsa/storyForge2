@@ -22,10 +22,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const { setPanel } = useWorkspacePanel();
 
   const [projectName, setProjectName] = useState("加载中…");
-  // v1.8.1: workspace enters in stopped managed state — user must explicitly
-  // start the autopilot. Prevents an immediate chapter generation from
-  // firing the moment a user opens a project they're just inspecting.
-  const [autopilotActive, setAutopilotActive] = useState(false); // mock — wired to backend in v1.9
+  // v1.9: ManagedDashboard now subscribes to useAutopilotSession directly,
+  // so this page no longer owns the autopilot on/off state. The
+  // `currentTask` string below remains — it's still consumed by
+  // ModeSwitchConfirmModal (Task 2.9 will replace that consumer).
   const [currentTask] = useState("生成第 7 章");
 
   const [chapters, setChapters] = useState<DashboardChapter[]>([
@@ -146,7 +146,11 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         projectName={projectName}
         mode={mode}
         onModeChange={handleModeChange}
-        autopilotState={mode === "managed" ? (autopilotActive ? "running" : "paused") : null}
+        // v1.9: ManagedDashboard now owns the on/off state via
+        // useAutopilotSession, so WorkspacePage cannot derive `autopilotState`
+        // locally any more. Task 2.8 will lift the real session reading into
+        // WorkspaceTopBar. Until then the badge simply stays hidden.
+        autopilotState={null}
       />
 
       <WorkspaceLayout
@@ -154,13 +158,11 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         left={
           mode === "managed" ? (
             <ManagedDashboard
+              projectId={projectId}
               chapters={chapters}
-              autopilotActive={autopilotActive}
-              currentTask={currentTask}
               onChapterClick={onDashboardChapterClick}
               onAddChapter={() => setChapters((cs) => [...cs, { chapter_number: cs.length + 1, status: "planned" }])}
               onRefresh={() => {}}
-              onToggleAutopilot={() => setAutopilotActive((a) => !a)}
             />
           ) : (
             <ChapterTreePanel

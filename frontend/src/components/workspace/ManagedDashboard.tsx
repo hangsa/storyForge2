@@ -1,3 +1,5 @@
+import { useAutopilotSession } from "../../hooks/useAutopilotSession";
+import type { ManagedStartConfig } from "./ManagedStartModal";
 import ManagedStatusStrip from "./ManagedStatusStrip";
 
 export type ChapterStatus = "completed" | "writing" | "planned" | "pending";
@@ -8,15 +10,11 @@ export interface DashboardChapter {
 }
 
 interface Props {
+  projectId: string;
   chapters: DashboardChapter[];
-  autopilotActive: boolean;
-  currentTask?: string;
   onChapterClick: (chapter_number: number, status: ChapterStatus) => void;
   onAddChapter: () => void;
   onRefresh: () => void;
-  /** Toggle the managed-mode autopilot. Workspace enters in stopped state,
-   *  so this is the user's primary on/off control for the AI loop. */
-  onToggleAutopilot: () => void;
 }
 
 const STATUS_CLASS: Record<ChapterStatus, string> = {
@@ -33,12 +31,34 @@ const STATUS_LABEL: Record<ChapterStatus, string> = {
   pending: "⏳",
 };
 
+// v1.9 default startup config — applied when the user clicks ▶ 启动托管
+// without first opening the ManagedStartModal. Mirrors the modal's balanced
+// defaults so the toggle button is a valid one-click shortcut.
+const DEFAULT_START_CONFIG: ManagedStartConfig = {
+  scope: "all_planned",
+  cadence: "balanced",
+  policy: "auto",
+  notify: "milestones",
+};
+
 export default function ManagedDashboard({
-  chapters, autopilotActive, currentTask, onChapterClick, onAddChapter, onRefresh, onToggleAutopilot,
+  projectId, chapters, onChapterClick, onAddChapter, onRefresh,
 }: Props) {
+  const { session, start, stop } = useAutopilotSession(projectId);
+  const active = session?.state === "running";
+  const currentTask = session?.current_task?.description;
+
+  const onToggle = () => {
+    if (active) {
+      void stop();
+    } else {
+      void start(DEFAULT_START_CONFIG);
+    }
+  };
+
   return (
     <div data-testid="managed-dashboard" className="space-y-4 p-6">
-      {autopilotActive && currentTask && <ManagedStatusStrip currentTask={currentTask} />}
+      {active && currentTask && <ManagedStatusStrip currentTask={currentTask} />}
 
       <div className="flex items-center justify-between">
         <h2 className="font-display text-primary text-lg">章节目录</h2>
@@ -46,14 +66,14 @@ export default function ManagedDashboard({
           <button
             type="button"
             data-testid="autopilot-toggle"
-            onClick={onToggleAutopilot}
+            onClick={onToggle}
             className={
-              autopilotActive
+              active
                 ? "px-3 py-1.5 text-sm rounded-lg bg-error/90 text-surface-container-low hover:opacity-90"
                 : "px-3 py-1.5 text-sm rounded-lg bg-primary-container text-surface-container-low hover:opacity-90"
             }
           >
-            {autopilotActive ? "⏸ 停止托管" : "▶ 启动托管"}
+            {active ? "⏸ 停止托管" : "▶ 启动托管"}
           </button>
           <button
             type="button"

@@ -53,10 +53,24 @@ describe("HTTP error format handling", () => {
 
 // Helper: build a mock Response-like object that the real `request<T>` accepts.
 function makeJsonResponse(body: unknown, init: { status?: number } = {}): Response {
+  const text = body === undefined ? "" : JSON.stringify(body);
   return {
     status: init.status ?? 200,
     ok: (init.status ?? 200) >= 200 && (init.status ?? 200) < 300,
+    text: async () => text,
     json: async () => body,
+  } as Response;
+}
+
+// Helper: build a Response-like that returns a non-JSON body (e.g. an upstream
+// proxy error page). Mirrors the real fetch Response contract: text() succeeds,
+// json() throws.
+function makeNonJsonResponse(body: string, init: { status?: number } = {}): Response {
+  return {
+    status: init.status ?? 500,
+    ok: false,
+    text: async () => body,
+    json: async () => { throw new SyntaxError("Unexpected token < in JSON at position 0"); },
   } as Response;
 }
 
@@ -144,5 +158,31 @@ describe("stage4 exemptions + sf-log + precheck client", () => {
       text: "scene-text",
       suggestions,
     });
+  });
+
+  // v1.9: a 500 with a non-JSON body (e.g. an upstream proxy's HTML error page)
+  // used to surface as bare "服务器返回无效响应 (500)" — impossible to debug.
+  // Now the message includes the method, path, and a body preview.
+  it("non-JSON 5xx surfaces method + path + body preview in the error", async () => {
+    fetchSpy.mockResolvedValue(
+      makeNonJsonResponse("<html>502 Bad Gateway</html>", { status: 502 }),
+    );
+    let caught: unknown;
+    try {
+      await api.createProject({
+        intent: "x", genre: "cool_novel", min_words: 2000,
+        target_total_words: 1000000, target_length_category: "标准商业连载",
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    const err = caught as ApiError;
+    expect(err.code).toBe("PARSE_ERROR");
+    expect(err.message).toContain("502");
+    expect(err.message).toContain("POST");
+    expect(err.message).toContain("/project/create");
+    expect(err.message).toContain("502 Bad Gateway");
+    expect(err.detail).toMatchObject({ path: "/project/create", status: 502 });
   });
 });

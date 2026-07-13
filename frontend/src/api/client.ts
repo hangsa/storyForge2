@@ -28,30 +28,49 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch (e) {
     clearTimeout(timer);
     if (e instanceof DOMException && e.name === "AbortError") {
-      throw new ApiError("TIMEOUT", "请求超时", {});
+      throw new ApiError("TIMEOUT", "请求超时", { path });
     }
-    throw new ApiError("NETWORK_ERROR", "网络请求失败", {});
+    throw new ApiError("NETWORK_ERROR", "网络请求失败", { path, message: e instanceof Error ? e.message : String(e) });
   } finally {
     clearTimeout(timer);
   }
 
-  let json: Record<string, unknown>;
-  try {
-    json = await res.json();
-  } catch {
-    throw new ApiError(
-      "PARSE_ERROR",
-      `服务器返回无效响应 (${res.status})`,
-      {}
-    );
+  // Read the body as text first so a 5xx with non-JSON body (e.g. upstream
+  // proxy truncating a 500 page) surfaces the actual payload in the error
+  // instead of the bare "服务器返回无效响应 (500)".
+  const rawText = await res.text();
+  let json: Record<string, unknown> | null = null;
+  if (rawText) {
+    try {
+      json = JSON.parse(rawText);
+    } catch {
+      // Non-JSON body. If the status is in 2xx, the server lied about the
+      // content-type; if 5xx, an upstream/proxy returned a non-JSON error
+      // page. Surface the actual text so the user can see what came back.
+      if (res.status >= 500) {
+        const preview = rawText.slice(0, 200);
+        throw new ApiError(
+          "PARSE_ERROR",
+          `服务器返回无效响应 (${res.status}) ${method} ${path}: ${preview}`,
+          { path, status: res.status, bodyPreview: preview },
+        );
+      }
+      throw new ApiError(
+        "PARSE_ERROR",
+        `服务器返回无效响应 (${res.status}) ${method} ${path}`,
+        { path, status: res.status, bodyPreview: rawText.slice(0, 200) },
+      );
+    }
   }
 
   // FastAPI wraps HTTPException detail: {"detail": {"error": true, "code": "X", ...}}
-  const detailObj = json.detail as Record<string, unknown> | undefined;
-  const topError = json.error;
+  // If rawText was empty, json is null — but then topError/nestedError are
+  // also undefined, so we fall through to the return below.
+  const detailObj = (json?.detail as Record<string, unknown> | undefined) ?? undefined;
+  const topError = json?.error;
   const nestedError = detailObj && typeof detailObj === "object" ? detailObj.error : undefined;
   if (topError || nestedError) {
-    const payload = nestedError ? detailObj! : json;
+    const payload = (nestedError ? detailObj : json) as Record<string, unknown>;
     throw new ApiError(
       (payload.code as string) || "UNKNOWN",
       (payload.message as string) || "未知错误",
@@ -59,7 +78,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     );
   }
 
-  return (json.detail as T) ?? (json as T);
+  return (json!.detail as T) ?? (json as T);
 }
 
 // --- Type definitions (mirror Pydantic models) ---

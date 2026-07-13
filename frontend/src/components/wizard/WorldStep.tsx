@@ -36,8 +36,11 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     setBusy(true);
     try {
       const result = await api.generateWorld(projectId);
-      setWorld({ ...EMPTY_WORLD, ...result });
-      wizard.setStatus("completed");
+      const merged = { ...EMPTY_WORLD, ...result };
+      setWorld(merged);
+      // v1.8.4: mark generated so step 2 stays reachable in the indicator
+      // when the user navigates away before clicking "下一步".
+      wizard.markStepGenerated(2, { world: merged });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "世界观生成失败");
     } finally {

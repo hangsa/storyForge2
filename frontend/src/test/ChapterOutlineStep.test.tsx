@@ -295,6 +295,58 @@ describe("ChapterOutlineStep", () => {
     expect(await screen.findByTestId("chapter-1-title")).toBeInTheDocument();
   });
 
+  // PROJ_proj_cc4ca4ae_report (v1.8.4): after step 6 auto-generates the 10
+  // chapters, the user clicks an earlier step in the indicator. Step 6 must
+  // remain reachable (clickable) on the indicator — currently it's grayed
+  // out because handleStart only wrote data via setStatus("completed") and
+  // never updated completedSteps. Once markStepGenerated is wired into
+  // handleStart, navigating away and back keeps step 6 marked completed.
+  //
+  // The same fix also re-hydrates the form when the user navigates back,
+  // because the InitWizardModal mounts only the active step (other steps
+  // are unmounted) — so the local useState in ChapterOutlineStep is reset
+  // and re-initializes from wizard.data.chapter1_outline. Without
+  // markStepGenerated, wizard.data.chapter1_outline is null → empty form +
+  // auto-trigger again (which would re-bill the user for LLM calls they
+  // already paid for). This sub-assertion catches that more catastrophic
+  // variant of the bug.
+  it("after auto-generation, step 6 stays reachable AND the form re-hydrates when navigating back", async () => {
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    setup();
+    // Wait for all 10 chapters to be generated (auto-trigger finishes).
+    await screen.findByTestId("chapter-outline-form");
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+
+    // Navigate back to step 1.
+    await act(async () => {
+      screen.getByTestId("wizard-step-1").click();
+    });
+
+    // Step 6 must still be marked completed (not "pending" / grayed out).
+    const step6 = screen.getByTestId("wizard-step-6");
+    expect(step6.getAttribute("data-state")).toBe("completed");
+    expect(step6).not.toBeDisabled();
+
+    // Navigate back to step 6 — the component remounts and must hydrate
+    // from wizard.data.chapter1_outline (which markStepGenerated wrote),
+    // not re-trigger generation or render an empty form.
+    const callsBeforeRentry = api.generateOutline.mock.calls.length;
+    await act(async () => {
+      step6.click();
+    });
+    await screen.findByTestId("chapter-outline-form");
+    for (let i = 1; i <= 10; i++) {
+      const input = screen.getByTestId(`chapter-${i}-title`) as HTMLInputElement;
+      expect(input.value).toBe(`第${i}章`);
+    }
+    // No regenerate call from this re-hydration — the auto-trigger gate
+    // (`!outline` in ChapterOutlineStep) only fires when wizard.data has no
+    // outline, which it now does because markStepGenerated wrote it.
+    expect(api.generateOutline).toHaveBeenCalledTimes(callsBeforeRentry);
+  });
+
   it("progress indicator shows '第 X / 10 章' while generating", async () => {
     // Slow down each call so the progress DOM is observable.
     (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(

@@ -35,7 +35,9 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       const result = await api.generateConcept(projectId);
       setConcept(result.concept);
       setDna(result.story_dna);
-      wizard.setStatus("completed");
+      // v1.8.4: mark generated so step 1 stays reachable in the indicator
+      // when the user navigates away before clicking "下一步".
+      wizard.markStepGenerated(1, { concept: result.concept, story_dna: result.story_dna });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念生成失败");
     } finally {

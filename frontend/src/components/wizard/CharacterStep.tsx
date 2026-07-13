@@ -57,8 +57,11 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
         if (!fresh) throw new Error("生成结果为空");
         newChars.push(fresh);
       }
-      setCharacters({ characters: newChars, current: newChars[0] });
-      wizard.setStatus("completed");
+      const next = { characters: newChars, current: newChars[0] };
+      setCharacters(next);
+      // v1.8.4: mark generated so step 3 stays reachable in the indicator
+      // when the user navigates away before clicking "下一步".
+      wizard.markStepGenerated(3, { characters: next });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色生成失败");
     } finally {

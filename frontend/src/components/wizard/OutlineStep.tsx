@@ -29,7 +29,9 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
     try {
       const result = await api.generateNovelOutline(projectId);
       setOutline(result);
-      wizard.setStatus("completed");
+      // v1.8.4: mark generated so step 5 stays reachable in the indicator
+      // when the user navigates away before clicking "下一步".
+      wizard.markStepGenerated(5, { novel_outline: result });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "全书大纲生成失败");
     } finally {

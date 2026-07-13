@@ -62,12 +62,23 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       // calls would race on the same read-modify-write. The response is
       // the post-merge outline, so the form can render every chapter
       // generated so far while the batch is still running.
+      let latest: Outline | null = null;
       for (let i = 1; i <= scope; i++) {
         const result = await api.generateOutline(projectId, i);
+        latest = result;
         setOutline(result);
         setProgress({ done: i, total: scope });
       }
-      wizard.setStatus("completed");
+      setProgress({ done: scope, total: scope });
+      // v1.8.4: mark generated so step 6 stays reachable in the indicator
+      // when the user navigates away before clicking "完成 → 进入工作台".
+      // `latest` is the post-merge outline from the just-finished loop;
+      // do NOT read outlineRef.current / outline here — React 18 batches
+      // the final setOutline/setProgress with this dispatch, so the ref
+      // would still hold the value from the previous render (outline with
+      // 9 chapters, not 10). handleFinish will overwrite this with the
+      // user's edited version via updateOutline + saveStep.
+      wizard.markStepGenerated(6, { chapter1_outline: latest });
     } catch (e) {
       // Partial failure: the chapters that succeeded are already in
       // `outline` state and on disk (the backend wrote them). Surface

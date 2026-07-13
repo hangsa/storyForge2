@@ -146,10 +146,6 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         projectName={projectName}
         mode={mode}
         onModeChange={handleModeChange}
-        // v1.9: ManagedDashboard now owns the on/off state via
-        // useAutopilotSession, so WorkspacePage cannot derive `autopilotState`
-        // locally any more. Task 2.8 will lift the real session reading into
-        // WorkspaceTopBar. Until then the badge simply stays hidden.
         autopilotState={null}
       />
 

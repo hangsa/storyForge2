@@ -5,12 +5,14 @@ import {
   startAutopilotSession,
 } from "../api/autopilot";
 
-const FALLBACK: ManagedStartConfig = {
+export const MANAGED_START_DEFAULTS: ManagedStartConfig = {
   scope: "all_planned",
   cadence: "balanced",
   policy: "auto",
   notify: "milestones",
 };
+
+const FALLBACK = MANAGED_START_DEFAULTS;
 
 export function useAutopilotConfig(projectId: string) {
   const [config, setConfig] = useState<ManagedStartConfig>(FALLBACK);

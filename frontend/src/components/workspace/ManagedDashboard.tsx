@@ -1,5 +1,6 @@
 import { useAutopilotSession } from "../../hooks/useAutopilotSession";
-import type { ManagedStartConfig } from "./ManagedStartModal";
+import { MANAGED_START_DEFAULTS } from "../../hooks/useAutopilotConfig";
+import { useToast } from "../../hooks/useToast";
 import ManagedStatusStrip from "./ManagedStatusStrip";
 
 export type ChapterStatus = "completed" | "writing" | "planned" | "pending";
@@ -31,28 +32,27 @@ const STATUS_LABEL: Record<ChapterStatus, string> = {
   pending: "⏳",
 };
 
-// v1.9 default startup config — applied when the user clicks ▶ 启动托管
-// without first opening the ManagedStartModal. Mirrors the modal's balanced
-// defaults so the toggle button is a valid one-click shortcut.
-const DEFAULT_START_CONFIG: ManagedStartConfig = {
-  scope: "all_planned",
-  cadence: "balanced",
-  policy: "auto",
-  notify: "milestones",
-};
-
 export default function ManagedDashboard({
   projectId, chapters, onChapterClick, onAddChapter, onRefresh,
 }: Props) {
   const { session, start, stop } = useAutopilotSession(projectId);
+  const { show } = useToast();
   const active = session?.state === "running";
-  const currentTask = session?.current_task?.description;
+  // Treat empty-string description as absent so a transient state transition
+  // doesn't briefly hide the strip.
+  const currentTaskDesc = session?.current_task?.description;
+  const currentTask = currentTaskDesc !== undefined && currentTaskDesc !== ""
+    ? currentTaskDesc
+    : null;
 
-  const onToggle = () => {
-    if (active) {
-      void stop();
-    } else {
-      void start(DEFAULT_START_CONFIG);
+  const onToggle = async () => {
+    try {
+      if (active) await stop();
+      else await start(MANAGED_START_DEFAULTS);
+    } catch (err) {
+      const action = active ? "停止" : "启动";
+      const msg = err instanceof Error ? err.message : String(err);
+      show(`${action}托管失败：${msg}`);
     }
   };
 

@@ -43,6 +43,25 @@ vi.mock("../hooks/useAutopilotSession", () => ({
   useAutopilotSession: vi.fn(),
 }));
 
+const {
+  mockedStartAutopilotSession,
+  mockedGetAutopilotSession,
+} = vi.hoisted(() => ({
+  mockedStartAutopilotSession: vi.fn().mockResolvedValue({
+    state: "running", current_task: null, queue: [], history: [], config: null,
+  }),
+  mockedGetAutopilotSession: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("../api/autopilot", async (importActual) => {
+  const actual = await importActual<typeof import("../api/autopilot")>();
+  return {
+    ...actual,
+    startAutopilotSession: mockedStartAutopilotSession,
+    getAutopilotSession: mockedGetAutopilotSession,
+  };
+});
+
 import WorkspacePage from "../pages/WorkspacePage";
 import { useAutopilotSession } from "../hooks/useAutopilotSession";
 import { ToastProvider } from "../hooks/useToast";
@@ -101,6 +120,12 @@ beforeEach(() => {
   mockedGetNovelOutline.mockResolvedValue({ volumes: [] });
   mockedGenerateOutline.mockReset();
   mockedGenerateOutline.mockResolvedValue({ chapters: [] });
+  mockedStartAutopilotSession.mockReset();
+  mockedStartAutopilotSession.mockResolvedValue({
+    state: "running", current_task: null, queue: [], history: [], config: null,
+  });
+  mockedGetAutopilotSession.mockReset();
+  mockedGetAutopilotSession.mockResolvedValue(null);
   startFn.mockClear();
   stopFn.mockClear();
   mockSession = {
@@ -196,6 +221,24 @@ describe("Workspace integration", () => {
     // The start modal fetches its config via api.getAutopilotSession; wait
     // for the async load to flip `loaded` to true so the modal renders.
     await waitFor(() => expect(screen.getByTestId("managed-start-modal")).toBeInTheDocument());
+  });
+
+  // Regression: ManagedStartModal requires `projectId` and calls
+  // `onStarted` after submit. WorkspacePage had been rendering it without
+  // `projectId` (passed undefined → backend "项目 undefined 不存在") and with
+  // an `onStart` prop the modal never reads, so the start flow silently
+  // toast-failed and never transitioned out of the modal / into managed mode.
+  it("'启动托管' submits with the actual projectId and switches to managed mode", async () => {
+    setup("/project/p1/workspace?mode=manual");
+    fireEvent.click(screen.getByTestId("mode-managed"));
+    await waitFor(() => expect(screen.getByTestId("managed-start-modal")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("start-submit"));
+    await waitFor(() => expect(mockedStartAutopilotSession).toHaveBeenCalled());
+    // projectId must be "p1" (the URL param), not undefined / empty.
+    expect(mockedStartAutopilotSession).toHaveBeenCalledWith("p1", expect.anything());
+    // After submit succeeds, modal closes and mode flips to managed.
+    await waitFor(() => expect(screen.queryByTestId("managed-start-modal")).not.toBeInTheDocument());
+    expect(screen.getByTestId("workspace-layout").getAttribute("data-mode")).toBe("managed");
   });
 
   it("clicking a 'writing' chapter cell opens the take-over confirm modal (not direct switch)", async () => {

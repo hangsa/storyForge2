@@ -452,9 +452,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         onConfirm={onConfirmDrillDown}
       />
       <ManagedStartModal
+        projectId={projectId}
         open={startOpen}
         onCancel={() => { setStartOpen(false); setPendingTargetMode(null); }}
-        onStart={(_cfg: ManagedStartConfig) => { setStartOpen(false); setMode("managed"); setPendingTargetMode(null); }}
+        onStarted={() => { setStartOpen(false); setMode("managed"); setPendingTargetMode(null); }}
       />
       <AddChaptersModal
         open={addOpen}

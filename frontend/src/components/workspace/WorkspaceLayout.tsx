@@ -14,14 +14,31 @@ const DEFAULT_LEFT = 260;
 const DEFAULT_RIGHT = 360;
 const MIN_COL = 200;
 const MIN_CENTER = 400;
+// Pointer-movement threshold above which we treat the gesture as a drag
+// (and skip the click → collapse toggle). 2px keeps a clean click usable.
+const DRAG_THRESHOLD_PX = 2;
 
-function loadWidths(): { left: number; right: number } {
-  if (typeof localStorage === "undefined") {
-    return { left: DEFAULT_LEFT, right: DEFAULT_RIGHT };
-  }
+interface CollapsedState {
+  left: boolean;
+  right: boolean;
+}
+
+interface StoredState {
+  left: number;
+  right: number;
+  collapsed: CollapsedState;
+}
+
+function loadState(): StoredState {
+  const defaults: StoredState = {
+    left: DEFAULT_LEFT,
+    right: DEFAULT_RIGHT,
+    collapsed: { left: false, right: false },
+  };
+  if (typeof localStorage === "undefined") return defaults;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { left: DEFAULT_LEFT, right: DEFAULT_RIGHT };
+    if (!raw) return defaults;
     const parsed = JSON.parse(raw);
     const left =
       typeof parsed?.left === "number" && parsed.left >= MIN_COL
@@ -31,9 +48,13 @@ function loadWidths(): { left: number; right: number } {
       typeof parsed?.right === "number" && parsed.right >= MIN_COL
         ? parsed.right
         : DEFAULT_RIGHT;
-    return { left, right };
+    const collapsed: CollapsedState = {
+      left: Boolean(parsed?.collapsed?.left),
+      right: Boolean(parsed?.collapsed?.right),
+    };
+    return { left, right, collapsed };
   } catch {
-    return { left: DEFAULT_LEFT, right: DEFAULT_RIGHT };
+    return defaults;
   }
 }
 
@@ -42,7 +63,13 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export default function WorkspaceLayout({ mode, left, center, right }: Props) {
-  const [widths, setWidths] = useState(() => loadWidths());
+  const initial = useRef(loadState()).current;
+  const [widths, setWidths] = useState<{ left: number; right: number }>({
+    left: initial.left,
+    right: initial.right,
+  });
+  const [collapsed, setCollapsed] = useState<CollapsedState>(initial.collapsed);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const widthsRef = useRef(widths);
   const dragState = useRef<{
@@ -52,6 +79,10 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
     startRight: number;
     containerWidth: number;
   } | null>(null);
+  // Tracks whether the current pointer gesture has moved enough to count as
+  // a drag. The handle's onClick checks this ref so a drag never accidentally
+  // collapses the column at mouseup time.
+  const dragOccurredRef = useRef(false);
 
   // Keep ref in sync so the global mousemove handler always reads the
   // latest widths without re-attaching listeners on every state change.
@@ -59,14 +90,27 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
     widthsRef.current = widths;
   }, [widths]);
 
-  // Persist widths across reloads.
+  // Persist widths + collapsed together (single localStorage write so a
+  // reload sees a consistent snapshot).
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(widths));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ left: widths.left, right: widths.right, collapsed }),
+      );
     } catch {
       // localStorage unavailable (SSR, quota) — non-fatal.
     }
-  }, [widths]);
+  }, [widths, collapsed]);
+
+  const toggleCollapse = (side: "left" | "right") => {
+    setCollapsed((prev) => ({ ...prev, [side]: !prev[side] }));
+  };
+
+  const onHandleClick = (side: "left" | "right") => () => {
+    if (dragOccurredRef.current) return;
+    toggleCollapse(side);
+  };
 
   const startDrag = (side: "left" | "right") => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -80,6 +124,7 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
       startRight: widthsRef.current.right,
       containerWidth: rect.width,
     };
+    dragOccurredRef.current = false;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   };
@@ -88,6 +133,9 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
     const onMove = (ev: MouseEvent) => {
       const s = dragState.current;
       if (!s) return;
+      if (Math.abs(ev.clientX - s.startX) > DRAG_THRESHOLD_PX) {
+        dragOccurredRef.current = true;
+      }
       const dx = ev.clientX - s.startX;
       const minCenter = mode === "manual" ? MIN_CENTER : 0;
       if (s.side === "left") {
@@ -120,15 +168,45 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
     };
   }, [mode]);
 
-  const renderHandle = (side: "left" | "right") => (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      data-testid={`resize-handle-${side}`}
-      onMouseDown={startDrag(side)}
-      className="w-1 bg-outline-variant hover:bg-primary cursor-col-resize shrink-0 transition-colors"
-    />
-  );
+  const renderHandle = (side: "left" | "right") => {
+    if (collapsed[side]) {
+      const chevron = side === "left" ? "›" : "‹";
+      const label = side === "left" ? "展开左栏" : "展开右栏";
+      return (
+        <button
+          type="button"
+          data-testid={`collapse-rail-${side}`}
+          aria-label={label}
+          title={label}
+          onClick={() => toggleCollapse(side)}
+          className="w-6 bg-surface-container hover:bg-surface-container-high shrink-0 flex items-center justify-center text-system-log cursor-pointer border-y border-outline-variant"
+        >
+          <span className="text-xs">{chevron}</span>
+        </button>
+      );
+    }
+    const chevron = side === "left" ? "‹" : "›";
+    const label = side === "left" ? "收起左栏" : "收起右栏";
+    return (
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={label}
+        title={label}
+        data-testid={`resize-handle-${side}`}
+        onMouseDown={startDrag(side)}
+        onClick={onHandleClick(side)}
+        className="w-1 bg-outline-variant hover:bg-primary cursor-col-resize shrink-0 transition-colors group flex items-center justify-center"
+      >
+        <span className="opacity-0 group-hover:opacity-100 text-[10px] text-system-log select-none">
+          {chevron}
+        </span>
+      </div>
+    );
+  };
+
+  const effectiveLeftWidth = collapsed.left ? 0 : widths.left;
+  const effectiveRightWidth = collapsed.right ? 0 : widths.right;
 
   if (mode === "managed") {
     return (
@@ -140,16 +218,17 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
       >
         <div
           data-testid="left-column"
-          style={{ width: widths.left }}
-          className="overflow-y-auto shrink-0"
+          style={{ width: effectiveLeftWidth }}
+          className="overflow-hidden shrink-0"
         >
           {left}
         </div>
         {renderHandle("left")}
+        {renderHandle("right")}
         <aside
           data-testid="right-column"
-          style={{ width: widths.right }}
-          className="overflow-y-auto shrink-0"
+          style={{ width: effectiveRightWidth }}
+          className="overflow-hidden shrink-0"
         >
           {right}
         </aside>
@@ -166,8 +245,8 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
     >
       <aside
         data-testid="left-column"
-        style={{ width: widths.left }}
-        className="overflow-y-auto shrink-0"
+        style={{ width: effectiveLeftWidth }}
+        className="overflow-hidden shrink-0"
       >
         {left}
       </aside>
@@ -181,8 +260,8 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
       {renderHandle("right")}
       <aside
         data-testid="right-column"
-        style={{ width: widths.right }}
-        className="overflow-y-auto shrink-0"
+        style={{ width: effectiveRightWidth }}
+        className="overflow-hidden shrink-0"
       >
         {right}
       </aside>

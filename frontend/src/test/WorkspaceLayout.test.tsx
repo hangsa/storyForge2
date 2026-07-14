@@ -61,7 +61,7 @@ describe("WorkspaceLayout", () => {
       expect(screen.getByTestId("resize-handle-right")).toBeInTheDocument();
     });
 
-    it("managed mode renders one resize handle (left-right)", () => {
+    it("managed mode renders resize handles for both side columns", () => {
       render(
         <WorkspaceLayout
           mode="managed"
@@ -70,7 +70,7 @@ describe("WorkspaceLayout", () => {
         />,
       );
       expect(screen.getByTestId("resize-handle-left")).toBeInTheDocument();
-      expect(screen.queryByTestId("resize-handle-right")).not.toBeInTheDocument();
+      expect(screen.getByTestId("resize-handle-right")).toBeInTheDocument();
     });
 
     it("default widths: left=260, right=360 (no localStorage)", () => {
@@ -147,6 +147,105 @@ describe("WorkspaceLayout", () => {
       fireEvent.mouseMove(document, { clientX: 0 });
       fireEvent.mouseUp(document);
       expect((screen.getByTestId("left-column") as HTMLElement).style.width).toBe("200px");
+    });
+  });
+
+  describe("one-click column hide", () => {
+    it("clicking the left handle collapses the left column and renders a rail", () => {
+      render(
+        <WorkspaceLayout
+          mode="manual"
+          left={<div>L</div>}
+          center={<div>C</div>}
+          right={<div>R</div>}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("resize-handle-left"));
+      expect(screen.getByTestId("collapse-rail-left")).toBeInTheDocument();
+      expect(screen.queryByTestId("resize-handle-left")).not.toBeInTheDocument();
+      expect((screen.getByTestId("left-column") as HTMLElement).style.width).toBe("0px");
+    });
+
+    it("clicking the right handle collapses the right column", () => {
+      render(
+        <WorkspaceLayout
+          mode="manual"
+          left={<div>L</div>}
+          center={<div>C</div>}
+          right={<div>R</div>}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("resize-handle-right"));
+      expect(screen.getByTestId("collapse-rail-right")).toBeInTheDocument();
+      expect(screen.queryByTestId("resize-handle-right")).not.toBeInTheDocument();
+      expect((screen.getByTestId("right-column") as HTMLElement).style.width).toBe("0px");
+    });
+
+    it("clicking the left rail expands the left column back to its width", () => {
+      render(
+        <WorkspaceLayout
+          mode="manual"
+          left={<div>L</div>}
+          center={<div>C</div>}
+          right={<div>R</div>}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("resize-handle-left"));
+      expect(screen.getByTestId("collapse-rail-left")).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("collapse-rail-left"));
+      expect(screen.getByTestId("resize-handle-left")).toBeInTheDocument();
+      expect(screen.queryByTestId("collapse-rail-left")).not.toBeInTheDocument();
+      expect((screen.getByTestId("left-column") as HTMLElement).style.width).toBe("260px");
+    });
+
+    it("dragging does not trigger collapse (drag guard)", () => {
+      render(
+        <WorkspaceLayout
+          mode="manual"
+          left={<div>L</div>}
+          center={<div>C</div>}
+          right={<div>R</div>}
+        />,
+      );
+      const handle = screen.getByTestId("resize-handle-left");
+      fireEvent.mouseDown(handle, { clientX: 260 });
+      fireEvent.mouseMove(document, { clientX: 400 });
+      fireEvent.mouseUp(document);
+      // Handle still rendered (not collapsed), no rail.
+      expect(screen.getByTestId("resize-handle-left")).toBeInTheDocument();
+      expect(screen.queryByTestId("collapse-rail-left")).not.toBeInTheDocument();
+    });
+
+    it("collapsed state persists to localStorage", () => {
+      render(
+        <WorkspaceLayout
+          mode="manual"
+          left={<div>L</div>}
+          center={<div>C</div>}
+          right={<div>R</div>}
+        />,
+      );
+      fireEvent.click(screen.getByTestId("resize-handle-left"));
+      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+      expect(stored.collapsed.left).toBe(true);
+      expect(stored.collapsed.right).toBe(false);
+    });
+
+    it("collapsed state restores from localStorage on mount", () => {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ left: 260, right: 360, collapsed: { left: true, right: false } }),
+      );
+      render(
+        <WorkspaceLayout
+          mode="manual"
+          left={<div>L</div>}
+          center={<div>C</div>}
+          right={<div>R</div>}
+        />,
+      );
+      expect(screen.getByTestId("collapse-rail-left")).toBeInTheDocument();
+      expect(screen.getByTestId("resize-handle-right")).toBeInTheDocument();
     });
   });
 });

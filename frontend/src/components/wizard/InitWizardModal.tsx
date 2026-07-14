@@ -149,7 +149,7 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
     // reload), calling navigate first ensures the workspace URL wins.
     // WizardDeepLinkPage's previous window.location.assign("/") bug
     // manifested as "complete wizard → land on / instead of /workspace".
-    navigate(`/project/${encodeURIComponent(projectId)}/workspace?mode=managed`);
+    navigate(`/project/${encodeURIComponent(projectId)}/workspace`);
     onDismiss();
   };
 

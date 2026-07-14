@@ -12,12 +12,14 @@ function renderModal(projects: Parameters<typeof BookShelfModal>[0]["projects"])
 }
 
 describe("BookShelfModal navigation", () => {
-  it("links STAGE4 projects to /workspace?mode=managed (STAGE5/6 have their own routes)", () => {
+  // v1.9: workspace defaults to manual mode, so the entry URL no longer
+  // forces ?mode=managed — the user opts into managed via the top-bar switcher.
+  it("links STAGE4 projects to /workspace (default manual mode)", () => {
     renderModal([
       { id: "proj_post", title: "已完成", genre: "cool_novel", current_stage: "STAGE4", created_at: "2026-07-10T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "" },
     ]);
     const link = screen.getByRole("link", { name: /已完成/ });
-    expect(link.getAttribute("href")).toBe("/project/proj_post/workspace?mode=managed");
+    expect(link.getAttribute("href")).toBe("/project/proj_post/workspace");
   });
 
   it("links INIT/STAGE1-3 projects to /wizard so users can resume initialization", () => {

@@ -63,10 +63,12 @@ function withPath(path: string) {
 }
 
 describe("Workspace routing", () => {
-  it("renders /workspace with mode=managed by default", () => {
+  // v1.9: workspace defaults to manual mode so all entry points (bookshelf,
+  // wizard, init) land the user on the chapter tree + writing area.
+  it("renders /workspace with mode=manual by default", () => {
     withPath("/workspace");
     expect(screen.getByTestId("workspace-page")).toBeInTheDocument();
-    expect(screen.getByTestId("mode-managed").className).toContain("bg-primary-container");
+    expect(screen.getByTestId("mode-manual").className).toContain("bg-primary-container");
   });
   it("renders /workspace?mode=manual", () => {
     withPath("/workspace?mode=manual");
@@ -87,12 +89,11 @@ describe("Workspace routing", () => {
     expect(globalThis.__lastLocation?.pathname).toBe("/workspace");
     expect(globalThis.__lastLocation?.search).toBe("?mode=manual&panel=export");
   });
-  it("clicking the manual switcher opens confirm modal; confirming persists 'manual' to localStorage", () => {
+  it("clicking the managed switcher from default-manual opens the start modal", async () => {
     withPath("/workspace");
-    fireEvent.click(screen.getByTestId("mode-manual"));
-    expect(screen.getByTestId("mode-switch-confirm")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("confirm-confirm"));
-    expect(localStorage.getItem("storyforge.workspace.mode")).toBe("manual");
+    fireEvent.click(screen.getByTestId("mode-managed"));
+    // manual → managed goes through the start modal (was: confirm modal).
+    expect(await screen.findByTestId("managed-start-modal")).toBeInTheDocument();
   });
 });
 

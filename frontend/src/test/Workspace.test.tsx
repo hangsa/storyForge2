@@ -124,25 +124,31 @@ beforeEach(() => {
 });
 
 describe("Workspace integration", () => {
-  it("default mode renders ManagedDashboard + ManagedAIControlPanel", () => {
-    setup("/project/p1/workspace");
-    expect(screen.getByTestId("workspace-layout").getAttribute("data-mode")).toBe("managed");
-    expect(screen.getByTestId("managed-dashboard")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-control-panel")).toBeInTheDocument();
+  // v1.9: workspace now defaults to manual mode on entry (was: managed).
+  // Users explicitly opt into managed (autopilot) via the top-bar switcher.
+  it("default mode renders ChapterTreePanel + WritingArea + ContextPanel (manual)", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [{ chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] }],
+    });
+    setup("/project/p1/workspace?chapter=1&scene=1-1");
+    expect(screen.getByTestId("workspace-layout").getAttribute("data-mode")).toBe("manual");
+    expect(await screen.findByTestId("chapter-tree")).toBeInTheDocument();
+    expect(await screen.findByTestId("writing-area")).toBeInTheDocument();
+    expect(screen.getByTestId("context-panel")).toBeInTheDocument();
   });
 
   // v1.8.1: workspace enters in "stopped" managed state — user must opt in
   // to start the autopilot. Status strip (current task) stays hidden until
   // the user clicks "启动托管".
   it("managed mode defaults to autopilot stopped (no status strip, toggle shows 启动)", () => {
-    setup("/project/p1/workspace");
+    setup("/project/p1/workspace?mode=managed");
     expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
     const toggle = screen.getByTestId("autopilot-toggle");
     expect(toggle.textContent).toContain("启动");
   });
 
   it("clicking autopilot-toggle shows status strip and switches button to 停止", async () => {
-    const { rerender } = setup("/project/p1/workspace");
+    const { rerender } = setup("/project/p1/workspace?mode=managed");
     fireEvent.click(screen.getByTestId("autopilot-toggle"));
     // start() is async; the mock updates mockSession synchronously but React
     // needs a render cycle to pick it up. Re-render the tree to mirror the
@@ -179,7 +185,7 @@ describe("Workspace integration", () => {
   });
 
   it("clicking mode-manual in the top-bar opens the confirm modal", () => {
-    setup("/project/p1/workspace");
+    setup("/project/p1/workspace?mode=managed");
     fireEvent.click(screen.getByTestId("mode-manual"));
     expect(screen.getByTestId("mode-switch-confirm")).toBeInTheDocument();
   });
@@ -198,7 +204,7 @@ describe("Workspace integration", () => {
     const chapter4 = [{ chapter_number: 4, status: "in_progress" }];
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
-    setup("/project/p1/workspace");
+    setup("/project/p1/workspace?mode=managed");
     // The useEffect fetch is async; wait for chapter-cell-4 to render.
     expect(await screen.findByTestId("chapter-cell-4")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("chapter-cell-4"));
@@ -217,7 +223,7 @@ describe("Workspace integration", () => {
         { chapter_number: 4, title: "第四章", scene_plan: [{ scene_number: 1 }] },
       ],
     });
-    setup("/project/p1/workspace");
+    setup("/project/p1/workspace?mode=managed");
     expect(await screen.findByTestId("chapter-cell-4")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("chapter-cell-4"));
     // uncheck "等待完成" so we take over immediately
@@ -236,8 +242,8 @@ describe("Workspace integration", () => {
   // rerender() (not multiple setup() calls) avoids duplicate-element errors
   // and mirrors a real "state-update" feel.
   it("EventSource sequence updates all 4 AI control tabs", () => {
-    // Step 1: default managed mode renders cleanly with no events yet.
-    const { rerender } = setup("/project/p1/workspace");
+    // Step 1: managed mode renders cleanly with no events yet.
+    const { rerender } = setup("/project/p1/workspace?mode=managed");
     expect(screen.getByTestId("ai-control-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
 
@@ -317,7 +323,7 @@ describe("Workspace integration", () => {
 
   it("new project with empty progress.json renders no chapter cells in managed mode", async () => {
     // Default mock returns { chapters: [] } — no chapter-cell-* should render.
-    setup("/project/p1/workspace");
+    setup("/project/p1/workspace?mode=managed");
     // useEffect runs after mount; wait for it to settle.
     await waitFor(() => expect(mockedGetStage4Progress).toHaveBeenCalledWith("p1"));
     expect(screen.queryByTestId("chapter-cell-1")).not.toBeInTheDocument();
@@ -384,7 +390,7 @@ describe("Workspace integration", () => {
         total_chapters: 7,
       })
       .mockRejectedValueOnce(new Error("network down"));
-    setup("/project/p1/workspace");
+    setup("/project/p1/workspace?mode=managed");
     // First load renders the 2 cells.
     expect(await screen.findByTestId("chapter-cell-1")).toBeInTheDocument();
     expect(screen.getByTestId("chapter-cell-2")).toBeInTheDocument();

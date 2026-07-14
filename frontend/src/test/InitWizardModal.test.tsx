@@ -209,7 +209,7 @@ describe("InitWizardModal", () => {
     await waitFor(() => expect(api.updateOutline).toHaveBeenCalled());
     await waitFor(() => expect(api.advance).toHaveBeenCalledWith(PROJECT, "STAGE4"));
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/workspace?mode=managed`),
+      expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/workspace`),
     );
     expect(onDismiss).toHaveBeenCalled();
     // Regression v1.9: navigate MUST be called before onDismiss, so any

@@ -136,7 +136,7 @@ describe("ChapterOutlineStep", () => {
     await waitFor(() => expect(api.updateOutline).toHaveBeenCalled());
     await waitFor(() => expect(api.advance).toHaveBeenCalledWith(PROJECT, "STAGE4"));
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/workspace?mode=managed`),
+      expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/workspace`),
     );
     const call = (api.updateOutline as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[1].chapters).toHaveLength(10);

@@ -324,7 +324,7 @@ function BookCard({ project, selectMode, selected, onToggle }: BookCardProps) {
     // hub — /stage1 only exists for the inline concept editor).
     const href = isPreWizardStage(project.current_stage)
       ? `/project/${encodeURIComponent(project.id)}/wizard`
-      : `/project/${encodeURIComponent(project.id)}/workspace?mode=managed`;
+      : `/project/${encodeURIComponent(project.id)}/workspace`;
     window.location.assign(href);
   };
 

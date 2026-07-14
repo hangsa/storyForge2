@@ -15,9 +15,12 @@ beforeEach(() => {
 });
 
 describe("useWorkspaceMode", () => {
-  it("defaults to 'managed' when URL has no mode and no localStorage", () => {
+  // v1.9: workspace defaults to manual mode so the chapter tree + writing
+  // area is what the user lands on — they explicitly opt into managed
+  // (autopilot) via the top-bar switcher when they're ready.
+  it("defaults to 'manual' when URL has no mode and no localStorage", () => {
     const { result } = renderHook(() => useWorkspaceMode(), { wrapper: wrap() });
-    expect(result.current.mode).toBe("managed");
+    expect(result.current.mode).toBe("manual");
   });
 
   it("reads mode from URL when ?mode=manual", () => {
@@ -50,10 +53,10 @@ describe("useWorkspaceMode", () => {
     expect(localStorage.getItem("storyforge.workspace.mode")).toBe("managed");
   });
 
-  it("falls back to 'managed' if ?mode=garbage", () => {
+  it("falls back to 'manual' if ?mode=garbage", () => {
     const { result } = renderHook(() => useWorkspaceMode(), {
       wrapper: wrap("/workspace?mode=robot"),
     });
-    expect(result.current.mode).toBe("managed");
+    expect(result.current.mode).toBe("manual");
   });
 });

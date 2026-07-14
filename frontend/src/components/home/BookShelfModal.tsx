@@ -44,7 +44,7 @@ function projectHref(currentStage: string, projectId: string) {
   }
   if (currentStage === "STAGE5") return `/project/${encoded}/stage5`;
   if (currentStage === "STAGE6") return `/project/${encoded}/stage6`;
-  return `/project/${encoded}/workspace?mode=managed`;
+  return `/project/${encoded}/workspace`;
 }
 
 export default function BookShelfModal({ projects, onClose }: BookShelfModalProps) {

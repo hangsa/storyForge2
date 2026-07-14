@@ -1,14 +1,38 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import ContextPanel from "../components/workspace/ContextPanel";
 
+const {
+  mockedGetConcept,
+  mockedGetWorld,
+  mockedGetCharacter,
+  mockedGetOutline,
+  mockedUpdateConcept,
+  mockedUpdateWorld,
+  mockedUpdateCharacter,
+  mockedUpdateOutline,
+} = vi.hoisted(() => ({
+  mockedGetConcept: vi.fn(),
+  mockedGetWorld: vi.fn(),
+  mockedGetCharacter: vi.fn(),
+  mockedGetOutline: vi.fn(),
+  mockedUpdateConcept: vi.fn(),
+  mockedUpdateWorld: vi.fn(),
+  mockedUpdateCharacter: vi.fn(),
+  mockedUpdateOutline: vi.fn(),
+}));
+
 vi.mock("../api/client", () => ({
   default: {
-    getConcept: vi.fn().mockResolvedValue({ concept: { title: "末世之塔", genre: "xianxia", premise: "修真与灭世" }, story_dna: null }),
-    getWorld: vi.fn().mockResolvedValue({ era: "修真纪元", era_social_structure: "宗门林立", era_cultural_history: "万年大战" }),
-    getCharacter: vi.fn().mockResolvedValue({ characters: [{ name: "林峰" }, { name: "苏晓晓" }, { name: "师父" }] }),
-    getOutline: vi.fn().mockResolvedValue({ chapters: [{ title: "第一章 开场" }, { title: "第二章 发现" }, { title: "第三章 冲突" }, { title: "第四章 高潮" }] }),
+    getConcept: mockedGetConcept,
+    getWorld: mockedGetWorld,
+    getCharacter: mockedGetCharacter,
+    getOutline: mockedGetOutline,
+    updateConcept: mockedUpdateConcept,
+    updateWorld: mockedUpdateWorld,
+    updateCharacter: mockedUpdateCharacter,
+    updateOutline: mockedUpdateOutline,
   },
 }));
 
@@ -22,42 +46,138 @@ function setupActivePanel(initialPath: string) {
   );
 }
 
+beforeEach(() => {
+  mockedGetConcept.mockReset();
+  mockedGetWorld.mockReset();
+  mockedGetCharacter.mockReset();
+  mockedGetOutline.mockReset();
+  mockedUpdateConcept.mockReset().mockResolvedValue(undefined);
+  mockedUpdateWorld.mockReset().mockResolvedValue(undefined);
+  mockedUpdateCharacter.mockReset().mockResolvedValue(undefined);
+  mockedUpdateOutline.mockReset().mockResolvedValue(undefined);
+  // sensible defaults — tests can override per-call
+  mockedGetConcept.mockResolvedValue({ concept: null, story_dna: null });
+  mockedGetWorld.mockResolvedValue({});
+  mockedGetCharacter.mockResolvedValue({ characters: [] });
+  mockedGetOutline.mockResolvedValue({ chapters: [] });
+});
+
 describe("ContextPanel", () => {
   it.each([
     "concept", "world", "character", "outline", "diagnosis", "export",
-  ])("renders %s tab active when ?panel=%s", async (panel) => {
+  ] as const)("renders %s tab active when ?panel=%s", async (panel) => {
     setupActivePanel(`/workspace?mode=manual&panel=${panel}`);
     expect(await screen.findByTestId(`context-tab-${panel}-active`)).toBeInTheDocument();
   });
 
-  it("defaults to concept when ?panel= is missing or garbage", async () => {
+  it("defaults to concept when ?panel= is missing", async () => {
     setupActivePanel(`/workspace?mode=manual`);
     expect(await screen.findByTestId("context-tab-concept-active")).toBeInTheDocument();
   });
 
-  it("concept tab preview shows fetched concept fields", async () => {
+  // Bug 3 fix — concept tab now shows the full editable form, with the
+  // prefill's `title` populating the title input. The legacy preview-only
+  // behavior is gone (no `context-preview-concept` testid anymore).
+  it("concept tab renders editable form pre-filled from getConcept", async () => {
+    mockedGetConcept.mockResolvedValueOnce({
+      concept: {
+        title: "末世之塔", genre: "xianxia", premise: "修真与灭世",
+        tone: "悲壮", theme: "宿命", target_audience: "男频", style_template: "网文",
+      },
+      story_dna: {
+        core_contradiction: { statement: "凡人 vs 天道", side_a: "凡人", side_b: "天道" },
+        value_stack: [],
+      },
+    });
     setupActivePanel("/workspace?mode=manual&panel=concept");
-    await waitFor(() =>
-      expect(screen.getByTestId("context-preview-concept")).toHaveTextContent(/末世之塔.*修真与灭世|修真纪元/),
-    );
+    expect(await screen.findByTestId("concept-editor")).toBeInTheDocument();
+    const titleInput = screen.getByTestId("concept-title") as HTMLInputElement;
+    expect(titleInput.value).toBe("末世之塔");
+    expect(screen.getByTestId("concept-premise")).toHaveTextContent("修真与灭世");
+    // Data-bearing tabs no longer expose context-preview-* / context-link-*
+    // (replaced by per-editor testids); only diagnosis/export keep the link.
+    expect(screen.queryByTestId("context-preview-concept")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("context-link-concept")).not.toBeInTheDocument();
   });
 
-  it("character tab preview lists first 5 character names", async () => {
+  it("concept editor save calls api.updateConcept with the edited values", async () => {
+    mockedGetConcept.mockResolvedValueOnce({
+      concept: { title: "原标题", genre: "x", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+    });
+    setupActivePanel("/workspace?mode=manual&panel=concept");
+    const titleInput = (await screen.findByTestId("concept-title")) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "新标题" } });
+    fireEvent.click(screen.getByTestId("concept-editor-save"));
+    await waitFor(() => expect(mockedUpdateConcept).toHaveBeenCalledTimes(1));
+    const [, conceptArg] = mockedUpdateConcept.mock.calls[0];
+    expect(conceptArg.title).toBe("新标题");
+  });
+
+  it("world editor renders power-system + factions pre-filled", async () => {
+    mockedGetWorld.mockResolvedValueOnce({
+      era: "修真纪元",
+      geography: "九州",
+      era_social_structure: "宗门林立",
+      era_cultural_history: "万年大战",
+      power_system: { name: "灵气", description: "炼气化神", stages: ["炼气", "筑基", "金丹"], core_rules: ["灵根"], ceilings: ["化神"], cost_system: "寿元" },
+      factions: [{ name: "青云宗", type: "正派", goal: "守护苍生", relations: "中立" }],
+      core_rules: ["不可逆转光阴"],
+    });
+    setupActivePanel("/workspace?mode=manual&panel=world");
+    expect(await screen.findByTestId("world-editor")).toBeInTheDocument();
+    expect((screen.getByTestId("world-era") as HTMLInputElement).value).toBe("修真纪元");
+    expect((screen.getByTestId("world-power-name") as HTMLInputElement).value).toBe("灵气");
+    expect(screen.getByTestId("world-power-stages")).toHaveDisplayValue("炼气、筑基、金丹");
+  });
+
+  it("character editor lists each character as a collapsible card", async () => {
+    mockedGetCharacter.mockResolvedValueOnce({
+      characters: [
+        {
+          id: "c1", name: "林峰", is_core_character: true, character_type: "protagonist",
+          personality: { beliefs: ["义"], desires: ["回家"], fears: ["孤独"], values: ["侠"], core_traits: ["机敏"] },
+          current_state: { location: "", physical_condition: "", emotional: "", known_secrets: [] },
+          voice_signature: { speech_style: "沉默", thought_patterns: "", taboos: [] },
+          unknown_to_character: [], relations: {},
+          growth_curve: null,
+        },
+      ],
+      current: { id: "c1", name: "林峰" },
+    });
     setupActivePanel("/workspace?mode=manual&panel=character");
-    await waitFor(() =>
-      expect(screen.getByTestId("context-preview-character")).toHaveTextContent("林峰"),
-    );
-    expect(screen.getByTestId("context-preview-character").textContent).toContain("苏晓晓");
-    expect(screen.getByTestId("context-preview-character").textContent).toContain("师父");
+    expect(await screen.findByTestId("character-editor")).toBeInTheDocument();
+    expect((screen.getByTestId("character-0-name") as HTMLInputElement).value).toBe("林峰");
+    expect((screen.getByTestId("character-0-role") as HTMLSelectElement).value).toBe("protagonist");
   });
 
-  it("every tab exposes a link to the relevant full Stage page", async () => {
-    setupActivePanel("/workspace?mode=manual&panel=concept");
-    expect(screen.getByTestId("context-link-concept").getAttribute("href"))
-      .toBe("/project/p1/stage1");
+  it("outline editor renders editable chapter titles", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "开篇", scene_plan: [{ scene_number: 1 }] },
+        { chapter_number: 2, title: "冲突", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
+    setupActivePanel("/workspace?mode=manual&panel=outline");
+    expect(await screen.findByTestId("outline-editor")).toBeInTheDocument();
+    const title1 = screen.getByTestId("outline-editor-chapter-1-title") as HTMLInputElement;
+    expect(title1.value).toBe("开篇");
+    fireEvent.change(title1, { target: { value: "新的开篇" } });
+    fireEvent.click(screen.getByTestId("outline-editor-save"));
+    await waitFor(() => expect(mockedUpdateOutline).toHaveBeenCalledTimes(1));
+    const [, outlineArg] = mockedUpdateOutline.mock.calls[0];
+    expect(outlineArg.chapters[0].title).toBe("新的开篇");
+  });
 
+  it("diagnosis + export tabs still show preview + link to full page", async () => {
     setupActivePanel("/workspace?mode=manual&panel=diagnosis");
+    expect(await screen.findByTestId("context-preview-diagnosis")).toBeInTheDocument();
     expect(screen.getByTestId("context-link-diagnosis").getAttribute("href"))
       .toBe("/project/p1/stage5");
+
+    setupActivePanel("/workspace?mode=manual&panel=export");
+    expect(await screen.findByTestId("context-preview-export")).toBeInTheDocument();
+    expect(screen.getByTestId("context-link-export").getAttribute("href"))
+      .toBe("/project/p1/stage6");
   });
 });

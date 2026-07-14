@@ -4,7 +4,7 @@ import { useWorkspacePanel, type WorkspacePanel } from "../../hooks/useWorkspace
 import ConceptEditor from "./editors/ConceptEditor";
 import WorldEditor from "./editors/WorldEditor";
 import CharacterEditor from "./editors/CharacterEditor";
-import OutlineEditor from "./editors/OutlineEditor";
+import NovelOutlineEditor from "./editors/NovelOutlineEditor";
 import DiagnosisSummary from "./DiagnosisSummary";
 import ExportSummary from "./ExportSummary";
 
@@ -18,10 +18,11 @@ interface BaseEditorProps {
   onSaved: () => void;
 }
 
-/** Tabs 1-4 (concept/world/character/outline) host in-place editors. Tabs
- *  5-6 (diagnosis/export) now show their own read+action summary components
- *  (DiagnosisSummary / ExportSummary) and keep the Stage5/6 link as a
- *  secondary action for full editing. */
+/** Tabs 1-4 (concept/world/character/outline) host in-place editors. The
+ *  "大纲" tab in v1.9 shows the NOVEL-level outline (核心冲突 / 全卷划分 /
+ *  主角成长弧线 / 关键剧情点) — chapter-by-chapter outlines live in the
+ *  left panel (ChapterTreePanel). Tabs 5-6 (diagnosis/export) show their
+ *  read+action summary components and keep Stage5/6 as secondary actions. */
 const TAB_LABEL: Record<WorkspacePanel, string> = {
   concept: "概念",
   world: "世界观",
@@ -35,7 +36,7 @@ const FETCHER: Record<WorkspacePanel, (id: string) => Promise<unknown>> = {
   concept: (id) => api.getConcept(id),
   world: (id) => api.getWorld(id),
   character: (id) => api.getCharacter(id),
-  outline: (id) => api.getOutline(id),
+  outline: (id) => api.getNovelOutline(id),
   diagnosis: async () => ({}),
   export: async () => ({}),
 };
@@ -99,5 +100,5 @@ function EditorForPanel({
   if (panel === "concept") return <ConceptEditor projectId={projectId} data={data} onSaved={onSaved} />;
   if (panel === "world") return <WorldEditor projectId={projectId} data={data} onSaved={onSaved} />;
   if (panel === "character") return <CharacterEditor projectId={projectId} data={data} onSaved={onSaved} />;
-  return <OutlineEditor projectId={projectId} data={data} onSaved={onSaved} />;
+  return <NovelOutlineEditor projectId={projectId} data={data} onSaved={onSaved} />;
 }

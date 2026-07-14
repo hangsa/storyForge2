@@ -501,4 +501,50 @@ describe("Workspace integration", () => {
     const goal = await screen.findByTestId("writing-scene-goal");
     expect(goal.textContent).toContain("主角启程遇到师父");
   });
+
+  // Issue 3 (v1.9) — left chapter list groups chapters by volume using
+  // novel_outline.volumes[].chapter_range strings. Each volume renders as a
+  // header with its name + range.
+  it("manual-mode chapter tree groups chapters by novel_outline volumes", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "卷一第一章", scene_plan: [{ scene_number: 1 }] },
+        { chapter_number: 5, title: "卷一第五章", scene_plan: [{ scene_number: 1 }] },
+        { chapter_number: 35, title: "卷二第一章", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
+    mockedGetNovelOutline.mockResolvedValueOnce({
+      volumes: [
+        { name: "第一卷", chapter_range: "1-30", summary: "初入江湖", key_events: [] },
+        { name: "第二卷", chapter_range: "31-60", summary: "卷入纷争", key_events: [] },
+      ],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    // Wait for the tree + the volume-aware grouping to render.
+    expect(await screen.findByTestId("volume-第一卷-header")).toBeInTheDocument();
+    expect(screen.getByTestId("volume-第二卷-header")).toBeInTheDocument();
+    // Volume headers carry the chapter range.
+    expect(screen.getByTestId("volume-第一卷-header").textContent).toContain("1-30");
+    expect(screen.getByTestId("volume-第二卷-header").textContent).toContain("31-60");
+    // Volume summaries are visible (volume 1 is auto-opened because it
+    // contains currentChapter=1).
+    expect(screen.getByTestId("volume-第一卷-summary")).toHaveTextContent("初入江湖");
+  });
+
+  it("manual-mode chapter tree falls back to '未分组' when no novel_outline exists", async () => {
+    // Default mockedGetNovelOutline already returns { volumes: [] }.
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    expect(await screen.findByTestId("volume-未分组-header")).toBeInTheDocument();
+    // chapter-1 still renders inside the ungrouped bucket.
+    expect(screen.getByTestId("chapter-1")).toBeInTheDocument();
+  });
 });

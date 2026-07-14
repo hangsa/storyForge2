@@ -1,21 +1,30 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import api, { DiagnosisIssue, DiagnosisReport } from "../../api/client";
+import api, { DiagnosisIssue, DiagnosisReport, NovelOutline, Outline } from "../../api/client";
+import { computePlannedTotal } from "../../utils/outline";
 
 interface Props {
   projectId: string;
 }
 
+interface ProjectContext {
+  /** Total chapters in outline.json (0 if no outline yet). */
+  chapterCount: number;
+  /** Planned total from novel_outline.json's volume chapter_range (0 if none). */
+  plannedTotal: number;
+}
+
 /**
- * Diagnosis tab content. v1.8 expansion: real information display +
- * operable from the panel (not just a link to Stage5). Shows the
- * latest diagnosis report (P0/P1/P2 counts + open issues list) and
- * exposes a "重新诊断" button that calls api.runDiagnosis() in place.
- * Detailed issue editing lives on Stage5 (per-Issue resolve/skip UI);
- * we keep the Stage5 link as a secondary action.
+ * Diagnosis tab content. v1.9 expansion: shows real project context
+ * (chapter count + planned total) at all times, then layers the latest
+ * diagnosis report on top when one exists. The "运行诊断"/"重新诊断"
+ * buttons call api.runDiagnosis in place. Detailed per-issue editing
+ * lives on Stage5 — the link is kept as a secondary action so the
+ * panel doesn't have to clone Stage5's full UI.
  */
 export default function DiagnosisSummary({ projectId }: Props) {
   const [report, setReport] = useState<DiagnosisReport | null>(null);
+  const [ctx, setCtx] = useState<ProjectContext>({ chapterCount: 0, plannedTotal: 0 });
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,11 +32,24 @@ export default function DiagnosisSummary({ projectId }: Props) {
   const load = () => {
     let cancelled = false;
     setLoading(true);
-    api
-      .getDiagnosis(projectId)
-      .then((r) => { if (!cancelled) setReport(r); })
-      .catch(() => { if (!cancelled) setReport(null); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    // Fetch the diagnosis + the project context (outline + novel_outline)
+    // in parallel. The context fetch is best-effort — if either is missing
+    // (404), we just show 0 for that field. This way the panel always
+    // surfaces "本项目 N 章待诊断" even when no diagnosis has been run.
+    Promise.all([
+      api.getDiagnosis(projectId).catch(() => null),
+      api.getOutline(projectId).catch(() => null),
+      api.getNovelOutline(projectId).catch(() => null),
+    ]).then(([report, outline, novelOutline]) => {
+      if (cancelled) return;
+      setReport(report);
+      setCtx({
+        chapterCount: countChapters(outline),
+        plannedTotal: computePlannedTotal(novelOutline as NovelOutline | null),
+      });
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => { cancelled = true; };
   };
 
@@ -50,45 +72,71 @@ export default function DiagnosisSummary({ projectId }: Props) {
     }
   };
 
-  if (loading) {
-    return (
-      <div data-testid="diagnosis-summary" className="space-y-3">
-        <p className="font-body-ui text-system-log text-sm">加载诊断报告…</p>
+  return (
+    <div data-testid="diagnosis-summary" className="space-y-3">
+      {/* Project context strip — always shown so the user sees real
+          numbers, not just a link. */}
+      <div data-testid="diagnosis-context" className="p-2 rounded-lg bg-surface-container border border-outline-variant space-y-1">
+        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">项目状态</div>
+        <div className="font-body-ui text-system-log text-xs">
+          {ctx.chapterCount > 0
+            ? <>已规划 <span className="text-primary font-medium">{ctx.chapterCount}</span> 章{ctx.plannedTotal > 0 && <> · 全书计划 {ctx.plannedTotal} 章</>}</>
+            : ctx.plannedTotal > 0
+              ? <>全书计划 {ctx.plannedTotal} 章 · 尚未生成章节大纲</>
+              : <>尚未生成章节大纲 — 请先到 Stage3 生成大纲</>}
+        </div>
       </div>
-    );
-  }
 
-  if (!report) {
-    return (
-      <div data-testid="diagnosis-summary" className="space-y-3">
-        <p className="font-body-ui text-system-log text-sm">尚未运行诊断。</p>
-        <button
-          type="button"
-          data-testid="diagnosis-run"
-          onClick={handleRun}
-          disabled={running}
-          className="px-4 py-1 text-sm bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
-        >{running ? "运行中…" : "运行诊断"}</button>
-        {error && (
-          <p data-testid="diagnosis-error" className="font-body-ui text-error text-xs">{error}</p>
-        )}
+      {loading ? (
+        <p className="font-body-ui text-system-log text-sm">加载诊断报告…</p>
+      ) : !report ? (
+        <div className="space-y-3">
+          <p data-testid="diagnosis-empty" className="font-body-ui text-system-log text-sm">
+            尚未运行诊断。
+            {ctx.chapterCount > 0
+              ? `点击下方按钮对 ${ctx.chapterCount} 章内容进行一致性 / 质量检查。`
+              : "（需要先生成章节大纲才能进行诊断）"}
+          </p>
+          <button
+            type="button"
+            data-testid="diagnosis-run"
+            onClick={handleRun}
+            disabled={running || ctx.chapterCount === 0}
+            className="px-4 py-1 text-sm bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
+          >{running ? "运行中…" : "运行诊断"}</button>
+          {error && (
+            <p data-testid="diagnosis-error" className="font-body-ui text-error text-xs">{error}</p>
+          )}
+        </div>
+      ) : (
+        <ReportBody report={report} running={running} onRerun={handleRun} error={error} />
+      )}
+
+      <div className="border-t border-outline-variant pt-2">
         <Link
           to={`/project/${encodeURIComponent(projectId)}/stage5`}
           data-testid="diagnosis-link"
-          className="inline-flex items-center gap-1 text-primary-container hover:opacity-80 text-sm"
+          className="inline-flex items-center gap-1 text-system-log/70 hover:text-primary-container text-xs"
         >
           在完整页面打开 <span aria-hidden>→</span>
         </Link>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
+function ReportBody({ report, running, onRerun, error }: {
+  report: DiagnosisReport;
+  running: boolean;
+  onRerun: () => void;
+  error: string | null;
+}) {
   const openIssues = (report.issues ?? []).filter((i) => i.status === "open");
   const { p0_count, p1_count, p2_count } = report.summary ?? { p0_count: 0, p1_count: 0, p2_count: 0 };
 
   return (
-    <div data-testid="diagnosis-summary" className="space-y-3">
-      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">诊断概览</div>
+    <div className="space-y-3">
+      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">诊断结果</div>
       <div data-testid="diagnosis-stats" className="grid grid-cols-3 gap-2 text-center">
         <div className="p-2 rounded-lg bg-error-container/20 border border-error/40">
           <div className="font-display text-error text-lg">{p0_count}</div>
@@ -123,22 +171,13 @@ export default function DiagnosisSummary({ projectId }: Props) {
         <p data-testid="diagnosis-error" className="font-body-ui text-error text-xs">{error}</p>
       )}
 
-      <div className="flex items-center gap-3 pt-1">
-        <button
-          type="button"
-          data-testid="diagnosis-rerun"
-          onClick={handleRun}
-          disabled={running}
-          className="px-4 py-1 text-sm bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
-        >{running ? "运行中…" : "重新诊断"}</button>
-        <Link
-          to={`/project/${encodeURIComponent(projectId)}/stage5`}
-          data-testid="diagnosis-link"
-          className="inline-flex items-center gap-1 text-primary-container hover:opacity-80 text-sm"
-        >
-          在完整页面打开 <span aria-hidden>→</span>
-        </Link>
-      </div>
+      <button
+        type="button"
+        data-testid="diagnosis-rerun"
+        onClick={onRerun}
+        disabled={running}
+        className="px-4 py-1 text-sm bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
+      >{running ? "运行中…" : "重新诊断"}</button>
     </div>
   );
 }
@@ -161,4 +200,9 @@ function IssueRow({ issue }: { issue: DiagnosisIssue }) {
       )}
     </div>
   );
+}
+
+function countChapters(outline: Outline | null | undefined): number {
+  if (!outline || !Array.isArray(outline.chapters)) return 0;
+  return outline.chapters.length;
 }

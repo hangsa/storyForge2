@@ -8,10 +8,12 @@ const {
   mockedGetWorld,
   mockedGetCharacter,
   mockedGetOutline,
+  mockedGetNovelOutline,
   mockedUpdateConcept,
   mockedUpdateWorld,
   mockedUpdateCharacter,
   mockedUpdateOutline,
+  mockedUpdateNovelOutline,
   mockedGetDiagnosis,
   mockedRunDiagnosis,
 } = vi.hoisted(() => ({
@@ -19,10 +21,12 @@ const {
   mockedGetWorld: vi.fn(),
   mockedGetCharacter: vi.fn(),
   mockedGetOutline: vi.fn(),
+  mockedGetNovelOutline: vi.fn(),
   mockedUpdateConcept: vi.fn(),
   mockedUpdateWorld: vi.fn(),
   mockedUpdateCharacter: vi.fn(),
   mockedUpdateOutline: vi.fn(),
+  mockedUpdateNovelOutline: vi.fn(),
   mockedGetDiagnosis: vi.fn(),
   mockedRunDiagnosis: vi.fn(),
 }));
@@ -33,10 +37,12 @@ vi.mock("../api/client", () => ({
     getWorld: mockedGetWorld,
     getCharacter: mockedGetCharacter,
     getOutline: mockedGetOutline,
+    getNovelOutline: mockedGetNovelOutline,
     updateConcept: mockedUpdateConcept,
     updateWorld: mockedUpdateWorld,
     updateCharacter: mockedUpdateCharacter,
     updateOutline: mockedUpdateOutline,
+    updateNovelOutline: mockedUpdateNovelOutline,
     getDiagnosis: mockedGetDiagnosis,
     runDiagnosis: mockedRunDiagnosis,
   },
@@ -57,10 +63,12 @@ beforeEach(() => {
   mockedGetWorld.mockReset();
   mockedGetCharacter.mockReset();
   mockedGetOutline.mockReset();
+  mockedGetNovelOutline.mockReset();
   mockedUpdateConcept.mockReset().mockResolvedValue(undefined);
   mockedUpdateWorld.mockReset().mockResolvedValue(undefined);
   mockedUpdateCharacter.mockReset().mockResolvedValue(undefined);
   mockedUpdateOutline.mockReset().mockResolvedValue(undefined);
+  mockedUpdateNovelOutline.mockReset().mockResolvedValue(undefined);
   mockedGetDiagnosis.mockReset();
   mockedRunDiagnosis.mockReset();
   // sensible defaults — tests can override per-call
@@ -68,6 +76,7 @@ beforeEach(() => {
   mockedGetWorld.mockResolvedValue({});
   mockedGetCharacter.mockResolvedValue({ characters: [] });
   mockedGetOutline.mockResolvedValue({ chapters: [] });
+  mockedGetNovelOutline.mockResolvedValue({});
   // getDiagnosis returns 404-shaped fallback (null) by default — DiagnosisSummary
   // treats null as "no report yet" and shows the "运行诊断" button.
   mockedGetDiagnosis.mockRejectedValue(new Error("no diagnosis yet"));
@@ -168,30 +177,76 @@ describe("ContextPanel", () => {
     expect((screen.getByTestId("character-0-role") as HTMLSelectElement).value).toBe("protagonist");
   });
 
-  it("outline editor renders editable chapter titles", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
-      chapters: [
-        { chapter_number: 1, title: "开篇", scene_plan: [{ scene_number: 1 }] },
-        { chapter_number: 2, title: "冲突", scene_plan: [{ scene_number: 1 }] },
+  it("outline tab renders novel-level outline (theme + volumes + growth arc + plot points)", async () => {
+    // v1.9 follow-up: the right-panel "大纲" tab shows novel_outline.json
+    // (the high-level structure), not the per-chapter outline.
+    mockedGetNovelOutline.mockResolvedValueOnce({
+      core_conflict_theme: "凡人 vs 天道",
+      volumes: [
+        { name: "第一卷", chapter_range: "1-30", summary: "主角初入江湖", key_events: ["拜师", "初试"] },
+        { name: "第二卷", chapter_range: "31-60", summary: "卷入纷争", key_events: ["对决"] },
       ],
+      mc_growth_arc: [
+        { label: "觉醒", target_chapter_range: "1-10", description: "意识到自己身世" },
+      ],
+      key_plot_points: [
+        { title: "师父之死", must_appear_in_volume: "第一卷", trigger_chapter_hint: "约 25 章", description: "推动主角出山" },
+      ],
+      generated_at: "",
+      updated_at: "",
     });
     setupActivePanel("/workspace?mode=manual&panel=outline");
-    expect(await screen.findByTestId("outline-editor")).toBeInTheDocument();
-    const title1 = screen.getByTestId("outline-editor-chapter-1-title") as HTMLInputElement;
-    expect(title1.value).toBe("开篇");
-    fireEvent.change(title1, { target: { value: "新的开篇" } });
-    fireEvent.click(screen.getByTestId("outline-editor-save"));
-    await waitFor(() => expect(mockedUpdateOutline).toHaveBeenCalledTimes(1));
-    const [, outlineArg] = mockedUpdateOutline.mock.calls[0];
-    expect(outlineArg.chapters[0].title).toBe("新的开篇");
+    expect(await screen.findByTestId("novel-outline-editor")).toBeInTheDocument();
+    expect(screen.getByTestId("novel-outline-theme")).toHaveTextContent("凡人 vs 天道");
+    expect(screen.getByTestId("novel-outline-volume-0-name")).toHaveDisplayValue("第一卷");
+    expect(screen.getByTestId("novel-outline-volume-1-range")).toHaveDisplayValue("31-60");
+    expect(screen.getByTestId("novel-outline-mc-0-label")).toHaveDisplayValue("觉醒");
+    expect(screen.getByTestId("novel-outline-plot-0-title")).toHaveDisplayValue("师父之死");
   });
 
-  it("diagnosis tab shows a '运行诊断' button + Stage5 link when no report exists", async () => {
+  it("outline tab save calls api.updateNovelOutline (not updateOutline)", async () => {
+    mockedGetNovelOutline.mockResolvedValueOnce({
+      core_conflict_theme: "原主题",
+      volumes: [],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    setupActivePanel("/workspace?mode=manual&panel=outline");
+    const theme = (await screen.findByTestId("novel-outline-theme")) as HTMLTextAreaElement;
+    fireEvent.change(theme, { target: { value: "新主题" } });
+    fireEvent.click(screen.getByTestId("novel-outline-editor-save"));
+    await waitFor(() => expect(mockedUpdateNovelOutline).toHaveBeenCalledTimes(1));
+    const [, novelArg] = mockedUpdateNovelOutline.mock.calls[0];
+    expect(novelArg.core_conflict_theme).toBe("新主题");
+  });
+
+  it("diagnosis tab shows project context + '运行诊断' button + Stage5 link when no report exists", async () => {
+    // Outline has 2 chapters → context shows "已规划 2 章", button is enabled.
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "a", scene_plan: [{ scene_number: 1 }] },
+        { chapter_number: 2, title: "b", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
     setupActivePanel("/workspace?mode=manual&panel=diagnosis");
     expect(await screen.findByTestId("diagnosis-summary")).toBeInTheDocument();
-    expect(screen.getByTestId("diagnosis-run")).toBeInTheDocument();
+    expect(screen.getByTestId("diagnosis-context")).toHaveTextContent("已规划 2 章");
+    const run = screen.getByTestId("diagnosis-run");
+    expect(run).toBeInTheDocument();
+    expect(run).not.toBeDisabled();
     expect(screen.getByTestId("diagnosis-link").getAttribute("href"))
       .toBe("/project/p1/stage5");
+  });
+
+  it("diagnosis '运行诊断' button is disabled when no chapters exist", async () => {
+    // Default mock has empty outline + no novel_outline → chapterCount=0,
+    // plannedTotal=0 → button disabled.
+    setupActivePanel("/workspace?mode=manual&panel=diagnosis");
+    const run = await screen.findByTestId("diagnosis-run");
+    expect(run).toBeDisabled();
+    expect(screen.getByTestId("diagnosis-context")).toHaveTextContent("尚未生成章节大纲");
   });
 
   it("diagnosis tab shows stats + open issues when a report is returned", async () => {
@@ -215,10 +270,15 @@ describe("ContextPanel", () => {
     expect(screen.getByTestId("diagnosis-link").getAttribute("href")).toBe("/project/p1/stage5");
   });
 
-  it("diagnosis '重新诊断' button calls api.runDiagnosis and refreshes the panel", async () => {
+  it("diagnosis '运行诊断' button calls api.runDiagnosis (requires chapters)", async () => {
+    // Need ≥1 chapter for the run button to be enabled.
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [{ chapter_number: 1, title: "a", scene_plan: [{ scene_number: 1 }] }],
+    });
     setupActivePanel("/workspace?mode=manual&panel=diagnosis");
-    await screen.findByTestId("diagnosis-run");
-    fireEvent.click(screen.getByTestId("diagnosis-run"));
+    const run = await screen.findByTestId("diagnosis-run");
+    expect(run).not.toBeDisabled();
+    fireEvent.click(run);
     await waitFor(() => expect(mockedRunDiagnosis).toHaveBeenCalledWith("p1"));
   });
 

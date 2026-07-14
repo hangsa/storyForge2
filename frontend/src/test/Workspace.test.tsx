@@ -420,14 +420,16 @@ describe("Workspace integration", () => {
     expect(await screen.findByTestId("chapter-1")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("add-chapter"));
     expect(await screen.findByTestId("add-chapters-modal")).toBeInTheDocument();
-    // Cap from novel_outline = 30, current max = 1 → modal allows adding 29.
-    const input = screen.getByTestId("add-chapters-count") as HTMLInputElement;
-    expect(input.max).toBe("29");
+    // currentMax=1, plannedTotal=30 → start=2, maxEnd=30, default end=11
+    expect(screen.getByTestId("add-chapters-start-display")).toHaveTextContent("2");
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    expect(input.max).toBe("30");
+    expect(input.min).toBe("2");
   });
 
   // Bug 1 fix regression — confirming AddChaptersModal calls
   // generateOutline sequentially for new chapter_numbers and reloads.
-  it("AddChaptersModal confirm triggers api.generateOutline for each new chapter", async () => {
+  it("AddChaptersModal confirm triggers api.generateOutline for chapters in [start..end]", async () => {
     const { default: api } = await import("../api/client");
     const generateSpy = api.generateOutline as ReturnType<typeof vi.fn>;
     generateSpy.mockReset();
@@ -451,8 +453,9 @@ describe("Workspace integration", () => {
     setup("/project/p1/workspace?mode=manual");
     expect(await screen.findByTestId("chapter-1")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("add-chapter"));
-    const input = await screen.findByTestId("add-chapters-count");
-    fireEvent.change(input, { target: { value: "2" } });
+    // currentMax=1 → start=2. Set end=3 → adds chapters 2, 3.
+    const input = await screen.findByTestId("add-chapters-end-input");
+    fireEvent.change(input, { target: { value: "3" } });
     fireEvent.click(screen.getByTestId("add-chapters-confirm"));
     await waitFor(() => expect(generateSpy).toHaveBeenCalledTimes(2));
     expect(generateSpy).toHaveBeenNthCalledWith(1, "p1", 2);
@@ -460,11 +463,10 @@ describe("Workspace integration", () => {
   });
 
   // Bug 2 fix — clicking a manual-mode chapter with a real outline.json now
-  // renders `writing-outline-summary` with the chapter's `theme` instead of
-  // the old "(占位)" placeholder. Without this, the header above the editor
-  // shows nothing useful and the user has to flip to Stage 3 to remember what
-  // they outlined.
-  it("manual-mode writing area renders chapter theme as outline_summary (not 占位)", async () => {
+  // surfaces the chapter's `theme` in the writing-area header (replacing
+  // the old "(占位)" placeholder). The theme renders as a labeled row
+  // `writing-chapter-theme` inside `writing-outline-block` for v1.8.
+  it("manual-mode writing area renders chapter theme above the editor (not 占位)", async () => {
     mockedGetOutline.mockResolvedValueOnce({
       chapters: [
         {
@@ -476,9 +478,9 @@ describe("Workspace integration", () => {
       ],
     });
     setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
-    const summary = await screen.findByTestId("writing-outline-summary");
-    expect(summary.textContent).toContain("主角踏上寻找身世的旅途");
-    expect(summary.textContent).not.toContain("占位");
+    const theme = await screen.findByTestId("writing-chapter-theme");
+    expect(theme.textContent).toContain("主角踏上寻找身世的旅途");
+    expect(screen.getByTestId("writing-outline-block").textContent).not.toContain("占位");
   });
 
   // Bug 2 fallback — older outline.json files written before the `theme`
@@ -496,7 +498,7 @@ describe("Workspace integration", () => {
       ],
     });
     setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
-    const summary = await screen.findByTestId("writing-outline-summary");
-    expect(summary.textContent).toContain("主角启程遇到师父");
+    const goal = await screen.findByTestId("writing-scene-goal");
+    expect(goal.textContent).toContain("主角启程遇到师父");
   });
 });

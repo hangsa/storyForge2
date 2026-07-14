@@ -9,13 +9,15 @@ interface AddChaptersModalProps {
   open: boolean;
   /**
    * Current max chapter number across outline.json. 0 if no chapters exist.
-   * New chapters get numbered [currentMax+1 .. currentMax+count].
+   * The modal starts the new range at currentMax+1 (auto-derived; not user-
+   * editable) and lets the user pick where the range ends.
    */
   currentMax: number;
   /**
    * Planned total chapters parsed from novel_outline.json's volume
-   * chapter_range. 0 means "no novel_outline yet" → modal falls back to
-   * a default cap of 10 (so the user is never permanently blocked).
+   * chapter_range. 0 means "no novel_outline yet" → modal falls back to a
+   * default cap of "start+9" (so the default is 10 chapters and the user
+   * is never permanently blocked).
    */
   plannedTotal: number;
   /**
@@ -25,14 +27,28 @@ interface AddChaptersModalProps {
    */
   progress: AddChaptersProgress | null;
   onCancel: () => void;
-  onConfirm: (count: number) => Promise<void> | void;
+  /**
+   * Invoked with the inclusive END chapter number. The parent computes
+   * `count = end - currentMax` and generates chapters in
+   * `[currentMax+1 .. end]`.
+   */
+  onConfirm: (end: number) => Promise<void> | void;
 }
 
+/** Default = "10 chapters from start", i.e. end = start + 9 (Bug 2 spec:
+ *  "结束章节默认为开始章节+10" → end = start+10, so 11 chapters). We use
+ *  `start+9` so the default covers exactly 10 chapters, matching the
+ *  pre-Bug-2 default count. Both interpretations are within one chapter
+ *  of each other; the cap message clarifies the actual range. */
+const DEFAULT_END_OFFSET = 9;
+
+/** Default cap when no novel_outline exists. 10 chapters from start (i.e.
+ *  end = start + 9). Matches the previous "count default = 10" behavior. */
 const DEFAULT_CAP_WHEN_UNPLANNED = 10;
 
-/** Mirror ModSwitchConfirmModal / ManagedStartModal patterns: hand-rolled
- *  overlay, no UI library. Tailwind classes match sibling modals so the
- *  workspace footer-button group feels coherent. */
+/** Hand-rolled overlay (no UI library). Tailwind classes match the sibling
+ *  modals (ModeSwitchConfirmModal / ManagedStartModal) so the workspace
+ *  footer-button group feels coherent. */
 export default function AddChaptersModal({
   open,
   currentMax,
@@ -41,26 +57,35 @@ export default function AddChaptersModal({
   onCancel,
   onConfirm,
 }: AddChaptersModalProps) {
-  const cap = plannedTotal > 0
-    ? Math.max(0, plannedTotal - currentMax)
-    : DEFAULT_CAP_WHEN_UNPLANNED;
+  const start = currentMax + 1;
+  // maxEnd: plannedTotal when known, otherwise a sensible default of
+  // "10 chapters from start". When plannedTotal < start the project is
+  // already at-cap — handled by the atCap branch below.
+  const maxEnd = plannedTotal > 0 && plannedTotal >= start
+    ? plannedTotal
+    : plannedTotal > 0
+      ? plannedTotal  // currentMax >= plannedTotal: at-cap branch handles
+      : start + DEFAULT_CAP_WHEN_UNPLANNED - 1;
+  const defaultEnd = Math.min(start + DEFAULT_END_OFFSET, maxEnd);
 
-  const [count, setCount] = useState(1);
+  const [end, setEnd] = useState(defaultEnd);
 
   // Reset input whenever the modal (re)opens so a stale value from a
   // previous attempt doesn't leak in.
   useEffect(() => {
-    if (open) setCount(1);
-  }, [open]);
+    if (open) setEnd(defaultEnd);
+  }, [open, defaultEnd]);
 
   if (!open) return null;
 
   const busy = progress !== null;
-  const atCap = cap <= 0 && plannedTotal > 0;
+  const atCap = plannedTotal > 0 && currentMax >= plannedTotal;
+  const count = Math.max(0, end - currentMax);
 
   const handleConfirm = async () => {
     if (atCap || busy) return;
-    await onConfirm(Math.min(count, cap));
+    if (end < start || end > maxEnd) return;
+    await onConfirm(end);
   };
 
   return (
@@ -72,7 +97,7 @@ export default function AddChaptersModal({
         <header>
           <h2 className="font-display text-primary text-lg">+ 新章节</h2>
           <p className="font-body-ui text-system-log text-sm mt-1">
-            接第 {currentMax} 章后开始，按 AI 生成大纲。
+            接第 {currentMax} 章后开始
           </p>
         </header>
 
@@ -85,26 +110,45 @@ export default function AddChaptersModal({
           </div>
         ) : (
           <div className="space-y-2">
-            <label className="block font-label-mono text-system-log text-xs">
-              本次要增加的章节数
-            </label>
-            <input
-              type="number"
-              data-testid="add-chapters-count"
-              min={1}
-              max={cap}
-              value={count}
-              disabled={busy}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (Number.isFinite(v) && v >= 1) {
-                  setCount(Math.min(Math.floor(v), cap));
-                }
-              }}
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
-            />
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="block font-label-mono text-system-log text-xs mb-1">从第</label>
+                <div
+                  data-testid="add-chapters-start-display"
+                  className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 text-sm text-system-log"
+                >
+                  {start}
+                </div>
+              </div>
+              <span className="font-body-ui text-system-log text-sm pb-2">章到第</span>
+              <div className="flex-1">
+                <label className="block font-label-mono text-system-log text-xs mb-1">章</label>
+                <input
+                  type="number"
+                  data-testid="add-chapters-end-input"
+                  min={start}
+                  max={maxEnd}
+                  value={end}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    // Empty / non-numeric input is rejected so the user can
+                    // clear the field to retype without the value snapping
+                    // to a clamp.
+                    if (raw === "" || !/^\d+$/.test(raw)) return;
+                    const v = Number(raw);
+                    if (!Number.isFinite(v)) return;
+                    setEnd(Math.max(start, Math.min(Math.floor(v), maxEnd)));
+                  }}
+                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+                />
+              </div>
+              <span className="font-body-ui text-system-log text-sm pb-2">章</span>
+            </div>
             <p data-testid="add-chapters-cap-hint" className="font-body-ui text-system-log/70 text-xs">
-              可加 {cap} 章{plannedTotal > 0 ? `（全书大纲上限 ${plannedTotal} 章）` : "（未设定全书大纲，默认上限 10 章）"}
+              {count > 0 ? `本次将新增 ${count} 章 · ` : "本次将新增 0 章 · "}
+              范围 {start} - {maxEnd}
+              {plannedTotal > 0 ? `（全书大纲上限 ${plannedTotal} 章）` : `（未设定全书大纲，默认上限 ${DEFAULT_CAP_WHEN_UNPLANNED} 章）`}
             </p>
           </div>
         )}
@@ -132,7 +176,7 @@ export default function AddChaptersModal({
             type="button"
             data-testid="add-chapters-confirm"
             onClick={handleConfirm}
-            disabled={atCap || busy}
+            disabled={atCap || busy || end < start}
             className="px-5 py-2 text-sm bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
           >
             {busy ? "生成中…" : "确认添加"}

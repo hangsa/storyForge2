@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { useWorkspacePanel, type WorkspacePanel } from "../../hooks/useWorkspacePanel";
 import ConceptEditor from "./editors/ConceptEditor";
 import WorldEditor from "./editors/WorldEditor";
 import CharacterEditor from "./editors/CharacterEditor";
 import OutlineEditor from "./editors/OutlineEditor";
+import DiagnosisSummary from "./DiagnosisSummary";
+import ExportSummary from "./ExportSummary";
 
 interface Props {
   projectId: string;
@@ -17,11 +18,10 @@ interface BaseEditorProps {
   onSaved: () => void;
 }
 
-/** Tabs 1-4 (concept/world/character/outline) now have in-place editors. Tabs
- *  5-6 (diagnosis/export) still defer to their full Stage pages because they
- *  expose dedicated flows (Stage5 evaluation + Stage6 export wizard) that the
- *  workspace panel can't host. The user's request was to fix tabs 1-4; tabs
- *  5-6 keep their existing layout + link. */
+/** Tabs 1-4 (concept/world/character/outline) host in-place editors. Tabs
+ *  5-6 (diagnosis/export) now show their own read+action summary components
+ *  (DiagnosisSummary / ExportSummary) and keep the Stage5/6 link as a
+ *  secondary action for full editing. */
 const TAB_LABEL: Record<WorkspacePanel, string> = {
   concept: "概念",
   world: "世界观",
@@ -77,26 +77,16 @@ export default function ContextPanel({ projectId }: Props) {
         ))}
       </div>
       <div className="flex-1 p-4 overflow-y-auto text-sm font-body-narrative text-system-log space-y-3">
-        {(panel === "concept" || panel === "world" || panel === "character" || panel === "outline") ? (
+        {panel === "concept" || panel === "world" || panel === "character" || panel === "outline" ? (
           loading ? (
             <p data-testid={`context-loading-${panel}`} className="font-body-ui text-system-log text-sm">加载中…</p>
           ) : (
             <EditorForPanel panel={panel} projectId={projectId} data={data} onSaved={refresh} />
           )
+        ) : panel === "diagnosis" ? (
+          <DiagnosisSummary projectId={projectId} />
         ) : (
-          // diagnosis / export: full-page links retained.
-          <div className="space-y-3">
-            <p data-testid={`context-preview-${panel}`} className="whitespace-pre-wrap break-words">
-              v1.8 {TAB_LABEL[panel]}功能由 Stage{panel === "diagnosis" ? "5" : "6"} 全屏提供
-            </p>
-            <Link
-              to={`/project/${encodeURIComponent(projectId)}/stage${panel === "diagnosis" ? "5" : "6"}`}
-              data-testid={`context-link-${panel}`}
-              className="inline-flex items-center gap-1 text-primary-container hover:opacity-80 text-sm"
-            >
-              在完整页面打开 <span aria-hidden>→</span>
-            </Link>
-          </div>
+          <ExportSummary projectId={projectId} />
         )}
       </div>
     </div>

@@ -97,4 +97,59 @@ describe("WritingArea", () => {
     );
     expect(screen.queryByTestId("writing-empty-go-to-outline")).not.toBeInTheDocument();
   });
+
+  // v1.8 expansion: structured scene outline (theme/goal/conflict/
+  // emotional_arc) renders as labeled rows in the writing-area header so the
+  // user sees the full context above the editor, not a single line.
+  it("renders the structured scene-outline block when all fields are present", () => {
+    render(
+      <WritingArea
+        current={{
+          chapter_number: 1,
+          chapter_title: "第一章",
+          chapter_theme: "主角踏上旅途",
+          scene_id: "1-1",
+          scene_title: "开场",
+          scene_goal: "主角遇到师父",
+          scene_conflict: "内心挣扎是否离开家乡",
+          scene_emotional_arc: "期待 → 恐惧",
+          scene_narrative_role: "setup",
+          scene_beat_type: "inciting",
+        }}
+        content=""
+        onContentChange={() => {}}
+        onSaveDraft={async () => {}}
+        onRegenerate={async () => {}}
+        onFactGuard={async () => {}}
+        busy={false}
+      />,
+    );
+    expect(screen.getByTestId("writing-outline-block")).toBeInTheDocument();
+    expect(screen.getByTestId("writing-chapter-theme")).toHaveTextContent("主角踏上旅途");
+    expect(screen.getByTestId("writing-scene-goal")).toHaveTextContent("主角遇到师父");
+    expect(screen.getByTestId("writing-scene-conflict")).toHaveTextContent("内心挣扎是否离开家乡");
+    expect(screen.getByTestId("writing-scene-emotional-arc")).toHaveTextContent("期待 → 恐惧");
+    expect(screen.getByTestId("writing-scene-role")).toHaveTextContent("setup");
+    expect(screen.getByTestId("writing-scene-role").textContent).toContain("inciting");
+  });
+
+  it("does not render the outline-block when no outline data is present", () => {
+    render(
+      <WritingArea
+        current={{
+          chapter_number: 1,
+          chapter_title: "第一章",
+          scene_id: "1-1",
+          scene_title: "开场",
+        }}
+        content=""
+        onContentChange={() => {}}
+        onSaveDraft={async () => {}}
+        onRegenerate={async () => {}}
+        onFactGuard={async () => {}}
+        busy={false}
+      />,
+    );
+    expect(screen.queryByTestId("writing-outline-block")).not.toBeInTheDocument();
+  });
 });

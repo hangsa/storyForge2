@@ -21,7 +21,7 @@ describe("AddChaptersModal", () => {
     expect(screen.queryByTestId("add-chapters-modal")).not.toBeInTheDocument();
   });
 
-  it("renders the count input + cap hint when plannedTotal > currentMax", () => {
+  it("renders start + end input with default end = start+9 when plannedTotal > currentMax", () => {
     render(
       <AddChaptersModal
         open
@@ -33,29 +33,19 @@ describe("AddChaptersModal", () => {
       />,
     );
     expect(screen.getByTestId("add-chapters-modal")).toBeInTheDocument();
-    const input = screen.getByTestId("add-chapters-count") as HTMLInputElement;
-    expect(input.value).toBe("1");
-    expect(input.max).toBe("15"); // 20 - 5 = 15
-    expect(screen.getByTestId("add-chapters-cap-hint")).toHaveTextContent(/可加 15 章/);
+    // start = currentMax + 1 = 6
+    expect(screen.getByTestId("add-chapters-start-display")).toHaveTextContent("6");
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    // default end = min(start + 9, plannedTotal) = min(15, 20) = 15
+    expect(input.value).toBe("15");
+    expect(input.max).toBe("20");
+    expect(input.min).toBe("6");
+    // hint shows the range + 10 chapters (15 - 6 + 1 = 10)
+    expect(screen.getByTestId("add-chapters-cap-hint")).toHaveTextContent(/本次将新增 10 章/);
+    expect(screen.getByTestId("add-chapters-cap-hint")).toHaveTextContent(/范围 6 - 20/);
   });
 
-  it("input max falls back to 10 when no novel_outline (plannedTotal=0)", () => {
-    render(
-      <AddChaptersModal
-        open
-        currentMax={0}
-        plannedTotal={0}
-        progress={null}
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
-    const input = screen.getByTestId("add-chapters-count") as HTMLInputElement;
-    expect(input.max).toBe("10");
-    expect(screen.getByTestId("add-chapters-cap-hint")).toHaveTextContent(/默认上限 10 章/);
-  });
-
-  it("clamps the input to the cap when user types a larger number", async () => {
+  it("clamps the end input to maxEnd when user types a larger number", async () => {
     render(
       <AddChaptersModal
         open
@@ -66,17 +56,15 @@ describe("AddChaptersModal", () => {
         onConfirm={vi.fn()}
       />,
     );
-    const input = screen.getByTestId("add-chapters-count") as HTMLInputElement;
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
     await act(async () => {
-      // user types 99 — clamp to cap (5); the modal's onChange uses
-      // Math.min(v, cap), so the displayed value should equal 5 after the
-      // change event propagates through React.
       fireEvent.change(input, { target: { value: "99" } });
     });
-    expect(input.value).toBe("5");
+    // maxEnd = 10, so the input clamps to 10
+    expect(input.value).toBe("10");
   });
 
-  it("ignores non-numeric / zero / negative input (keeps last valid)", async () => {
+  it("clamps the end input to start when user types a smaller number", async () => {
     render(
       <AddChaptersModal
         open
@@ -87,16 +75,69 @@ describe("AddChaptersModal", () => {
         onConfirm={vi.fn()}
       />,
     );
-    const input = screen.getByTestId("add-chapters-count") as HTMLInputElement;
-    // Start at 1 (initial).
-    expect(input.value).toBe("1");
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "2" } });
+    });
+    // min = start = 6
+    expect(input.value).toBe("6");
+  });
+
+  it("ignores non-numeric input (keeps last valid)", async () => {
+    render(
+      <AddChaptersModal
+        open
+        currentMax={5}
+        plannedTotal={20}
+        progress={null}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    // Default = 15
+    expect(input.value).toBe("15");
     await act(async () => {
       fireEvent.change(input, { target: { value: "" } });
     });
-    expect(input.value).toBe("1");
+    expect(input.value).toBe("15");
   });
 
-  it("shows cap-reached message and disables confirm when currentMax === plannedTotal", () => {
+  it("default end = start+9 capped at plannedTotal when plannedTotal is small", () => {
+    // currentMax=5, plannedTotal=10 → start=6, defaultEnd=min(15, 10)=10
+    render(
+      <AddChaptersModal
+        open
+        currentMax={5}
+        plannedTotal={10}
+        progress={null}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    expect(input.value).toBe("10");
+  });
+
+  it("default end = start+9 when no novel_outline (plannedTotal=0)", () => {
+    render(
+      <AddChaptersModal
+        open
+        currentMax={0}
+        plannedTotal={0}
+        progress={null}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    // start=1, defaultEnd=1+9=10, maxEnd=10
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    expect(input.value).toBe("10");
+    expect(input.max).toBe("10");
+    expect(screen.getByTestId("add-chapters-cap-hint")).toHaveTextContent(/默认上限 10 章/);
+  });
+
+  it("shows cap-reached message and disables confirm when currentMax >= plannedTotal", () => {
     render(
       <AddChaptersModal
         open
@@ -111,7 +152,7 @@ describe("AddChaptersModal", () => {
     expect(screen.getByTestId("add-chapters-confirm")).toBeDisabled();
   });
 
-  it("clicking confirm invokes onConfirm with the count", async () => {
+  it("clicking confirm invokes onConfirm with the end chapter number", async () => {
     const onConfirm = vi.fn();
     render(
       <AddChaptersModal
@@ -123,14 +164,14 @@ describe("AddChaptersModal", () => {
         onConfirm={onConfirm}
       />,
     );
-    const input = screen.getByTestId("add-chapters-count") as HTMLInputElement;
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
     await act(async () => {
-      fireEvent.change(input, { target: { value: "3" } });
+      fireEvent.change(input, { target: { value: "10" } });
     });
     await act(async () => {
       screen.getByTestId("add-chapters-confirm").click();
     });
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(3));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(10));
   });
 
   it("clicking cancel invokes onCancel", async () => {
@@ -164,6 +205,6 @@ describe("AddChaptersModal", () => {
     );
     expect(screen.getByTestId("add-chapters-progress")).toHaveTextContent(/第 2 \/ 5 章/);
     expect(screen.getByTestId("add-chapters-confirm")).toBeDisabled();
-    expect(screen.getByTestId("add-chapters-count")).toBeDisabled();
+    expect(screen.getByTestId("add-chapters-end-input")).toBeDisabled();
   });
 });

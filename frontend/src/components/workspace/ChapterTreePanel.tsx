@@ -6,6 +6,8 @@ export interface WorkspaceSceneNode {
   goal?: string;
   conflict?: string;
   emotional_arc?: string;
+  narrative_role?: string;
+  beat_type?: string;
 }
 export interface WorkspaceChapterNode {
   chapter_number: number;

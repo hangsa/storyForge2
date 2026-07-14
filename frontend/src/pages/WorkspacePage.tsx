@@ -133,9 +133,9 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   // ${chapter_number}-${scene_number} (the existing UI convention). Backend
   // get_outline returns 404 if outline.json does not exist; treat that the
   // same as a successful empty payload. We surface the chapter's `theme`
-  // and each scene's goal/conflict/emotional_arc so the WritingArea header
-  // can show real outline content above the editor (was "(占位)" before
-  // Bug 2 fix).
+  // and each scene's goal/conflict/emotional_arc/narrative_role/beat_type so
+  // the WritingArea header can show real outline content above the editor
+  // (was "(占位)" before Bug 2 fix).
   useEffect(() => {
     if (!projectId) return;
     setManualChapters([]);  // clear stale data on every (re)load — on failure
@@ -154,6 +154,8 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
             goal?: string;
             conflict?: string;
             emotional_arc?: string;
+            narrative_role?: string;
+            beat_type?: string;
           }>;
         }>;
       }) => {
@@ -168,6 +170,8 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
             goal: s.goal,
             conflict: s.conflict,
             emotional_arc: s.emotional_arc,
+            narrative_role: s.narrative_role,
+            beat_type: s.beat_type,
           })),
         }));
         setManualChapters(mapped);
@@ -237,14 +241,17 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, reloadKey]);
 
-  const handleAddChapters = async (count: number) => {
+  const handleAddChapters = async (end: number) => {
+    const start = currentMaxChapter + 1;
+    const count = Math.max(0, end - currentMaxChapter);
+    if (count === 0) return;
     setAddProgress({ done: 0, total: count });
     // Sequential (mirrors ChapterOutlineStep v1.8.3): /stage3/generate reads
     // existing outline.json, dedupes by chapter_number, appends the new one,
     // writes back. Parallel calls would race on the read-modify-write.
     try {
       for (let i = 1; i <= count; i++) {
-        const next = currentMaxChapter + i;
+        const next = start + i - 1;
         await api.generateOutline(projectId, next);
         setAddProgress({ done: i, total: count });
       }
@@ -308,17 +315,22 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                 const ch = manualChapters.find((c) => c.chapter_number === currentChapter);
                 const sc = ch?.scenes.find((s) => s.scene_id === currentScene);
                 if (!ch || !sc) return null;
-                // Bug 2: show real outline content above the editor.
-                // Prefer the chapter's `theme` (the chapter-level summary from
-                // outline_generation.yaml); fall back to the selected scene's
-                // goal when no chapter theme was generated. Leave the empty
-                // string so WritingArea's "大纲：…" line is suppressed entirely
-                // for chapters written before the theme field was introduced.
+                // Bug 2: show real outline content above the editor. v1.8
+                // expansion: thread the chapter theme + scene goal/conflict/
+                // emotional_arc through so the header can render them as
+                // labeled rows instead of a single "占位" line. outline_summary
+                // is kept for back-compat with the existing test.
                 return {
                   chapter_number: ch.chapter_number,
                   chapter_title: ch.title,
+                  chapter_theme: ch.theme,
                   scene_id: sc.scene_id,
                   scene_title: sc.title,
+                  scene_goal: sc.goal,
+                  scene_conflict: sc.conflict,
+                  scene_emotional_arc: sc.emotional_arc,
+                  scene_narrative_role: sc.narrative_role,
+                  scene_beat_type: sc.beat_type,
                   outline_summary:
                     ch.theme?.trim() ||
                     sc.goal?.trim() ||

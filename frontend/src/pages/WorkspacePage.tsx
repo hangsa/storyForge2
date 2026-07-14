@@ -16,6 +16,7 @@ import WritingArea from "../components/workspace/WritingArea";
 import ContextPanel from "../components/workspace/ContextPanel";
 import ModeSwitchConfirmModal from "../components/workspace/ModeSwitchConfirmModal";
 import ManagedStartModal, { type ManagedStartConfig } from "../components/workspace/ManagedStartModal";
+import AutopilotMiddlePanel from "../components/workspace/AutopilotMiddlePanel";
 import AddChaptersModal, { type AddChaptersProgress } from "../components/workspace/AddChaptersModal";
 
 // Map progress.json's `status` field onto ManagedDashboard's chapter status.
@@ -435,7 +436,12 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
               busy={busy}
               onNavigateToOutline={goToOutlinePanel}
             />
-          ) : null
+          ) : (
+            // v1.9: plotPilot alignment — managed mode centers on an
+            // AutopilotWorkspace (cockpit/dashboard/log) instead of an
+            // empty center column.
+            <AutopilotMiddlePanel projectId={projectId} />
+          )
         }
         right={
           mode === "managed" ? <ManagedAIControlPanel projectId={projectId} /> : <ContextPanel projectId={projectId} />

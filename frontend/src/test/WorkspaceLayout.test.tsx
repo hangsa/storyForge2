@@ -19,12 +19,28 @@ beforeEach(() => {
 });
 
 describe("WorkspaceLayout", () => {
-  it("renders managed slots (left, right) when mode=managed", () => {
+  it("renders managed slots (left, center, right) when mode=managed", () => {
+    // v1.9 alignment with plotPilot: managed mode now centers on the
+    // autopilot workspace (cockpit/dashboard/log). WorkspaceLayout should
+    // render the center column whenever it's provided, regardless of mode.
     render(
       <WorkspaceLayout
         mode="managed"
         left={<div data-testid="l">L</div>}
         center={<div data-testid="c">C</div>}
+        right={<div data-testid="r">R</div>}
+      />,
+    );
+    expect(screen.getByTestId("l")).toBeInTheDocument();
+    expect(screen.getByTestId("c")).toBeInTheDocument();
+    expect(screen.getByTestId("r")).toBeInTheDocument();
+  });
+
+  it("managed mode without a center slot still renders left + right", () => {
+    render(
+      <WorkspaceLayout
+        mode="managed"
+        left={<div data-testid="l">L</div>}
         right={<div data-testid="r">R</div>}
       />,
     );

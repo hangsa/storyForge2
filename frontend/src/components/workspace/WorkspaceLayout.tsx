@@ -4,7 +4,6 @@ import type { WorkspaceMode } from "../../hooks/useWorkspaceMode";
 interface Props {
   mode: WorkspaceMode;
   left: ReactNode;
-  /** Only rendered in manual mode. */
   center?: ReactNode;
   right: ReactNode;
 }
@@ -224,6 +223,14 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
           {left}
         </div>
         {renderHandle("left")}
+        {center && (
+          <main
+            data-testid="center-column"
+            className="flex-1 overflow-hidden min-w-0"
+          >
+            {center}
+          </main>
+        )}
         {renderHandle("right")}
         <aside
           data-testid="right-column"

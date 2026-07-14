@@ -172,6 +172,21 @@ describe("Workspace integration", () => {
     expect(toggle.textContent).toContain("启动");
   });
 
+  // v1.9 alignment with plotPilot: managed mode centers on an
+  // AutopilotWorkspace (cockpit / dashboard / log) rather than just a chapter
+  // grid + side panels. The center slot had been left empty, so the user
+  // saw only the left chapter grid + right AI-control panel — no progress
+  // / queue / event stream surface in the middle.
+  it("managed mode renders the autopilot middle panel with cockpit/dashboard/log tabs", async () => {
+    setup("/project/p1/workspace?mode=managed");
+    expect(await screen.findByTestId("autopilot-middle-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-tab-cockpit")).toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-tab-dashboard")).toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-tab-log")).toBeInTheDocument();
+    // Cockpit is the default landing tab and shows the session state card.
+    expect(screen.getByTestId("autopilot-cockpit-state")).toBeInTheDocument();
+  });
+
   it("clicking autopilot-toggle shows status strip and switches button to 停止", async () => {
     const { rerender } = setup("/project/p1/workspace?mode=managed");
     fireEvent.click(screen.getByTestId("autopilot-toggle"));

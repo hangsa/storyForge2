@@ -3,10 +3,14 @@ import { useState } from "react";
 export interface WorkspaceSceneNode {
   scene_id: string;
   title: string;
+  goal?: string;
+  conflict?: string;
+  emotional_arc?: string;
 }
 export interface WorkspaceChapterNode {
   chapter_number: number;
   title: string;
+  theme?: string;
   scenes: WorkspaceSceneNode[];
 }
 

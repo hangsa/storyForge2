@@ -132,7 +132,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   // Load manual-mode chapter tree from outline.json. scene_id is derived as
   // ${chapter_number}-${scene_number} (the existing UI convention). Backend
   // get_outline returns 404 if outline.json does not exist; treat that the
-  // same as a successful empty payload.
+  // same as a successful empty payload. We surface the chapter's `theme`
+  // and each scene's goal/conflict/emotional_arc so the WritingArea header
+  // can show real outline content above the editor (was "(占位)" before
+  // Bug 2 fix).
   useEffect(() => {
     if (!projectId) return;
     setManualChapters([]);  // clear stale data on every (re)load — on failure
@@ -145,16 +148,26 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         chapters?: Array<{
           chapter_number: number;
           title: string;
-          scene_plan?: Array<{ scene_number: number }>;
+          theme?: string;
+          scene_plan?: Array<{
+            scene_number: number;
+            goal?: string;
+            conflict?: string;
+            emotional_arc?: string;
+          }>;
         }>;
       }) => {
         if (cancelled) return;
         const mapped: WorkspaceChapterNode[] = (o?.chapters ?? []).map((c) => ({
           chapter_number: c.chapter_number,
           title: c.title || `第 ${c.chapter_number} 章`,
+          theme: c.theme,
           scenes: (c.scene_plan ?? []).map((s) => ({
             scene_id: `${c.chapter_number}-${s.scene_number}`,
             title: `场景 ${c.chapter_number}-${s.scene_number}`,
+            goal: s.goal,
+            conflict: s.conflict,
+            emotional_arc: s.emotional_arc,
           })),
         }));
         setManualChapters(mapped);
@@ -295,12 +308,21 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                 const ch = manualChapters.find((c) => c.chapter_number === currentChapter);
                 const sc = ch?.scenes.find((s) => s.scene_id === currentScene);
                 if (!ch || !sc) return null;
+                // Bug 2: show real outline content above the editor.
+                // Prefer the chapter's `theme` (the chapter-level summary from
+                // outline_generation.yaml); fall back to the selected scene's
+                // goal when no chapter theme was generated. Leave the empty
+                // string so WritingArea's "大纲：…" line is suppressed entirely
+                // for chapters written before the theme field was introduced.
                 return {
                   chapter_number: ch.chapter_number,
                   chapter_title: ch.title,
                   scene_id: sc.scene_id,
                   scene_title: sc.title,
-                  outline_summary: "(占位)",
+                  outline_summary:
+                    ch.theme?.trim() ||
+                    sc.goal?.trim() ||
+                    "",
                 };
               })()}
               content={content}

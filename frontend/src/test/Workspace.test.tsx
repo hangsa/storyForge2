@@ -458,4 +458,45 @@ describe("Workspace integration", () => {
     expect(generateSpy).toHaveBeenNthCalledWith(1, "p1", 2);
     expect(generateSpy).toHaveBeenNthCalledWith(2, "p1", 3);
   });
+
+  // Bug 2 fix — clicking a manual-mode chapter with a real outline.json now
+  // renders `writing-outline-summary` with the chapter's `theme` instead of
+  // the old "(占位)" placeholder. Without this, the header above the editor
+  // shows nothing useful and the user has to flip to Stage 3 to remember what
+  // they outlined.
+  it("manual-mode writing area renders chapter theme as outline_summary (not 占位)", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        {
+          chapter_number: 1,
+          title: "第一章",
+          theme: "主角踏上寻找身世的旅途",
+          scene_plan: [{ scene_number: 1, goal: "主角启程遇到师父" }],
+        },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    const summary = await screen.findByTestId("writing-outline-summary");
+    expect(summary.textContent).toContain("主角踏上寻找身世的旅途");
+    expect(summary.textContent).not.toContain("占位");
+  });
+
+  // Bug 2 fallback — older outline.json files written before the `theme`
+  // field existed should still surface the selected scene's goal so the
+  // header isn't silently empty.
+  it("manual-mode writing area falls back to scene goal when chapter theme is missing", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        {
+          chapter_number: 1,
+          title: "第一章",
+          // no theme on purpose — simulates pre-v1.8 outline.json
+          scene_plan: [{ scene_number: 1, goal: "主角启程遇到师父" }],
+        },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    const summary = await screen.findByTestId("writing-outline-summary");
+    expect(summary.textContent).toContain("主角启程遇到师父");
+  });
 });

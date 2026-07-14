@@ -281,6 +281,10 @@ export interface Outline {
   chapters: Array<{
     chapter_number: number;
     title: string;
+    /** 本章核心主题（per backend/prompts/outline_generation.yaml）。
+     *  Optional in older outline.json files written before the field was
+     *  introduced; readers must tolerate absence. */
+    theme?: string;
     scene_plan: ScenePlan[];
   }>;
 }

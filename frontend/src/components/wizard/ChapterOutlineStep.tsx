@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api, { NovelOutline, Outline } from "../../api/client";
+import { computePlannedTotal } from "../../utils/outline";
 import { useWizard } from "./WizardContext";
 
 interface ChapterOutlineStepProps {
@@ -12,25 +13,9 @@ interface ChapterOutlineStepProps {
  * v1.8.3: default scope for chapter-outline auto-generation = first 10
  * chapters (≈ the leading third of a typical 30-chapter novel). Capped by
  * the user's planned total parsed from `novel_outline.json`'s volume
- * `chapter_range` strings. The strict regex format mirrors the backend
- * parser in backend/api/stage4_writing.py:647-681 — anything that fails
- * the regex (or a missing file) falls back to the default 10.
+ * `chapter_range` strings (parser lives in utils/outline.ts).
  */
 const DEFAULT_OUTLINE_CHAPTERS = 10;
-const CHAPTER_RANGE_RE = /^\s*(\d+)\s*-\s*(\d+)\s*$/;
-
-function computePlannedTotal(novelOutline: NovelOutline | null): number {
-  if (!novelOutline?.volumes?.length) return 0;
-  let maxEnd = 0;
-  for (const v of novelOutline.volumes) {
-    const m = CHAPTER_RANGE_RE.exec(v.chapter_range ?? "");
-    if (!m) continue;
-    const start = +m[1], end = +m[2];
-    if (start < 1 || end < start) continue;
-    if (end > maxEnd) maxEnd = end;
-  }
-  return maxEnd;
-}
 
 function computeOutlineScope(novelOutline: NovelOutline | null): number {
   const planned = computePlannedTotal(novelOutline);

@@ -9,6 +9,8 @@ const {
   mockedGetProjectStatus,
   mockedGetStage4Progress,
   mockedGetOutline,
+  mockedGetNovelOutline,
+  mockedGenerateOutline,
 } = vi.hoisted(() => ({
   mockedGetProjectStatus: vi.fn().mockResolvedValue({ title: "T" }),
   // Mirrors the backend's no-progress response: chapters=[] but total_chapters
@@ -19,6 +21,8 @@ const {
     .fn()
     .mockResolvedValue({ chapters: [], total_chapters: 0 }),
   mockedGetOutline: vi.fn().mockResolvedValue({ chapters: [] }),
+  mockedGetNovelOutline: vi.fn().mockResolvedValue({ volumes: [] }),
+  mockedGenerateOutline: vi.fn().mockResolvedValue({ chapters: [] }),
 }));
 
 vi.mock("../api/client", () => ({
@@ -29,8 +33,9 @@ vi.mock("../api/client", () => ({
     getConcept: vi.fn().mockResolvedValue({ concept: null, story_dna: null }),
     getWorld: vi.fn().mockResolvedValue({}),
     getCharacter: vi.fn().mockResolvedValue({ characters: [] }),
-    getNovelOutline: vi.fn().mockResolvedValue({}),
+    getNovelOutline: mockedGetNovelOutline,
     updateOutline: vi.fn().mockResolvedValue(undefined),
+    generateOutline: mockedGenerateOutline,
   },
 }));
 
@@ -92,6 +97,10 @@ beforeEach(() => {
   mockedGetStage4Progress.mockResolvedValue({ chapters: [], total_chapters: 0 });
   mockedGetOutline.mockReset();
   mockedGetOutline.mockResolvedValue({ chapters: [] });
+  mockedGetNovelOutline.mockReset();
+  mockedGetNovelOutline.mockResolvedValue({ volumes: [] });
+  mockedGenerateOutline.mockReset();
+  mockedGenerateOutline.mockResolvedValue({ chapters: [] });
   startFn.mockClear();
   stopFn.mockClear();
   mockSession = {
@@ -386,5 +395,67 @@ describe("Workspace integration", () => {
       expect(screen.queryByTestId("chapter-cell-1")).not.toBeInTheDocument();
     });
     expect(screen.queryByTestId("chapter-cell-2")).not.toBeInTheDocument();
+  });
+
+  // Bug 1 fix regression — clicking "+ 新章节" on the manual-mode tree
+  // toolbar must open the AddChaptersModal (previously a no-op).
+  it("'manual mode' + 新章节 opens AddChaptersModal", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        {
+          chapter_number: 1,
+          title: "现有第一章",
+          scene_plan: [{ scene_number: 1 }],
+        },
+      ],
+    });
+    mockedGetNovelOutline.mockResolvedValueOnce({
+      volumes: [{ name: "v1", chapter_range: "1-30", summary: "", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    setup("/project/p1/workspace?mode=manual");
+    expect(await screen.findByTestId("chapter-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("add-chapter"));
+    expect(await screen.findByTestId("add-chapters-modal")).toBeInTheDocument();
+    // Cap from novel_outline = 30, current max = 1 → modal allows adding 29.
+    const input = screen.getByTestId("add-chapters-count") as HTMLInputElement;
+    expect(input.max).toBe("29");
+  });
+
+  // Bug 1 fix regression — confirming AddChaptersModal calls
+  // generateOutline sequentially for new chapter_numbers and reloads.
+  it("AddChaptersModal confirm triggers api.generateOutline for each new chapter", async () => {
+    const { default: api } = await import("../api/client");
+    const generateSpy = api.generateOutline as ReturnType<typeof vi.fn>;
+    generateSpy.mockReset();
+    generateSpy.mockResolvedValue({ chapters: [] });
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        {
+          chapter_number: 1,
+          title: "现有第一章",
+          scene_plan: [{ scene_number: 1 }],
+        },
+      ],
+    });
+    mockedGetNovelOutline.mockResolvedValueOnce({
+      volumes: [{ name: "v1", chapter_range: "1-10", summary: "", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    setup("/project/p1/workspace?mode=manual");
+    expect(await screen.findByTestId("chapter-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("add-chapter"));
+    const input = await screen.findByTestId("add-chapters-count");
+    fireEvent.change(input, { target: { value: "2" } });
+    fireEvent.click(screen.getByTestId("add-chapters-confirm"));
+    await waitFor(() => expect(generateSpy).toHaveBeenCalledTimes(2));
+    expect(generateSpy).toHaveBeenNthCalledWith(1, "p1", 2);
+    expect(generateSpy).toHaveBeenNthCalledWith(2, "p1", 3);
   });
 });

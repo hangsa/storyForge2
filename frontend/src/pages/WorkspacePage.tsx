@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import api from "../api/client";
+import api, { NovelOutline } from "../api/client";
 import { useWorkspaceMode } from "../hooks/useWorkspaceMode";
 import { useWorkspacePanel } from "../hooks/useWorkspacePanel";
+import { computePlannedTotal } from "../utils/outline";
 import WorkspaceTopBar from "../components/workspace/WorkspaceTopBar";
 import WorkspaceLayout from "../components/workspace/WorkspaceLayout";
 import ManagedDashboard, { type DashboardChapter } from "../components/workspace/ManagedDashboard";
@@ -12,6 +13,7 @@ import WritingArea from "../components/workspace/WritingArea";
 import ContextPanel from "../components/workspace/ContextPanel";
 import ModeSwitchConfirmModal from "../components/workspace/ModeSwitchConfirmModal";
 import ManagedStartModal, { type ManagedStartConfig } from "../components/workspace/ManagedStartModal";
+import AddChaptersModal, { type AddChaptersProgress } from "../components/workspace/AddChaptersModal";
 
 // Map progress.json's `status` field onto ManagedDashboard's chapter status.
 // `in_progress` is the writer-side term; the dashboard surfaces it as "writing".
@@ -34,6 +36,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
 
   const [chapters, setChapters] = useState<DashboardChapter[]>([]);
   const [manualChapters, setManualChapters] = useState<WorkspaceChapterNode[]>([]);
+  const [novelOutline, setNovelOutline] = useState<NovelOutline | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [currentChapter, setCurrentChapter] = useState(1);
   const [currentScene, setCurrentScene] = useState<string | null>(null);
@@ -45,6 +48,16 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const [takeOverChapter, setTakeOverChapter] = useState<number | null>(null);
   const [pendingTargetMode, setPendingTargetMode] = useState<"manual" | "managed" | null>(null);
   const [startOpen, setStartOpen] = useState(false);
+
+  // Bug 1 fix: + 新章节 wiring. Modal state + progress; currentMaxChapter
+  // drives the "starting from chapter N" hint inside the modal.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addProgress, setAddProgress] = useState<AddChaptersProgress | null>(null);
+  const currentMaxChapter = useMemo(
+    () => manualChapters.reduce((max, c) => Math.max(max, c.chapter_number), 0),
+    [manualChapters],
+  );
+  const plannedTotal = useMemo(() => computePlannedTotal(novelOutline), [novelOutline]);
 
   // Project name load — best-effort. 404 redirects to "/" per spec
   // § Error Handling. Anything else is silently swallowed (page still
@@ -196,6 +209,42 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     setPendingTargetMode(null);
   };
 
+  // Load novel_outline.json so the + 新章节 modal can show a sensible cap.
+  // Backend returns 404 on the first call when the project is brand new; we
+  // treat that the same way as a missing/null payload (cap falls back to
+  // a default in AddChaptersModal).
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    api
+      .getNovelOutline(projectId)
+      .then((o) => { if (!cancelled) setNovelOutline(o ?? null); })
+      .catch(() => { if (!cancelled) setNovelOutline(null); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, reloadKey]);
+
+  const handleAddChapters = async (count: number) => {
+    setAddProgress({ done: 0, total: count });
+    // Sequential (mirrors ChapterOutlineStep v1.8.3): /stage3/generate reads
+    // existing outline.json, dedupes by chapter_number, appends the new one,
+    // writes back. Parallel calls would race on the read-modify-write.
+    try {
+      for (let i = 1; i <= count; i++) {
+        const next = currentMaxChapter + i;
+        await api.generateOutline(projectId, next);
+        setAddProgress({ done: i, total: count });
+      }
+      setAddOpen(false);
+      setAddProgress(null);
+      setReloadKey((k) => k + 1);
+    } catch {
+      // Leave the modal open with the partial progress so the user can
+      // dismiss or retry; surface the failure via setStatus would
+      // fight the wizard, so we just leave progress visible.
+    }
+  };
+
   const goToOutlinePanel = () => {
     setPanel("outline");
   };
@@ -234,7 +283,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                 setContent("");
               }}
               onSelectScene={(n, s) => { setCurrentChapter(n); setCurrentScene(s); }}
-              onAddChapter={() => {}}
+              onAddChapter={() => setAddOpen(true)}
               onRefresh={() => setReloadKey((k) => k + 1)}
             />
           )
@@ -295,6 +344,18 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         open={startOpen}
         onCancel={() => { setStartOpen(false); setPendingTargetMode(null); }}
         onStart={(_cfg: ManagedStartConfig) => { setStartOpen(false); setMode("managed"); setPendingTargetMode(null); }}
+      />
+      <AddChaptersModal
+        open={addOpen}
+        currentMax={currentMaxChapter}
+        plannedTotal={plannedTotal}
+        progress={addProgress}
+        onCancel={() => {
+          // Allow cancel only when no in-flight generation: protects
+          // against abandoning a half-finished LLM batch.
+          if (addProgress === null) setAddOpen(false);
+        }}
+        onConfirm={handleAddChapters}
       />
     </div>
   );

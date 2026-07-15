@@ -15,6 +15,7 @@ const {
   mockedFactGuard,
   mockedGetSceneDraft,
   mockedStopAutopilotSession,
+  mockedGetSceneDrafts,
 } = vi.hoisted(() => ({
   mockedGetProjectStatus: vi.fn().mockResolvedValue({ title: "T" }),
   // Mirrors the backend's no-progress response: chapters=[] but total_chapters
@@ -62,6 +63,10 @@ const {
   // current_task. Default-resolves to an empty object — tests assert via
   // mockClear()/toHaveBeenCalledWith().
   mockedStopAutopilotSession: vi.fn().mockResolvedValue({}),
+  // Default: no drafts on disk for any chapter. Tests override via
+  // mockResolvedValueOnce or mockImplementation to drive the chapter-level
+  // scene-status dots and the refetch-on-chapter-switch behavior.
+  mockedGetSceneDrafts: vi.fn().mockResolvedValue({ chapter_number: 0, scenes: [] }),
 }));
 
 vi.mock("../api/client", () => ({
@@ -80,6 +85,7 @@ vi.mock("../api/client", () => ({
     writeScene: mockedWriteScene,
     factGuard: mockedFactGuard,
     stopAutopilotSession: mockedStopAutopilotSession,
+    getSceneDrafts: mockedGetSceneDrafts,
   },
 }));
 
@@ -205,6 +211,8 @@ beforeEach(() => {
   mockedGetAutopilotSession.mockResolvedValue(null);
   mockedStopAutopilotSession.mockReset();
   mockedStopAutopilotSession.mockResolvedValue({});
+  mockedGetSceneDrafts.mockReset();
+  mockedGetSceneDrafts.mockResolvedValue({ chapter_number: 0, scenes: [] });
   startFn.mockClear();
   stopFn.mockClear();
   mockSession = {
@@ -960,5 +968,68 @@ describe("Workspace integration", () => {
     // promise resolves. Use waitFor to avoid races with the auto-dismiss
     // timer in case the test environment is slow.
     await waitFor(() => expect(screen.getByText(/草稿已保存/)).toBeInTheDocument());
+  });
+
+  // v1.10: chapter-level status from getStage4Progress surfaces as badges.
+  it("manual mode renders chapter-status badges derived from getStage4Progress", async () => {
+    // Both WorkspacePage and WorkspaceTopBar call getStage4Progress on mount.
+    mockedGetStage4Progress.mockResolvedValue({
+      chapters: [
+        { chapter_number: 1, status: "completed" },
+        { chapter_number: 2, status: "in_progress" },
+      ],
+      total_chapters: 2,
+    });
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+        { chapter_number: 2, title: "第二章", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    expect(await screen.findByTestId("chapter-status-1")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-status-1").textContent).toBe("✓");
+    expect(screen.getByTestId("chapter-status-2")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-status-2").textContent).toBe("✎");
+  });
+
+  // v1.10: switching chapters refetches scene-drafts and updates the
+  // scene-status dots accordingly.
+  it("manual mode refetches scene drafts when currentChapter changes", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", scene_plan: [
+          { scene_number: 1 }, { scene_number: 2 },
+        ]},
+        { chapter_number: 2, title: "第二章", scene_plan: [
+          { scene_number: 1 },
+        ]},
+      ],
+    });
+    // Chapter 1: scene 1 has draft, scene 2 doesn't.
+    // Chapter 2: scene 1 has draft.
+    mockedGetSceneDrafts.mockImplementation(async (_pid: string, ch: number) => {
+      if (ch === 1) return { chapter_number: 1, scenes: [
+        { scene_number: 1, has_draft: true },
+        { scene_number: 2, has_draft: false },
+      ]};
+      return { chapter_number: 2, scenes: [
+        { scene_number: 1, has_draft: true },
+      ]};
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    await waitFor(() => expect(mockedGetSceneDrafts).toHaveBeenCalledWith("p1", 1));
+    expect(await screen.findByTestId("scene-status-1-1")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-status-1-1").textContent).toBe("●");
+    expect(screen.getByTestId("scene-status-1-2").textContent).toBe("○");
+
+    // Click chapter 2 to switch — refetch should fire.
+    fireEvent.click(screen.getByTestId("chapter-2"));
+    await waitFor(() => expect(mockedGetSceneDrafts).toHaveBeenCalledWith("p1", 2));
+    expect(await screen.findByTestId("scene-status-2-1")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-status-2-1").textContent).toBe("●");
+    // Chapter 1's cached entries must remain in the map (we don't refetch
+    // to remove them — the user may switch back).
+    expect(screen.queryByTestId("scene-status-1-1")).not.toBeInTheDocument();
   });
 });

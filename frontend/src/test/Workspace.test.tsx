@@ -594,9 +594,10 @@ describe("Workspace integration", () => {
     // Volume headers carry the chapter range.
     expect(screen.getByTestId("volume-第一卷-header").textContent).toContain("1-30");
     expect(screen.getByTestId("volume-第二卷-header").textContent).toContain("31-60");
-    // Volume summaries are visible (volume 1 is auto-opened because it
-    // contains currentChapter=1).
-    expect(screen.getByTestId("volume-第一卷-summary")).toHaveTextContent("初入江湖");
+    // Volume's detailed outline (summary) is intentionally hidden — only the
+    // name + range are surfaced; the writer consults the prose outline elsewhere.
+    expect(screen.queryByTestId("volume-第一卷-summary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("volume-第二卷-summary")).not.toBeInTheDocument();
   });
 
   it("manual-mode chapter tree falls back to '未分组' when no novel_outline exists", async () => {

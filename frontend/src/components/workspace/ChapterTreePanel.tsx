@@ -143,14 +143,6 @@ export default function ChapterTreePanel({
                 </span>
                 <span className="text-[10px] text-system-log/70">{vol.chapters.length} 章</span>
               </button>
-              {vol.summary && isOpen && (
-                <p
-                  data-testid={`volume-${vol.name}-summary`}
-                  className="font-body-ui text-system-log/70 text-xs italic pl-2"
-                >
-                  {vol.summary}
-                </p>
-              )}
               {isOpen && (
                 <ul className="space-y-1 pl-2">
                   {vol.chapters.map((ch) => {

@@ -156,7 +156,10 @@ describe("ChapterTreePanel", () => {
     expect(screen.getByTestId("volume-第一卷-header").textContent).toContain("第一卷");
     expect(screen.getByTestId("volume-第一卷-header").textContent).toContain("1-30");
     expect(screen.getByTestId("volume-第二卷-header")).toBeInTheDocument();
-    expect(screen.getByTestId("volume-第一卷-summary")).toHaveTextContent("初入江湖");
+    // Volume's detailed outline (summary) is intentionally hidden — the panel
+    // shows the volume name + chapter range for orientation, but not the prose
+    // outline the writer authored separately.
+    expect(screen.queryByTestId("volume-第一卷-summary")).not.toBeInTheDocument();
     // Chapter 1 belongs to volume 1, so its scenes are visible.
     expect(screen.getByTestId("scene-1-1")).toBeInTheDocument();
     // Chapter 2 is in volume 2 (not current) — its scenes are hidden.
@@ -200,5 +203,44 @@ describe("ChapterTreePanel", () => {
     );
     expect(screen.queryByTestId(/^volume-/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("chapter-1")).not.toBeInTheDocument();
+  });
+
+  it("renders a per-chapter status badge when chapterStatus is provided", () => {
+    render(
+      <ChapterTreePanel
+        volumes={VOLUMES}
+        currentChapter={1}
+        currentScene="1-1"
+        chapterStatus={{ 1: "completed", 2: "writing" }}
+        onSelectChapter={() => {}}
+        onSelectScene={() => {}}
+        onAddChapter={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    const ch1 = screen.getByTestId("chapter-status-1");
+    const ch2 = screen.getByTestId("chapter-status-2");
+    expect(ch1.textContent).toBe("✓");
+    expect(ch1.title).toBe("已完成");
+    expect(ch1.className).toMatch(/emerald/);
+    expect(ch2.textContent).toBe("✎");
+    expect(ch2.title).toBe("撰写中");
+    expect(ch2.className).toMatch(/blue/);
+  });
+
+  it("does not render status badges when chapterStatus is omitted", () => {
+    render(
+      <ChapterTreePanel
+        volumes={VOLUMES}
+        currentChapter={1}
+        currentScene="1-1"
+        onSelectChapter={() => {}}
+        onSelectScene={() => {}}
+        onAddChapter={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId("chapter-status-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chapter-status-2")).not.toBeInTheDocument();
   });
 });

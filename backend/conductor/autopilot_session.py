@@ -137,6 +137,14 @@ class AutopilotSessionManager:
         self.save(s2)
         return s2
 
+    def fail_current_task(self, error: str) -> AutopilotSession:
+        """Write-through wrapper for fail_current_task(error)."""
+        from backend.models.autopilot_session import fail_current_task as _pure_fail
+        s = self.load() or self._empty_session()
+        s2 = _pure_fail(s, error=error)
+        self.save(s2)
+        return s2
+
     def add_queue(self, item: QueueItem) -> AutopilotSession:
         """Write-through convenience for the pure `add_queue_item` helper."""
         s = self.load() or self._empty_session()

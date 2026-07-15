@@ -198,6 +198,26 @@ def complete_current_task(s: AutopilotSession) -> AutopilotSession:
     )
 
 
+def fail_current_task(s: AutopilotSession, error: str) -> AutopilotSession:
+    """Clear `current_task` and emit a `task_fail` event.
+
+    Distinct from `complete_current_task`: success path emits task_complete and
+    sets progress_pct=100; this emits task_fail and clears current_task outright.
+    The runner uses this on the executor-exception branch.
+    """
+    if s.current_task is None:
+        return s
+    s2 = AutopilotSession(
+        project_id=s.project_id, state=s.state, config=s.config,
+        started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
+        current_task=None, queue=list(s.queue), history=list(s.history),
+        circuit=s.circuit,
+    )
+    return _append_event(s2, "task_fail", task_id=s.current_task.scene_id,
+                         chapter_number=s.current_task.chapter_number,
+                         payload={"error": error})
+
+
 def add_queue_item(s: AutopilotSession, item: QueueItem) -> AutopilotSession:
     if item.kind not in TASK_KINDS:
         raise ValueError(f"unknown task kind: {item.kind!r}")

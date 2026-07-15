@@ -268,3 +268,41 @@ class TestSessionStateMachineClass:
         sm = SessionStateMachine()
         with pytest.raises(InvalidTransition):
             sm.pause(make_session(SessionState.IDLE))
+
+
+class TestFailCurrentTask:
+    def test_emits_task_fail_event(self):
+        from backend.models.autopilot_session import (
+            AutopilotSession, CircuitSnapshot, CurrentTask, ManagedStartConfig,
+            SessionState, fail_current_task,
+        )
+        s = AutopilotSession(
+            project_id="p1", state=SessionState.RUNNING,
+            config=ManagedStartConfig(), started_at=None,
+            last_heartbeat_at=None,
+            current_task=CurrentTask(
+                kind="write_scene", chapter_number=1, scene_id=None,
+                status="active", started_at="2026-07-15T00:00:00Z",
+                description="writing chapter 1 scene 1",
+            ),
+            queue=[], history=[], circuit=CircuitSnapshot(),
+        )
+        s2 = fail_current_task(s, error="LLM 5xx")
+        assert s2.current_task is None
+        assert len(s2.history) == 1
+        assert s2.history[0].type == "task_fail"
+        assert s2.history[0].payload == {"error": "LLM 5xx"}
+
+    def test_no_op_when_no_current_task(self):
+        from backend.models.autopilot_session import (
+            AutopilotSession, CircuitSnapshot, ManagedStartConfig,
+            SessionState, fail_current_task,
+        )
+        s = AutopilotSession(
+            project_id="p1", state=SessionState.RUNNING,
+            config=ManagedStartConfig(), started_at=None,
+            last_heartbeat_at=None, current_task=None,
+            queue=[], history=[], circuit=CircuitSnapshot(),
+        )
+        s2 = fail_current_task(s, error="orphan fail")
+        assert s2.history == []

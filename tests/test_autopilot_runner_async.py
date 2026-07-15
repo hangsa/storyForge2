@@ -73,9 +73,10 @@ def projects_dir(tmp_path, monkeypatch):
     from backend.api.stage4_writing import fm
     # _write_scene_chapter / _advance_chapter use settings.projects_dir (and the
     # module-level fm.projects_dir bound at import time). Bind both to tmp_path
-    # so the executor's file I/O lands in the test's sandbox.
+    # so the executor's file I/O lands in the test's sandbox. monkeypatch
+    # auto-reverts both when the test ends, preventing cross-suite state leaks.
     monkeypatch.setattr(settings, "projects_dir", tmp_path)
-    fm.projects_dir = tmp_path
+    monkeypatch.setattr(fm, "projects_dir", tmp_path)
     (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
     (tmp_path / "p1" / "project.json").write_text(
         json.dumps({"id": "p1"}), encoding="utf-8"

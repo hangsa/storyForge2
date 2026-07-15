@@ -218,7 +218,7 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
         <div
           data-testid="left-column"
           style={{ width: effectiveLeftWidth }}
-          className="overflow-hidden shrink-0"
+          className="h-full overflow-y-auto shrink-0"
         >
           {left}
         </div>
@@ -235,7 +235,7 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
         <aside
           data-testid="right-column"
           style={{ width: effectiveRightWidth }}
-          className="overflow-hidden shrink-0"
+          className="h-full overflow-y-auto shrink-0"
         >
           {right}
         </aside>
@@ -253,7 +253,7 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
       <aside
         data-testid="left-column"
         style={{ width: effectiveLeftWidth }}
-        className="overflow-hidden shrink-0"
+        className="h-full overflow-y-auto shrink-0"
       >
         {left}
       </aside>
@@ -268,7 +268,7 @@ export default function WorkspaceLayout({ mode, left, center, right }: Props) {
       <aside
         data-testid="right-column"
         style={{ width: effectiveRightWidth }}
-        className="overflow-hidden shrink-0"
+        className="h-full overflow-y-auto shrink-0"
       >
         {right}
       </aside>

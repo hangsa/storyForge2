@@ -102,6 +102,7 @@ vi.mock("../api/autopilot", async (importActual) => {
 import WorkspacePage from "../pages/WorkspacePage";
 import { useAutopilotSession } from "../hooks/useAutopilotSession";
 import { ToastProvider } from "../hooks/useToast";
+import ToastContainer from "../components/shared/ToastContainer";
 
 // Mutable state shared between ManagedDashboard and ManagedAIControlPanel —
 // they each call useAutopilotSession() in their own subtree, so we need a
@@ -137,8 +138,8 @@ function setup(initialPath: string) {
         {/* WorkspacePage reads useParams<{ projectId }> — declare the route
             with a :projectId segment so MemoryRouter populates params. The
             "path *" branch below is a fallback for non-/project paths. */}
-        <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /></ToastProvider>} />
-        <Route path="*" element={<ToastProvider><WorkspacePage projectId="p1" /></ToastProvider>} />
+        <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /><ToastContainer /></ToastProvider>} />
+        <Route path="*" element={<ToastProvider><WorkspacePage projectId="p1" /><ToastContainer /></ToastProvider>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -897,5 +898,26 @@ describe("Workspace integration", () => {
     expect(writeSceneSpy).not.toHaveBeenCalled();
     // Editor content is preserved.
     expect((screen.getByTestId("editor-body") as HTMLTextAreaElement).value).toBe("未保存的改动");
+  });
+
+  it("'保存草稿' shows a success toast on save", async () => {
+    const { default: api } = await import("../api/client");
+    const updateSceneDraftSpy = api.updateSceneDraft as ReturnType<typeof vi.fn>;
+    updateSceneDraftSpy.mockReset();
+    updateSceneDraftSpy.mockResolvedValue({ chapter_number: 1, scene_number: 1 });
+
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
+    fireEvent.change(body, { target: { value: "新内容" } });
+    fireEvent.click(screen.getByTestId("editor-save"));
+    // findByText polls — the toast renders asynchronously after the save
+    // promise resolves. Use waitFor to avoid races with the auto-dismiss
+    // timer in case the test environment is slow.
+    await waitFor(() => expect(screen.getByText(/草稿已保存/)).toBeInTheDocument());
   });
 });

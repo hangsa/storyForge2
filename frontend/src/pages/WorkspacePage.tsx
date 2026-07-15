@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api, { NovelOutline } from "../api/client";
 import { useWorkspaceMode } from "../hooks/useWorkspaceMode";
 import { useWorkspacePanel } from "../hooks/useWorkspacePanel";
+import { useToast } from "../hooks/useToast";
 import { computePlannedTotal } from "../utils/outline";
 import WorkspaceTopBar from "../components/workspace/WorkspaceTopBar";
 import WorkspaceLayout from "../components/workspace/WorkspaceLayout";
@@ -103,6 +104,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const navigate = useNavigate();
   const { mode, setMode } = useWorkspaceMode();
   const { setPanel } = useWorkspacePanel();
+  const { show } = useToast();
 
   const [projectName, setProjectName] = useState("加载中…");
 
@@ -399,9 +401,15 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         chapter_number: currentChapter,
         scene_number: sceneNumber,
       });
-      if (resp.draft_text) setContent(resp.draft_text);
+      if (resp.draft_text) {
+        setContent(resp.draft_text);
+        show("场景已重新生成");
+      } else {
+        show("场景生成完成（无草稿文本）");
+      }
     } catch (e) {
-      console.warn("regenerate scene failed", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      show(`重新生成失败：${msg}`);
     } finally {
       setBusy(false);
     }
@@ -489,8 +497,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                     draft_text: content,
                   });
                   setLastSavedContent(content);
-                } catch {
-                  // swallow — toast wiring lands in Task 6
+                  show("草稿已保存");
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  show(`保存失败：${msg}`);
                 } finally {
                   setBusy(false);
                 }
@@ -515,16 +525,25 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                 setBusy(true);
                 try {
                   // Read-only check — does NOT call /write-scene, does NOT
-                  // overwrite the editor. Result is shown via toast (Task 6)
-                  // and an inline summary in the future.
-                  await api.factGuard({
+                  // overwrite the editor. Result is shown via toast.
+                  const result = await api.factGuard({
                     project_id: projectId,
                     chapter_number: currentChapter,
                     scene_number: sceneNumber,
                     draft_text: content,
                   });
-                } catch {
-                  // swallow — toast wiring lands in Task 6
+                  // User-friendly summary — hide internal check names; just
+                  // report the failure count so the toast stays short.
+                  if (result.all_passed) {
+                    const n = result.checks.length;
+                    show(n > 0 ? `Fact Guard 通过（${n} 项检查）` : "Fact Guard 通过");
+                  } else {
+                    const failed = result.checks.filter((c) => !c.passed).length;
+                    show(`Fact Guard 未通过（${failed} 项不通过）`);
+                  }
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  show(`Fact Guard 失败：${msg}`);
                 } finally {
                   setBusy(false);
                 }

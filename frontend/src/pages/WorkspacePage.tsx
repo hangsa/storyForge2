@@ -8,7 +8,6 @@ import { computePlannedTotal } from "../utils/outline";
 import WorkspaceTopBar from "../components/workspace/WorkspaceTopBar";
 import WorkspaceLayout from "../components/workspace/WorkspaceLayout";
 import ManagedDashboard, { type DashboardChapter } from "../components/workspace/ManagedDashboard";
-import ManagedAIControlPanel from "../components/workspace/ManagedAIControlPanel";
 import ChapterTreePanel, {
   type WorkspaceChapterNode,
   type WorkspaceVolumeGroup,
@@ -578,7 +577,11 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
           )
         }
         right={
-          mode === "managed" ? <ManagedAIControlPanel projectId={projectId} /> : <ContextPanel projectId={projectId} />
+          <ContextPanel
+            projectId={projectId}
+            readOnly={mode === "managed"}
+            readOnlyReason={mode === "managed" ? "托管运行中,元数据已锁定" : undefined}
+          />
         }
       />
 

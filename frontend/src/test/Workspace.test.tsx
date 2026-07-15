@@ -547,7 +547,9 @@ describe("Workspace integration", () => {
   it("EventSource sequence updates all 4 AI control tabs", () => {
     // Step 1: managed mode renders cleanly with no events yet.
     const { rerender } = setup("/project/p1/workspace?mode=managed");
-    expect(screen.getByTestId("ai-control-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("ai-control-panel")).not.toBeInTheDocument();
+    expect(screen.getByTestId("context-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("context-readonly-banner")).toHaveTextContent("托管运行中");
     expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
 
     // Step 2: switch session to running with a current task — triggers the

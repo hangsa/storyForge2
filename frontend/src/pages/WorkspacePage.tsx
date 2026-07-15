@@ -18,6 +18,7 @@ import ModeSwitchConfirmModal from "../components/workspace/ModeSwitchConfirmMod
 import ManagedStartModal, { type ManagedStartConfig } from "../components/workspace/ManagedStartModal";
 import AutopilotMiddlePanel from "../components/workspace/AutopilotMiddlePanel";
 import AddChaptersModal, { type AddChaptersProgress } from "../components/workspace/AddChaptersModal";
+import ConfirmDialog from "../components/shared/ConfirmDialog";
 
 // Map progress.json's `status` field onto ManagedDashboard's chapter status.
 // `in_progress` is the writer-side term; the dashboard surfaces it as "writing".
@@ -121,6 +122,13 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   // on every regenerate for chapters that already have a saved draft —
   // the common case for power users.
   const [lastSavedContent, setLastSavedContent] = useState<string>("");
+
+  // 重新生成: when true, the user has chosen to proceed with regenerate
+  // after the unsaved-changes confirm dialog.
+  const [regenerateGuard, setRegenerateGuard] = useState<{
+    open: boolean;
+    pending: boolean;
+  }>({ open: false, pending: false });
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmKind, setConfirmKind] = useState<"mode-switch" | "take-over">("mode-switch");
@@ -383,6 +391,22 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     setPanel("outline");
   };
 
+  const doRegenerate = async (sceneNumber: number) => {
+    setBusy(true);
+    try {
+      const resp = await api.writeScene({
+        project_id: projectId,
+        chapter_number: currentChapter,
+        scene_number: sceneNumber,
+      });
+      if (resp.draft_text) setContent(resp.draft_text);
+    } catch (e) {
+      console.warn("regenerate scene failed", e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div data-testid="workspace-page" className="h-screen flex flex-col bg-canvas-bg">
       <WorkspaceTopBar
@@ -475,21 +499,14 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                 if (!currentScene) return;
                 const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
                 if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
-                setBusy(true);
-                try {
-                  const resp = await api.writeScene({
-                    project_id: projectId,
-                    chapter_number: currentChapter,
-                    scene_number: sceneNumber,
-                  });
-                  if (resp.draft_text) {
-                    setContent(resp.draft_text);
-                  }
-                } catch (e) {
-                  console.warn("regenerate scene failed", e);
-                } finally {
-                  setBusy(false);
+                // Confirm only when the editor has edits the user has NOT
+                // saved. If content matches what's on disk (lastSavedContent),
+                // the regenerate doesn't destroy anything.
+                if (content !== lastSavedContent) {
+                  setRegenerateGuard({ open: true, pending: true });
+                  return;
                 }
+                await doRegenerate(sceneNumber);
               }}
               onFactGuard={async () => {
                 if (!currentScene) return;
@@ -553,6 +570,20 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
           if (addProgress === null) setAddOpen(false);
         }}
         onConfirm={handleAddChapters}
+      />
+      <ConfirmDialog
+        open={regenerateGuard.open}
+        title="重新生成场景？"
+        message="当前编辑的内容将被覆盖。是否继续？"
+        confirmLabel="重新生成"
+        onCancel={() => setRegenerateGuard({ open: false, pending: false })}
+        onConfirm={async () => {
+          setRegenerateGuard({ open: false, pending: false });
+          if (!currentScene) return;
+          const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
+          if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
+          await doRegenerate(sceneNumber);
+        }}
       />
     </div>
   );

@@ -59,6 +59,7 @@ export default function WorkspaceTopBar({
   const sessionState = session?.state ?? null;
   const showTask =
     sessionState === "running" &&
+    mode === "managed" &&
     !!session?.current_task?.description;
 
   const badge = (() => {

@@ -13,6 +13,7 @@ from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.config import settings
+from backend.conductor.autopilot_loop import AutopilotLoopService
 from backend.conductor.autopilot_session import (
     AutopilotSessionManager, _session_to_dict,
 )
@@ -32,6 +33,15 @@ router = APIRouter(
 
 def _mgr(project_id: str) -> AutopilotSessionManager:
     return AutopilotSessionManager(settings.projects_dir, project_id, broadcaster=broadcaster)
+
+
+def _loop_svc(request: Request) -> AutopilotLoopService:
+    return request.app.state.loop_service
+
+
+def _executor_for(request: Request, project_id: str):
+    """The single app-wide executor. Tests override via app.state too."""
+    return request.app.state.stage4_executor
 
 
 def _ensure_project_exists(project_id: str):
@@ -67,7 +77,7 @@ async def get_session(project_id: str):
 # --- POST /session/start ---
 
 @router.post("/session/start")
-async def start_session(project_id: str, data: dict):
+async def start_session(project_id: str, data: dict, request: Request):
     err = _ensure_project_exists(project_id)
     if err is not None:
         return err
@@ -77,32 +87,47 @@ async def start_session(project_id: str, data: dict):
         policy=data.get("policy", "auto"),
         notify=data.get("notify", "milestones"),
     )
-    s = _mgr(project_id).start(cfg)
+    # outline missing → 400 BEFORE we start the session (spec §5 row 9).
+    outline_path = settings.projects_dir / project_id / "outline.json"
+    if not outline_path.exists():
+        return JSONResponse(
+            status_code=400,
+            content={"error": True, "code": "OUTLINE_NOT_FOUND",
+                     "message": "项目缺少 outline.json，无法启动托管", "detail": {}},
+        )
+    mgr = _mgr(project_id)
+    s = mgr.start(cfg)
+    # Spawn the runner.
+    loop = _loop_svc(request)
+    executor = _executor_for(request, project_id)
+    await loop.ensure(project_id, mgr, executor, cfg)
     return _envelope(_session_to_dict(s), "session started")
 
 
 # --- POST /session/{stop,pause,resume} ---
 
 @router.post("/session/stop")
-async def stop_session(project_id: str):
+async def stop_session(project_id: str, request: Request):
     err = _ensure_project_exists(project_id)
     if err is not None:
         return err
     s = _mgr(project_id).stop()
+    await _loop_svc(request).cancel(project_id)
     return _envelope(_session_to_dict(s), "session stopped")
 
 
 @router.post("/session/pause")
-async def pause_session(project_id: str):
+async def pause_session(project_id: str, request: Request):
     err = _ensure_project_exists(project_id)
     if err is not None:
         return err
     s = _mgr(project_id).pause()
+    await _loop_svc(request).cancel(project_id)
     return _envelope(_session_to_dict(s), "session paused")
 
 
 @router.post("/session/resume")
-async def resume_session(project_id: str):
+async def resume_session(project_id: str, request: Request):
     err = _ensure_project_exists(project_id)
     if err is not None:
         return err
@@ -116,6 +141,8 @@ async def resume_session(project_id: str):
                      "detail": {"current_state": current.state.value}},
         )
     s = mgr.resume()
+    cfg = s.config if s is not None else ManagedStartConfig()
+    await _loop_svc(request).ensure(project_id, mgr, _executor_for(request, project_id), cfg)
     return _envelope(_session_to_dict(s), "session resumed")
 
 

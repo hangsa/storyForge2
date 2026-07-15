@@ -20,7 +20,16 @@ def client(projects_dir: Path):
     orig = settings.projects_dir
     settings.projects_dir = projects_dir
     from backend.api.autopilot import router as autopilot_router
+    from backend.conductor.autopilot_loop import AutopilotLoopService
     app = FastAPI()
+    # Stub app.state so the wiring in start/stop/pause/resume doesn't blow up.
+    # These tests don't seed outline.json, so ensure() will short-circuit
+    # (seed_queue returns 0 → no task spawned → no LLM calls).
+    app.state.loop_service = AutopilotLoopService()
+    class _NoopExecutor:
+        async def execute(self, item, project_id):
+            return {"status": "ok"}
+    app.state.stage4_executor = _NoopExecutor()
     app.include_router(autopilot_router)
     yield TestClient(app)
     settings.projects_dir = orig
@@ -31,6 +40,16 @@ def _make_project(projects_dir: Path, project_id: str = "p1") -> None:
     (projects_dir / project_id / "project.json").write_text(
         json.dumps({"id": project_id, "title": "测试项目", "current_stage": "STAGE4"}),
         encoding="utf-8",
+    )
+    # Seed a minimal outline so seed_queue enqueues >=1 item and the runner
+    # actually spawns. Without this, loop.ensure() short-circuits to mgr.stop()
+    # and the session never reaches 'running' state.
+    (projects_dir / project_id / "outline.json").write_text(
+        json.dumps({"chapters": [
+            {"chapter_number": 1, "scene_plan": [
+                {"scene_number": 1, "goal": "", "conflict": ""},
+            ]},
+        ]}), encoding="utf-8",
     )
 
 

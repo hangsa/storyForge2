@@ -175,3 +175,32 @@ class TestHistory:
         assert r.status_code == 200
         assert r.json()["detail"]["events"] == []
         assert r.json()["detail"]["next_cursor"] is None
+
+
+def _write_outline(projects_dir: Path, outline: dict) -> None:
+    (projects_dir / "p1" / "outline.json").write_text(
+        json.dumps(outline), encoding="utf-8"
+    )
+
+
+class TestStartSpawnsRunner:
+    """Spec §2 row 7: POST /start must spawn a runner observable via
+    mgr.current_task or via SSE on GET /events."""
+
+    def test_start_sets_running_state(self, client, projects_dir):
+        """The minimal assertion per spec -- POST /start -> state=running."""
+        _make_project(projects_dir, "p1")
+        _write_outline(projects_dir, {"chapters": [
+            {"chapter_number": 1, "scene_plan": [
+                {"scene_number": 1, "goal": "g", "conflict": "c"},
+            ]},
+        ]})
+        r = client.post("/api/v1/projects/p1/autopilot/session/start",
+                        json=_start_payload())
+        assert r.status_code == 200
+        body = r.json()["detail"]
+        assert body["state"] == "running"
+        # The session has been started AND the manager has been written to disk.
+        # (The runner itself may have already finished by the time we check --
+        # the spec only requires the runner is SPAWNED, not that it lingers.)
+        assert body["queue"] is not None

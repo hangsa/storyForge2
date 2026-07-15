@@ -306,3 +306,43 @@ class TestFailCurrentTask:
         )
         s2 = fail_current_task(s, error="orphan fail")
         assert s2.history == []
+
+
+class TestRecordForcePassInternal:
+    def test_first_call_increments_count_no_threshold(self, tmp_path):
+        """Two force-passes: counter at 2, threshold_warning False."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig
+
+        (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "p1" / "project.json").write_text(
+            '{"id":"p1"}', encoding="utf-8"
+        )
+        mgr = AutopilotSessionManager(tmp_path, "p1")
+        mgr.start(ManagedStartConfig())
+        mgr.record_force_pass_internal()
+        mgr.record_force_pass_internal()
+        s = mgr.load()
+        assert s.circuit.force_pass_count == 2
+        assert s.circuit.threshold_warning is False
+
+    def test_third_call_pauses_session(self, tmp_path):
+        """Third force-pass crosses threshold → circuit_open auto-pause."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig
+
+        (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "p1" / "project.json").write_text(
+            '{"id":"p1"}', encoding="utf-8"
+        )
+        mgr = AutopilotSessionManager(tmp_path, "p1")
+        mgr.start(ManagedStartConfig())
+        mgr.record_force_pass_internal()
+        mgr.record_force_pass_internal()
+        mgr.record_force_pass_internal()
+        s = mgr.load()
+        assert s.circuit.force_pass_count == 3
+        assert s.circuit.threshold_warning is True
+        assert s.state.value == "paused"
+        # circuit_open event was emitted
+        assert any(e.type == "circuit_open" for e in s.history)

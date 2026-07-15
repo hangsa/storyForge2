@@ -184,6 +184,32 @@ class AutopilotSessionManager:
         self.save(s2)
         return s2
 
+    def record_force_pass_internal(self) -> AutopilotSession:
+        """Spec §2 row 5: write-through wrapper around the runner's force_pass
+        logic. Increments circuit.force_pass_count + threshold_warning; if the
+        new count crosses CIRCUIT_THRESHOLD (3) and state==running, transitions
+        to paused via `circuit_open`. Used by AsyncAutopilotRunner on the
+        scene_status=='force_passed' branch."""
+        from datetime import datetime, timezone
+        from backend.conductor.autopilot_runner import CIRCUIT_THRESHOLD
+        s = self.load() or self._empty_session()
+        new_count = s.circuit.force_pass_count + 1
+        snap = CircuitSnapshot(
+            force_pass_count=new_count,
+            last_event_at=datetime.now(timezone.utc).isoformat(),
+            threshold_warning=new_count >= CIRCUIT_THRESHOLD,
+        )
+        s2 = self.update_circuit_snapshot(snap)
+        crossed = (
+            s.circuit.force_pass_count < CIRCUIT_THRESHOLD
+            and new_count >= CIRCUIT_THRESHOLD
+        )
+        if crossed and s2.state == SessionState.RUNNING:
+            s3 = self._sm.circuit_open(s2)
+            self.save(s3)
+            return s3
+        return s2
+
 
 # --- Serialization helpers (used by API layer in Task 1.4) ---
 

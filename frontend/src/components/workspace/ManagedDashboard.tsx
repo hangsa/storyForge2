@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
 import { useAutopilotSession } from "../../hooks/useAutopilotSession";
+import { MANAGED_START_DEFAULTS } from "../../hooks/useAutopilotConfig";
+import { useToast } from "../../hooks/useToast";
 import ManagedStatusStrip from "./ManagedStatusStrip";
-import type { ChapterStatus, WorkspaceVolumeGroup } from "./ChapterTreePanel";
 
-export type { ChapterStatus };
+export type ChapterStatus = "completed" | "writing" | "planned" | "pending";
 
 export interface DashboardChapter {
   chapter_number: number;
@@ -13,26 +13,16 @@ export interface DashboardChapter {
 interface Props {
   projectId: string;
   chapters: DashboardChapter[];
-  /** Volume groups (with title + scene counts) — same shape ChapterTreePanel
-   *  consumes. When omitted (e.g. outline not yet loaded), we fall back to
-   *  a single "未分组" group from `chapters` so the panel is still useful. */
-  volumes?: WorkspaceVolumeGroup[];
-  /** When true (default), chapters are grouped under their volume headers
-   *  with per-volume summary + collapse state. When false, the panel renders
-   *  a flat chapter list — the workspace's left column uses this since
-   *  the user is editing one chapter at a time, not browsing the volume
-   *  outline. */
-  showVolumes?: boolean;
   onChapterClick: (chapter_number: number, status: ChapterStatus) => void;
   onAddChapter: () => void;
   onRefresh: () => void;
 }
 
 const STATUS_CLASS: Record<ChapterStatus, string> = {
-  completed: "bg-emerald-100 text-emerald-700",
-  writing: "bg-blue-100 text-blue-700",
-  planned: "bg-amber-100 text-amber-700",
-  pending: "bg-surface-container text-system-log/60",
+  completed: "bg-emerald-100 border-emerald-400 text-emerald-700",
+  writing: "bg-blue-100 border-blue-400 text-blue-700",
+  planned: "bg-amber-100 border-amber-400 text-amber-700",
+  pending: "bg-surface-container-low border-dashed border-outline-variant text-system-log/50",
 };
 
 const STATUS_LABEL: Record<ChapterStatus, string> = {
@@ -42,34 +32,11 @@ const STATUS_LABEL: Record<ChapterStatus, string> = {
   pending: "⏳",
 };
 
-const STATUS_TOOLTIP: Record<ChapterStatus, string> = {
-  completed: "已完成",
-  writing: "撰写中",
-  planned: "已规划",
-  pending: "待规划",
-};
-
-function fallbackVolumes(chapters: DashboardChapter[]): WorkspaceVolumeGroup[] {
-  if (chapters.length === 0) return [];
-  return [
-    {
-      name: "未分组",
-      chapter_range: "",
-      summary: undefined,
-      chapters: chapters.map((c) => ({
-        chapter_number: c.chapter_number,
-        title: `第 ${c.chapter_number} 章`,
-        scenes: [],
-      })),
-    },
-  ];
-}
-
 export default function ManagedDashboard({
-  projectId, chapters, volumes, showVolumes = true,
-  onChapterClick, onAddChapter, onRefresh,
+  projectId, chapters, onChapterClick, onAddChapter, onRefresh,
 }: Props) {
-  const { session } = useAutopilotSession(projectId);
+  const { session, start, stop } = useAutopilotSession(projectId);
+  const { show } = useToast();
   const active = session?.state === "running";
   // Treat empty-string description as absent so a transient state transition
   // doesn't briefly hide the strip.
@@ -78,61 +45,16 @@ export default function ManagedDashboard({
     ? currentTaskDesc
     : null;
 
-  // Map chapter_number → status (so we can look up from the volume row).
-  const statusByChapter: Record<number, ChapterStatus> = {};
-  for (const c of chapters) statusByChapter[c.chapter_number] = c.status;
-
-  const effectiveVolumes = (volumes && volumes.length > 0)
-    ? volumes
-    : fallbackVolumes(chapters);
-
-  // Track which volumes are open. Auto-open on first mount + whenever a
-  // new volume arrives (mirrors ChapterTreePanel's UX).
-  const [open, setOpen] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    for (const v of effectiveVolumes) init[v.name] = true;
-    return init;
-  });
-  useEffect(() => {
-    setOpen((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      for (const v of effectiveVolumes) {
-        if (!(v.name in next)) {
-          next[v.name] = true;
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [effectiveVolumes]);
-
-  const renderChapterRow = (ch: WorkspaceVolumeGroup["chapters"][number], status: ChapterStatus | undefined) => (
-    <li key={ch.chapter_number}>
-      <button
-        type="button"
-        data-testid={`chapter-${ch.chapter_number}`}
-        onClick={() => onChapterClick(ch.chapter_number, status ?? "planned")}
-        className="w-full text-left px-2 py-1.5 rounded transition-colors flex items-center justify-between gap-2 text-primary hover:bg-surface-container"
-      >
-        <span className="truncate flex items-center gap-2 min-w-0">
-          <span className="truncate">第 {ch.chapter_number} 章 · {ch.title}</span>
-          {status && (
-            <span
-              data-testid={`chapter-status-${ch.chapter_number}`}
-              title={STATUS_TOOLTIP[status]}
-              className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-label-mono leading-none ${STATUS_CLASS[status]}`}
-            >
-              {STATUS_LABEL[status]}
-            </span>
-          )}
-        </span>
-        {ch.scenes.length > 0 && (
-          <span className="text-[10px] text-system-log/70 shrink-0">{ch.scenes.length} 场景</span>
-        )}
-      </button>
-    </li>
-  );
+  const onToggle = async () => {
+    try {
+      if (active) await stop();
+      else await start(MANAGED_START_DEFAULTS);
+    } catch (err) {
+      const action = active ? "停止" : "启动";
+      const msg = err instanceof Error ? err.message : String(err);
+      show(`${action}托管失败：${msg}`);
+    }
+  };
 
   return (
     <div data-testid="managed-dashboard" className="space-y-4 p-6">
@@ -141,6 +63,18 @@ export default function ManagedDashboard({
       <div className="flex items-center justify-between">
         <h2 className="font-display text-primary text-lg">章节目录</h2>
         <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="autopilot-toggle"
+            onClick={onToggle}
+            className={
+              active
+                ? "px-3 py-1.5 text-sm rounded-lg bg-error/90 text-surface-container-low hover:opacity-90"
+                : "px-3 py-1.5 text-sm rounded-lg bg-primary-container text-surface-container-low hover:opacity-90"
+            }
+          >
+            {active ? "⏸ 停止托管" : "▶ 启动托管"}
+          </button>
           <button
             type="button"
             data-testid="refresh"
@@ -160,50 +94,20 @@ export default function ManagedDashboard({
         </div>
       </div>
 
-      {effectiveVolumes.length === 0 ? (
-        <p className="text-sm font-body-ui text-system-log/60 italic">
-          — 暂无章节 —
-        </p>
-      ) : showVolumes ? (
-        <div className="space-y-3">
-          {effectiveVolumes.map((vol) => {
-            const isOpen = open[vol.name] ?? false;
-            return (
-              <div key={vol.name} data-testid={`volume-${vol.name}`} className="space-y-1">
-                <button
-                  type="button"
-                  data-testid={`volume-${vol.name}-header`}
-                  onClick={() => setOpen((prev) => ({ ...prev, [vol.name]: !isOpen }))}
-                  className="w-full text-left px-3 py-2 rounded bg-surface-container text-primary flex items-center justify-between"
-                >
-                  <span className="font-label-mono text-xs">
-                    <span className="text-system-log/70 mr-1">{isOpen ? "▾" : "▸"}</span>
-                    {vol.name}{vol.chapter_range ? ` · 第 ${vol.chapter_range} 章` : ""}
-                  </span>
-                  <span className="text-[10px] text-system-log/70">{vol.chapters.length} 章</span>
-                </button>
-                {vol.summary && isOpen && (
-                  <p
-                    data-testid={`volume-${vol.name}-summary`}
-                    className="font-body-ui text-system-log/70 text-xs italic pl-2"
-                  >
-                    {vol.summary}
-                  </p>
-                )}
-                {isOpen && (
-                  <ul className="space-y-1 pl-2">
-                    {vol.chapters.map((ch) => renderChapterRow(ch, statusByChapter[ch.chapter_number]))}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <ul className="space-y-1" data-testid="chapter-flat-list">
-          {effectiveVolumes.flatMap((v) => v.chapters).map((ch) => renderChapterRow(ch, statusByChapter[ch.chapter_number]))}
-        </ul>
-      )}
+      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+        {chapters.map((c) => (
+          <button
+            key={c.chapter_number}
+            type="button"
+            data-testid={`chapter-cell-${c.chapter_number}`}
+            onClick={() => onChapterClick(c.chapter_number, c.status)}
+            className={`min-h-[80px] rounded-lg border-2 p-3 text-left transition-transform hover:scale-[1.02] ${STATUS_CLASS[c.status]}`}
+          >
+            <div className="text-2xl">{STATUS_LABEL[c.status]}</div>
+            <div className="font-display mt-1">第 {c.chapter_number} 章</div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

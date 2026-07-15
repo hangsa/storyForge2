@@ -9,7 +9,6 @@ import WorkspaceLayout from "../components/workspace/WorkspaceLayout";
 import ManagedDashboard, { type DashboardChapter } from "../components/workspace/ManagedDashboard";
 import ManagedAIControlPanel from "../components/workspace/ManagedAIControlPanel";
 import ChapterTreePanel, {
-  type ChapterStatus,
   type WorkspaceChapterNode,
   type WorkspaceVolumeGroup,
 } from "../components/workspace/ChapterTreePanel";
@@ -137,16 +136,6 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     () => groupChaptersByVolume(manualChapters, novelOutline),
     [manualChapters, novelOutline],
   );
-  // Per-chapter completion status map for the manual-mode ChapterTreePanel.
-  // Source: the same `chapters` array fetched from progress.json that drives
-  // ManagedDashboard. Manual mode didn't previously have any status field on
-  // the tree; this adds a small ✓/✎/📋/⏳ badge so the user can see at a
-  // glance which chapters are already written without switching modes.
-  const chapterStatus = useMemo<Record<number, ChapterStatus>>(() => {
-    const m: Record<number, ChapterStatus> = {};
-    for (const c of chapters) m[c.chapter_number] = c.status;
-    return m;
-  }, [chapters]);
 
   // Project name load — best-effort. 404 redirects to "/" per spec
   // § Error Handling. Anything else is silently swallowed (page still
@@ -374,8 +363,6 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
             <ManagedDashboard
               projectId={projectId}
               chapters={chapters}
-              volumes={volumeGroups}
-              showVolumes={false}
               onChapterClick={onDashboardChapterClick}
               // No-op: there is no backend endpoint to add a chapter outside the
               // outline workflow. Refresh re-fetches the real list.
@@ -387,8 +374,6 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
               volumes={volumeGroups}
               currentChapter={currentChapter}
               currentScene={currentScene}
-              chapterStatus={chapterStatus}
-              showVolumes={false}
               onSelectChapter={(n) => {
                 setCurrentChapter(n);
                 const ch = manualChapters.find((c) => c.chapter_number === n);

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import ContextPanel from "../components/workspace/ContextPanel";
+import { ToastProvider } from "../hooks/useToast";
 
 const {
   mockedGetConcept,
@@ -295,5 +296,35 @@ describe("ContextPanel", () => {
     expect(stats.textContent).toContain("2"); // 2 chapters
     expect(stats.textContent).toContain("5"); // 3 + 2 scenes
     expect(screen.getByTestId("export-link").getAttribute("href")).toBe("/project/p1/stage6");
+  });
+
+  describe("readOnly mode", () => {
+    it("shows a read-only banner with the supplied reason", async () => {
+      // Switch to a tab that uses an editor (concept).
+      mockedGetConcept.mockResolvedValue({ title: "测试", logline: "" });
+      render(
+        <ToastProvider>
+          <MemoryRouter initialEntries={["/?panel=concept"]}>
+            <ContextPanel projectId="p" readOnly readOnlyReason="托管运行中" />
+          </MemoryRouter>
+        </ToastProvider>,
+      );
+      await waitFor(() => screen.getByTestId("context-readonly-banner"));
+      expect(screen.getByTestId("context-readonly-banner")).toHaveTextContent("托管运行中");
+    });
+
+    it("disables save button in editors when readOnly", async () => {
+      mockedGetConcept.mockResolvedValue({ title: "x", logline: "y" });
+      render(
+        <ToastProvider>
+          <MemoryRouter initialEntries={["/?panel=concept"]}>
+            <ContextPanel projectId="p" readOnly readOnlyReason="测试" />
+          </MemoryRouter>
+        </ToastProvider>,
+      );
+      // Wait for the editor to mount, then check the save button is disabled.
+      const save = await screen.findByTestId("concept-editor-save");
+      expect(save).toBeDisabled();
+    });
   });
 });

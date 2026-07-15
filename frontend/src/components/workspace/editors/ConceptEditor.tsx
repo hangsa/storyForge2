@@ -5,6 +5,7 @@ interface BaseEditorProps {
   projectId: string;
   data: unknown;
   onSaved: () => void;
+  readOnly?: boolean;
 }
 
 const EMPTY_CONCEPT: Concept = {
@@ -29,7 +30,7 @@ function readPayload(data: unknown): { concept: Concept; storyDna: StoryDNA } {
  * the old preview-only truncation in ContextPanel with a full editable form.
  * Save → api.updateConcept. Cancel reverts to the last-saved snapshot.
  */
-export default function ConceptEditor({ projectId, data, onSaved }: BaseEditorProps) {
+export default function ConceptEditor({ projectId, data, onSaved, readOnly }: BaseEditorProps) {
   const seed = readPayload(data);
   const [concept, setConcept] = useState<Concept>(seed.concept);
   const [dna, setDna] = useState<StoryDNA>(seed.storyDna);
@@ -188,7 +189,8 @@ export default function ConceptEditor({ projectId, data, onSaved }: BaseEditorPr
           type="button"
           data-testid="concept-editor-save"
           onClick={handleSave}
-          disabled={busy}
+          disabled={busy || readOnly}
+          title={readOnly ? "托管运行中,元数据已锁定" : undefined}
           className="px-4 py-1 text-xs bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
         >{busy ? "保存中…" : "保存"}</button>
       </footer>

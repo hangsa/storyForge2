@@ -10,12 +10,14 @@ import ExportSummary from "./ExportSummary";
 
 interface Props {
   projectId: string;
+  readOnly?: boolean;
 }
 
 interface BaseEditorProps {
   projectId: string;
   data: unknown;
   onSaved: () => void;
+  readOnly?: boolean;
 }
 
 /** Tabs 1-4 (concept/world/character/outline) host in-place editors. The
@@ -41,7 +43,7 @@ const FETCHER: Record<WorkspacePanel, (id: string) => Promise<unknown>> = {
   export: async () => ({}),
 };
 
-export default function ContextPanel({ projectId }: Props) {
+export default function ContextPanel({ projectId, readOnly }: Props) {
   const { panel, setPanel } = useWorkspacePanel();
   const [data, setData] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
@@ -82,7 +84,7 @@ export default function ContextPanel({ projectId }: Props) {
           loading ? (
             <p data-testid={`context-loading-${panel}`} className="font-body-ui text-system-log text-sm">加载中…</p>
           ) : (
-            <EditorForPanel panel={panel} projectId={projectId} data={data} onSaved={refresh} />
+            <EditorForPanel panel={panel} projectId={projectId} data={data} onSaved={refresh} readOnly={readOnly} />
           )
         ) : panel === "diagnosis" ? (
           <DiagnosisSummary projectId={projectId} />
@@ -95,10 +97,10 @@ export default function ContextPanel({ projectId }: Props) {
 }
 
 function EditorForPanel({
-  panel, projectId, data, onSaved,
+  panel, projectId, data, onSaved, readOnly,
 }: { panel: "concept" | "world" | "character" | "outline" } & BaseEditorProps) {
-  if (panel === "concept") return <ConceptEditor projectId={projectId} data={data} onSaved={onSaved} />;
-  if (panel === "world") return <WorldEditor projectId={projectId} data={data} onSaved={onSaved} />;
-  if (panel === "character") return <CharacterEditor projectId={projectId} data={data} onSaved={onSaved} />;
-  return <NovelOutlineEditor projectId={projectId} data={data} onSaved={onSaved} />;
+  if (panel === "concept") return <ConceptEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
+  if (panel === "world") return <WorldEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
+  if (panel === "character") return <CharacterEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
+  return <NovelOutlineEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
 }

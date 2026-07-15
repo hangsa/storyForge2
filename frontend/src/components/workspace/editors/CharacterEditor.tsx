@@ -5,6 +5,7 @@ interface BaseEditorProps {
   projectId: string;
   data: unknown;
   onSaved: () => void;
+  readOnly?: boolean;
 }
 
 const EMPTY_SET: CharacterSet = { characters: [], current: null as unknown as Character };
@@ -42,7 +43,7 @@ const ROLE_LABELS: Record<Character["character_type"], string> = {
  * fields for personality/voice. Adding/removing characters is intentionally
  * out of scope — Stage2 wizard owns that workflow.
  */
-export default function CharacterEditor({ projectId, data, onSaved }: BaseEditorProps) {
+export default function CharacterEditor({ projectId, data, onSaved, readOnly }: BaseEditorProps) {
   const [set, setSet] = useState<CharacterSet>(() => readSet(data));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -229,7 +230,8 @@ export default function CharacterEditor({ projectId, data, onSaved }: BaseEditor
           type="button"
           data-testid="character-editor-save"
           onClick={handleSave}
-          disabled={busy}
+          disabled={busy || readOnly}
+          title={readOnly ? "托管运行中,元数据已锁定" : undefined}
           className="px-4 py-1 text-xs bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
         >{busy ? "保存中…" : "保存"}</button>
       </footer>

@@ -5,6 +5,7 @@ interface BaseEditorProps {
   projectId: string;
   data: unknown;
   onSaved: () => void;
+  readOnly?: boolean;
 }
 
 const EMPTY_WORLD: World = {
@@ -38,7 +39,7 @@ function parseChips(s: string): string[] {
  * per row, parsed/rejoined on save; the wizard's richer add/remove UI is
  * not required for workspace-level tweaks.
  */
-export default function WorldEditor({ projectId, data, onSaved }: BaseEditorProps) {
+export default function WorldEditor({ projectId, data, onSaved, readOnly }: BaseEditorProps) {
   const [world, setWorld] = useState<World>(() => readWorld(data));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -260,7 +261,8 @@ export default function WorldEditor({ projectId, data, onSaved }: BaseEditorProp
           type="button"
           data-testid="world-editor-save"
           onClick={handleSave}
-          disabled={busy}
+          disabled={busy || readOnly}
+          title={readOnly ? "托管运行中,元数据已锁定" : undefined}
           className="px-4 py-1 text-xs bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
         >{busy ? "保存中…" : "保存"}</button>
       </footer>

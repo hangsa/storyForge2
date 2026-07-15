@@ -5,6 +5,7 @@ interface BaseEditorProps {
   projectId: string;
   data: unknown;
   onSaved: () => void;
+  readOnly?: boolean;
 }
 
 const EMPTY: NovelOutline = {
@@ -33,7 +34,7 @@ function readNovel(data: unknown): NovelOutline {
  * Stage3 itself). Empty novel_outline shows a "请到 Stage3 生成全文大纲"
  * hint with a link.
  */
-export default function NovelOutlineEditor({ projectId, data, onSaved }: BaseEditorProps) {
+export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly }: BaseEditorProps) {
   const [novel, setNovel] = useState<NovelOutline>(() => readNovel(data));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,7 +286,8 @@ export default function NovelOutlineEditor({ projectId, data, onSaved }: BaseEdi
           type="button"
           data-testid="novel-outline-editor-save"
           onClick={handleSave}
-          disabled={busy}
+          disabled={busy || readOnly}
+          title={readOnly ? "托管运行中,元数据已锁定" : undefined}
           className="px-4 py-1 text-xs bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
         >{busy ? "保存中…" : "保存"}</button>
       </footer>

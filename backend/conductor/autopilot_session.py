@@ -38,6 +38,11 @@ class AutopilotSessionManager:
         self._session_file = self._session_dir / SESSION_FILENAME
         self._sm = SessionStateMachine()
         self._broadcaster = broadcaster
+        # Number of history entries already published to the SSE broadcaster.
+        # load() sets this to len(s.history) for sessions just loaded from disk
+        # so subsequent saves don't re-broadcast old events. Starts at 0 for
+        # fresh managers so the first write-through publishes its append.
+        self._last_published_count: int = 0
 
     @property
     def session_path(self) -> Path:
@@ -59,7 +64,11 @@ class AutopilotSessionManager:
             return None
         try:
             raw = json.loads(self._session_file.read_text(encoding="utf-8"))
-            return _dict_to_session(raw)
+            s = _dict_to_session(raw)
+            # Mark all loaded history as already-published so recover /
+            # heartbeat flows don't re-broadcast old events on first save.
+            self._last_published_count = len(s.history)
+            return s
         except Exception as e:
             # Spec L286: corrupt file → treat as no session (don't crash server)
             logger.warning(
@@ -76,22 +85,31 @@ class AutopilotSessionManager:
             encoding="utf-8",
         )
         tmp.replace(self._session_file)
-        # Publish the newly appended event (history[-1]) if any
-        if session.history:
-            self._publish_event(session, session.history[-1])
+        # Publish only events appended since the last save. heartbeat() and
+        # update_circuit_snapshot() rebuild and re-save the session without
+        # appending to history; without this guard subscribers would see the
+        # same tail event republished on every tick.
+        new_events = session.history[self._last_published_count:]
+        for event in new_events:
+            self._publish_event(session, event)
+        self._last_published_count = len(session.history)
 
     def _publish_event(self, s: AutopilotSession, event: "SessionEvent") -> None:
         """Push an event onto the SSE broadcaster. No-op if no broadcaster.
 
-        The session's `history` list is the authoritative record; the broadcaster
-        is a derived view for live subscribers. We convert the dataclass to a
-        plain dict so JSON encoding is straightforward.
+        Adds project_id to the published payload so subscribers can filter
+        cross-project event bleed (the module-level SSEBroadcaster is shared
+        across all projects). Failures of `asdict` are logged and swallowed
+        so a malformed event can't break the persistence path.
         """
         if self._broadcaster is None:
             return
         try:
             data = asdict(event)
-        except Exception:
+            data["project_id"] = s.project_id
+        except Exception as e:
+            logger.debug("autopilot SSE publish skipped for %s: %s",
+                         self._project_id, e)
             return
         self._broadcaster.publish(event.type, data)
 

@@ -205,3 +205,71 @@ class TestSsePublish:
         mgr = AutopilotSessionManager(tmp_path, "p1")  # no broadcaster
         s = mgr.start(ManagedStartConfig())
         assert s.state.value == "running"
+
+    def test_heartbeat_does_not_republish_tail_event(self, tmp_path):
+        """heartbeat() rebuilds the session without appending to history — a
+        naive save()-based publish would re-broadcast the previous tail event."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.utils.sse_broadcaster import SSEBroadcaster
+        from backend.models.autopilot_session import ManagedStartConfig
+
+        (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "p1" / "project.json").write_text('{"id":"p1"}', encoding="utf-8")
+
+        bc = SSEBroadcaster(history_size=64, queue_max=8)
+        mgr = AutopilotSessionManager(tmp_path, "p1", broadcaster=bc)
+        mgr.start(ManagedStartConfig())
+        baseline = len(bc.history)
+        mgr.heartbeat()
+        mgr.heartbeat()
+        mgr.heartbeat()
+        # No new events appended → broadcaster count unchanged.
+        assert len(bc.history) == baseline
+
+    def test_payload_includes_project_id(self, tmp_path):
+        """Subscribers filter cross-project bleed via the published payload."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.utils.sse_broadcaster import SSEBroadcaster
+        from backend.models.autopilot_session import ManagedStartConfig
+
+        (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "p1" / "project.json").write_text('{"id":"p1"}', encoding="utf-8")
+
+        bc = SSEBroadcaster(history_size=16, queue_max=4)
+        mgr = AutopilotSessionManager(tmp_path, "p1", broadcaster=bc)
+        mgr.start(ManagedStartConfig())
+        assert bc.history, "start() should have published"
+        assert bc.history[-1].data.get("project_id") == "p1"
+
+    def test_loaded_session_does_not_republish_old_events(self, tmp_path):
+        """A manager that picks up an existing session.json must not re-broadcast
+        its existing history on subsequent save() calls (e.g. recover_running_sessions)."""
+        import json
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.utils.sse_broadcaster import SSEBroadcaster
+        from backend.models.autopilot_session import ManagedStartConfig
+
+        (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "p1" / "project.json").write_text('{"id":"p1"}', encoding="utf-8")
+        # Pre-seed a session.json with 2 history events.
+        session_dir = tmp_path / "p1" / "autopilot"
+        session_dir.mkdir(parents=True, exist_ok=True)
+        (session_dir / "session.json").write_text(json.dumps({
+            "project_id": "p1", "state": "running",
+            "config": {"scope": "all_planned", "cadence": "balanced",
+                       "policy": "auto", "notify": "milestones"},
+            "started_at": None, "last_heartbeat_at": None,
+            "current_task": None, "queue": [], "history": [
+                {"id": "e1", "type": "task_start", "at": "2026-07-15T00:00:00Z",
+                 "task_id": None, "chapter_number": None, "payload": {}},
+                {"id": "e2", "type": "task_complete", "at": "2026-07-15T00:00:01Z",
+                 "task_id": None, "chapter_number": None, "payload": {}},
+            ], "circuit": {"force_pass_count": 0, "last_event_at": None,
+                           "threshold_warning": False},
+        }), encoding="utf-8")
+
+        bc = SSEBroadcaster(history_size=64, queue_max=8)
+        mgr = AutopilotSessionManager(tmp_path, "p1", broadcaster=bc)
+        # Triggering heartbeat() causes a save() with no new history → nothing published.
+        mgr.heartbeat()
+        assert bc.history == []

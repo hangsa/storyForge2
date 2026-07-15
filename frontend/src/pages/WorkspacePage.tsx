@@ -332,6 +332,12 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     }
     setCurrentChapter(n);
     setMode("manual");
+    // v1.9 layer 3 fix: drilling into a completed/pending chapter also exits
+    // managed mode, so the autopilot session must stop for the same reason
+    // as the top-bar mode switch — see onConfirmDrillDown below.
+    if (projectId) {
+      void api.stopAutopilotSession(projectId).catch(() => {});
+    }
   };
 
   const onConfirmDrillDown = (opts: { waitForCurrent: boolean; chapterNumber?: number }) => {
@@ -342,9 +348,22 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         const ch = manualChapters.find((c) => c.chapter_number === opts.chapterNumber);
         setCurrentScene(ch?.scenes[0]?.scene_id ?? null);
         setMode("manual");
+        // v1.9 layer 3 fix: stopping the autopilot session when leaving
+        // managed mode prevents a stale "state: running" / "current_task:
+        // ..." from leaking into manual-mode UI (the topbar reads
+        // session.current_task even when mode === "manual"). Fire-and-
+        // forget — the UI doesn't need to wait, and a slow stop call
+        // shouldn't block the user from editing.
+        if (projectId) {
+          void api.stopAutopilotSession(projectId).catch(() => {});
+        }
       }
     } else {
       setMode("manual");
+      // v1.9 layer 3 fix: same as above for the top-bar mode-switch path.
+      if (projectId) {
+        void api.stopAutopilotSession(projectId).catch(() => {});
+      }
     }
     setTakeOverChapter(null);
     setPendingTargetMode(null);

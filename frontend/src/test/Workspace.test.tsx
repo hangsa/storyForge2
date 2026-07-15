@@ -14,6 +14,7 @@ const {
   mockedWriteScene,
   mockedFactGuard,
   mockedGetSceneDraft,
+  mockedStopAutopilotSession,
 } = vi.hoisted(() => ({
   mockedGetProjectStatus: vi.fn().mockResolvedValue({ title: "T" }),
   // Mirrors the backend's no-progress response: chapters=[] but total_chapters
@@ -56,6 +57,11 @@ const {
     fact_guard_results: null,
     coherence_score: 0,
   }),
+  // Layer 3 fix: managed→manual switch must POST /session/stop so the
+  // on-disk session.json doesn't stay in state="running" with a stale
+  // current_task. Default-resolves to an empty object — tests assert via
+  // mockClear()/toHaveBeenCalledWith().
+  mockedStopAutopilotSession: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock("../api/client", () => ({
@@ -73,6 +79,7 @@ vi.mock("../api/client", () => ({
     generateOutline: mockedGenerateOutline,
     writeScene: mockedWriteScene,
     factGuard: mockedFactGuard,
+    stopAutopilotSession: mockedStopAutopilotSession,
   },
 }));
 
@@ -196,6 +203,8 @@ beforeEach(() => {
   });
   mockedGetAutopilotSession.mockReset();
   mockedGetAutopilotSession.mockResolvedValue(null);
+  mockedStopAutopilotSession.mockReset();
+  mockedStopAutopilotSession.mockResolvedValue({});
   startFn.mockClear();
   stopFn.mockClear();
   mockSession = {
@@ -464,6 +473,32 @@ describe("Workspace integration", () => {
     // After submit succeeds, modal closes and mode flips to managed.
     await waitFor(() => expect(screen.queryByTestId("managed-start-modal")).not.toBeInTheDocument());
     expect(screen.getByTestId("workspace-layout").getAttribute("data-mode")).toBe("managed");
+  });
+
+  // Layer 3 (v1.9) — when the user confirms a managed→manual switch, the
+  // backend's POST /session/stop must be called so session.json leaves
+  // state="running" / current_task set. Without this call the manual-mode
+  // topbar reads stale session.current_task and displays it. Fire-and-forget
+  // is acceptable — we assert the call was made, not its result.
+  it("managed→manual switch calls api.stopAutopilotSession(projectId)", async () => {
+    setup("/project/p1/workspace?mode=managed");
+    fireEvent.click(screen.getByTestId("mode-manual"));
+    expect(screen.getByTestId("mode-switch-confirm")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("confirm-confirm"));
+    // Stop is fire-and-forget; give the microtask queue a tick.
+    await waitFor(() => expect(mockedStopAutopilotSession).toHaveBeenCalledWith("p1"));
+  });
+
+  // Counterpart to the test above — manual→managed switch opens the start
+  // modal, not the confirm modal, and must NOT touch the running session.
+  // Otherwise the user couldn't re-enter managed mode with the existing
+  // session still alive.
+  it("manual→managed switch does NOT call api.stopAutopilotSession", async () => {
+    setup("/project/p1/workspace?mode=manual");
+    fireEvent.click(screen.getByTestId("mode-managed"));
+    // The start modal opens; confirm it (no stop should have fired yet).
+    await waitFor(() => expect(screen.getByTestId("managed-start-modal")).toBeInTheDocument());
+    expect(mockedStopAutopilotSession).not.toHaveBeenCalled();
   });
 
   it("clicking a 'writing' chapter cell opens the take-over confirm modal (not direct switch)", async () => {

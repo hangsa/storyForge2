@@ -11,6 +11,7 @@ const {
   mockedGetOutline,
   mockedGetNovelOutline,
   mockedGenerateOutline,
+  mockedWriteScene,
 } = vi.hoisted(() => ({
   mockedGetProjectStatus: vi.fn().mockResolvedValue({ title: "T" }),
   // Mirrors the backend's no-progress response: chapters=[] but total_chapters
@@ -23,6 +24,19 @@ const {
   mockedGetOutline: vi.fn().mockResolvedValue({ chapters: [] }),
   mockedGetNovelOutline: vi.fn().mockResolvedValue({ volumes: [] }),
   mockedGenerateOutline: vi.fn().mockResolvedValue({ chapters: [] }),
+  // writeScene: per-test override via mockResolvedValueOnce. Default returns
+  // an empty draft so unrelated tests that click 重新生成 don't break.
+  mockedWriteScene: vi.fn().mockResolvedValue({
+    scene_number: 0,
+    status: "passed",
+    retry_count: 0,
+    draft_text: "",
+    parsed_logs: [],
+    fact_guard_results: { all_passed: true, checks: [], coherence_score: 0 },
+    registry_updates: { created: [], updated: [], cascade_executed: [] },
+    l0_snapshot: {},
+    precheck_result: { precheck_passed: true, suggestions: [], tokens_used: 0, skipped_reason: "" },
+  }),
 }));
 
 vi.mock("../api/client", () => ({
@@ -36,6 +50,7 @@ vi.mock("../api/client", () => ({
     getNovelOutline: mockedGetNovelOutline,
     updateOutline: vi.fn().mockResolvedValue(undefined),
     generateOutline: mockedGenerateOutline,
+    writeScene: mockedWriteScene,
   },
 }));
 
@@ -120,6 +135,18 @@ beforeEach(() => {
   mockedGetNovelOutline.mockResolvedValue({ volumes: [] });
   mockedGenerateOutline.mockReset();
   mockedGenerateOutline.mockResolvedValue({ chapters: [] });
+  mockedWriteScene.mockReset();
+  mockedWriteScene.mockResolvedValue({
+    scene_number: 0,
+    status: "passed",
+    retry_count: 0,
+    draft_text: "",
+    parsed_logs: [],
+    fact_guard_results: { all_passed: true, checks: [], coherence_score: 0 },
+    registry_updates: { created: [], updated: [], cascade_executed: [] },
+    l0_snapshot: {},
+    precheck_result: { precheck_passed: true, suggestions: [], tokens_used: 0, skipped_reason: "" },
+  });
   mockedStartAutopilotSession.mockReset();
   mockedStartAutopilotSession.mockResolvedValue({
     state: "running", current_task: null, queue: [], history: [], config: null,
@@ -222,6 +249,42 @@ describe("Workspace integration", () => {
     // Wait for getOutline to resolve + URL parse useEffect to pick chapter 1
     expect(await screen.findByTestId("writing-area")).toBeInTheDocument();
     expect(screen.getByTestId("context-panel")).toBeInTheDocument();
+  });
+
+  // Regression: the manual-mode "重新生成" button used to be a no-op
+  // (just toggled busy). It must call /stage4/write-scene and update the
+  // editor body with the returned draft_text.
+  it("manual-mode 重新生成 button calls writeScene and updates editor content", async () => {
+    mockedWriteScene.mockResolvedValueOnce({
+      scene_number: 1,
+      status: "passed",
+      retry_count: 0,
+      draft_text: "新生成的场景正文。",
+      parsed_logs: [],
+      fact_guard_results: { all_passed: true, checks: [], coherence_score: 95 },
+      registry_updates: { created: [], updated: [], cascade_executed: [] },
+      l0_snapshot: {},
+      precheck_result: { precheck_passed: true, suggestions: [], tokens_used: 0, skipped_reason: "" },
+    });
+
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    const regen = await screen.findByTestId("editor-regenerate");
+    fireEvent.click(regen);
+
+    await waitFor(() => {
+      expect(mockedWriteScene).toHaveBeenCalledWith({
+        project_id: "p1",
+        chapter_number: 1,
+        scene_number: 1,
+      });
+    });
+    const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
+    expect(body.value).toBe("新生成的场景正文。");
   });
 
   it("clicking mode-manual in the top-bar opens the confirm modal", () => {

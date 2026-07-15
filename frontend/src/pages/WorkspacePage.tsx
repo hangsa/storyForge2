@@ -431,8 +431,50 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                   setBusy(false);
                 }
               }}
-              onRegenerate={async () => { setBusy(true); setBusy(false); }}
-              onFactGuard={async () => { setBusy(true); setBusy(false); }}
+              onRegenerate={async () => {
+                if (!currentScene) return;
+                const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
+                if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
+                setBusy(true);
+                try {
+                  const resp = await api.writeScene({
+                    project_id: projectId,
+                    chapter_number: currentChapter,
+                    scene_number: sceneNumber,
+                  });
+                  if (resp.draft_text) {
+                    setContent(resp.draft_text);
+                  }
+                } catch (e) {
+                  console.warn("regenerate scene failed", e);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              onFactGuard={async () => {
+                // Fact-guard runs as part of /write-scene (returns the
+                // fact_guard_results inline), so the affordance reuses the
+                // same pipeline. A future Fact-Guard-only endpoint could
+                // split this out.
+                if (!currentScene) return;
+                const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
+                if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
+                setBusy(true);
+                try {
+                  const resp = await api.writeScene({
+                    project_id: projectId,
+                    chapter_number: currentChapter,
+                    scene_number: sceneNumber,
+                  });
+                  if (resp.draft_text) {
+                    setContent(resp.draft_text);
+                  }
+                } catch (e) {
+                  console.warn("fact-guard scene failed", e);
+                } finally {
+                  setBusy(false);
+                }
+              }}
               busy={busy}
               onNavigateToOutline={goToOutlinePanel}
             />

@@ -51,3 +51,64 @@ def is_chapter_complete(
         if status not in DONE_STATUSES:
             return False
     return True
+
+
+def seed_queue(
+    mgr: "AutopilotSessionManager",
+    outline: dict,
+    progress: Optional[dict],
+    novel_outline: Optional[dict],
+    cfg: ManagedStartConfig,
+) -> int:
+    """Translate (outline, progress, novel_outline, cfg) into QueueItems
+    appended to mgr.queue. Returns count of items enqueued.
+
+    Pure-ish: the only side effect is `mgr.add_queue(...)` (which writes
+    session.json). No HTTP, no LLM, no executor.
+    """
+    if not outline or not outline.get("chapters"):
+        return 0
+    progress = progress or {}
+    chapters = progress.get("chapters", []) or []
+    progress_by_chapter = {
+        ch.get("chapter_number"): ch for ch in chapters
+    }
+    current_chapter = progress.get("current_chapter", 1)
+
+    # Decide which chapters to enqueue based on scope.
+    all_chapters = outline["chapters"]
+    if cfg.scope == "next_chapter":
+        target_chapters = [
+            ch for ch in all_chapters
+            if ch.get("chapter_number") == current_chapter
+        ]
+    else:  # "all_planned"
+        target_chapters = list(all_chapters)
+
+    seeded = 0
+    for ch in target_chapters:
+        ch_num = ch.get("chapter_number")
+        scene_plan = ch.get("scene_plan", []) or []
+        if not scene_plan:
+            continue
+        ch_progress = progress_by_chapter.get(ch_num, {})
+        done_nums = {
+            s.get("scene_number")
+            for s in ch_progress.get("scenes", []) or []
+            if s.get("status") in DONE_STATUSES
+        }
+        for s in scene_plan:
+            n = s.get("scene_number")
+            if n in done_nums:
+                continue
+            item = QueueItem(
+                id=f"write-{ch_num}-{n}",
+                kind="write_scene",
+                chapter_number=ch_num,
+                scheduled_at=None,
+                priority=20 + n,   # archival uses priority 10 (lower = earlier)
+                payload={"scene_number": n},
+            )
+            mgr.add_queue(item)
+            seeded += 1
+    return seeded

@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException
 from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
+from backend.growth_curve.context import compute_character_growth_context
+from backend.story_os.registries import RegistryManager
 from backend.conductor.circuit_breaker import CircuitBreaker
 from backend.conductor.checkpoint import CheckpointManager
 from backend.agents.writer import WriterAgent
@@ -236,14 +238,12 @@ async def _write_scene_chapter(
     l0 = L0Runtime()
     l0.set_scene_context(scene_number, scene_plan.get("goal", ""))
 
-    from backend.growth_curve.context import compute_character_growth_context
     character_growth_context = compute_character_growth_context(
         ctx["characters"], chapter_number
     )
 
     writer = WriterAgent(project_id)
     reviewer = ReviewerAgent(project_id)
-    from backend.story_os.registries import RegistryManager
     registry_mgr = RegistryManager(project_id)
     storyos = StoryOSAgent(project_id, registry_manager=registry_mgr)
     breaker = CircuitBreaker()

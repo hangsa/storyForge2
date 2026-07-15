@@ -849,6 +849,18 @@ export const api = {
       custom_style_config: data.custom_style_config ?? null,
     }),
 
+  factGuard: (data: {
+    project_id: string;
+    chapter_number: number;
+    scene_number: number;
+    draft_text: string;
+  }) =>
+    request<{
+      all_passed: boolean;
+      checks: Array<{ name: string; passed: boolean; detail: string }>;
+      coherence_score: number;
+    }>("POST", "/stage4/fact-guard", data),
+
   forcePass: (data: { project_id: string; scene_number: number }) =>
     request<void>("POST", "/stage4/force-pass", data),
 

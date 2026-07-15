@@ -465,25 +465,22 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                 }
               }}
               onFactGuard={async () => {
-                // Fact-guard runs as part of /write-scene (returns the
-                // fact_guard_results inline), so the affordance reuses the
-                // same pipeline. A future Fact-Guard-only endpoint could
-                // split this out.
                 if (!currentScene) return;
                 const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
                 if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
                 setBusy(true);
                 try {
-                  const resp = await api.writeScene({
+                  // Read-only check — does NOT call /write-scene, does NOT
+                  // overwrite the editor. Result is shown via toast (Task 6)
+                  // and an inline summary in the future.
+                  await api.factGuard({
                     project_id: projectId,
                     chapter_number: currentChapter,
                     scene_number: sceneNumber,
+                    draft_text: content,
                   });
-                  if (resp.draft_text) {
-                    setContent(resp.draft_text);
-                  }
-                } catch (e) {
-                  console.warn("fact-guard scene failed", e);
+                } catch {
+                  // swallow — toast wiring lands in Task 6
                 } finally {
                   setBusy(false);
                 }

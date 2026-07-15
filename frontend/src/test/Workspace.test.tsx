@@ -12,6 +12,7 @@ const {
   mockedGetNovelOutline,
   mockedGenerateOutline,
   mockedWriteScene,
+  mockedFactGuard,
 } = vi.hoisted(() => ({
   mockedGetProjectStatus: vi.fn().mockResolvedValue({ title: "T" }),
   // Mirrors the backend's no-progress response: chapters=[] but total_chapters
@@ -37,6 +38,13 @@ const {
     l0_snapshot: {},
     precheck_result: { precheck_passed: true, suggestions: [], tokens_used: 0, skipped_reason: "" },
   }),
+  // Default: pass. Tests that care about a specific result override via
+  // mockResolvedValueOnce.
+  mockedFactGuard: vi.fn().mockResolvedValue({
+    all_passed: true,
+    checks: [],
+    coherence_score: 95,
+  }),
 }));
 
 vi.mock("../api/client", () => ({
@@ -52,6 +60,7 @@ vi.mock("../api/client", () => ({
     updateSceneDraft: vi.fn().mockResolvedValue({ chapter_number: 1, scene_number: 1 }),
     generateOutline: mockedGenerateOutline,
     writeScene: mockedWriteScene,
+    factGuard: mockedFactGuard,
   },
 }));
 
@@ -147,6 +156,12 @@ beforeEach(() => {
     registry_updates: { created: [], updated: [], cascade_executed: [] },
     l0_snapshot: {},
     precheck_result: { precheck_passed: true, suggestions: [], tokens_used: 0, skipped_reason: "" },
+  });
+  mockedFactGuard.mockReset();
+  mockedFactGuard.mockResolvedValue({
+    all_passed: true,
+    checks: [],
+    coherence_score: 95,
   });
   mockedStartAutopilotSession.mockReset();
   mockedStartAutopilotSession.mockResolvedValue({
@@ -317,6 +332,44 @@ describe("Workspace integration", () => {
       scene_number: 1,
       draft_text: "用户写的正文",
     });
+  });
+
+  // Bug fix — "Fact Guard" must run a read-only check on the current draft,
+  // not regenerate the scene via /write-scene (which would overwrite the
+  // user's hand-written text). See api.factGuard in client.ts.
+  it("'Fact Guard' button calls factGuard (not writeScene) and does NOT overwrite the editor", async () => {
+    const { default: api } = await import("../api/client");
+    const writeSceneSpy = api.writeScene as ReturnType<typeof vi.fn>;
+    writeSceneSpy.mockClear();
+
+    mockedFactGuard.mockResolvedValueOnce({
+      all_passed: false,
+      checks: [{ name: "timeline", passed: false, detail: "时间线冲突" }],
+      coherence_score: 60,
+    });
+
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
+    // Type user content; clicking Fact Guard must NOT replace it.
+    fireEvent.change(body, { target: { value: "用户手写的稿子" } });
+    fireEvent.click(screen.getByTestId("editor-fact-guard"));
+
+    await waitFor(() => expect(mockedFactGuard).toHaveBeenCalled());
+    expect(mockedFactGuard).toHaveBeenCalledWith({
+      project_id: "p1",
+      chapter_number: 1,
+      scene_number: 1,
+      draft_text: "用户手写的稿子",
+    });
+    // Critical: writeScene is NOT called for Fact Guard (would overwrite).
+    expect(writeSceneSpy).not.toHaveBeenCalled();
+    // Editor body must be unchanged after Fact Guard.
+    expect((screen.getByTestId("editor-body") as HTMLTextAreaElement).value).toBe("用户手写的稿子");
   });
 
   it("clicking mode-manual in the top-bar opens the confirm modal", () => {

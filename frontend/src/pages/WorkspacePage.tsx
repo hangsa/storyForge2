@@ -186,6 +186,34 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualChapters]);
 
+  // Load saved draft for the currently-selected chapter/scene. The
+  // content is set even if it's empty (so the editor doesn't show stale
+  // prose from a previous selection). When the user picks a chapter
+  // with no saved draft yet, content is set to "". lastSavedContent
+  // tracks the on-disk state so the regenerate confirm only fires when
+  // the user has unsaved edits.
+  useEffect(() => {
+    if (!projectId) return;
+    if (!currentScene) return;
+    const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
+    if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
+    let cancelled = false;
+    api
+      .getSceneDraft(projectId, currentChapter, sceneNumber)
+      .then((d: { draft_text?: string }) => {
+        if (cancelled) return;
+        const text = d?.draft_text ?? "";
+        setContent(text);
+        setLastSavedContent(text);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setContent("");
+        setLastSavedContent("");
+      });
+    return () => { cancelled = true; };
+  }, [projectId, currentChapter, currentScene]);
+
   // Load managed-mode chapter list (with status) from progress.json.
   // Backend get_progress returns { chapters: [] } when progress.json does not
   // exist (e.g. brand-new project) — no special-case needed here, the empty
@@ -386,7 +414,6 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                 setCurrentChapter(n);
                 const ch = manualChapters.find((c) => c.chapter_number === n);
                 setCurrentScene(ch?.scenes[0]?.scene_id ?? null);
-                setContent("");
               }}
               onSelectScene={(n, s) => { setCurrentChapter(n); setCurrentScene(s); }}
               onAddChapter={() => setAddOpen(true)}

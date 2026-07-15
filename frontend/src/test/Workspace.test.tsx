@@ -13,6 +13,7 @@ const {
   mockedGenerateOutline,
   mockedWriteScene,
   mockedFactGuard,
+  mockedGetSceneDraft,
 } = vi.hoisted(() => ({
   mockedGetProjectStatus: vi.fn().mockResolvedValue({ title: "T" }),
   // Mirrors the backend's no-progress response: chapters=[] but total_chapters
@@ -45,6 +46,16 @@ const {
     checks: [],
     coherence_score: 95,
   }),
+  // Default: empty draft (no on-disk content). The draft-load regression
+  // test overrides via mockResolvedValueOnce to simulate a saved scene.
+  mockedGetSceneDraft: vi.fn().mockResolvedValue({
+    draft_text: "",
+    chapter_number: 1,
+    scene_number: 1,
+    parsed_logs: [],
+    fact_guard_results: null,
+    coherence_score: 0,
+  }),
 }));
 
 vi.mock("../api/client", () => ({
@@ -58,6 +69,7 @@ vi.mock("../api/client", () => ({
     getNovelOutline: mockedGetNovelOutline,
     updateOutline: vi.fn().mockResolvedValue(undefined),
     updateSceneDraft: vi.fn().mockResolvedValue({ chapter_number: 1, scene_number: 1 }),
+    getSceneDraft: mockedGetSceneDraft,
     generateOutline: mockedGenerateOutline,
     writeScene: mockedWriteScene,
     factGuard: mockedFactGuard,
@@ -162,6 +174,20 @@ beforeEach(() => {
     all_passed: true,
     checks: [],
     coherence_score: 95,
+  });
+  // Reset getSceneDraft back to its default empty-draft response — the
+  // draft-load regression test calls mockReset/mockResolvedValueOnce and
+  // leaves the spy in a no-implementation state; without this re-mock
+  // the next test's useEffect call returns undefined and crashes the
+  // .then() chain.
+  mockedGetSceneDraft.mockReset();
+  mockedGetSceneDraft.mockResolvedValue({
+    draft_text: "",
+    chapter_number: 1,
+    scene_number: 1,
+    parsed_logs: [],
+    fact_guard_results: null,
+    coherence_score: 0,
   });
   mockedStartAutopilotSession.mockReset();
   mockedStartAutopilotSession.mockResolvedValue({
@@ -370,6 +396,41 @@ describe("Workspace integration", () => {
     expect(writeSceneSpy).not.toHaveBeenCalled();
     // Editor body must be unchanged after Fact Guard.
     expect((screen.getByTestId("editor-body") as HTMLTextAreaElement).value).toBe("用户手写的稿子");
+  });
+
+  // Bug fix — selecting a chapter/scene must load the saved draft from
+  // disk (ch{NN}_scene_{NNN}_draft.md) so the user sees their previously
+  // written prose instead of an empty editor.
+  it("selecting a chapter loads its saved draft into the editor", async () => {
+    const { default: api } = await import("../api/client");
+    const getSceneDraftSpy = api.getSceneDraft as ReturnType<typeof vi.fn>;
+    getSceneDraftSpy.mockReset();
+    getSceneDraftSpy.mockResolvedValueOnce({
+      draft_text: "之前保存的草稿",
+      chapter_number: 1,
+      scene_number: 1,
+      parsed_logs: [],
+      fact_guard_results: null,
+      coherence_score: 0,
+    });
+
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        {
+          chapter_number: 1,
+          title: "第一章",
+          scene_plan: [
+            { scene_number: 1 },
+            { scene_number: 2 },
+          ],
+        },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    // Wait for the draft load useEffect to run.
+    await waitFor(() => expect(getSceneDraftSpy).toHaveBeenCalledWith("p1", 1, 1));
+    const body = await screen.findByTestId("editor-body");
+    expect((body as HTMLTextAreaElement).value).toBe("之前保存的草稿");
   });
 
   it("clicking mode-manual in the top-bar opens the confirm modal", () => {

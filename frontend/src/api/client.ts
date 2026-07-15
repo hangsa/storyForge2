@@ -879,6 +879,15 @@ export const api = {
       "GET", `/stage4/scene-draft?project_id=${projectId}&chapter_number=${chapterNumber}&scene_number=${sceneNumber}`
     ),
 
+  getSceneDrafts: (projectId: string, chapterNumber: number) =>
+    request<{
+      chapter_number: number;
+      scenes: Array<{ scene_number: number; has_draft: boolean }>;
+    }>(
+      "GET",
+      `/stage4/scene-drafts?project_id=${projectId}&chapter_number=${chapterNumber}`,
+    ),
+
   updateSceneDraft: (data: { project_id: string; chapter_number: number; scene_number: number; draft_text: string }) =>
     request<{ chapter_number: number; scene_number: number }>(
       "PUT", "/stage4/scene-draft", data

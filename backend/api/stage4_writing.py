@@ -157,6 +157,64 @@ async def get_scene_draft(project_id: str, chapter_number: int = 1, scene_number
     }
 
 
+@stage4_router.get("/scene-drafts")
+async def list_scene_drafts(project_id: str, chapter_number: int = 1):
+    """List draft-availability for every scene in `outline.json` `scene_plan`
+    for the given chapter. `has_draft=true` iff `ch{NN}_scene_{NNN}_draft.md`
+    exists and is non-empty after stripping. Read-only, no side effects.
+    """
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+
+    # Project existence check — surfaces 404 rather than silently returning empty.
+    project_dir = fm.projects_dir / project_id
+    if not project_dir.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "PROJECT_NOT_FOUND",
+                    "message": f"项目 {project_id} 不存在", "detail": {}},
+        )
+
+    outline = fm.read_json(project_id, "outline.json")
+    scenes_out: list[dict] = []
+    if outline is not None:
+        chapter = next(
+            (c for c in outline.get("chapters", [])
+             if c.get("chapter_number") == chapter_number),
+            None,
+        )
+        if chapter is not None:
+            scene_plan = chapter.get("scene_plan", [])
+            chapters_dir = fm.project_path(project_id, "chapters")
+            for sp in scene_plan:
+                scene_number = sp.get("scene_number")
+                if scene_number is None:
+                    continue
+                fname = f"ch{chapter_number:02d}_scene_{scene_number:03d}_draft.md"
+                draft_path = chapters_dir / fname
+                has_draft = False
+                if draft_path.is_file():
+                    try:
+                        has_draft = bool(draft_path.read_text(encoding="utf-8").strip())
+                    except OSError:
+                        has_draft = False
+                scenes_out.append({
+                    "scene_number": scene_number,
+                    "has_draft": has_draft,
+                })
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "",
+        "detail": {"chapter_number": chapter_number, "scenes": scenes_out},
+    }
+
+
 @stage4_router.put("/scene-draft")
 async def update_scene_draft(data: dict):
     """Save manually edited scene draft text to disk."""

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 interface Props {
   open: boolean;
   title: string;
@@ -11,6 +13,27 @@ interface Props {
 export default function ConfirmDialog({
   open, title, message, confirmLabel = "确认", cancelLabel = "取消", onCancel, onConfirm,
 }: Props) {
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onCancel();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, onCancel]);
+
+  useEffect(() => {
+    if (open) {
+      confirmButtonRef.current?.focus();
+    }
+  }, [open]);
+
   if (!open) return null;
   return (
     <div
@@ -36,6 +59,7 @@ export default function ConfirmDialog({
             {cancelLabel}
           </button>
           <button
+            ref={confirmButtonRef}
             type="button"
             data-testid="confirm-dialog-confirm"
             onClick={onConfirm}

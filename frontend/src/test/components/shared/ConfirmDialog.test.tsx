@@ -59,4 +59,19 @@ describe("ConfirmDialog", () => {
     );
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("pressing Escape calls onCancel", () => {
+    const onCancel = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        title="t"
+        message="m"
+        onCancel={onCancel}
+        onConfirm={() => {}}
+      />,
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalled();
+  });
 });

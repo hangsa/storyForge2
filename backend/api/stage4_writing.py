@@ -182,30 +182,33 @@ async def update_scene_draft(data: dict):
     }
 
 
-@stage4_router.post("/write-scene")
-async def write_scene(data: dict):
-    project_id = data.get("project_id", "")
-    chapter_number = data.get("chapter_number", 1)
-    scene_number = data.get("scene_number", 1)
-    custom_style_config = data.get("custom_style_config") or None
+async def _write_scene_chapter(
+    project_id: str,
+    chapter_number: int,
+    scene_number: int,
+    custom_style_config=None,
+    *,
+    # Test seam: when set, skip LLM calls and use these instead.
+    draft_factory=None,           # Callable[[int, int], str] | None
+    breaker_result_override=None,  # "passed" | "force_pass" | "skipped" | None
+) -> dict:
+    """In-process chapter scene writer used by BOTH the HTTP handler and the
+    autopilot executor. Returns the same dict shape as the old HTTP body so
+    neither caller has to special-case it.
 
-    if not project_id:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
-        )
-
+    When `draft_factory` is None, performs the real LLM-backed write. When
+    provided, calls `draft_factory(chapter, scene)` to obtain canned draft text
+    and `breaker_result_override` controls the circuit-breaker outcome (so
+    integration tests can simulate `force_pass`).
+    """
     sm = StageStateMachine(settings.projects_dir)
     current = sm.get_current_stage(project_id)
     if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE4):
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": True,
-                "code": "STAGE_NOT_READY",
-                "message": f"当前阶段为 {current.value}，无法执行 STAGE4 操作",
-                "detail": {},
-            },
+            detail={"error": True, "code": "STAGE_NOT_READY",
+                    "message": f"当前阶段为 {current.value}，无法执行 STAGE4 操作",
+                    "detail": {}},
         )
 
     ctx = _load_context(project_id, chapter_number)
@@ -216,10 +219,10 @@ async def write_scene(data: dict):
     if scene_plan is None:
         raise HTTPException(
             status_code=404,
-            detail={"error": True, "code": "SCENE_NOT_FOUND", "message": f"Scene {scene_number} 不存在", "detail": {}},
+            detail={"error": True, "code": "SCENE_NOT_FOUND",
+                    "message": f"Scene {scene_number} 不存在", "detail": {}},
         )
 
-    # Initialize MemoryCoordinator for full L0-L4 context assembly
     mc = MemoryCoordinator(project_id, settings.projects_dir)
     character_names = [c.get("name", "") for c in ctx["characters"]]
     ctx_mem = mc.assemble_for_scene(
@@ -230,11 +233,9 @@ async def write_scene(data: dict):
         chapter_number=chapter_number,
     )
 
-    # Keep L0Runtime reference for later L0 updates after StoryOS parsing
     l0 = L0Runtime()
     l0.set_scene_context(scene_number, scene_plan.get("goal", ""))
 
-    # Compute character growth context (v1.6 TRD 4.1)
     from backend.growth_curve.context import compute_character_growth_context
     character_growth_context = compute_character_growth_context(
         ctx["characters"], chapter_number
@@ -248,7 +249,6 @@ async def write_scene(data: dict):
     breaker = CircuitBreaker()
     reader_os = ReaderOS(project_id)
 
-    # Compute ReaderOS warnings for writer context
     genre = ctx["genre"]
     reader_warnings = reader_os.get_warnings(chapter_number, genre)
     reader_warnings_str = (
@@ -260,44 +260,48 @@ async def write_scene(data: dict):
         else "无预警"
     )
 
-    # --- Write Phase ---
-    try:
-        result, response = await writer.write_scene(
-            genre=genre,
-            concept=ctx["concept"],
-            world_rules=ctx["world"],
-            characters=ctx["characters"],
-            scene_plan=scene_plan,
-            l0_context=ctx_mem.l0_context,
-            l1_context=ctx_mem.l1_context,
-            l2_context=ctx_mem.l2_context,
-            l3_context=ctx_mem.l3_context,
-            l4_context=ctx_mem.l4_context,
-            growth_stage_hint=ctx_mem.growth_stage_hint,
-            character_growth_context=character_growth_context,
-            reader_os_warnings=reader_warnings_str,
-            custom_style_config=custom_style_config,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
-        )
+    if draft_factory is not None:
+        # Test seam: skip LLM call entirely.
+        draft_text = draft_factory(chapter_number, scene_number)
+        response = None
+    else:
+        try:
+            result, response = await writer.write_scene(
+                genre=genre,
+                concept=ctx["concept"],
+                world_rules=ctx["world"],
+                characters=ctx["characters"],
+                scene_plan=scene_plan,
+                l0_context=ctx_mem.l0_context,
+                l1_context=ctx_mem.l1_context,
+                l2_context=ctx_mem.l2_context,
+                l3_context=ctx_mem.l3_context,
+                l4_context=ctx_mem.l4_context,
+                growth_stage_hint=ctx_mem.growth_stage_hint,
+                character_growth_context=character_growth_context,
+                reader_os_warnings=reader_warnings_str,
+                custom_style_config=custom_style_config,
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=503,
+                detail={"error": True, "code": "LLM_GENERATION_FAILED",
+                        "message": str(e), "detail": {}},
+            )
+        draft_text = result.get("text", "")
 
-    draft_text = result.get("text", "")
     if not draft_text or not draft_text.strip():
         raise HTTPException(
             status_code=503,
             detail={"error": True, "code": "LLM_GENERATION_FAILED",
                     "message": "LLM 返回了空文本，请重试", "detail": {}},
         )
-    writer.log_usage("scene_writing", response)
+    if response is not None:
+        writer.log_usage("scene_writing", response)
 
-    # --- Review & Retry Loop ---
     attempt = 1
     current_draft = draft_text
 
-    # --- v1.7: Semantic precheck (advisory, runs once per scene) ---
     char_names = [c.get("name", "") for c in ctx.get("characters", []) if c.get("name")]
     precheck_result = await _run_semantic_precheck(
         scene_text=current_draft,
@@ -318,7 +322,8 @@ async def write_scene(data: dict):
         except Exception as e:
             logger.warning("Failed to log semantic precheck tokens (non-blocking): %s", e)
 
-    while True:
+    if breaker_result_override is not None:
+        # Test seam: skip the loop entirely.
         fg_result = reviewer.run_fact_guard(
             draft_text=current_draft,
             characters=ctx["characters"],
@@ -326,65 +331,68 @@ async def write_scene(data: dict):
             scene_plan=scene_plan,
             precheck_result=precheck_result,
         )
-
-        breaker_result = breaker.check(
-            scene_number=scene_number,
-            fact_guard_passed=fg_result.all_passed,
-            attempt=attempt,
-            hints=fg_result.retry_hints,
-        )
-
-        if breaker_result == "passed":
-            break
-
-        if breaker_result == "retry":
-            attempt += 1
-            hints = breaker.generate_retry_hints(
-                scene_number,
-                [
-                    {"name": c.name, "passed": c.passed, "detail": c.detail}
-                    for c in fg_result.checks
-                ],
+        breaker_result = breaker_result_override
+        attempt = 3 if breaker_result_override == "force_pass" else 1
+    else:
+        while True:
+            fg_result = reviewer.run_fact_guard(
+                draft_text=current_draft,
+                characters=ctx["characters"],
+                world_rules=ctx["world"],
+                scene_plan=scene_plan,
+                precheck_result=precheck_result,
             )
-            try:
-                rewrite_result, rewrite_response = await writer.rewrite_scene(
-                    genre=ctx["genre"],
-                    concept=ctx["concept"],
-                    world_rules=ctx["world"],
-                    characters=ctx["characters"],
-                    scene_plan=scene_plan,
-                    retry_hints=hints,
-                    previous_draft=current_draft,
-                    l0_context=ctx_mem.l0_context,
-                    l1_context=ctx_mem.l1_context,
-                    l2_context=ctx_mem.l2_context,
-                    l3_context=ctx_mem.l3_context,
-                    l4_context=ctx_mem.l4_context,
-                    growth_stage_hint=ctx_mem.growth_stage_hint,
-                    character_growth_context=character_growth_context,
-                    reader_os_warnings=reader_warnings_str,
-                    custom_style_config=custom_style_config,
-                )
-            except ValueError as e:
-                raise HTTPException(
-                    status_code=503,
-                    detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
-                )
-            current_draft = rewrite_result.get("text", "")
-            writer.log_usage("scene_rewrite", rewrite_response)
-            continue
 
-        # force_pass
-        break
+            breaker_result = breaker.check(
+                scene_number=scene_number,
+                fact_guard_passed=fg_result.all_passed,
+                attempt=attempt,
+                hints=fg_result.retry_hints,
+            )
 
-    # --- StoryOS Update ---
+            if breaker_result == "passed":
+                break
+            if breaker_result == "retry":
+                attempt += 1
+                hints = breaker.generate_retry_hints(
+                    scene_number,
+                    [{"name": c.name, "passed": c.passed, "detail": c.detail}
+                     for c in fg_result.checks],
+                )
+                try:
+                    rewrite_result, rewrite_response = await writer.rewrite_scene(
+                        genre=ctx["genre"],
+                        concept=ctx["concept"],
+                        world_rules=ctx["world"],
+                        characters=ctx["characters"],
+                        scene_plan=scene_plan,
+                        retry_hints=hints,
+                        previous_draft=current_draft,
+                        l0_context=ctx_mem.l0_context,
+                        l1_context=ctx_mem.l1_context,
+                        l2_context=ctx_mem.l2_context,
+                        l3_context=ctx_mem.l3_context,
+                        l4_context=ctx_mem.l4_context,
+                        growth_stage_hint=ctx_mem.growth_stage_hint,
+                        character_growth_context=character_growth_context,
+                        reader_os_warnings=reader_warnings_str,
+                        custom_style_config=custom_style_config,
+                    )
+                except ValueError as e:
+                    raise HTTPException(
+                        status_code=503,
+                        detail={"error": True, "code": "LLM_GENERATION_FAILED",
+                                "message": str(e), "detail": {}},
+                    )
+                current_draft = rewrite_result.get("text", "")
+                writer.log_usage("scene_rewrite", rewrite_response)
+                continue
+            break  # force_pass
+
     parsed_logs = storyos.parse_sf_logs(current_draft)
     registry_report = storyos.update_registries(parsed_logs)
-
-    # Update L0 from character state changes
     l0.update_from_logs(registry_report.character_state_updates)
 
-    # --- Style Guard (v1.6 Phase 4b) ---
     style_violations = []
     try:
         from backend.style_engine.genre_template import GenreTemplate
@@ -397,13 +405,11 @@ async def write_scene(data: dict):
     except Exception as e:
         logger.warning("Style Guard failed (non-blocking): %s", e)
 
-    # Save draft (chapter-aware filename to preserve cross-chapter drafts)
     chapters_dir = fm.project_path(project_id, "chapters")
     chapters_dir.mkdir(parents=True, exist_ok=True)
     draft_filename = f"ch{chapter_number:02d}_scene_{scene_number:03d}_draft.md"
     fm.write_markdown(project_id, f"chapters/{draft_filename}", current_draft)
 
-    # Save scene metadata (SF logs, Fact Guard results) for cross-scene retrieval
     meta_filename = f"ch{chapter_number:02d}_scene_{scene_number:03d}_meta.json"
     scene_meta = {
         "chapter_number": chapter_number,
@@ -411,15 +417,11 @@ async def write_scene(data: dict):
         "status": breaker_result,
         "retry_count": attempt - 1,
         "coherence_score": fg_result.coherence_score,
-        "parsed_logs": [
-            {"type": log.type, "params": log.params} for log in parsed_logs
-        ],
+        "parsed_logs": [{"type": log.type, "params": log.params} for log in parsed_logs],
         "fact_guard_results": {
             "all_passed": fg_result.all_passed,
-            "checks": [
-                {"check_id": c.check_id, "name": c.name, "passed": c.passed, "detail": c.detail}
-                for c in fg_result.checks
-            ],
+            "checks": [{"check_id": c.check_id, "name": c.name, "passed": c.passed,
+                        "detail": c.detail} for c in fg_result.checks],
         },
         "registry_updates": {
             "created": registry_report.created,
@@ -429,22 +431,16 @@ async def write_scene(data: dict):
         "style_guard_violations": style_violations,
         "precheck_result": {
             "precheck_passed": precheck_result.precheck_passed,
-            "suggestions": [
-                {
-                    "event_type": s.event_type,
-                    "location_hint": s.location_hint,
-                    "suggested_tag": s.suggested_tag,
-                    "reason": s.reason,
-                }
-                for s in (precheck_result.suggestions or [])
-            ],
+            "suggestions": [{
+                "event_type": s.event_type, "location_hint": s.location_hint,
+                "suggested_tag": s.suggested_tag, "reason": s.reason,
+            } for s in (precheck_result.suggestions or [])],
             "tokens_used": precheck_result.tokens_used,
             "skipped_reason": getattr(precheck_result, "skipped_reason", ""),
         },
     }
     fm.write_json(project_id, f"chapters/{meta_filename}", scene_meta)
 
-    # Save checkpoint
     cpm = CheckpointManager(project_id)
     cpm.save(
         pipeline_stage="scene_written",
@@ -454,7 +450,6 @@ async def write_scene(data: dict):
         character_states=ctx["characters"],
     )
 
-    # Update progress
     outline = ctx["outline"]
     total_chapters = len(outline.get("chapters", [])) if outline else 1
     progress = fm.read_json(project_id, "progress.json") or {
@@ -473,8 +468,7 @@ async def write_scene(data: dict):
     if chapter_progress is None:
         chapter_progress = {
             "chapter_number": ctx["chapter"].get("chapter_number", 1),
-            "status": "in_progress",
-            "scenes": [],
+            "status": "in_progress", "scenes": [],
         }
         progress.setdefault("chapters", []).append(chapter_progress)
 
@@ -492,18 +486,13 @@ async def write_scene(data: dict):
         })
 
     breaker_events = [
-        {
-            "scene_number": e.scene_number,
-            "attempt": e.attempt,
-            "result": e.result,
-            "timestamp": e.timestamp,
-        }
+        {"scene_number": e.scene_number, "attempt": e.attempt,
+         "result": e.result, "timestamp": e.timestamp}
         for e in breaker.get_events()
     ]
     progress["circuit_breaker_events"] = breaker_events
     fm.write_json(project_id, "progress.json", progress)
 
-    # v1.6 Phase 3a: Chapter review trigger
     chapter_review_ready = False
     all_scenes_done = all(
         s.get("status") in ("completed", "force_passed", "skipped")
@@ -524,24 +513,19 @@ async def write_scene(data: dict):
             logger.warning("Chapter review generation failed (non-blocking): %s", e)
 
     return {
-        "error": False,
-        "code": "OK",
+        "error": False, "code": "OK",
         "message": f"Scene {scene_number} 写作完成",
         "detail": {
             "scene_number": scene_number,
             "status": breaker_result,
             "retry_count": attempt - 1,
             "draft_text": current_draft,
-            "chapter_review_ready": chapter_review_ready,  # v1.6 Phase 3a
-            "parsed_logs": [
-                {"type": log.type, "params": log.params} for log in parsed_logs
-            ],
+            "chapter_review_ready": chapter_review_ready,
+            "parsed_logs": [{"type": log.type, "params": log.params} for log in parsed_logs],
             "fact_guard_results": {
                 "all_passed": fg_result.all_passed,
-                "checks": [
-                    {"check_id": c.check_id, "name": c.name, "passed": c.passed, "detail": c.detail}
-                    for c in fg_result.checks
-                ],
+                "checks": [{"check_id": c.check_id, "name": c.name, "passed": c.passed,
+                            "detail": c.detail} for c in fg_result.checks],
                 "coherence_score": fg_result.coherence_score,
             },
             "registry_updates": {
@@ -549,26 +533,172 @@ async def write_scene(data: dict):
                 "updated": registry_report.updated,
                 "cascade_executed": registry_report.cascade_executed,
             },
-            "l0_snapshot": {
-                "scene": scene_number,
-                "goal": scene_plan.get("goal", ""),
-            },
+            "l0_snapshot": {"scene": scene_number, "goal": scene_plan.get("goal", "")},
             "precheck_result": {
                 "precheck_passed": precheck_result.precheck_passed,
-                "suggestions": [
-                    {
-                        "event_type": s.event_type,
-                        "location_hint": s.location_hint,
-                        "suggested_tag": s.suggested_tag,
-                        "reason": s.reason,
-                    }
-                    for s in (precheck_result.suggestions or [])
-                ],
+                "suggestions": [{
+                    "event_type": s.event_type, "location_hint": s.location_hint,
+                    "suggested_tag": s.suggested_tag, "reason": s.reason,
+                } for s in (precheck_result.suggestions or [])],
                 "tokens_used": precheck_result.tokens_used,
                 "skipped_reason": getattr(precheck_result, "skipped_reason", ""),
             },
         },
     }
+
+
+async def _advance_chapter(
+    project_id: str,
+    *,
+    fake: bool = False,
+) -> dict:
+    """In-process chapter advancement. Returns the same dict shape as the
+    existing /api/stage4/advance-chapter handler.
+
+    When `fake=True`, skip the real SummaryArchiver LLM call (used by
+    FakeStage4Executor in tests).
+    """
+    sm = StageStateMachine(settings.projects_dir)
+    current = sm.get_current_stage(project_id)
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE4):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "STAGE_NOT_READY",
+                    "message": f"当前阶段为 {current.value}，无法推进章节", "detail": {}},
+        )
+
+    progress = fm.read_json(project_id, "progress.json") or {}
+    current_chapter = progress.get("current_chapter", 1)
+    chapters = progress.get("chapters", [])
+
+    ch_progress = next(
+        (ch for ch in chapters if ch.get("chapter_number") == current_chapter),
+        None,
+    )
+    if ch_progress is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "PRECONDITION_FAILED",
+                    "message": f"第{current_chapter}章无进度记录", "detail": {}},
+        )
+
+    incomplete = [
+        s for s in ch_progress.get("scenes", [])
+        if s.get("status") not in ("completed", "force_passed", "skipped")
+    ]
+    if incomplete:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "CHAPTER_NOT_COMPLETE",
+                    "message": f"第{current_chapter}章有 {len(incomplete)} 个 Scene 未完成",
+                    "detail": {"incomplete_scenes": incomplete}},
+        )
+
+    storyos = StoryOSAgent(project_id)
+    scene_drafts = []
+    all_sf_logs = []
+    chapters_dir = fm.project_path(project_id, "chapters")
+    if chapters_dir.exists():
+        for draft_file in sorted(chapters_dir.glob(f"ch{current_chapter:02d}_scene_*_draft.md")):
+            draft_text = draft_file.read_text(encoding="utf-8")
+            if draft_text:
+                scene_drafts.append(draft_text)
+                parsed = storyos.parse_sf_logs(draft_text)
+                all_sf_logs.extend([{"type": log.type, "params": log.params}
+                                    for log in parsed])
+
+    ctx = _load_context(project_id, current_chapter)
+    archiver = SummaryArchiver(project_id)
+    l2 = L2WarmMemory(project_id)
+
+    if fake:
+        summary = {"summary": f"<fake summary for ch{current_chapter}>",
+                   "key_events": []}
+    else:
+        try:
+            summary = await archiver.archive_chapter(
+                chapter_number=current_chapter,
+                scene_drafts=scene_drafts,
+                sf_logs=all_sf_logs,
+                character_states={
+                    c.get("id", ""): {
+                        "name": c.get("name", ""),
+                        "current_state": c.get("current_state", {}),
+                    } for c in ctx["characters"]
+                },
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=503,
+                detail={"error": True, "code": "LLM_GENERATION_FAILED",
+                        "message": f"章摘要生成失败: {str(e)}", "detail": {}},
+            )
+
+    l2.update_from_summary(current_chapter, summary, all_sf_logs)
+
+    mc = MemoryCoordinator(project_id, settings.projects_dir)
+    mc.assemble_for_chapter_advance(
+        chapter_number=current_chapter,
+        scene_drafts=scene_drafts,
+    )
+
+    reader_os = ReaderOS(project_id)
+    genre = ctx["genre"]
+    snapshot = reader_os.snapshot(current_chapter, genre)
+
+    ch_progress["status"] = "completed"
+    ch_progress["reader_os"] = snapshot
+    progress["current_chapter"] = current_chapter + 1
+
+    next_ch = next((ch for ch in chapters if ch.get("chapter_number") == current_chapter + 1), None)
+    if next_ch is None:
+        chapters.append({"chapter_number": current_chapter + 1, "status": "pending", "scenes": []})
+
+    fm.write_json(project_id, "progress.json", progress)
+
+    cpm = CheckpointManager(project_id)
+    cpm.save(
+        pipeline_stage="chapter_advanced",
+        current_chapter=current_chapter + 1,
+        current_scene=1,
+        l0_snapshot={"stage": "chapter_advanced", "from_chapter": current_chapter},
+        character_states=ctx["characters"],
+    )
+
+    return {
+        "error": False, "code": "OK",
+        "message": f"已推进到第{current_chapter + 1}章",
+        "detail": {
+            "status": "advanced",
+            "from_chapter": current_chapter,
+            "to_chapter": current_chapter + 1,
+            "reader_os_snapshot": snapshot,
+            "l2_summary": {
+                "summary": summary.get("summary", ""),
+                "key_events": summary.get("key_events", []),
+            },
+        },
+    }
+
+
+@stage4_router.post("/write-scene")
+async def write_scene(data: dict):
+    project_id = data.get("project_id", "")
+    chapter_number = data.get("chapter_number", 1)
+    scene_number = data.get("scene_number", 1)
+    custom_style_config = data.get("custom_style_config") or None
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    return await _write_scene_chapter(
+        project_id=project_id,
+        chapter_number=chapter_number,
+        scene_number=scene_number,
+        custom_style_config=custom_style_config,
+    )
 
 
 @stage4_router.post("/force-pass")
@@ -741,148 +871,14 @@ async def get_progress(project_id: str):
 
 @stage4_router.post("/advance-chapter")
 async def advance_chapter(data: dict):
-    """推进到下一章：触发 Summary Archiver + ReaderOS + L2 更新"""
     project_id = data.get("project_id", "")
-
     if not project_id:
         raise HTTPException(
             status_code=400,
-            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
         )
-
-    sm = StageStateMachine(settings.projects_dir)
-    current = sm.get_current_stage(project_id)
-    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE4):
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "STAGE_NOT_READY", "message": f"当前阶段为 {current.value}，无法推进章节", "detail": {}},
-        )
-
-    # 1. Verify current chapter scenes are all done
-    progress = fm.read_json(project_id, "progress.json") or {}
-    current_chapter = progress.get("current_chapter", 1)
-    chapters = progress.get("chapters", [])
-
-    ch_progress = next(
-        (ch for ch in chapters if ch.get("chapter_number") == current_chapter),
-        None,
-    )
-    if ch_progress is None:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "PRECONDITION_FAILED", "message": f"第{current_chapter}章无进度记录", "detail": {}},
-        )
-
-    incomplete = [
-        s for s in ch_progress.get("scenes", [])
-        if s.get("status") not in ("completed", "force_passed", "skipped")
-    ]
-    if incomplete:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "CHAPTER_NOT_COMPLETE", "message": f"第{current_chapter}章有 {len(incomplete)} 个 Scene 未完成", "detail": {"incomplete_scenes": incomplete}},
-        )
-
-    # 2. Collect scene drafts and SF_LOG results for archiving
-    storyos = StoryOSAgent(project_id)
-    scene_drafts = []
-    all_sf_logs = []
-    chapters_dir = fm.project_path(project_id, "chapters")
-    if chapters_dir.exists():
-        for draft_file in sorted(chapters_dir.glob(f"ch{current_chapter:02d}_scene_*_draft.md")):
-            draft_text = draft_file.read_text(encoding="utf-8")
-            if draft_text:
-                scene_drafts.append(draft_text)
-                parsed = storyos.parse_sf_logs(draft_text)
-                all_sf_logs.extend([
-                    {"type": log.type, "params": log.params}
-                    for log in parsed
-                ])
-
-    # 3. Trigger Summary Archiver (LLM call)
-    ctx = _load_context(project_id, current_chapter)
-    archiver = SummaryArchiver(project_id)
-    l2 = L2WarmMemory(project_id)
-
-    try:
-        summary = await archiver.archive_chapter(
-            chapter_number=current_chapter,
-            scene_drafts=scene_drafts,
-            sf_logs=all_sf_logs,
-            character_states={
-                c.get("id", ""): {
-                    "name": c.get("name", ""),
-                    "current_state": c.get("current_state", {}),
-                }
-                for c in ctx["characters"]
-            },
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": f"章摘要生成失败: {str(e)}", "detail": {}},
-        )
-
-    # 4. Update L2 memory
-    l2.update_from_summary(current_chapter, summary, all_sf_logs)
-
-    # 4b. Trigger L4 sync + L3 indexing (Phase 2: deterministic, tier_0)
-    mc = MemoryCoordinator(project_id, settings.projects_dir)
-    mc.assemble_for_chapter_advance(
-        chapter_number=current_chapter,
-        scene_drafts=scene_drafts,
-    )
-
-    # 5. Trigger ReaderOS calculation
-    reader_os = ReaderOS(project_id)
-    genre = ctx["genre"]
-    snapshot = reader_os.snapshot(current_chapter, genre)
-
-    # 6. Update progress.json
-    ch_progress["status"] = "completed"
-    ch_progress["reader_os"] = snapshot
-
-    progress["current_chapter"] = current_chapter + 1
-
-    # Create progress entry for next chapter if needed
-    next_ch = next(
-        (ch for ch in chapters if ch.get("chapter_number") == current_chapter + 1),
-        None,
-    )
-    if next_ch is None:
-        chapters.append({
-            "chapter_number": current_chapter + 1,
-            "status": "pending",
-            "scenes": [],
-        })
-
-    fm.write_json(project_id, "progress.json", progress)
-
-    # 7. Write checkpoint (drafts preserved on disk for cross-chapter retrieval)
-    cpm = CheckpointManager(project_id)
-    cpm.save(
-        pipeline_stage="chapter_advanced",
-        current_chapter=current_chapter + 1,
-        current_scene=1,
-        l0_snapshot={"stage": "chapter_advanced", "from_chapter": current_chapter},
-        character_states=ctx["characters"],
-    )
-
-    return {
-        "error": False,
-        "code": "OK",
-        "message": f"已推进到第{current_chapter + 1}章",
-        "detail": {
-            "status": "advanced",
-            "from_chapter": current_chapter,
-            "to_chapter": current_chapter + 1,
-            "reader_os_snapshot": snapshot,
-            "l2_summary": {
-                "summary": summary.get("summary", ""),
-                "key_events": summary.get("key_events", []),
-            },
-        },
-    }
+    return await _advance_chapter(project_id=project_id)
 
 
 # --- v1.6 Phase 3a: Chapter Review API ---

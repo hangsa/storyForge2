@@ -49,6 +49,7 @@ vi.mock("../api/client", () => ({
     getCharacter: vi.fn().mockResolvedValue({ characters: [] }),
     getNovelOutline: mockedGetNovelOutline,
     updateOutline: vi.fn().mockResolvedValue(undefined),
+    updateSceneDraft: vi.fn().mockResolvedValue({ chapter_number: 1, scene_number: 1 }),
     generateOutline: mockedGenerateOutline,
     writeScene: mockedWriteScene,
   },
@@ -285,6 +286,37 @@ describe("Workspace integration", () => {
     });
     const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
     expect(body.value).toBe("新生成的场景正文。");
+  });
+
+  // Bug fix — "保存草稿" must call updateSceneDraft (writes draft.md), NOT
+  // updateOutline (which corrupts outline.json by setting title: "" and
+  // injecting schema-invalid `content` field). See client.ts:870 for the
+  // correct endpoint.
+  it("'保存草稿' button calls updateSceneDraft with the current editor content", async () => {
+    const { default: api } = await import("../api/client");
+    const updateSceneDraftSpy = api.updateSceneDraft as ReturnType<typeof vi.fn>;
+    updateSceneDraftSpy.mockReset();
+    updateSceneDraftSpy.mockResolvedValue({ chapter_number: 1, scene_number: 1 });
+
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
+    setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    // Wait for editor to mount, then type some content.
+    const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
+    fireEvent.change(body, { target: { value: "用户写的正文" } });
+    fireEvent.click(screen.getByTestId("editor-save"));
+    await waitFor(() => expect(updateSceneDraftSpy).toHaveBeenCalled());
+    // Must use the scene-draft endpoint, not updateOutline (which would
+    // corrupt outline.json).
+    expect(updateSceneDraftSpy).toHaveBeenCalledWith({
+      project_id: "p1",
+      chapter_number: 1,
+      scene_number: 1,
+      draft_text: "用户写的正文",
+    });
   });
 
   it("clicking mode-manual in the top-bar opens the confirm modal", () => {

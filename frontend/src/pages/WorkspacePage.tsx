@@ -114,6 +114,14 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Tracks the on-disk content for the currently-selected scene. Set
+  // after a successful save and after a successful draft load (Task 4).
+  // The dirty check `content !== lastSavedContent` decides whether the
+  // regenerate confirm dialog should appear. length > 0 alone would fire
+  // on every regenerate for chapters that already have a saved draft —
+  // the common case for power users.
+  const [lastSavedContent, setLastSavedContent] = useState<string>("");
+
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmKind, setConfirmKind] = useState<"mode-switch" | "take-over">("mode-switch");
   const [takeOverChapter, setTakeOverChapter] = useState<number | null>(null);
@@ -418,15 +426,20 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
               content={content}
               onContentChange={setContent}
               onSaveDraft={async () => {
+                if (!currentScene) return;
+                const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
+                if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
                 setBusy(true);
                 try {
-                  await api.updateOutline(
-                    projectId,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    { chapters: [{ chapter_number: currentChapter, title: "", scene_plan: [{ scene_id: currentScene ?? "", content }] }] } as any,
-                  );
+                  await api.updateSceneDraft({
+                    project_id: projectId,
+                    chapter_number: currentChapter,
+                    scene_number: sceneNumber,
+                    draft_text: content,
+                  });
+                  setLastSavedContent(content);
                 } catch {
-                  // swallow — UI scaffolding only, v1.8 has no toast layer yet
+                  // swallow — toast wiring lands in Task 6
                 } finally {
                   setBusy(false);
                 }

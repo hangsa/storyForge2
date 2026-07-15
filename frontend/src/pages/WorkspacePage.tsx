@@ -156,21 +156,19 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   );
 
   // chapterStatus: derived from the existing `chapters` array (already mapped
-  // through mapProgressStatus into DashboardChapter["status"]). Defensive
-  // matching for force_passed/skipped — neither is currently emitted by
-  // getStage4Progress, but the schema is non-zero possibility in future.
-  // Cast `c.status` to string so the compiler accepts the broader match —
-  // DashboardChapter["status"] is a closed union but the runtime can be
-  // more permissive.
+  // through mapProgressStatus into DashboardChapter["status"]). The
+  // DashboardChapter["status"] union is closed (no defensive `as string` —
+  // if a new state is added upstream, this memo will surface a TS error
+  // rather than silently rendering as "planned").
   const chapterStatus = useMemo<Record<number, ChapterStatus>>(() => {
     const m: Record<number, ChapterStatus> = {};
     for (const c of chapters) {
-      const s = c.status as string;
-      if (s === "completed" || s === "force_passed" || s === "skipped") {
+      if (c.status === "completed") {
         m[c.chapter_number] = "completed";
-      } else if (s === "writing") {
+      } else if (c.status === "writing") {
         m[c.chapter_number] = "writing";
       } else {
+        // "planned" | "pending" both render as 未写
         m[c.chapter_number] = "planned";
       }
     }

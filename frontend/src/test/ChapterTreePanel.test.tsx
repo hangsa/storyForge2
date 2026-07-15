@@ -205,27 +205,41 @@ describe("ChapterTreePanel", () => {
     expect(screen.queryByTestId("chapter-1")).not.toBeInTheDocument();
   });
 
-  it("renders a per-chapter status badge when chapterStatus is provided", () => {
+  it("renders per-chapter status badges for all three states", () => {
+    const volumes: WorkspaceVolumeGroup[] = [
+      { name: "未分组", chapter_range: "", chapters: [
+        { chapter_number: 1, title: "第一章", scenes: [{ scene_id: "1-1", title: "开场" }] },
+        { chapter_number: 2, title: "第二章", scenes: [{ scene_id: "2-1", title: "冲突" }] },
+        { chapter_number: 3, title: "第三章", scenes: [{ scene_id: "3-1", title: "高潮" }] },
+      ] },
+    ];
     render(
       <ChapterTreePanel
-        volumes={VOLUMES}
+        volumes={volumes}
         currentChapter={1}
         currentScene="1-1"
-        chapterStatus={{ 1: "completed", 2: "writing" }}
+        chapterStatus={{ 1: "completed", 2: "writing", 3: "planned" }}
         onSelectChapter={() => {}}
         onSelectScene={() => {}}
         onAddChapter={() => {}}
         onRefresh={() => {}}
       />,
     );
-    const ch1 = screen.getByTestId("chapter-status-1");
-    const ch2 = screen.getByTestId("chapter-status-2");
-    expect(ch1.textContent).toBe("✓");
-    expect(ch1.title).toBe("已完成");
-    expect(ch1.className).toMatch(/emerald/);
-    expect(ch2.textContent).toBe("✎");
-    expect(ch2.title).toBe("撰写中");
-    expect(ch2.className).toMatch(/blue/);
+    const s1 = screen.getByTestId("chapter-status-1");
+    const s2 = screen.getByTestId("chapter-status-2");
+    const s3 = screen.getByTestId("chapter-status-3");
+    // completed → ✓
+    expect(s1.textContent).toBe("✓");
+    expect(s1.title).toBe("已完成");
+    expect(s1.className).toMatch(/emerald/);
+    // writing → ✎
+    expect(s2.textContent).toBe("✎");
+    expect(s2.title).toBe("撰写中");
+    expect(s2.className).toMatch(/blue/);
+    // planned → ○
+    expect(s3.textContent).toBe("○");
+    expect(s3.title).toBe("未写");
+    expect(s3.className).toMatch(/gray/);
   });
 
   it("does not render status badges when chapterStatus is omitted", () => {

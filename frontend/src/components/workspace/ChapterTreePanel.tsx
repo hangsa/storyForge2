@@ -16,6 +16,11 @@ export interface WorkspaceChapterNode {
   scenes: WorkspaceSceneNode[];
 }
 
+export type ChapterStatus = "completed" | "writing" | "planned";
+
+/** Status info for the current chapter's scenes. Keyed by scene_id (e.g. "1-2"). */
+export type SceneStatusMap = Record<string, boolean>;
+
 /** A pre-computed volume group, derived from novel_outline.json in the
  *  parent. Pass a single "ungrouped" volume when there's no novel_outline
  *  (so the panel can still render a single header instead of a flat list). */
@@ -36,6 +41,8 @@ interface Props {
   volumes: WorkspaceVolumeGroup[];
   currentChapter: number;
   currentScene: string | null;
+  /** Optional per-chapter status map keyed by chapter_number. Omit to hide badges. */
+  chapterStatus?: Record<number, ChapterStatus>;
   onSelectChapter: (chapter_number: number) => void;
   onSelectScene: (chapter_number: number, scene_id: string) => void;
   onAddChapter: () => void;
@@ -49,7 +56,8 @@ const VIEW_MODES: { value: ViewMode; label: string }[] = [
 ];
 
 export default function ChapterTreePanel({
-  volumes, currentChapter, currentScene, onSelectChapter, onSelectScene, onAddChapter, onRefresh,
+  volumes, currentChapter, currentScene, chapterStatus,
+  onSelectChapter, onSelectScene, onAddChapter, onRefresh,
 }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("flat");
 
@@ -87,6 +95,21 @@ export default function ChapterTreePanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChapter]);
+
+  const renderChapterStatus = (n: number) => {
+    const status = chapterStatus?.[n];
+    if (status == null) return null;
+    if (status === "completed") {
+      return <span data-testid={`chapter-status-${n}`} title="已完成"
+        className="ml-2 inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 text-[10px]">✓</span>;
+    }
+    if (status === "writing") {
+      return <span data-testid={`chapter-status-${n}`} title="撰写中"
+        className="ml-2 inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-100 text-blue-700 text-[10px]">✎</span>;
+    }
+    return <span data-testid={`chapter-status-${n}`} title="未写"
+      className="ml-2 inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-100 text-gray-500 text-[10px]">○</span>;
+  };
 
   return (
     <div data-testid="chapter-tree" className="p-3 space-y-3 text-sm font-body-ui">
@@ -157,7 +180,10 @@ export default function ChapterTreePanel({
                             isCurrent ? "bg-primary-container/10 text-primary-container font-medium" : "text-primary hover:bg-surface-container"
                           }`}
                         >
-                          <span className="truncate">第 {ch.chapter_number} 章 · {ch.title}</span>
+                          <span className="truncate flex items-center">
+                            第 {ch.chapter_number} 章 · {ch.title}
+                            {renderChapterStatus(ch.chapter_number)}
+                          </span>
                           {isCurrent && <span className="text-[10px] text-system-log/70">{ch.scenes.length} 场景</span>}
                         </button>
                         {isCurrent && (

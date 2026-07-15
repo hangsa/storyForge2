@@ -257,4 +257,51 @@ describe("ChapterTreePanel", () => {
     expect(screen.queryByTestId("chapter-status-1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("chapter-status-2")).not.toBeInTheDocument();
   });
+
+  it("renders scene-status dots when sceneStatus is provided", () => {
+    const volumes: WorkspaceVolumeGroup[] = [
+      { name: "未分组", chapter_range: "", chapters: [
+        { chapter_number: 1, title: "第一章", scenes: [
+          { scene_id: "1-1", title: "开场" },
+          { scene_id: "1-2", title: "发现" },
+        ]},
+      ]},
+    ];
+    render(
+      <ChapterTreePanel
+        volumes={volumes}
+        currentChapter={1}
+        currentScene="1-1"
+        sceneStatus={{ "1-1": true, "1-2": false }}
+        onSelectChapter={() => {}}
+        onSelectScene={() => {}}
+        onAddChapter={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    const draft = screen.getByTestId("scene-status-1-1");
+    const empty = screen.getByTestId("scene-status-1-2");
+    expect(draft.textContent).toBe("●");
+    expect(draft.title).toMatch(/已写/);
+    expect(draft.className).toMatch(/emerald|blue/);
+    expect(empty.textContent).toBe("○");
+    expect(empty.title).toMatch(/未写/);
+    expect(empty.className).toMatch(/gray/);
+  });
+
+  it("does not render scene-status dots when sceneStatus is omitted", () => {
+    render(
+      <ChapterTreePanel
+        volumes={VOLUMES}
+        currentChapter={1}
+        currentScene="1-1"
+        onSelectChapter={() => {}}
+        onSelectScene={() => {}}
+        onAddChapter={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId("scene-status-1-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("scene-status-1-2")).not.toBeInTheDocument();
+  });
 });

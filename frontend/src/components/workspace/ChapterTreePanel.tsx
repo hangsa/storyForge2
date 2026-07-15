@@ -43,6 +43,8 @@ interface Props {
   currentScene: string | null;
   /** Optional per-chapter status map keyed by chapter_number. Omit to hide badges. */
   chapterStatus?: Record<number, ChapterStatus>;
+  /** Optional scene-draft availability map keyed by scene_id. Omit to hide dots. */
+  sceneStatus?: SceneStatusMap;
   onSelectChapter: (chapter_number: number) => void;
   onSelectScene: (chapter_number: number, scene_id: string) => void;
   onAddChapter: () => void;
@@ -56,7 +58,7 @@ const VIEW_MODES: { value: ViewMode; label: string }[] = [
 ];
 
 export default function ChapterTreePanel({
-  volumes, currentChapter, currentScene, chapterStatus,
+  volumes, currentChapter, currentScene, chapterStatus, sceneStatus,
   onSelectChapter, onSelectScene, onAddChapter, onRefresh,
 }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("flat");
@@ -109,6 +111,16 @@ export default function ChapterTreePanel({
     }
     return <span data-testid={`chapter-status-${n}`} title="未写"
       className="ml-2 inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-100 text-gray-500 text-[10px]">○</span>;
+  };
+
+  const renderSceneStatus = (scene_id: string) => {
+    const has = sceneStatus?.[scene_id];
+    if (has == null) return null;
+    return has
+      ? <span data-testid={`scene-status-${scene_id}`} title="已写"
+          className="mr-1 inline-block w-2 h-2 rounded-full bg-emerald-500 align-middle">●</span>
+      : <span data-testid={`scene-status-${scene_id}`} title="未写"
+          className="mr-1 inline-block w-2 h-2 rounded-full bg-gray-300 align-middle">○</span>;
   };
 
   return (
@@ -194,12 +206,15 @@ export default function ChapterTreePanel({
                                   type="button"
                                   data-testid={`scene-${s.scene_id}`}
                                   onClick={() => onSelectScene(ch.chapter_number, s.scene_id)}
-                                  className={`w-full text-left px-2 py-1 rounded text-xs ${
+                                  className={`w-full text-left px-2 py-1 rounded text-xs flex items-center ${
                                     s.scene_id === currentScene
                                       ? "bg-tertiary-container/20 text-primary"
                                       : "text-system-log hover:bg-surface-container hover:text-primary"
                                   }`}
-                                >{s.title}</button>
+                                >
+                                  {renderSceneStatus(s.scene_id)}
+                                  <span className="truncate">{s.title}</span>
+                                </button>
                               </li>
                             ))}
                           </ul>

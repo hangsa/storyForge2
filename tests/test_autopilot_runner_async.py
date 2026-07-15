@@ -476,3 +476,119 @@ class TestAsyncStage4ExecutorControlFlow:
                           scheduled_at=None, priority=1, payload={}),
                 project_id="p1",
             )
+
+
+class TestAsyncAutopilotRunner:
+    @pytest.mark.asyncio
+    async def test_run_executes_all_items_then_stops(
+        self, mgr, projects_dir, fake_project
+    ):
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+        mgr.add_queue(QueueItem(id="w-1-2", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=22,
+                                payload={"scene_number": 2}))
+        executor = FakeStage4Executor(mgr, projects_dir, breaker_result="passed")
+        runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
+        await runner.run()
+        # Both scenes were processed; runner auto-stopped because after archival,
+        # chapter 2 has no scenes (we did NOT pre-seed chapter 2).
+        assert mgr.load().state.value == "stopped"
+        kinds = [c["kind"] for c in executor._calls]
+        assert "write_scene" in kinds
+        assert "archival" in kinds
+
+    @pytest.mark.asyncio
+    async def test_run_returns_immediately_when_state_not_running(
+        self, mgr, projects_dir, fake_project
+    ):
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+        # Don't start the session — state stays idle.
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+        executor = FakeStage4Executor(mgr, projects_dir)
+        runner = AsyncAutopilotRunner(mgr, executor)
+        await runner.run()
+        assert executor._calls == []  # never executed
+
+    @pytest.mark.asyncio
+    async def test_step_emits_task_fail_on_executor_exception(
+        self, mgr, projects_dir, fake_project
+    ):
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+
+        class BoomExecutor:
+            async def execute(self, item, project_id):
+                raise RuntimeError("LLM 5xx")
+            @property
+            def _calls(self): return []
+
+        executor = BoomExecutor()
+        runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
+        # run a single step
+        s = mgr.load()
+        item = runner._pick_next(s.queue)
+        await runner._step_one(item, "p1")
+        # task_fail event was appended
+        events = [e.type for e in mgr.load().history]
+        assert "task_fail" in events
+        # current_task was cleared
+        assert mgr.load().current_task is None
+        # item dropped from queue (failure path)
+        assert all(q.id != "w-1-1" for q in mgr.load().queue)
+        # force_pass_count NOT incremented
+        assert mgr.load().circuit.force_pass_count == 0
+
+    @pytest.mark.asyncio
+    async def test_step_increments_force_pass_count_on_force_passed_scene(
+        self, mgr, projects_dir, fake_project
+    ):
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+        executor = FakeStage4Executor(mgr, projects_dir, breaker_result="force_pass")
+        runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
+        await runner.run()  # one step then queue empty (no archival enqueued)
+        # session paused after 3 force-passes is the circuit-breaker behaviour;
+        # 1 force-pass alone just increments counter and stays running.
+        s = mgr.load()
+        assert s.circuit.force_pass_count == 1
+        assert s.circuit.threshold_warning is False
+
+    @pytest.mark.asyncio
+    async def test_step_emits_circuit_open_after_three_force_passes(
+        self, mgr, projects_dir, fake_project
+    ):
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+        mgr.start(ManagedStartConfig())
+        executor = FakeStage4Executor(mgr, projects_dir, breaker_result="force_pass")
+        # Pre-seed 3 write_scene items.
+        for n in (1, 2, 3):
+            mgr.add_queue(QueueItem(id=f"w-1-{n}", kind="write_scene",
+                                    chapter_number=1, scheduled_at=None,
+                                    priority=20 + n,
+                                    payload={"scene_number": n}))
+        runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
+        await runner.run()
+        s = mgr.load()
+        assert s.circuit.force_pass_count >= 3
+        assert s.circuit.threshold_warning is True
+        # Auto-paused after the 3rd force-pass crossed the threshold.
+        assert s.state.value == "paused"
+        events = [e.type for e in s.history]
+        assert "circuit_open" in events

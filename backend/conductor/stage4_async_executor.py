@@ -49,6 +49,22 @@ def _next_outline_chapter(outline: dict, chapter_number: int) -> Optional[dict]:
     )
 
 
+# Map raw breaker_result → canonical scene status used by DONE_STATUSES
+# ("completed" / "force_passed" / "skipped") and the runner's
+# `scene_status == "force_passed"` check. This is the executor's
+# boundary: callers see the canonical form regardless of where the
+# raw value came from (test seam, real breaker, etc.).
+_BREAKER_TO_SCENE_STATUS = {
+    "passed": "completed",
+    "force_pass": "force_passed",
+    "skipped": "skipped",
+}
+
+
+def _canonical_scene_status(raw: str) -> str:
+    return _BREAKER_TO_SCENE_STATUS.get(raw, raw)
+
+
 def _maybe_enqueue_archival(
     mgr, projects_dir: Path, project_id: str, chapter_number: int
 ) -> bool:
@@ -115,7 +131,9 @@ class AsyncStage4Executor:
         mgr = self._mgr_for(project_id)
         _maybe_enqueue_archival(mgr, self._projects_dir, project_id,
                                item.chapter_number)
-        return {"status": "ok", "scene_status": result["detail"]["status"]}
+        return {"status": "ok", "scene_status": _canonical_scene_status(
+            result["detail"]["status"]
+        )}
 
     async def _archival(self, item: QueueItem, project_id: str) -> dict:
         await _advance_chapter(project_id=project_id)
@@ -173,7 +191,9 @@ class FakeStage4Executor:
             )
             _maybe_enqueue_archival(self._mgr, self._projects_dir, project_id,
                                    item.chapter_number)
-            return {"status": "ok", "scene_status": result["detail"]["status"]}
+            return {"status": "ok", "scene_status": _canonical_scene_status(
+                result["detail"]["status"]
+            )}
 
         if item.kind == "archival":
             self._calls.append({"kind": "archival", "chapter": item.chapter_number})

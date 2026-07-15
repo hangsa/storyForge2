@@ -44,7 +44,7 @@ const FETCHER: Record<WorkspacePanel, (id: string) => Promise<unknown>> = {
   export: async () => ({}),
 };
 
-export default function ContextPanel({ projectId, readOnly }: Props) {
+export default function ContextPanel({ projectId, readOnly, readOnlyReason }: Props) {
   const { panel, setPanel } = useWorkspacePanel();
   const [data, setData] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
@@ -80,6 +80,15 @@ export default function ContextPanel({ projectId, readOnly }: Props) {
           >{TAB_LABEL[id]}</button>
         ))}
       </div>
+      {readOnly && readOnlyReason && (
+        <div
+          data-testid="context-readonly-banner"
+          className="px-4 py-2 bg-secondary-container/30 border-b border-outline-variant text-xs font-body-ui text-system-log"
+        >
+          <span className="font-label-mono text-[10px] uppercase tracking-wider mr-2">只读</span>
+          {readOnlyReason}
+        </div>
+      )}
       <div className="flex-1 p-4 overflow-y-auto text-sm font-body-narrative text-system-log space-y-3">
         {panel === "concept" || panel === "world" || panel === "character" || panel === "outline" ? (
           loading ? (

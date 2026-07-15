@@ -103,8 +103,124 @@ class TestCrashRecovery:
 
         svc = AutopilotLoopService()
         await svc.recover_running_sessions(projects_dir)
-        # Only the running one was resumed (paused stays paused, recovered on user action).
-        assert svc.is_running("p_run") is True
+        # p_run has no heartbeat → downgraded to paused (Layer 2 fix).
+        # p_pause is already paused → left as-is.
+        assert svc.is_running("p_run") is False
         assert svc.is_running("p_pause") is False
+        # Both session files should now be in 'paused' state.
+        for pid in ("p_run", "p_pause"):
+            payload = json.loads(
+                (projects_dir / pid / "autopilot" / "session.json").read_text(encoding="utf-8")
+            )
+            assert payload["state"] == "paused", f"{pid} should be paused, got {payload['state']}"
+
+    @pytest.mark.asyncio
+    async def test_running_session_with_no_heartbeat_is_downgraded(self, projects_dir):
+        """A running session with last_heartbeat_at == None must be downgraded
+        to paused on recovery. The Layer 1 heartbeat fix means fresh sessions
+        always have a heartbeat; None implies the runner died before the
+        heartbeat was ever added (i.e., a pre-Layer-1 crashed session)."""
+        from datetime import datetime, timezone
+        pid = "p_no_hb"
+        (projects_dir / pid).mkdir(parents=True, exist_ok=True)
+        (projects_dir / pid / "autopilot").mkdir(parents=True, exist_ok=True)
+        (projects_dir / pid / "outline.json").write_text(
+            json.dumps({"chapters": [
+                {"chapter_number": 1, "scene_plan": [
+                    {"scene_number": 1, "goal": "", "conflict": ""},
+                ]},
+            ]}), encoding="utf-8"
+        )
+        (projects_dir / pid / "autopilot" / "session.json").write_text(json.dumps({
+            "project_id": pid, "state": "running",
+            "config": {"scope": "all_planned", "cadence": "balanced",
+                       "policy": "auto", "notify": "milestones"},
+            "started_at": None, "last_heartbeat_at": None,
+            "current_task": None, "queue": [], "history": [],
+            "circuit": {"force_pass_count": 0, "last_event_at": None,
+                        "threshold_warning": False},
+        }), encoding="utf-8")
+
+        svc = AutopilotLoopService()
+        await svc.recover_running_sessions(projects_dir)
+        # No task should be spawned for a stale session.
+        assert svc.is_running(pid) is False
+        assert pid not in svc._tasks
+        # Session file should be downgraded to 'paused'.
+        payload = json.loads(
+            (projects_dir / pid / "autopilot" / "session.json").read_text(encoding="utf-8")
+        )
+        assert payload["state"] == "paused"
+
+    @pytest.mark.asyncio
+    async def test_running_session_with_stale_heartbeat_is_downgraded(self, projects_dir):
+        """A running session whose last_heartbeat_at is older than
+        STALE_HEARTBEAT_SECONDS must be downgraded to paused."""
+        from datetime import datetime, timezone, timedelta
+        pid = "p_stale"
+        (projects_dir / pid).mkdir(parents=True, exist_ok=True)
+        (projects_dir / pid / "autopilot").mkdir(parents=True, exist_ok=True)
+        (projects_dir / pid / "outline.json").write_text(
+            json.dumps({"chapters": [
+                {"chapter_number": 1, "scene_plan": [
+                    {"scene_number": 1, "goal": "", "conflict": ""},
+                ]},
+            ]}), encoding="utf-8"
+        )
+        stale_ts = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+        (projects_dir / pid / "autopilot" / "session.json").write_text(json.dumps({
+            "project_id": pid, "state": "running",
+            "config": {"scope": "all_planned", "cadence": "balanced",
+                       "policy": "auto", "notify": "milestones"},
+            "started_at": None, "last_heartbeat_at": stale_ts,
+            "current_task": None, "queue": [], "history": [],
+            "circuit": {"force_pass_count": 0, "last_event_at": None,
+                        "threshold_warning": False},
+        }), encoding="utf-8")
+
+        svc = AutopilotLoopService()
+        await svc.recover_running_sessions(projects_dir)
+        assert svc.is_running(pid) is False
+        assert pid not in svc._tasks
+        payload = json.loads(
+            (projects_dir / pid / "autopilot" / "session.json").read_text(encoding="utf-8")
+        )
+        assert payload["state"] == "paused"
+
+    @pytest.mark.asyncio
+    async def test_running_session_with_fresh_heartbeat_is_resumed(self, projects_dir):
+        """Regression: a running session with a fresh last_heartbeat_at should
+        still be resumed by ensure()."""
+        from datetime import datetime, timezone, timedelta
+        pid = "p_fresh"
+        (projects_dir / pid).mkdir(parents=True, exist_ok=True)
+        (projects_dir / pid / "autopilot").mkdir(parents=True, exist_ok=True)
+        (projects_dir / pid / "outline.json").write_text(
+            json.dumps({"chapters": [
+                {"chapter_number": 1, "scene_plan": [
+                    {"scene_number": 1, "goal": "", "conflict": ""},
+                ]},
+            ]}), encoding="utf-8"
+        )
+        fresh_ts = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+        (projects_dir / pid / "autopilot" / "session.json").write_text(json.dumps({
+            "project_id": pid, "state": "running",
+            "config": {"scope": "all_planned", "cadence": "balanced",
+                       "policy": "auto", "notify": "milestones"},
+            "started_at": None, "last_heartbeat_at": fresh_ts,
+            "current_task": None, "queue": [], "history": [],
+            "circuit": {"force_pass_count": 0, "last_event_at": None,
+                        "threshold_warning": False},
+        }), encoding="utf-8")
+
+        svc = AutopilotLoopService()
+        await svc.recover_running_sessions(projects_dir)
+        # Fresh heartbeat → task should be spawned via ensure().
+        assert svc.is_running(pid) is True
+        # Session file should remain in 'running' state.
+        payload = json.loads(
+            (projects_dir / pid / "autopilot" / "session.json").read_text(encoding="utf-8")
+        )
+        assert payload["state"] == "running"
         # Cleanup
-        await svc.cancel("p_run")
+        await svc.cancel(pid)

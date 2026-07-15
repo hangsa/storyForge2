@@ -143,24 +143,40 @@ class AutopilotLoopService:
             if payload.get("state") != SessionState.RUNNING.value:
                 continue
             pid = proj_dir.name
-            # Stale-session rule: if last_heartbeat_at is older than threshold,
-            # downgrade to paused (the user can manually resume).
+
+            # Stale-session rule: downgrade to paused if heartbeat is missing OR stale.
+            # A None heartbeat means the runner never reported — after Layer 1's fix
+            # this only happens for sessions that pre-date the heartbeat mechanism
+            # (i.e., crashed before heartbeats were added). Treating that as stale
+            # is safe: the user can manually resume from managed mode if needed.
             last_hb = payload.get("last_heartbeat_at")
-            if last_hb:
+            is_stale = False
+            stale_reason = ""
+            if last_hb is None:
+                is_stale = True
+                stale_reason = "no heartbeat recorded"
+            else:
                 try:
                     hb_dt = datetime.fromisoformat(last_hb)
                     age = (datetime.now(timezone.utc) - hb_dt).total_seconds()
                     if age > STALE_HEARTBEAT_SECONDS:
-                        # Use the manager so SSE events fire on the downgrade.
-                        mgr = AutopilotSessionManager(projects_dir, pid)
-                        mgr.pause()
-                        logger.info(
-                            "autopilot recovery: downgraded stale session %s (%.1fs old)",
-                            pid, age,
-                        )
-                        continue
+                        is_stale = True
+                        stale_reason = f"heartbeat {age:.1f}s old (>{STALE_HEARTBEAT_SECONDS}s)"
                 except Exception:
-                    pass  # unparseable timestamp → resume anyway
+                    # Unparseable timestamp → treat as stale (safer than resuming
+                    # a session whose age we can't compute).
+                    is_stale = True
+                    stale_reason = "unparseable heartbeat timestamp"
+
+            if is_stale:
+                # Use the manager so SSE events fire on the downgrade.
+                mgr = AutopilotSessionManager(projects_dir, pid)
+                mgr.pause()
+                logger.info(
+                    "autopilot recovery: downgraded stale session %s (%s)",
+                    pid, stale_reason,
+                )
+                continue
             mgr = AutopilotSessionManager(projects_dir, pid)
             cfg = payload.get("config") or {}
             from backend.models.autopilot_session import ManagedStartConfig

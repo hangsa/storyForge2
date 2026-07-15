@@ -1,13 +1,54 @@
+"""FastAPI entry — StoryForge API.
+
+Owns the application-level state for v1.9: AutopilotLoopService and the
+stage4 executor live on `app.state` so the autopilot API can spawn/cancel
+runner tasks. On startup we recover any sessions that were running when the
+previous process died (spec §4E).
+"""
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.api import project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing, stage5_diagnosis, stage6_export, style_extractor, conductor, storyos, settings_api, creative_canvas, growth_workshop, style_sandbox, autopilot
+from backend.api import (
+    project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing,
+    stage5_diagnosis, stage6_export, style_extractor, conductor, storyos,
+    settings_api, creative_canvas, growth_workshop, style_sandbox, autopilot,
+)
+from backend.config import settings
+from backend.conductor.autopilot_loop import AutopilotLoopService
+from backend.conductor.stage4_async_executor import AsyncStage4Executor
+from backend.conductor.autopilot_session import AutopilotSessionManager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.loop_service = AutopilotLoopService()
+    # Single app-wide executor; AsyncStage4Executor is stateless w.r.t. manager
+    # (builds a fresh AutopilotSessionManager per execute() call).
+    app.state.stage4_executor = AsyncStage4Executor(
+        projects_dir=settings.projects_dir,
+    )
+    # Crash recovery: re-spawn runners for sessions that were 'running' when the
+    # previous process exited. Stale sessions (>30s without heartbeat) are
+    # downgraded to paused (spec §5 row 9 + spec L287).
+    await app.state.loop_service.recover_running_sessions(settings.projects_dir)
+    try:
+        yield
+    finally:
+        # On shutdown, cancel any in-flight runners.
+        for pid in list(app.state.loop_service._tasks.keys()):
+            await app.state.loop_service.cancel(pid)
+
 
 app = FastAPI(
     title="StoryForge API",
     description="AI-Powered Creative Narrative Operating System",
     version="0.1.0-mvp",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

@@ -9,6 +9,7 @@ import WorkspaceTopBar from "../components/workspace/WorkspaceTopBar";
 import WorkspaceLayout from "../components/workspace/WorkspaceLayout";
 import ManagedDashboard, { type DashboardChapter } from "../components/workspace/ManagedDashboard";
 import ChapterTreePanel, {
+  type ChapterStatus,
   type WorkspaceChapterNode,
   type WorkspaceVolumeGroup,
 } from "../components/workspace/ChapterTreePanel";
@@ -153,6 +154,68 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     () => groupChaptersByVolume(manualChapters, novelOutline),
     [manualChapters, novelOutline],
   );
+
+  // chapterStatus: derived from the existing `chapters` array (already mapped
+  // through mapProgressStatus into DashboardChapter["status"]). Defensive
+  // matching for force_passed/skipped — neither is currently emitted by
+  // getStage4Progress, but the schema is non-zero possibility in future.
+  // Cast `c.status` to string so the compiler accepts the broader match —
+  // DashboardChapter["status"] is a closed union but the runtime can be
+  // more permissive.
+  const chapterStatus = useMemo<Record<number, ChapterStatus>>(() => {
+    const m: Record<number, ChapterStatus> = {};
+    for (const c of chapters) {
+      const s = c.status as string;
+      if (s === "completed" || s === "force_passed" || s === "skipped") {
+        m[c.chapter_number] = "completed";
+      } else if (s === "writing") {
+        m[c.chapter_number] = "writing";
+      } else {
+        m[c.chapter_number] = "planned";
+      }
+    }
+    return m;
+  }, [chapters]);
+
+  // sceneStatus: keyed `${chapterNumber}-${sceneNumber}` (the existing
+  // scene_id convention). Populated lazily when currentChapter changes or
+  // the user clicks 刷新 (reloadKey++). Cache entries for other chapters
+  // are preserved across switches.
+  const [sceneStatus, setSceneStatus] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    api
+      .getSceneDrafts(projectId, currentChapter)
+      .then((r: { scenes: Array<{ scene_number: number; has_draft: boolean }> }) => {
+        if (cancelled) return;
+        setSceneStatus((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(next)) {
+            if (k.startsWith(`${currentChapter}-`)) delete next[k];
+          }
+          for (const s of r.scenes ?? []) {
+            next[`${currentChapter}-${s.scene_number}`] = s.has_draft;
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // Failed fetch → silently clear current chapter's entries (matches
+        // the existing "we don't know what's on disk" pattern). The UI
+        // simply omits the scene-status dot for that chapter.
+        if (cancelled) return;
+        setSceneStatus((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(next)) {
+            if (k.startsWith(`${currentChapter}-`)) delete next[k];
+          }
+          return next;
+        });
+      });
+    return () => { cancelled = true; };
+  }, [projectId, currentChapter, reloadKey]);
 
   // Project name load — best-effort. 404 redirects to "/" per spec
   // § Error Handling. Anything else is silently swallowed (page still
@@ -460,6 +523,8 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
               volumes={volumeGroups}
               currentChapter={currentChapter}
               currentScene={currentScene}
+              chapterStatus={chapterStatus}
+              sceneStatus={sceneStatus}
               onSelectChapter={(n) => {
                 setCurrentChapter(n);
                 const ch = manualChapters.find((c) => c.chapter_number === n);

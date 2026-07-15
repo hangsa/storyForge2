@@ -170,7 +170,7 @@ async def list_scene_drafts(project_id: str, chapter_number: int = 1):
                     "message": "project_id 不能为空", "detail": {}},
         )
 
-    # Project existence check — surfaces 404 rather than silently returning empty.
+    # Project existence check.
     project_dir = fm.projects_dir / project_id
     if not project_dir.exists():
         raise HTTPException(
@@ -196,12 +196,7 @@ async def list_scene_drafts(project_id: str, chapter_number: int = 1):
                     continue
                 fname = f"ch{chapter_number:02d}_scene_{scene_number:03d}_draft.md"
                 draft_path = chapters_dir / fname
-                has_draft = False
-                if draft_path.is_file():
-                    try:
-                        has_draft = bool(draft_path.read_text(encoding="utf-8").strip())
-                    except OSError:
-                        has_draft = False
+                has_draft = bool(draft_path.read_text(encoding="utf-8").strip()) if draft_path.is_file() else False
                 scenes_out.append({
                     "scene_number": scene_number,
                     "has_draft": has_draft,

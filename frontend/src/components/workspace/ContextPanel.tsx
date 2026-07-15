@@ -11,6 +11,7 @@ import ExportSummary from "./ExportSummary";
 interface Props {
   projectId: string;
   readOnly?: boolean;
+  readOnlyReason?: string;
 }
 
 interface BaseEditorProps {

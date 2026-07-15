@@ -624,6 +624,23 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("action-stop")).toBeInTheDocument();
   });
 
+  it("cockpit renders a rollback button (disabled, v1.9.1 placeholder)", () => {
+    // Rollback only renders mid-flight, so start the session in running state.
+    const { rerender } = setup("/project/p1/workspace?mode=managed");
+    mockSession = { ...mockSession, state: "running", current_task: { description: "writing ch7" } };
+    rerender(
+      <MemoryRouter initialEntries={["/project/p1/workspace?mode=managed"]}>
+        <Routes>
+          <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /><ToastContainer /></ToastProvider>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("autopilot-cockpit-rollback")).toBeInTheDocument();
+    const rollback = screen.getByTestId("autopilot-cockpit-rollback");
+    expect(rollback).toBeDisabled();
+    expect(rollback.title).toContain("v1.9.1");
+  });
+
   it("new project with empty progress.json renders no chapter cells in managed mode", async () => {
     // Default mock returns { chapters: [] } — no chapter-cell-* should render.
     setup("/project/p1/workspace?mode=managed");

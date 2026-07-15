@@ -238,6 +238,17 @@ function CockpitView({
                 ⏹ 停止
               </button>
             )}
+            {state === "running" && (
+              <button
+                type="button"
+                data-testid="autopilot-cockpit-rollback"
+                disabled
+                title="回滚到上一节点 · v1.9.1 接入 checkpoint rollback"
+                className="px-4 py-2 text-sm rounded-lg bg-surface-container text-system-log/50 cursor-not-allowed"
+              >
+                ↺ 回滚
+              </button>
+            )}
           </div>
         </div>
       </div>

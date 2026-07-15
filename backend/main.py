@@ -17,6 +17,7 @@ from backend.api import (
     project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing,
     stage5_diagnosis, stage6_export, style_extractor, conductor, storyos,
     settings_api, creative_canvas, growth_workshop, style_sandbox, autopilot,
+    stage4_fact_guard,
 )
 from backend.config import settings
 from backend.conductor.autopilot_loop import AutopilotLoopService
@@ -65,6 +66,7 @@ app.include_router(stage1_concept.router)
 app.include_router(stage2_world_char.router)
 app.include_router(stage3_outline.router)
 app.include_router(stage4_writing.router)
+app.include_router(stage4_fact_guard.router)
 app.include_router(storyos.router)
 app.include_router(stage5_diagnosis.router)
 app.include_router(stage6_export.router)

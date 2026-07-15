@@ -111,7 +111,7 @@ import { useAutopilotSession } from "../hooks/useAutopilotSession";
 import { ToastProvider } from "../hooks/useToast";
 import ToastContainer from "../components/shared/ToastContainer";
 
-// Mutable state shared between ManagedDashboard and ManagedAIControlPanel —
+// Mutable state shared between ManagedDashboard and AutopilotMiddlePanel —
 // they each call useAutopilotSession() in their own subtree, so we need a
 // single source of truth for `session` / `events` that both render paths
 // read from. Tests can mutate `mockSession` / `mockEvents` and re-render to
@@ -539,21 +539,19 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("writing-area")).toBeInTheDocument();
   });
 
-  // Stage 2 Task 2.11 — full SSE event sequence across all 4 AI control tabs.
-  // We mock useAutopilotSession directly (not the underlying EventSource) and
-  // re-mock its return value before each sub-step, then re-render. Using
-  // rerender() (not multiple setup() calls) avoids duplicate-element errors
-  // and mirrors a real "state-update" feel.
-  it("EventSource sequence updates all 4 AI control tabs", () => {
+  // Stage 2 Task 2.11 — full SSE event sequence through the autopilot
+  // center panel. We mock useAutopilotSession directly (not the underlying
+  // EventSource) and re-mock its return value before each sub-step, then
+  // re-render. Using rerender() (not multiple setup() calls) avoids
+  // duplicate-element errors and mirrors a real "state-update" feel.
+  it("EventSource sequence updates autopilot center panel", () => {
     // Step 1: managed mode renders cleanly with no events yet.
     const { rerender } = setup("/project/p1/workspace?mode=managed");
-    expect(screen.queryByTestId("ai-control-panel")).not.toBeInTheDocument();
-    expect(screen.getByTestId("context-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("context-readonly-banner")).toHaveTextContent("托管运行中");
+    expect(screen.getByTestId("autopilot-middle-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
 
-    // Step 2: switch session to running with a current task — triggers the
-    // status strip in ManagedDashboard.
+    // Step 2: switch session to running with a current task — triggers
+    // the status strip in ManagedDashboard and shows live state in cockpit.
     mockSession = { ...mockSession, state: "running", current_task: { description: "writing ch7" } };
     rerender(
       <MemoryRouter initialEntries={["/project/p1/workspace"]}>
@@ -563,13 +561,10 @@ describe("Workspace integration", () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId("status-strip")).toBeInTheDocument();
-    // decisions tab is default — no event cards yet.
-    fireEvent.click(screen.getByTestId("ai-tab-decisions"));
-    expect(screen.queryByTestId("event-card-task_complete")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("event-card-circuit_open")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("event-card-circuit_close")).not.toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-cockpit-state")).toBeInTheDocument();
 
-    // Step 3: feed a partial event sequence — all three decision cards appear.
+    // Step 3: feed a partial event sequence — recent events appear in the
+    // cockpit live feed.
     mockEvents = [
       { event: "task_start", data: { description: "writing ch7" }, id: 1 },
       { event: "circuit_open", data: { reason: "guard" }, id: 2 },
@@ -584,16 +579,10 @@ describe("Workspace integration", () => {
         </Routes>
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByTestId("ai-tab-decisions"));
-    expect(screen.getByTestId("event-card-task_complete")).toBeInTheDocument();
-    expect(screen.getByTestId("event-card-circuit_open")).toBeInTheDocument();
-    expect(screen.getByTestId("event-card-circuit_close")).toBeInTheDocument();
+    const cockpitEvents = screen.getAllByTestId(/^autopilot-cockpit-event-/);
+    expect(cockpitEvents.length).toBeGreaterThanOrEqual(3);
 
-    // Step 4: queue_add event + session.queue populated → queue tab shows q1.
-    mockEvents = [
-      ...mockEvents,
-      { event: "queue_add", data: { id: "q1", description: "review" }, id: 6 },
-    ];
+    // Step 4: switch to dashboard tab — queue and event stats appear.
     mockSession = { ...mockSession, queue: [{ id: "q1", description: "review" }] };
     rerender(
       <MemoryRouter initialEntries={["/project/p1/workspace"]}>
@@ -602,13 +591,14 @@ describe("Workspace integration", () => {
         </Routes>
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByTestId("ai-tab-queue"));
-    expect(screen.getByTestId("queue-item-q1")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("autopilot-tab-dashboard"));
+    expect(screen.getByTestId("autopilot-dashboard-queue")).toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-queue-row-q1")).toBeInTheDocument();
 
-    // Step 5: task_fail event → checks tab renders the fail card.
+    // Step 5: task_fail event → log tab filter surfaces the failure.
     mockEvents = [
       ...mockEvents,
-      { event: "task_fail", data: { reason: "x" }, id: 7 },
+      { event: "task_fail", data: { reason: "x" }, id: 6 },
     ];
     rerender(
       <MemoryRouter initialEntries={["/project/p1/workspace"]}>
@@ -617,13 +607,10 @@ describe("Workspace integration", () => {
         </Routes>
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByTestId("ai-tab-checks"));
-    expect(screen.getByTestId("event-card-task_fail")).toBeInTheDocument();
-
-    // Step 6: intervene tab shows pause + stop actions.
-    fireEvent.click(screen.getByTestId("ai-tab-intervene"));
-    expect(screen.getByTestId("action-pause")).toBeInTheDocument();
-    expect(screen.getByTestId("action-stop")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("autopilot-tab-log"));
+    fireEvent.click(screen.getByTestId("autopilot-log-filter-task_fail"));
+    const failRows = screen.getAllByTestId(/^autopilot-log-row-/);
+    expect(failRows.length).toBeGreaterThanOrEqual(1);
   });
 
   it("cockpit renders a rollback button (disabled, v1.9.1 placeholder)", () => {

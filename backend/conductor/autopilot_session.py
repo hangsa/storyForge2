@@ -31,12 +31,13 @@ SESSION_DIRNAME = "autopilot"
 class AutopilotSessionManager:
     """Owns the on-disk file for one project's AutopilotSession."""
 
-    def __init__(self, projects_dir: Path, project_id: str) -> None:
+    def __init__(self, projects_dir: Path, project_id: str, broadcaster=None) -> None:
         self._projects_dir = Path(projects_dir)
         self._project_id = project_id
         self._session_dir = self._projects_dir / project_id / SESSION_DIRNAME
         self._session_file = self._session_dir / SESSION_FILENAME
         self._sm = SessionStateMachine()
+        self._broadcaster = broadcaster
 
     @property
     def session_path(self) -> Path:
@@ -75,6 +76,24 @@ class AutopilotSessionManager:
             encoding="utf-8",
         )
         tmp.replace(self._session_file)
+        # Publish the newly appended event (history[-1]) if any
+        if session.history:
+            self._publish_event(session, session.history[-1])
+
+    def _publish_event(self, s: AutopilotSession, event: "SessionEvent") -> None:
+        """Push an event onto the SSE broadcaster. No-op if no broadcaster.
+
+        The session's `history` list is the authoritative record; the broadcaster
+        is a derived view for live subscribers. We convert the dataclass to a
+        plain dict so JSON encoding is straightforward.
+        """
+        if self._broadcaster is None:
+            return
+        try:
+            data = asdict(event)
+        except Exception:
+            return
+        self._broadcaster.publish(event.type, data)
 
     # --- High-level intent methods (each writes through) ---
 

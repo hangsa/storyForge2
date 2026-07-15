@@ -31,7 +31,7 @@ router = APIRouter(
 
 
 def _mgr(project_id: str) -> AutopilotSessionManager:
-    return AutopilotSessionManager(settings.projects_dir, project_id)
+    return AutopilotSessionManager(settings.projects_dir, project_id, broadcaster=broadcaster)
 
 
 def _ensure_project_exists(project_id: str):

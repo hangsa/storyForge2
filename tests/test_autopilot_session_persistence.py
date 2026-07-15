@@ -159,3 +159,49 @@ class TestIdempotency:
         mgr.stop()  # second stop
         completes = [e for e in mgr.load().history if e.type == "task_complete"]
         assert len(completes) == 1
+
+
+class TestSsePublish:
+    def test_state_transition_publishes_to_broadcaster(self, tmp_path):
+        """A start() call must publish its transition event to the broadcaster."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.utils.sse_broadcaster import SSEBroadcaster
+        from backend.models.autopilot_session import ManagedStartConfig
+
+        (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "p1" / "project.json").write_text('{"id":"p1"}', encoding="utf-8")
+
+        bc = SSEBroadcaster(history_size=16, queue_max=4)
+        mgr = AutopilotSessionManager(tmp_path, "p1", broadcaster=bc)
+        mgr.start(ManagedStartConfig())
+        published = [ev for ev in bc.history if ev.event == "task_start"]
+        assert len(published) >= 1
+        assert published[-1].data["type"] == "task_start"
+
+    def test_add_queue_publishes_queue_add_event(self, tmp_path):
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig, QueueItem
+        from backend.utils.sse_broadcaster import SSEBroadcaster
+
+        (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "p1" / "project.json").write_text('{"id":"p1"}', encoding="utf-8")
+
+        bc = SSEBroadcaster(history_size=16, queue_max=4)
+        mgr = AutopilotSessionManager(tmp_path, "p1", broadcaster=bc)
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="q1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=1, payload={}))
+        kinds = [ev.data.get("type") for ev in bc.history]
+        assert "queue_add" in kinds
+
+    def test_no_broadcaster_does_not_crash(self, tmp_path):
+        """When constructed without a broadcaster, writes still succeed."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig
+
+        (tmp_path / "p1").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "p1" / "project.json").write_text('{"id":"p1"}', encoding="utf-8")
+
+        mgr = AutopilotSessionManager(tmp_path, "p1")  # no broadcaster
+        s = mgr.start(ManagedStartConfig())
+        assert s.state.value == "running"

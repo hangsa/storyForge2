@@ -593,3 +593,70 @@ class TestAsyncAutopilotRunner:
         assert s.state.value == "paused"
         events = [e.type for e in s.history]
         assert "circuit_open" in events
+
+    @pytest.mark.asyncio
+    async def test_run_calls_heartbeat_so_recovery_can_detect_dead_runner(
+        self, mgr, projects_dir, fake_project
+    ):
+        """Layer 1 fix: AsyncAutopilotRunner.run() must call mgr.heartbeat()
+        at least once per iteration so session.last_heartbeat_at is fresh.
+        Without this, recover_running_sessions's `if last_hb:` guard sees
+        None and never downgrades a stale session after a --reload crash."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+
+        mgr.start(ManagedStartConfig())
+        # Sanity: a freshly started session has last_heartbeat_at == None
+        # (start() doesn't populate it).
+        assert mgr.load().last_heartbeat_at is None
+
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+        executor = FakeStage4Executor(mgr, projects_dir, breaker_result="passed")
+        runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
+        await runner.run()  # one iteration is enough
+
+        # After run() exits, last_heartbeat_at must be populated. We don't
+        # assert exact value (it's a timestamp) — just that heartbeat() ran.
+        s = mgr.load()
+        assert s.last_heartbeat_at is not None
+        assert isinstance(s.last_heartbeat_at, str)
+        # And the same value survives a fresh load (i.e. it was persisted).
+        s2 = mgr.load()
+        assert s2.last_heartbeat_at == s.last_heartbeat_at
+
+    @pytest.mark.asyncio
+    async def test_run_heartbeats_each_iteration_not_just_first(
+        self, mgr, projects_dir, fake_project
+    ):
+        """The heartbeat must be refreshed on every loop iteration, not only
+        the first one — otherwise a long chapter stalls past the 30s
+        staleness threshold without any new heartbeat on disk."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+
+        # Wrap heartbeat() to count calls without changing behavior.
+        call_count = {"n": 0}
+        real_heartbeat = mgr.heartbeat
+        def counting_heartbeat():
+            call_count["n"] += 1
+            return real_heartbeat()
+        mgr.heartbeat = counting_heartbeat
+
+        mgr.start(ManagedStartConfig())
+        # Three write_scene items → runner will iterate at least 3 times
+        # before the loop decides to stop (plus 1 archival = 4 iterations).
+        for n in (1, 2, 3):
+            mgr.add_queue(QueueItem(id=f"w-1-{n}", kind="write_scene",
+                                    chapter_number=1, scheduled_at=None,
+                                    priority=20 + n,
+                                    payload={"scene_number": n}))
+        executor = FakeStage4Executor(mgr, projects_dir, breaker_result="passed")
+        runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
+        await runner.run()
+
+        assert call_count["n"] >= 3, (
+            f"expected ≥3 heartbeats (one per loop iteration), got "
+            f"{call_count['n']}"
+        )

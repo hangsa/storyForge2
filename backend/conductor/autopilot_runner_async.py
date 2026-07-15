@@ -137,6 +137,12 @@ class AsyncAutopilotRunner:
         """Main loop. Exits on state != running, or when queue is exhausted
         (auto-stop in that case)."""
         while True:
+            # Layer 1 fix: keep last_heartbeat_at fresh so recover_running_sessions
+            # can detect a dead runner. Without this the field is always null and
+            # the stale-session downgrade never fires. Called once per iteration
+            # (each iteration already has asyncio.sleep(self._cadence_delay)
+            # = 0.5/2/5s, well under the 30s staleness threshold).
+            self._mgr.heartbeat()
             s = self._mgr.load()
             if s is None or s.state != SessionState.RUNNING:
                 return

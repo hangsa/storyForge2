@@ -162,16 +162,6 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("context-panel")).toBeInTheDocument();
   });
 
-  // v1.8.1: workspace enters in "stopped" managed state — user must opt in
-  // to start the autopilot. Status strip (current task) stays hidden until
-  // the user clicks "启动托管".
-  it("managed mode defaults to autopilot stopped (no status strip, toggle shows 启动)", () => {
-    setup("/project/p1/workspace?mode=managed");
-    expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
-    const toggle = screen.getByTestId("autopilot-toggle");
-    expect(toggle.textContent).toContain("启动");
-  });
-
   // v1.9 alignment with plotPilot: managed mode centers on an
   // AutopilotWorkspace (cockpit / dashboard / log) rather than just a chapter
   // grid + side panels. The center slot had been left empty, so the user
@@ -185,25 +175,6 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("autopilot-tab-log")).toBeInTheDocument();
     // Cockpit is the default landing tab and shows the session state card.
     expect(screen.getByTestId("autopilot-cockpit-state")).toBeInTheDocument();
-  });
-
-  it("clicking autopilot-toggle shows status strip and switches button to 停止", async () => {
-    const { rerender } = setup("/project/p1/workspace?mode=managed");
-    fireEvent.click(screen.getByTestId("autopilot-toggle"));
-    // start() is async; the mock updates mockSession synchronously but React
-    // needs a render cycle to pick it up. Re-render the tree to mirror the
-    // post-promise-resolve snapshot the real hook would have produced.
-    await new Promise((r) => setTimeout(r, 50));
-    rerender(
-      <MemoryRouter initialEntries={["/project/p1/workspace"]}>
-        <Routes>
-          <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /></ToastProvider>} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    expect(screen.getByTestId("status-strip")).toBeInTheDocument();
-    const toggle = screen.getByTestId("autopilot-toggle");
-    expect(toggle.textContent).toContain("停止");
   });
 
   it("?mode=manual renders ChapterTreePanel + WritingArea + ContextPanel", async () => {
@@ -263,9 +234,9 @@ describe("Workspace integration", () => {
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
     setup("/project/p1/workspace?mode=managed");
-    // The useEffect fetch is async; wait for chapter-cell-4 to render.
-    expect(await screen.findByTestId("chapter-cell-4")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("chapter-cell-4"));
+    // The useEffect fetch is async; wait for chapter-4 to render.
+    expect(await screen.findByTestId("chapter-4")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("chapter-4"));
     expect(screen.getByTestId("mode-switch-confirm")).toBeInTheDocument();
     expect(localStorage.getItem("storyforge.workspace.mode")).toBeNull(); // still on managed
   });
@@ -282,8 +253,8 @@ describe("Workspace integration", () => {
       ],
     });
     setup("/project/p1/workspace?mode=managed");
-    expect(await screen.findByTestId("chapter-cell-4")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("chapter-cell-4"));
+    expect(await screen.findByTestId("chapter-4")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("chapter-4"));
     // uncheck "等待完成" so we take over immediately
     const waitCheckbox = screen.getByTestId("confirm-wait-finish") as HTMLInputElement;
     fireEvent.change(waitCheckbox, { target: { checked: false } });
@@ -380,12 +351,12 @@ describe("Workspace integration", () => {
   });
 
   it("new project with empty progress.json renders no chapter cells in managed mode", async () => {
-    // Default mock returns { chapters: [] } — no chapter-cell-* should render.
+    // Default mock returns { chapters: [] } — no chapter-* should render.
     setup("/project/p1/workspace?mode=managed");
     // useEffect runs after mount; wait for it to settle.
     await waitFor(() => expect(mockedGetStage4Progress).toHaveBeenCalledWith("p1"));
-    expect(screen.queryByTestId("chapter-cell-1")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("chapter-cell-2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chapter-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chapter-2")).not.toBeInTheDocument();
   });
 
   it("TopBar progress ring shows the novel_outline-derived total (0 / 150) for new project", async () => {
@@ -450,15 +421,15 @@ describe("Workspace integration", () => {
       .mockRejectedValueOnce(new Error("network down"));
     setup("/project/p1/workspace?mode=managed");
     // First load renders the 2 cells.
-    expect(await screen.findByTestId("chapter-cell-1")).toBeInTheDocument();
-    expect(screen.getByTestId("chapter-cell-2")).toBeInTheDocument();
+    expect(await screen.findByTestId("chapter-1")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-2")).toBeInTheDocument();
     // Click the workspace "刷新" button.
     fireEvent.click(screen.getByTestId("refresh"));
     // After the failed refresh the cells are gone — stale data cleared.
     await waitFor(() => {
-      expect(screen.queryByTestId("chapter-cell-1")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("chapter-1")).not.toBeInTheDocument();
     });
-    expect(screen.queryByTestId("chapter-cell-2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chapter-2")).not.toBeInTheDocument();
   });
 
   // Bug 1 fix regression — clicking "+ 新章节" on the manual-mode tree
@@ -566,10 +537,11 @@ describe("Workspace integration", () => {
     expect(goal.textContent).toContain("主角启程遇到师父");
   });
 
-  // Issue 3 (v1.9) — left chapter list groups chapters by volume using
-  // novel_outline.volumes[].chapter_range strings. Each volume renders as a
-  // header with its name + range.
-  it("manual-mode chapter tree groups chapters by novel_outline volumes", async () => {
+  // The workspace's left column (both managed + manual modes) intentionally
+  // hides volume outline info — the user is editing one chapter at a time,
+  // not browsing the volume grouping. Volume headers, summaries, and the
+  // "未分组" fallback bucket should NOT appear; chapters render as a flat list.
+  it("manual-mode chapter tree renders a flat list without volume headers", async () => {
     mockedGetOutline.mockResolvedValueOnce({
       chapters: [
         { chapter_number: 1, title: "卷一第一章", scene_plan: [{ scene_number: 1 }] },
@@ -588,18 +560,19 @@ describe("Workspace integration", () => {
       updated_at: "",
     });
     setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
-    // Wait for the tree + the volume-aware grouping to render.
-    expect(await screen.findByTestId("volume-第一卷-header")).toBeInTheDocument();
-    expect(screen.getByTestId("volume-第二卷-header")).toBeInTheDocument();
-    // Volume headers carry the chapter range.
-    expect(screen.getByTestId("volume-第一卷-header").textContent).toContain("1-30");
-    expect(screen.getByTestId("volume-第二卷-header").textContent).toContain("31-60");
-    // Volume summaries are visible (volume 1 is auto-opened because it
-    // contains currentChapter=1).
-    expect(screen.getByTestId("volume-第一卷-summary")).toHaveTextContent("初入江湖");
+    // Wait for the flat chapter list to render.
+    expect(await screen.findByTestId("chapter-flat-list")).toBeInTheDocument();
+    // No volume headers or summaries leak through.
+    expect(screen.queryByTestId("volume-第一卷-header")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("volume-第二卷-header")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("volume-第一卷-summary")).not.toBeInTheDocument();
+    // All chapters from all volumes still render, just ungrouped.
+    expect(screen.getByTestId("chapter-1")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-5")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-35")).toBeInTheDocument();
   });
 
-  it("manual-mode chapter tree falls back to '未分组' when no novel_outline exists", async () => {
+  it("manual-mode flat list still works when no novel_outline exists", async () => {
     // Default mockedGetNovelOutline already returns { volumes: [] }.
     mockedGetOutline.mockResolvedValueOnce({
       chapters: [
@@ -607,8 +580,17 @@ describe("Workspace integration", () => {
       ],
     });
     setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
-    expect(await screen.findByTestId("volume-未分组-header")).toBeInTheDocument();
-    // chapter-1 still renders inside the ungrouped bucket.
+    expect(await screen.findByTestId("chapter-flat-list")).toBeInTheDocument();
+    // No "未分组" bucket is shown — the flat list is the only container.
+    expect(screen.queryByTestId("volume-未分组-header")).not.toBeInTheDocument();
     expect(screen.getByTestId("chapter-1")).toBeInTheDocument();
+  });
+
+  it("managed-mode left column renders a flat list without volume headers", async () => {
+    setup("/project/p1/workspace?mode=managed&chapter=1");
+    expect(await screen.findByTestId("managed-dashboard")).toBeInTheDocument();
+    // Even when a novel_outline is loaded, no volume headers leak through.
+    expect(screen.queryByTestId(/^volume-.+-header$/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/^volume-.+-summary$/)).not.toBeInTheDocument();
   });
 });

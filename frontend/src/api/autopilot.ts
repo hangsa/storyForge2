@@ -132,3 +132,107 @@ export async function interveneAutopilotSession(projectId: string, action: strin
 export async function getAutopilotHistory(projectId: string, cursor?: string): Promise<unknown> {
   return api.getAutopilotHistory(projectId, cursor);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Chapter stream — v1.10 Direction B (real-time writing stream)              */
+/* -------------------------------------------------------------------------- */
+
+export type ChapterStreamSceneStart = {
+  event: "scene_start";
+  data: { chapter_number: number; scene_number: number };
+};
+
+export type ChapterStreamChunk = {
+  event: "scene_chunk";
+  data: {
+    seq: number;
+    chapter_number: number;
+    scene_number: number;
+    text: string;
+  };
+};
+
+export type ChapterStreamDone = {
+  event: "scene_done";
+  data: {
+    chapter_number: number;
+    scene_number: number;
+    status: string;
+    total_chars: number;
+  };
+};
+
+export type ChapterStreamFailed = {
+  event: "scene_failed";
+  data: {
+    chapter_number: number;
+    scene_number: number;
+    error: string;
+    partial_text: string;
+  };
+};
+
+export type ChapterStreamIdle = {
+  event: "idle";
+  data: { reason: string };
+};
+
+export type ChapterStreamEvent =
+  | ChapterStreamSceneStart
+  | ChapterStreamChunk
+  | ChapterStreamDone
+  | ChapterStreamFailed
+  | ChapterStreamIdle;
+
+const CHAPTER_STREAM_EVENTS = [
+  "scene_start",
+  "scene_chunk",
+  "scene_done",
+  "scene_failed",
+  "idle",
+] as const;
+
+/**
+ * Open an EventSource for /api/v1/projects/{id}/autopilot/chapter-stream.
+ *
+ * Reconnect补发 is browser-managed: when the server sets an `id:` field on
+ * scene_chunk SSE messages, the browser stores it and re-sends it as the
+ * `Last-Event-ID` HTTP header on every automatic reconnect. The server
+ * reads that header and replays the missing chunks from SceneChunkStore.
+ *
+ * Do NOT expose a `?since_seq=` URL parameter — it would conflict with
+ * the header mechanism and split reconnect behavior across two channels.
+ */
+export interface ChapterStreamHandlers {
+  onEvent: (ev: ChapterStreamEvent) => void;
+  onError?: () => void;
+}
+
+export function connectChapterStreamSSE(
+  projectId: string,
+  handlers: ChapterStreamHandlers,
+): SSEHandle {
+  const url = `/api/v1/projects/${encodeURIComponent(projectId)}/autopilot/chapter-stream`;
+  const source = new EventSource(url);
+
+  for (const ev of CHAPTER_STREAM_EVENTS) {
+    source.addEventListener(ev, (raw) => {
+      const me = raw as MessageEvent;
+      let data: unknown = me.data;
+      try {
+        data = JSON.parse(me.data as string);
+      } catch {
+        // not JSON — leave as string
+      }
+      handlers.onEvent({ event: ev, data } as ChapterStreamEvent);
+    });
+  }
+
+  source.addEventListener("error", () => handlers.onError?.());
+
+  return {
+    close() {
+      source.close();
+    },
+  };
+}

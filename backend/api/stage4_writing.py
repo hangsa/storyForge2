@@ -28,6 +28,48 @@ stage4_router = APIRouter(prefix="/api/stage4", tags=["stage4"])
 fm = FileManager(settings.projects_dir)
 logger = logging.getLogger(__name__)
 
+
+class OutlineExhaustedError(Exception):
+    """Raised by _advance_chapter when current_chapter is at or past
+    the outline's maximum chapter_number. Domain-level signal — the
+    /advance-chapter HTTP wrapper translates it to HTTPException(400).
+
+    Attributes:
+        project_id: project id
+        current_chapter: the chapter the caller tried to advance past
+        outline_max: the maximum chapter_number in the project's outline
+    """
+
+    def __init__(self, *, project_id: str, current_chapter: int, outline_max: int):
+        self.project_id = project_id
+        self.current_chapter = current_chapter
+        self.outline_max = outline_max
+        super().__init__(
+            f"outline exhausted: project={project_id} "
+            f"current_chapter={current_chapter} outline_max={outline_max}"
+        )
+
+
+def _outline_max_chapter(project_id: str) -> Optional[int]:
+    """Return the maximum chapter_number in the project's outline.json,
+    or None if the outline is missing / malformed (no cap applies)."""
+    try:
+        outline = fm.read_json(project_id, "outline.json")
+    except Exception:
+        return None
+    if not isinstance(outline, dict):
+        return None
+    chapters = outline.get("chapters")
+    if not isinstance(chapters, list) or not chapters:
+        return None
+    nums = [
+        c.get("chapter_number") for c in chapters
+        if isinstance(c, dict) and isinstance(c.get("chapter_number"), int)
+    ]
+    if not nums:
+        return None
+    return max(nums)
+
 # Top-level router combining stage4 + v1.7 exemptions routes. main.py and tests import `router`.
 router = APIRouter()
 
@@ -875,6 +917,15 @@ async def _advance_chapter(
                     "detail": {"incomplete_scenes": incomplete}},
         )
 
+    # Cap at outline max — no cap if outline is missing.
+    outline_max = _outline_max_chapter(project_id)
+    if outline_max is not None and current_chapter >= outline_max:
+        raise OutlineExhaustedError(
+            project_id=project_id,
+            current_chapter=current_chapter,
+            outline_max=outline_max,
+        )
+
     storyos = StoryOSAgent(project_id)
     scene_drafts = []
     all_sf_logs = []
@@ -1159,7 +1210,21 @@ async def advance_chapter(data: dict):
             detail={"error": True, "code": "VALIDATION_ERROR",
                     "message": "project_id 不能为空", "detail": {}},
         )
-    return await _advance_chapter(project_id=project_id)
+    try:
+        return await _advance_chapter(project_id=project_id)
+    except OutlineExhaustedError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "OUTLINE_EXHAUSTED",
+                    "message": (
+                        f"大纲已结束：当前第{e.current_chapter}章，"
+                        f"已无新章节可推进（大纲共 {e.outline_max} 章）"
+                    ),
+                    "detail": {
+                        "current_chapter": e.current_chapter,
+                        "outline_max": e.outline_max,
+                    }},
+        )
 
 
 @stage4_router.post("/repair-progress")

@@ -44,7 +44,7 @@ class FakeCompletionsAPI:
         self._fake_stream = fake_stream
         self.last_kwargs = None
 
-    def create(self, **kwargs):
+    async def create(self, **kwargs):
         self.last_kwargs = kwargs
         return self._fake_stream
 

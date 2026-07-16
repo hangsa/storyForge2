@@ -71,7 +71,7 @@ class DeepSeekProvider(BaseLLMProvider):
             {"role": "user", "content": user_prompt},
         ]
 
-        stream = self.client.chat.completions.create(
+        stream = await self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             stream=True,

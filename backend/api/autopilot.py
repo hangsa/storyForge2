@@ -6,6 +6,7 @@ Stage 2 (Task 2.2): SSE feed at /session/events.
 from __future__ import annotations
 import asyncio
 import json
+import time
 from typing import AsyncIterator, Optional
 from dataclasses import asdict
 
@@ -265,7 +266,7 @@ async def chapter_stream(
         settings.projects_dir, project_id, chapter, scene,
     )
 
-    last_task_check = asyncio.get_event_loop().time()
+    last_task_check = time.monotonic()
 
     async def event_stream() -> AsyncIterator[bytes]:
         nonlocal last_task_check
@@ -293,7 +294,7 @@ async def chapter_stream(
 
         # ---- Live subscription
         async for ev in broadcaster.subscribe(last_event_id):
-            now = asyncio.get_event_loop().time()
+            now = time.monotonic()
             if now - last_task_check > 5.0:
                 last_task_check = now
                 cur = (_read_raw_session(project_id) or {}).get("current_task") or {}

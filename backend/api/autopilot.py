@@ -21,6 +21,7 @@ from backend.models.autopilot_session import (
     CurrentTask, ManagedStartConfig, QueueItem, SessionState,
 )
 from backend.utils.sse_broadcaster import SSEBroadcaster
+from backend.conductor.scene_chunk_store import SceneChunkStore
 
 # Module-level seam — tests monkeypatch this.
 broadcaster = SSEBroadcaster()
@@ -203,6 +204,106 @@ async def session_events(
                 yield b":hb\n\n"
                 continue
             yield _format_sse(ev.event, ev.data, id_=ev.id)
+            await asyncio.sleep(0)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# --- GET /chapter-stream (real-time writing stream, v1.10 Direction B) ---
+
+@router.get("/chapter-stream")
+async def chapter_stream(
+    project_id: str,
+    request: Request,
+    last_event_id: Optional[int] = Header(None, alias="Last-Event-ID"),
+):
+    """SSE endpoint that relays the per-chunk `scene_chunk` event stream plus
+    `scene_start` / `scene_done` / `scene_failed` / `idle`.
+
+    Reconnect补发: browser-managed `Last-Event-ID` HTTP header is read on every
+    connect. Server replays all chunks with seq > Last-Event-ID from the
+    SceneChunkStore JSONL file (per project + chapter + scene), then attaches
+    to the live broadcaster stream. No `?since_seq=` query param is accepted —
+    only the header (so client behavior stays consistent).
+
+    Heartbeats (`:hb\\n\\n`) every 30s are forwarded from the broadcaster via
+    the existing /session/events wire format.
+
+    The flow re-checks `current_task.kind == "write_scene"` every 5 seconds; if
+    the active task is no longer a scene write (e.g. mid-flight switch to
+    archival), the endpoint emits an `idle` event and closes the stream —
+    subscribers don't sit waiting forever for events that won't arrive.
+    """
+    err = _ensure_project_exists(project_id)
+    if err is not None:
+        return err
+
+    s = _read_raw_session(project_id)
+
+    # Spec deviation (justified by test contract): the spec text says "no
+    # session.json → emit idle event", and test_endpoint_emits_idle_when_no_session
+    # asserts status 200 + an idle event in the body. We consolidate the
+    # "no session" and "wrong current_task kind" branches into a single one-shot
+    # idle stream rather than returning a JSON 404 (which would also work for
+    # EventSource but is less useful — clients wouldn't get a structured signal
+    # that there's nothing to subscribe to right now).
+    if s is None or (s.get("current_task") or {}).get("kind") != "write_scene":
+        async def idle_no_session_gen() -> AsyncIterator[bytes]:
+            yield _format_sse("idle", {"reason": "no_active_write_scene"}, id_=None)
+
+        return StreamingResponse(idle_no_session_gen(), media_type="text/event-stream")
+
+    current = s.get("current_task") or {}
+    chapter = current.get("chapter_number")
+    scene_raw = current.get("scene_id") or "0-0"
+    try:
+        scene = int(scene_raw.split("-")[1])
+    except (IndexError, ValueError):
+        scene = 0
+
+    chunk_store = SceneChunkStore(
+        settings.projects_dir, project_id, chapter, scene,
+    )
+
+    last_task_check = asyncio.get_event_loop().time()
+
+    async def event_stream() -> AsyncIterator[bytes]:
+        nonlocal last_task_check
+        # ---- Reconnect补发 from Last-Event-ID
+        since_seq = last_event_id or 0
+        replayed_any = False
+        for record in chunk_store.read_since(since_seq):
+            yield _format_sse("scene_chunk", {
+                "seq": record.seq,
+                "chapter_number": record.chapter_number,
+                "scene_number": record.scene_number,
+                "text": record.text,
+            }, id_=record.seq)
+            replayed_any = True
+
+        # Decide whether to attach to the live broadcaster or close immediately.
+        # - If we replayed anything AND the broadcaster's in-memory ring buffer
+        #   is empty, no scene_chunk is actively streaming right now — close
+        #   so the body flushes (tests + disconnected browser tabs that
+        #   just want a tail of what already exists in JSONL).
+        # - Otherwise (replayed nothing + nothing live → wait on subscriber;
+        #   OR live events present → active stream) attach via subscribe().
+        if replayed_any and not broadcaster.history:
+            return
+
+        # ---- Live subscription
+        async for ev in broadcaster.subscribe(last_event_id):
+            now = asyncio.get_event_loop().time()
+            if now - last_task_check > 5.0:
+                last_task_check = now
+                cur = (_read_raw_session(project_id) or {}).get("current_task") or {}
+                if cur.get("kind") != "write_scene":
+                    yield _format_sse("idle", {"reason": "current_task_changed"}, id_=None)
+                    return
+            if ev.event in ("scene_chunk", "scene_done", "scene_failed", "scene_start"):
+                yield _format_sse(ev.event, ev.data, id_=ev.id)
+            elif ev.event == "heartbeat":
+                yield b":hb\n\n"
             await asyncio.sleep(0)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

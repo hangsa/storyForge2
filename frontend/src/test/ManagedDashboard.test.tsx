@@ -1,43 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
-vi.mock("../hooks/useAutopilotSession", () => ({
-  useAutopilotSession: vi.fn(),
-}));
-
-import { useAutopilotSession } from "../hooks/useAutopilotSession";
 import ManagedDashboard from "../components/workspace/ManagedDashboard";
 import type { WorkspaceVolumeGroup } from "../components/workspace/ChapterTreePanel";
-
-type SessionOverrides = {
-  state?: "stopped" | "running" | "paused";
-  current_task?: { description: string; chapter?: number } | null;
-};
-
-type UseAutopilotSessionReturnMock = ReturnType<typeof useAutopilotSession>;
-
-const mockSession = (overrides: SessionOverrides = {}) => ({
-  project_id: "p",
-  state: ("running" as const),
-  current_task: { description: "生成第 7 章" },
-  queue: [],
-  history: [],
-  config: null,
-  ...overrides,
-});
-
-const buildHookReturn = (
-  overrides: SessionOverrides = {},
-): UseAutopilotSessionReturnMock => ({
-  session: mockSession(overrides),
-  events: [],
-  status: "connected",
-  start: vi.fn().mockResolvedValue(undefined),
-  stop: vi.fn().mockResolvedValue(undefined),
-  pause: vi.fn().mockResolvedValue(undefined),
-  resume: vi.fn().mockResolvedValue(undefined),
-  refresh: vi.fn().mockResolvedValue(undefined),
-});
 
 const DEFAULT_VOLUMES: WorkspaceVolumeGroup[] = [
   {
@@ -86,42 +51,6 @@ function renderDashboard(
 }
 
 describe("ManagedDashboard", () => {
-  beforeEach(() => {
-    vi.mocked(useAutopilotSession).mockReturnValue(buildHookReturn());
-  });
-
-  // v1.9: status strip driven by useAutopilotSession; visible only when
-  // session.state === "running" AND current_task has a non-empty description.
-  it("hides status strip when session.state !== 'running'", () => {
-    vi.mocked(useAutopilotSession).mockReturnValue(
-      buildHookReturn({ state: "stopped", current_task: null }),
-    );
-    renderDashboard();
-    expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
-  });
-
-  it("shows status strip when session.state === 'running' and current_task is set", () => {
-    renderDashboard();
-    expect(screen.getByTestId("status-strip")).toBeInTheDocument();
-    expect(screen.getByTestId("status-strip").textContent).toContain("生成第 7 章");
-  });
-
-  it("hides status strip when running but current_task is null", () => {
-    vi.mocked(useAutopilotSession).mockReturnValue(
-      buildHookReturn({ current_task: null }),
-    );
-    renderDashboard();
-    expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
-  });
-
-  it("hides status strip when current_task has empty description", () => {
-    vi.mocked(useAutopilotSession).mockReturnValue(
-      buildHookReturn({ current_task: { description: "" } }),
-    );
-    renderDashboard();
-    expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
-  });
-
   // v1.9: managed-mode left column now mirrors ChapterTreePanel's volume +
   // title row layout (with status badge + scene count), so the user sees
   // titles and volume grouping without switching modes.

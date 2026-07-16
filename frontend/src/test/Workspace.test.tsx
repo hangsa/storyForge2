@@ -264,14 +264,15 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("context-panel")).toBeInTheDocument();
   });
 
-  // v1.8.1: workspace enters in "stopped" managed state — user must opt in
-  // to start the autopilot. Status strip (current task) stays hidden until
-  // the user clicks "启动托管".
-  it("managed mode defaults to autopilot stopped (no status strip, toggle shows 启动)", () => {
+  // v1.9.1: managed-mode left column (ManagedDashboard) no longer renders
+  // its own autopilot start/stop toggle — the cockpit tab in the middle
+  // AutopilotMiddlePanel owns all session controls. Session still defaults
+  // to "stopped" so the user must opt in via the cockpit's 启动托管 button.
+  it("managed mode defaults to autopilot stopped (cockpit has the 启动托管 button)", () => {
     setup("/project/p1/workspace?mode=managed");
+    expect(screen.getByTestId("autopilot-cockpit-state")).toBeInTheDocument();
     expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
-    const toggle = screen.getByTestId("autopilot-toggle");
-    expect(toggle.textContent).toContain("启动");
+    expect(screen.queryByTestId("autopilot-toggle")).not.toBeInTheDocument();
   });
 
   // v1.9 alignment with plotPilot: managed mode centers on an
@@ -289,9 +290,11 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("autopilot-cockpit-state")).toBeInTheDocument();
   });
 
-  it("clicking autopilot-toggle shows status strip and switches button to 停止", async () => {
+  it("clicking cockpit 启动托管 button starts the autopilot session", async () => {
     const { rerender } = setup("/project/p1/workspace?mode=managed");
-    fireEvent.click(screen.getByTestId("autopilot-toggle"));
+    // v1.9.1: left-column toggle was removed; the cockpit's start button is
+    // the only entry point to start the session in managed mode.
+    fireEvent.click(screen.getByTestId("autopilot-cockpit-start"));
     // start() is async; the mock updates mockSession synchronously but React
     // needs a render cycle to pick it up. Re-render the tree to mirror the
     // post-promise-resolve snapshot the real hook would have produced.
@@ -303,9 +306,11 @@ describe("Workspace integration", () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.getByTestId("status-strip")).toBeInTheDocument();
-    const toggle = screen.getByTestId("autopilot-toggle");
-    expect(toggle.textContent).toContain("停止");
+    expect(startFn).toHaveBeenCalled();
+    // Once running, the cockpit surfaces pause/stop (start is hidden).
+    expect(screen.queryByTestId("autopilot-cockpit-start")).not.toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-cockpit-pause")).toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-cockpit-stop")).toBeInTheDocument();
   });
 
   it("?mode=manual renders ChapterTreePanel + WritingArea + ContextPanel", async () => {
@@ -573,8 +578,9 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("autopilot-middle-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("status-strip")).not.toBeInTheDocument();
 
-    // Step 2: switch session to running with a current task — triggers
-    // the status strip in ManagedDashboard and shows live state in cockpit.
+    // Step 2: switch session to running with a current task — the cockpit
+    // surfaces the current task + live state. v1.9.1: no left-column status
+    // strip anymore (that surface was removed when the cockpit absorbed it).
     mockSession = { ...mockSession, state: "running", current_task: { description: "writing ch7" } };
     rerender(
       <MemoryRouter initialEntries={["/project/p1/workspace"]}>
@@ -583,8 +589,9 @@ describe("Workspace integration", () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.getByTestId("status-strip")).toBeInTheDocument();
     expect(screen.getByTestId("autopilot-cockpit-state")).toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-cockpit-current-task")).toBeInTheDocument();
+    expect(screen.getByTestId("autopilot-cockpit-current-task").textContent).toContain("writing ch7");
 
     // Step 3: feed a partial event sequence — recent events appear in the
     // cockpit live feed.

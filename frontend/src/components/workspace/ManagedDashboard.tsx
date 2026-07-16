@@ -1,8 +1,3 @@
-import { useAutopilotSession } from "../../hooks/useAutopilotSession";
-import { MANAGED_START_DEFAULTS } from "../../hooks/useAutopilotConfig";
-import { useToast } from "../../hooks/useToast";
-import ManagedStatusStrip from "./ManagedStatusStrip";
-
 export type ChapterStatus = "completed" | "writing" | "planned" | "pending";
 
 export interface DashboardChapter {
@@ -35,46 +30,11 @@ const STATUS_LABEL: Record<ChapterStatus, string> = {
 export default function ManagedDashboard({
   projectId, chapters, onChapterClick, onAddChapter, onRefresh,
 }: Props) {
-  const { session, start, stop } = useAutopilotSession(projectId);
-  const { show } = useToast();
-  const active = session?.state === "running";
-  // Treat empty-string description as absent so a transient state transition
-  // doesn't briefly hide the strip.
-  const currentTaskDesc = session?.current_task?.description;
-  const currentTask = currentTaskDesc !== undefined && currentTaskDesc !== ""
-    ? currentTaskDesc
-    : null;
-
-  const onToggle = async () => {
-    try {
-      if (active) await stop();
-      else await start(MANAGED_START_DEFAULTS);
-    } catch (err) {
-      const action = active ? "停止" : "启动";
-      const msg = err instanceof Error ? err.message : String(err);
-      show(`${action}托管失败：${msg}`);
-    }
-  };
-
   return (
     <div data-testid="managed-dashboard" className="space-y-4 p-6">
-      {active && currentTask && <ManagedStatusStrip currentTask={currentTask} />}
-
       <div className="flex items-center justify-between">
         <h2 className="font-display text-primary text-lg">章节目录</h2>
         <div className="flex gap-2">
-          <button
-            type="button"
-            data-testid="autopilot-toggle"
-            onClick={onToggle}
-            className={
-              active
-                ? "px-3 py-1.5 text-sm rounded-lg bg-error/90 text-surface-container-low hover:opacity-90"
-                : "px-3 py-1.5 text-sm rounded-lg bg-primary-container text-surface-container-low hover:opacity-90"
-            }
-          >
-            {active ? "⏸ 停止托管" : "▶ 启动托管"}
-          </button>
           <button
             type="button"
             data-testid="refresh"

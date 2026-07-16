@@ -530,7 +530,19 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
               }}
               onSelectScene={(n, s) => { setCurrentChapter(n); setCurrentScene(s); }}
               onAddChapter={() => setAddOpen(true)}
-              onRefresh={() => setReloadKey((k) => k + 1)}
+              onRefresh={async () => {
+                if (!projectId) return;
+                try {
+                  const r = await api.repairProgress(projectId);
+                  if (r.repaired_chapters.length > 0) {
+                    show(`已推进 ${r.repaired_chapters.length} 个章节`);
+                  }
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : String(e);
+                  show(`章节收尾失败：${msg}`);
+                }
+                setReloadKey((k) => k + 1);
+              }}
             />
           )
         }

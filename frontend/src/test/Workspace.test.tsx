@@ -16,6 +16,7 @@ const {
   mockedGetSceneDraft,
   mockedStopAutopilotSession,
   mockedGetSceneDrafts,
+  mockedRepairProgress,
 } = vi.hoisted(() => ({
   mockedGetProjectStatus: vi.fn().mockResolvedValue({ title: "T" }),
   // Mirrors the backend's no-progress response: chapters=[] but total_chapters
@@ -67,6 +68,14 @@ const {
   // mockResolvedValueOnce or mockImplementation to drive the chapter-level
   // scene-status dots and the refetch-on-chapter-switch behavior.
   mockedGetSceneDrafts: vi.fn().mockResolvedValue({ chapter_number: 0, scenes: [] }),
+  // v1.10 fix: refresh button calls api.repairProgress to reconcile stuck
+  // chapters (status=in_progress with all scenes terminal) without invoking
+  // the LLM advance path. Default-resolves to no repairs — tests assert via
+  // mockClear()/mockResolvedValueOnce.
+  mockedRepairProgress: vi.fn().mockResolvedValue({
+    repaired_chapters: [],
+    current_chapter: 1,
+  }),
 }));
 
 vi.mock("../api/client", () => ({
@@ -86,6 +95,7 @@ vi.mock("../api/client", () => ({
     factGuard: mockedFactGuard,
     stopAutopilotSession: mockedStopAutopilotSession,
     getSceneDrafts: mockedGetSceneDrafts,
+    repairProgress: mockedRepairProgress,
   },
 }));
 
@@ -213,6 +223,11 @@ beforeEach(() => {
   mockedStopAutopilotSession.mockResolvedValue({});
   mockedGetSceneDrafts.mockReset();
   mockedGetSceneDrafts.mockResolvedValue({ chapter_number: 0, scenes: [] });
+  mockedRepairProgress.mockClear();
+  mockedRepairProgress.mockResolvedValue({
+    repaired_chapters: [],
+    current_chapter: 1,
+  });
   startFn.mockClear();
   stopFn.mockClear();
   mockSession = {
@@ -1031,5 +1046,84 @@ describe("Workspace integration", () => {
     // Chapter 1's cached entries must remain in the map (we don't refetch
     // to remove them — the user may switch back).
     expect(screen.queryByTestId("scene-status-1-1")).not.toBeInTheDocument();
+  });
+
+  // v1.10 fix: refresh button invokes api.repairProgress before reloadKey++,
+  // so stuck chapters (status=in_progress but all scenes terminal) can be
+  // reconciled without the LLM advance path.
+  describe("refresh button triggers repairProgress", () => {
+    it("clicking 刷新 calls repairProgress, reloads, and shows toast when chapters were repaired", async () => {
+      mockedRepairProgress.mockResolvedValueOnce({
+        repaired_chapters: [13],
+        current_chapter: 14,
+      });
+      mockedGetOutline.mockResolvedValueOnce({
+        chapters: [
+          { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+        ],
+      });
+      setup("/project/p1/workspace?chapter=1&scene=1-1");
+      // Wait for manual-mode UI to render so the refresh button is in the DOM.
+      await screen.findByTestId("chapter-tree");
+      const refreshBtn = await screen.findByTestId("refresh");
+      fireEvent.click(refreshBtn);
+      // repairProgress was called exactly once with the project id
+      await waitFor(() =>
+        expect(mockedRepairProgress).toHaveBeenCalledTimes(1)
+      );
+      expect(mockedRepairProgress).toHaveBeenCalledWith("p1");
+      // Toast shows the count
+      expect(
+        await screen.findByText("已推进 1 个章节")
+      ).toBeInTheDocument();
+    });
+
+    it("does not show toast when repairProgress returns no repaired chapters", async () => {
+      mockedRepairProgress.mockResolvedValueOnce({
+        repaired_chapters: [],
+        current_chapter: 1,
+      });
+      mockedGetOutline.mockResolvedValueOnce({
+        chapters: [
+          { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+        ],
+      });
+      setup("/project/p1/workspace?chapter=1&scene=1-1");
+      await screen.findByTestId("chapter-tree");
+      const refreshBtn = await screen.findByTestId("refresh");
+      fireEvent.click(refreshBtn);
+      await waitFor(() =>
+        expect(mockedRepairProgress).toHaveBeenCalledTimes(1)
+      );
+      // No "已推进" toast should appear
+      expect(
+        screen.queryByText(/已推进 \d+ 个章节/)
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows error toast when repairProgress rejects, but still triggers reload", async () => {
+      mockedRepairProgress.mockRejectedValueOnce(new Error("disk full"));
+      mockedGetOutline.mockResolvedValueOnce({
+        chapters: [
+          { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+        ],
+      });
+      // Snapshot the call count before the click so we can assert it grows.
+      const callsBeforeClick = mockedGetStage4Progress.mock.calls.length;
+      setup("/project/p1/workspace?chapter=1&scene=1-1");
+      await screen.findByTestId("chapter-tree");
+      const refreshBtn = await screen.findByTestId("refresh");
+      fireEvent.click(refreshBtn);
+      // Error toast surfaces
+      expect(
+        await screen.findByText(/章节收尾失败.*disk full/)
+      ).toBeInTheDocument();
+      // setReloadKey++ still fired → getStage4Progress called at least once more
+      await waitFor(() =>
+        expect(mockedGetStage4Progress.mock.calls.length).toBeGreaterThan(
+          callsBeforeClick
+        )
+      );
+    });
   });
 });

@@ -25,6 +25,11 @@ class AsyncTaskExecutor(Protocol):
     async def execute(self, item: QueueItem, project_id: str) -> dict:
         ...
 
+    async def execute_stream(self, item: QueueItem, project_id: str) -> dict:
+        """Streaming twin. Implementations may delegate to execute() if they
+        don't yet support streaming (FakeStage4Executor pre-Plan-3 still does)."""
+        ...
+
 
 CADENCE_DELAYS = {"fast": 0.5, "balanced": 2.0, "careful": 5.0}
 

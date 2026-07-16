@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from backend.models.autopilot_session import QueueItem
 
 from backend.api.stage4_writing import (
-    _write_scene_chapter, _advance_chapter,
+    _write_scene_chapter, _write_scene_chapter_stream, _advance_chapter,
 )
 from backend.conductor.autopilot_runner_async import is_chapter_complete
 
@@ -108,8 +108,20 @@ class AsyncStage4Executor:
     startup and use it for every project (no per-request executor wiring).
     """
 
-    def __init__(self, projects_dir: Path) -> None:
+    def __init__(self, projects_dir: Path, broadcaster: Optional[Any] = None) -> None:
+        """Constructor.
+
+        `broadcaster` is optional: if omitted, a default SSEBroadcaster is
+        used (publishes are silently dropped when no subscribers). Production
+        code (the FastAPI lifespan) passes the module-level broadcaster from
+        backend.api.autopilot; tests can inject a fresh broadcaster to assert
+        on published events.
+        """
         self._projects_dir = Path(projects_dir)
+        if broadcaster is None:
+            from backend.utils.sse_broadcaster import SSEBroadcaster
+            broadcaster = SSEBroadcaster()  # throws publishes away harmlessly
+        self._broadcaster = broadcaster
 
     def _mgr_for(self, project_id: str):
         from backend.conductor.autopilot_session import AutopilotSessionManager
@@ -121,6 +133,14 @@ class AsyncStage4Executor:
         if item.kind == "archival":
             return await self._archival(item, project_id)
         raise ValueError(f"AsyncStage4Executor: unsupported kind {item.kind!r}")
+
+    async def execute_stream(self, item: QueueItem, project_id: str) -> dict:
+        """Streaming twin of execute(). Returns the same shape so the runner can
+        treat both calls interchangeably."""
+        if item.kind == "write_scene":
+            return await self._write_scene_stream(item, project_id)
+        # archival / other kinds still use the non-streaming path.
+        return await self.execute(item, project_id)
 
     async def _write_scene(self, item: QueueItem, project_id: str) -> dict:
         result = await _write_scene_chapter(
@@ -134,6 +154,91 @@ class AsyncStage4Executor:
         return {"status": "ok", "scene_status": _canonical_scene_status(
             result["detail"]["status"]
         )}
+
+    async def _write_scene_stream(self, item: QueueItem, project_id: str) -> dict:
+        """Per-task streaming writer. Constructs a SceneChunkStore, fires
+        scene_start, consumes _write_scene_chapter_stream() events, persists
+        each chunk, publishes scene_chunk / scene_done / scene_failed.
+
+        Order on success (spec §3.3, §4.3.2):
+          1. chunk_store.clear()   — wipe any leftover from a previous scene
+          2. broadcaster.publish("scene_start", {...})
+          3. For each "chunk" event:
+                chunk_store.append(text)
+                broadcaster.publish("scene_chunk", {...})
+          4. On "done":
+                broadcaster.publish("scene_done", {...})
+                chunk_store.clear()
+                _maybe_enqueue_archival(...)
+          5. On "failed":
+                broadcaster.publish("scene_failed", {...})
+                chunk_store.clear()
+                return {"status": "fail", ...}
+        """
+        from backend.conductor.scene_chunk_store import SceneChunkStore
+
+        chapter = item.chapter_number
+        scene = item.payload["scene_number"]
+        chunk_store = SceneChunkStore(
+            self._projects_dir, project_id, chapter, scene,
+        )
+        chunk_store.clear()  # hygiene: stale data from a prior aborted scene
+
+        self._broadcaster.publish("scene_start", {
+            "chapter_number": chapter,
+            "scene_number": scene,
+        })
+
+        mgr = self._mgr_for(project_id)
+
+        try:
+            async for event in _write_scene_chapter_stream(
+                project_id=project_id,
+                chapter_number=chapter,
+                scene_number=scene,
+            ):
+                if event["event"] == "chunk":
+                    record = chunk_store.append(event["text"])
+                    self._broadcaster.publish("scene_chunk", {
+                        "seq": record.seq,
+                        "chapter_number": record.chapter_number,
+                        "scene_number": record.scene_number,
+                        "text": record.text,
+                    })
+                elif event["event"] == "done":
+                    self._broadcaster.publish("scene_done", {
+                        "chapter_number": chapter,
+                        "scene_number": scene,
+                        "status": event.get("status", "completed"),
+                        "total_chars": len(event.get("draft_text", "")),
+                    })
+                    chunk_store.clear()  # draft.md is the new source-of-truth
+                    _maybe_enqueue_archival(
+                        mgr, self._projects_dir, project_id, chapter,
+                    )
+                    return {
+                        "status": "ok",
+                        "scene_status": _canonical_scene_status(event.get("status", "passed")),
+                    }
+                elif event["event"] == "failed":
+                    self._broadcaster.publish("scene_failed", {
+                        "chapter_number": chapter,
+                        "scene_number": scene,
+                        "error": event.get("error", ""),
+                        "partial_text": event.get("partial_text", ""),
+                    })
+                    chunk_store.clear()
+                    return {"status": "fail", "error": event.get("error", "")}
+        except Exception as e:
+            self._broadcaster.publish("scene_failed", {
+                "chapter_number": chapter,
+                "scene_number": scene,
+                "error": str(e),
+                "partial_text": "",
+            })
+            chunk_store.clear()
+            return {"status": "fail", "error": str(e)}
+        return {"status": "fail", "error": "no_done_event"}
 
     async def _archival(self, item: QueueItem, project_id: str) -> dict:
         await _advance_chapter(project_id=project_id)

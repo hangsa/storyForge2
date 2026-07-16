@@ -85,7 +85,17 @@ class SSEBroadcaster:
         subscribe() and the first __anext__() — those events must be queued
         rather than dropped.
         """
-        sub = _Subscriber(queue=asyncio.Queue(maxsize=self._queue_max))
+        try:
+            queue: asyncio.Queue = asyncio.Queue(maxsize=self._queue_max)
+        except RuntimeError:
+            # Python 3.9: asyncio.Queue() binds to get_event_loop() at
+            # construction, which raises when called synchronously with no
+            # current loop (e.g. between asyncio.run() calls in tests). Provide
+            # a loop so registration stays synchronous as documented; the queue
+            # rebinds naturally once consumed inside a running loop.
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            queue = asyncio.Queue(maxsize=self._queue_max)
+        sub = _Subscriber(queue=queue)
         self._subscribers.append(sub)
 
         async def gen() -> AsyncIterator[SSEEvent]:

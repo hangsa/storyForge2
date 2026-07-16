@@ -140,8 +140,22 @@ export default function AutopilotMiddlePanel({ projectId }: Props) {
 
 interface CockpitViewProps {
   state: "stopped" | "running" | "paused";
-  currentTask: { description: string; chapter?: number } | null;
-  queue: Array<{ id: string; description: string }>;
+  currentTask: {
+    description: string;
+    kind?: string;
+    chapter?: number;
+    scene_id?: string | null;
+    progress_pct?: number;
+    started_at?: string | null;
+  } | null;
+  queue: Array<{
+    id: string;
+    kind?: string;
+    chapter_number?: number;
+    description: string;
+    priority?: number;
+    payload?: { scene_number?: number };
+  }>;
   events: Array<{ event: string; data: unknown; id?: number }>;
   sseStatus: "connecting" | "connected" | "reconnecting" | "error";
   onStart: () => void;
@@ -157,6 +171,38 @@ function CockpitView({
   const recentEvents = events.slice(-12).reverse();
   const badge = STATE_BADGE[state];
   const chapter = currentTask?.chapter;
+  const sceneId = currentTask?.scene_id;
+  const sceneNum =
+    sceneId && /^\d+-(\d+)$/.test(sceneId) ? Number(RegExp.$1) : null;
+  const progressPct = currentTask?.progress_pct;
+  // current_task SSE payload does NOT include an `id` field (verified
+  // against projects/proj_cc4ca4ae/autopilot/session.json on 2026-07-16),
+  // so we match the current task into the queue by chapter_number +
+  // parsed scene_id instead.
+  const currentIndexInQueue = currentTask
+    ? queue.findIndex(
+        (q) =>
+          q.chapter_number === currentTask.chapter &&
+          q.payload?.scene_number !== undefined &&
+          currentTask.scene_id !== null &&
+          currentTask.scene_id !== undefined &&
+          q.payload.scene_number ===
+            Number(currentTask.scene_id.split("-")[1] ?? ""),
+      )
+    : -1;
+  const nextItem =
+    currentIndexInQueue >= 0
+      ? queue[currentIndexInQueue + 1]
+      : queue[0];
+  const queuePreview = queue
+    .slice(0, 3)
+    .map((q) => {
+      const ch = q.chapter_number;
+      const sn = q.payload?.scene_number;
+      if (ch !== undefined && sn !== undefined) return `ch${ch}·scene${sn}`;
+      return q.description;
+    })
+    .join(" → ");
 
   return (
     <div className="p-6 space-y-6">
@@ -186,14 +232,54 @@ function CockpitView({
               className="text-base font-display text-primary"
             >
               {currentTask?.description
-                ? `AI 正在 ${currentTask.description}${chapter ? ` · 第 ${chapter} 章` : ""}`
+                ? `AI 正在 ${currentTask.description}${chapter ? ` · 第 ${chapter} 章` : ""}${
+                    sceneNum !== null ? ` · 第 ${sceneNum} 场景` : ""
+                  }${
+                    progressPct !== undefined && progressPct > 0
+                      ? ` (${progressPct}%)`
+                      : ""
+                  }`
                 : state === "running"
                   ? "AI 正在准备下一任务…"
                   : "AI 尚未启动"}
             </div>
+            {state === "running" &&
+              progressPct !== undefined &&
+              progressPct > 0 && (
+                <div
+                  className="h-1.5 w-full rounded-full bg-outline-variant overflow-hidden"
+                  data-testid="autopilot-cockpit-progress-bar"
+                >
+                  <div
+                    className="h-full bg-primary-container transition-[width] duration-500"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, progressPct))}%`,
+                    }}
+                  />
+                </div>
+              )}
             {queue.length > 0 && (
-              <div className="text-xs font-body-ui text-system-log truncate">
-                队列预览：{queue.slice(0, 3).map((q) => q.description).join(" → ")}
+              <div className="space-y-1">
+                <div
+                  className="text-xs font-body-ui text-system-log"
+                  data-testid="autopilot-cockpit-queue-position"
+                >
+                  队列{" "}
+                  {currentTask && currentIndexInQueue >= 0
+                    ? currentIndexInQueue + 1
+                    : "—"}
+                  /{queue.length}
+                  {nextItem?.chapter_number !== undefined && (
+                    <>
+                      {" "}· 下一个: 第 {nextItem.chapter_number} 章
+                      {nextItem.payload?.scene_number !== undefined &&
+                        ` 第 ${nextItem.payload.scene_number} 场景`}
+                    </>
+                  )}
+                </div>
+                <div className="text-xs font-body-ui text-system-log/70 truncate">
+                  {queuePreview}
+                </div>
               </div>
             )}
           </div>

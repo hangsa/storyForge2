@@ -172,7 +172,18 @@ class AsyncAutopilotRunner:
         self._mgr.set_current_task(task)
 
         try:
-            result = await self._executor.execute(item, project_id=project_id)
+            # Prefer execute_stream() when the executor implements it. This
+            # is the v1.10 Direction B wiring: streaming executors publish
+            # per-chunk events that the /chapter-stream SSE endpoint relays
+            # to the cockpit UI. Executors that haven't been upgraded yet
+            # (e.g. older FakeStage4Executor instances) fall back to
+            # execute() — they just won't stream.
+            executor_call = (
+                self._executor.execute_stream
+                if hasattr(self._executor, "execute_stream")
+                else self._executor.execute
+            )
+            result = await executor_call(item, project_id=project_id)
         except Exception as e:
             self._mgr.fail_current_task(error=str(e))
             self._mgr.drop_queue(item.id)

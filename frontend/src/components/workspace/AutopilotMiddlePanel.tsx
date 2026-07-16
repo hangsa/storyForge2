@@ -144,6 +144,7 @@ interface CockpitViewProps {
     description: string;
     kind?: string;
     chapter?: number;
+    chapter_number?: number;
     scene_id?: string | null;
     progress_pct?: number;
     started_at?: string | null;
@@ -170,10 +171,10 @@ function CockpitView({
 }: CockpitViewProps) {
   const recentEvents = events.slice(-12).reverse();
   const badge = STATE_BADGE[state];
-  const chapter = currentTask?.chapter;
+  const chapterNum = currentTask?.chapter_number ?? currentTask?.chapter;
   const sceneId = currentTask?.scene_id;
-  const sceneNum =
-    sceneId && /^\d+-(\d+)$/.test(sceneId) ? Number(RegExp.$1) : null;
+  const sceneIdMatch = sceneId ? /^(\d+)-(\d+)$/.exec(sceneId) : null;
+  const sceneNum = sceneIdMatch ? Number(sceneIdMatch[2]) : null;
   const progressPct = currentTask?.progress_pct;
   // current_task SSE payload does NOT include an `id` field (verified
   // against projects/proj_cc4ca4ae/autopilot/session.json on 2026-07-16),
@@ -182,7 +183,7 @@ function CockpitView({
   const currentIndexInQueue = currentTask
     ? queue.findIndex(
         (q) =>
-          q.chapter_number === currentTask.chapter &&
+          q.chapter_number === chapterNum &&
           q.payload?.scene_number !== undefined &&
           currentTask.scene_id !== null &&
           currentTask.scene_id !== undefined &&
@@ -232,7 +233,7 @@ function CockpitView({
               className="text-base font-display text-primary"
             >
               {currentTask?.description
-                ? `AI 正在 ${currentTask.description}${chapter ? ` · 第 ${chapter} 章` : ""}${
+                ? `AI 正在 ${currentTask.description}${chapterNum !== undefined ? ` · 第 ${chapterNum} 章` : ""}${
                     sceneNum !== null ? ` · 第 ${sceneNum} 场景` : ""
                   }${
                     progressPct !== undefined && progressPct > 0

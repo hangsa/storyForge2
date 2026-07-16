@@ -3,6 +3,7 @@ import { useAutopilotSession } from "../../hooks/useAutopilotSession";
 import { MANAGED_START_DEFAULTS } from "../../hooks/useAutopilotConfig";
 import type { ManagedStartConfig } from "./ManagedStartModal";
 import { useToast } from "../../hooks/useToast";
+import ChapterStreamPanel from "./ChapterStreamPanel";
 
 type Tab = "cockpit" | "dashboard" | "log";
 
@@ -112,6 +113,7 @@ export default function AutopilotMiddlePanel({ projectId }: Props) {
       <div className="flex-1 overflow-y-auto">
         {tab === "cockpit" && (
           <CockpitView
+            projectId={projectId}
             state={state}
             currentTask={currentTask}
             queue={queue}
@@ -139,6 +141,7 @@ export default function AutopilotMiddlePanel({ projectId }: Props) {
 }
 
 interface CockpitViewProps {
+  projectId: string;
   state: "stopped" | "running" | "paused";
   currentTask: {
     description: string;
@@ -166,6 +169,7 @@ interface CockpitViewProps {
 }
 
 function CockpitView({
+  projectId,
   state, currentTask, queue, events, sseStatus,
   onStart, onPause, onResume, onStop,
 }: CockpitViewProps) {
@@ -339,6 +343,12 @@ function CockpitView({
           </div>
         </div>
       </div>
+
+      {/* Real-time writing stream — connects to /chapter-stream when a scene is
+          actively being written. Tab-switching unmounts this; re-mounting it
+          triggers an SSE reconnect with Last-Event-ID set by the browser, so
+          the buffer rebuilds from SceneChunkStore without losing text. */}
+      <ChapterStreamPanel projectId={projectId} />
 
       {/* Live event feed */}
       <section>

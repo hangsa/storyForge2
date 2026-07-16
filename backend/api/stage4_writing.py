@@ -1,8 +1,9 @@
 import json
 import logging
 import re
+import time
 from dataclasses import asdict
-from typing import Optional
+from typing import Any, AsyncIterator, Dict, Optional
 from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
@@ -598,6 +599,233 @@ async def _write_scene_chapter(
             },
         },
     }
+
+
+async def _write_scene_chapter_stream(
+    *,
+    project_id: str,
+    chapter_number: int,
+    scene_number: int,
+    custom_style_config=None,
+    chunk_flush_chars: int = 50,
+    chunk_flush_ms: int = 80,
+) -> AsyncIterator[Dict[str, Any]]:
+    """Streaming twin of _write_scene_chapter. Yields dicts:
+
+      {"event": "chunk", "text": <flushed substring>}
+      {"event": "done",  "draft_text": <full>, "status": <breaker_result>}
+      {"event": "failed","error": <str>, "partial_text": <so-far>}
+
+    The flush policy is: every chunk_flush_chars chars OR every chunk_flush_ms
+    milliseconds, whichever happens first. Fixed thresholds; spec §3.2 names
+    them. The final StreamChunk (with finish_reason set) forces a flush.
+
+    Fact Guard / StoryOS / MemoryOS / chapters/.../draft.md write all run on
+    the assembled text exactly once, at the end — same code path as the
+    non-streaming version. LLM-call retries stay on the non-streaming path:
+    `_write_scene_chapter` is preserved for that use-case (manual reviewer,
+    archival pipeline, existing tests that exercise the breaker loop).
+    """
+    # ---- shared L0/L1/L2/L3/L4 / scene-plan setup ----------------------
+    sm = StageStateMachine(settings.projects_dir)
+    current = sm.get_current_stage(project_id)
+    if STAGE_ORDER.index(current) < STAGE_ORDER.index(Stage.STAGE4):
+        raise ValueError(
+            f"项目阶段为 {current.value}，无法执行 STAGE4 操作"
+        )
+
+    ctx = _load_context(project_id, chapter_number)
+    scenes = ctx["chapter"].get("scene_plan", [])
+    scene_plan = next(
+        (s for s in scenes if s.get("scene_number") == scene_number), None
+    )
+    if scene_plan is None:
+        raise ValueError(f"Scene {scene_number} 不存在")
+
+    mc = MemoryCoordinator(project_id, settings.projects_dir)
+    character_names = [c.get("name", "") for c in ctx["characters"]]
+    ctx_mem = mc.assemble_for_scene(
+        scene_number=scene_number,
+        scene_goal=scene_plan.get("goal", ""),
+        scene_conflict=scene_plan.get("conflict", ""),
+        character_names=character_names,
+        chapter_number=chapter_number,
+    )
+    l0 = L0Runtime()
+    l0.set_scene_context(scene_number, scene_plan.get("goal", ""))
+
+    character_growth_context = compute_character_growth_context(
+        ctx["characters"], chapter_number
+    )
+
+    writer = WriterAgent(project_id)
+    reviewer = ReviewerAgent(project_id)
+    registry_mgr = RegistryManager(project_id)
+    storyos = StoryOSAgent(project_id, registry_manager=registry_mgr)
+    breaker = CircuitBreaker()
+    reader_os = ReaderOS(project_id)
+
+    genre = ctx["genre"]
+    reader_warnings = reader_os.get_warnings(chapter_number, genre)
+    reader_warnings_str = (
+        "\n".join(
+            f"  - [{w['level'].upper()}] {w['metric']}: {w['hint']}"
+            for w in reader_warnings
+        )
+        if reader_warnings
+        else "无预警"
+    )
+
+    # ---- streaming flush infrastructure ---------------------------------
+    buffer = ""
+    last_flush = time.time()
+    assembled_text = ""
+
+    async def try_flush(force: bool = False):
+        """Return a 'chunk' event dict if a flush happened, else None.
+
+        Side-effects: invokes nothing external — chunk persistence + publishing
+        happen in the executor (per spec §4.3.2, the executor owns the
+        broadcaster-side coupling; this function is content-only). This
+        keeps the streaming layer testable in isolation.
+        """
+        nonlocal buffer, last_flush, assembled_text
+        if not (force or
+                len(buffer) >= chunk_flush_chars or
+                (time.time() - last_flush) * 1000 >= chunk_flush_ms):
+            return None
+        ev = {"event": "chunk", "text": buffer}
+        assembled_text += buffer
+        buffer = ""
+        last_flush = time.time()
+        return ev
+
+    # ---- stream from writer ---------------------------------------------
+    final_breaker_result = "passed"
+    final_attempt = 1
+    try:
+        async for stream_chunk in writer.write_scene_stream(
+            genre=genre,
+            concept=ctx["concept"],
+            world_rules=ctx["world"],
+            characters=ctx["characters"],
+            scene_plan=scene_plan,
+            l0_context=ctx_mem.l0_context,
+            l1_context=ctx_mem.l1_context,
+            l2_context=ctx_mem.l2_context,
+            l3_context=ctx_mem.l3_context,
+            l4_context=ctx_mem.l4_context,
+            growth_stage_hint=ctx_mem.growth_stage_hint,
+            character_growth_context=character_growth_context,
+            reader_os_warnings=reader_warnings_str,
+            custom_style_config=custom_style_config,
+        ):
+            buffer += stream_chunk.text
+            force = stream_chunk.finish_reason is not None
+            ev = await try_flush(force=force)
+            if ev is not None:
+                yield ev
+
+        # Drain any remaining buffered text (defense in depth: try_flush above
+        # should have handled the final chunk's force=True, but a trailing
+        # space/punctuation may have slipped under the threshold).
+        ev = await try_flush(force=True)
+        if ev is not None:
+            yield ev
+
+        if not assembled_text.strip():
+            yield {"event": "failed",
+                   "error": "LLM 返回了空文本",
+                   "partial_text": assembled_text}
+            return
+
+        # ---- Fact Guard + breaker (single pass — no rewrite loop) ---------
+        precheck_result = await _run_semantic_precheck(
+            scene_text=assembled_text,
+            scene_plan=scene_plan,
+            character_names=character_names,
+        )
+        if precheck_result.tokens_used:
+            try:
+                from backend.llm.base_provider import LLMResponse
+                synth = LLMResponse(
+                    text="",
+                    tokens_in=precheck_result.tokens_used,
+                    tokens_out=0,
+                    model="semantic_precheck",
+                    provider="semantic_precheck",
+                )
+                writer.log_usage("semantic_precheck_tokens", synth)
+            except Exception as e:
+                logger.warning("Failed to log semantic precheck tokens: %s", e)
+
+        fg_result = reviewer.run_fact_guard(
+            draft_text=assembled_text,
+            characters=ctx["characters"],
+            world_rules=ctx["world"],
+            scene_plan=scene_plan,
+            precheck_result=precheck_result,
+        )
+        breaker_result = breaker.check(
+            scene_number=scene_number,
+            fact_guard_passed=fg_result.all_passed,
+            attempt=1,
+            hints=fg_result.retry_hints,
+        )
+        # Map breaker raw → canonical scene status (same table as executor).
+        from backend.conductor.stage4_async_executor import _canonical_scene_status
+        final_breaker_result = _canonical_scene_status(breaker_result)
+        final_attempt = 1
+
+        # ---- StoryOS / MemoryOS update ---------------------------------
+        parsed_logs = storyos.parse_sf_logs(assembled_text)
+        registry_report = storyos.update_registries(parsed_logs)
+        l0.update_from_logs(registry_report.character_state_updates)
+
+        # ---- Style Guard (best-effort, non-blocking) --------------------
+        try:
+            from backend.style_engine.genre_template import GenreTemplate
+            genre_template = GenreTemplate().load(ctx["genre"])
+            await reviewer.run_style_guard(
+                scene_text=assembled_text,
+                genre_template=genre_template,
+                characters=ctx["characters"],
+            )
+        except Exception as e:
+            logger.warning("Style Guard failed (non-blocking): %s", e)
+
+        # ---- write final draft.md + meta.json + progress + checkpoint ----
+        chapters_dir = fm.project_path(project_id, "chapters")
+        chapters_dir.mkdir(parents=True, exist_ok=True)
+        draft_filename = f"ch{chapter_number:02d}_scene_{scene_number:03d}_draft.md"
+        fm.write_markdown(project_id, f"chapters/{draft_filename}", assembled_text)
+
+        # NOTE: progress.json + checkpoint writes are intentionally
+        # OUT OF SCOPE for this function — the executor (Task 3) updates
+        # progress + checkpoint alongside this function's "done" event.
+        # That keeps streaming's contract narrow (only "chunk"/"done"/
+        # "failed" yields) and lets the executor own the cross-file
+        # bookkeeping exactly like the existing _write_scene() does.
+
+        yield {
+            "event": "done",
+            "draft_text": assembled_text,
+            "status": final_breaker_result,
+            "attempt": final_attempt,
+        }
+
+    except Exception as e:
+        # Flush any unflushed buffer so partial_text reflects *all* text the
+        # writer produced before raising (the 50-char / 80-ms threshold may
+        # not have fired yet).
+        if buffer:
+            assembled_text += buffer
+            buffer = ""
+        yield {
+            "event": "failed",
+            "error": str(e),
+            "partial_text": assembled_text,
+        }
 
 
 async def _advance_chapter(

@@ -934,6 +934,91 @@ async def advance_chapter(data: dict):
     return await _advance_chapter(project_id=project_id)
 
 
+@stage4_router.post("/repair-progress")
+async def repair_progress(data: dict):
+    """Scan progress.json for chapters stuck at status=in_progress despite
+    all outline scenes having terminal status; flip them to completed and
+    advance current_chapter forward. Pure state-machine repair — no LLM,
+    no L2 update, no checkpoint. Idempotent.
+
+    Request: {project_id: string}
+    Response detail: {
+      repaired_chapters: number[],   // sorted ascending
+      current_chapter: number        // may equal old value if no advance needed
+    }
+    """
+    project_id = data.get("project_id", "")
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+
+    project_dir = fm.projects_dir / project_id
+    if not project_dir.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "PROJECT_NOT_FOUND",
+                    "message": f"项目 {project_id} 不存在", "detail": {}},
+        )
+
+    progress = fm.read_json(project_id, "progress.json")
+    if progress is None:
+        # No progress yet — nothing to repair
+        return {
+            "error": False, "code": "OK", "message": "",
+            "detail": {"repaired_chapters": [], "current_chapter": 1},
+        }
+
+    outline = fm.read_json(project_id, "outline.json") or {}
+    outline_chs = {
+        c.get("chapter_number"): c
+        for c in outline.get("chapters", [])
+    }
+
+    DONE_STATUSES = {"completed", "force_passed", "skipped"}
+    repaired: list[int] = []
+    for ch_progress in progress.get("chapters", []):
+        if ch_progress.get("status") != "in_progress":
+            continue
+        ch_num = ch_progress.get("chapter_number")
+        outline_ch = outline_chs.get(ch_num)
+        if outline_ch is None:
+            continue  # no ground truth — skip defensively
+        planned = outline_ch.get("scene_plan", [])
+        if not planned:
+            continue
+        progress_by_num = {
+            s.get("scene_number"): s.get("status")
+            for s in ch_progress.get("scenes", [])
+        }
+        all_done = all(
+            progress_by_num.get(s.get("scene_number")) in DONE_STATUSES
+            for s in planned
+        )
+        if all_done:
+            ch_progress["status"] = "completed"
+            repaired.append(ch_num)
+
+    if repaired:
+        # current_chapter only moves forward — never regresses
+        old_current = progress.get("current_chapter", 1)
+        new_current = max(old_current, max(repaired) + 1)
+        if new_current != old_current:
+            progress["current_chapter"] = new_current
+        fm.write_json(project_id, "progress.json", progress)
+
+    return {
+        "error": False, "code": "OK",
+        "message": f"已修复 {len(repaired)} 个章节",
+        "detail": {
+            "repaired_chapters": sorted(repaired),
+            "current_chapter": progress.get("current_chapter", 1),
+        },
+    }
+
+
 # --- v1.6 Phase 3a: Chapter Review API ---
 
 

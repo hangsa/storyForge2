@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Callable, Optional
 
 from backend.models.autopilot_session import QueueItem
 
@@ -120,7 +120,7 @@ class AsyncStage4Executor:
         self._projects_dir = Path(projects_dir)
         if broadcaster is None:
             from backend.utils.sse_broadcaster import SSEBroadcaster
-            broadcaster = SSEBroadcaster()  # throws publishes away harmlessly
+            broadcaster = SSEBroadcaster()  # silently drops events (no subscribers)
         self._broadcaster = broadcaster
 
     def _mgr_for(self, project_id: str):

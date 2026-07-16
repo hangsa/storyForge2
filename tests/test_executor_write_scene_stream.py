@@ -2,8 +2,7 @@
 
 Verifies:
 - scene_start published at the start
-- scene_chunk published per chunk yielded from _write_scene_chapter_stream(),
-  with seq monotonic and starting at 1
+- scene_chunk published per chunk yielded from _write_scene_chapter_stream()
 - scene_done published on success; chunk_store cleared after
 - scene_failed published on failure; chunk_store cleared after
 - Returns the same shape as _write_scene(): {"status": "ok"|"fail", ...}
@@ -13,7 +12,6 @@ Verifies:
 import asyncio
 import json
 from pathlib import Path
-import pytest
 
 from backend.agents.base_agent import StreamChunk
 from backend.conductor.scene_chunk_store import chunk_path
@@ -59,54 +57,9 @@ def _fake_streaming_chapter(chunks, monkeypatch):
     monkeypatch.setattr(ex_mod, "_write_scene_chapter_stream", fake_gen)
 
 
-def _patch_fact_guard(monkeypatch):
-    """Skip the Fact Guard loop inside _write_scene_chapter_stream since this
-    test replaces the function entirely with a fake generator."""
-    pass  # No-op: the fake_gen above bypasses _write_scene_chapter_stream body.
-
-
 def _make_broadcaster_with_subscribers():
     bc = SSEBroadcaster(history_size=64, queue_max=32)
     return bc
-
-
-def _bootstrap_session(tmp_path, project_id):
-    """Build a session.json with one queue item already dropped to the
-    current_task so _maybe_enqueue_archival can find a chapter."""
-    from backend.conductor.autopilot_session import AutopilotSessionManager
-    mgr = AutopilotSessionManager(tmp_path, project_id)
-    mgr.start()
-    mgr.complete_current_task()
-    # progress.json — needed for is_chapter_complete() in
-    # _maybe_enqueue_archival; we leave it stale on purpose (no scenes
-    # marked done → chapter stays incomplete → nothing enqueued).
-    (tmp_path / project_id / "progress.json").write_text(
-        json.dumps({"project_id": project_id, "current_chapter": 1,
-                    "chapters": []}),
-        encoding="utf-8",
-    )
-    return mgr
-
-
-@pytest.fixture
-def setup(tmp_path, monkeypatch):
-    info = _bootstrap_project(tmp_path)
-    monkeypatch.setattr(ex_mod.settings if hasattr(ex_mod, "settings") else _settings(),
-                        "projects_dir", tmp_path)
-    bc = _make_broadcaster_with_subscribers()
-    return {**info, "broadcaster": bc}
-
-
-def _settings():
-    from backend.config import settings
-    return settings
-
-
-def _make_executor(projects_dir, broadcaster):
-    return ex_mod.AsyncStage4Executor.__new__(ex_mod.AsyncStage4Executor).__init__(
-        projects_dir=projects_dir,
-        broadcaster=broadcaster,
-    ) if False else _build(projects_dir, broadcaster)
 
 
 def _build(projects_dir, broadcaster):
@@ -125,8 +78,6 @@ def test_write_scene_stream_publishes_scene_start(tmp_path, monkeypatch):
     item = QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
                      scheduled_at=None, priority=20,
                      payload={"scene_number": 1})
-    # Subscribe so we can assert published events.
-    info["broadcaster"].subscribe(None).__anext__()  # registers
 
     async def _run():
         return await ex.execute_stream(item, info["project_id"])
@@ -171,7 +122,6 @@ def test_write_scene_stream_publishes_failed_on_exception(tmp_path, monkeypatch)
     item = QueueItem(id="w-1-3", kind="write_scene", chapter_number=1,
                      scheduled_at=None, priority=20,
                      payload={"scene_number": 3})
-    info["broadcaster"].subscribe(None).__anext__()
 
     async def _run():
         return await ex.execute_stream(item, info["project_id"])

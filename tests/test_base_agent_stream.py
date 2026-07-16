@@ -7,7 +7,6 @@ every chunk and finish_reason verbatim.
 """
 
 import asyncio
-from pathlib import Path
 import pytest
 
 from backend.agents.base_agent import BaseAgent

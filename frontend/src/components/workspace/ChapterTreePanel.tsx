@@ -115,7 +115,7 @@ export default function ChapterTreePanel({
 
   return (
     <div data-testid="chapter-tree" className="p-3 space-y-3 text-sm font-body-ui">
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-canvas-bg border-b border-outline-variant -mx-3 px-3 pt-3 pb-2 flex items-center justify-between">
         <span className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">章节</span>
         <div className="flex gap-1">
           <button

@@ -1,5 +1,5 @@
 from backend.config import settings
-from backend.llm.base_provider import BaseLLMProvider, LLMResponse, LLMConfig
+from backend.llm.base_provider import BaseLLMProvider, LLMResponse, LLMConfig, StreamChunk
 from backend.llm.anthropic_provider import AnthropicProvider
 from backend.llm.deepseek_provider import DeepSeekProvider
 from backend.llm.minimax_provider import MiniMaxProvider
@@ -61,7 +61,7 @@ def create_provider() -> BaseLLMProvider:
 
 
 __all__ = [
-    "BaseLLMProvider", "LLMResponse", "LLMConfig",
+    "BaseLLMProvider", "LLMResponse", "LLMConfig", "StreamChunk",
     "AnthropicProvider", "DeepSeekProvider", "MiniMaxProvider",
     "create_provider",
     "ModelRouter", "ModelUnavailableError", "RoutingDecision",

@@ -3,10 +3,10 @@ import logging
 import yaml
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 from backend.config import settings
-from backend.llm import create_provider, BaseLLMProvider, LLMResponse
+from backend.llm import create_provider, BaseLLMProvider, LLMResponse, StreamChunk
 from backend.llm.model_router import (
     ModelRouter,
     ModelUnavailableError,
@@ -156,6 +156,52 @@ class BaseAgent:
             max_tokens=prompt.max_tokens,
             temperature=prompt.temperature,
         )
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_mode: bool = False,
+        **kwargs,
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream version of generate().
+
+        Yields each StreamChunk from the provider directly. NO JSON parsing, NO
+        retry — partial JSON streams cannot be meaningfully validated, so the
+        caller must treat streamed content as final text. Setting json_mode=True
+        raises NotImplementedError because the contract can't be honored.
+        """
+        if json_mode:
+            raise NotImplementedError(
+                "generate_stream() doesn't support json_mode; use generate() for that."
+            )
+        async for chunk in self.provider.generate_stream(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            **kwargs,
+        ):
+            yield chunk
+
+    async def generate_from_template_stream(
+        self,
+        template_name: str,
+        **kwargs,
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream version of generate_from_template(). Loads the prompt template
+        (system + user) and pipes them through generate_stream().
+
+        Does NOT route through ModelRouter — streams bypass tier routing for now.
+        If tier-based streaming is later needed, add generate_with_tier_stream()
+        that calls router.execute(stream=True) and yields the same StreamChunk shape.
+        """
+        prompt = self.load_prompt(template_name)
+        async for chunk in self.generate_stream(
+            system_prompt=prompt.format_system(**kwargs),
+            user_prompt=prompt.format_user(**kwargs),
+            max_tokens=prompt.max_tokens,
+            temperature=prompt.temperature,
+        ):
+            yield chunk
 
     # --- v1.6: Tier-based LLM routing ---
 

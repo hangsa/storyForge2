@@ -81,8 +81,22 @@ import type { ManagedStartConfig } from "../components/workspace/ManagedStartMod
 export interface AutopilotSession {
   project_id: string;
   state: "stopped" | "running" | "paused";
-  current_task: { description: string; chapter?: number } | null;
-  queue: Array<{ id: string; description: string }>;
+  current_task: {
+    description: string;
+    kind?: string;
+    chapter?: number;
+    scene_id?: string | null;
+    progress_pct?: number;
+    started_at?: string | null;
+  } | null;
+  queue: Array<{
+    id: string;
+    kind?: string;
+    chapter_number?: number;
+    description: string;
+    priority?: number;
+    payload?: { scene_number?: number };
+  }>;
   history: unknown[];
   config: ManagedStartConfig | null;
 }

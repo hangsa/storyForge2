@@ -898,6 +898,11 @@ export const api = {
       "POST", "/stage4/advance-chapter", { project_id: projectId }
     ),
 
+  repairProgress: (projectId: string) =>
+    request<{ repaired_chapters: number[]; current_chapter: number }>(
+      "POST", "/stage4/repair-progress", { project_id: projectId }
+    ),
+
   getRegistry: (projectId: string, registryType: string) =>
     request<RegistryResponse>("GET", `/storyos/${registryType}?project_id=${projectId}`),
 

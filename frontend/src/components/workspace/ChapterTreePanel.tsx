@@ -35,8 +35,6 @@ export interface WorkspaceVolumeGroup {
   chapters: WorkspaceChapterNode[];
 }
 
-type ViewMode = "flat" | "tree" | "act";
-
 interface Props {
   volumes: WorkspaceVolumeGroup[];
   currentChapter: number;
@@ -51,18 +49,10 @@ interface Props {
   onRefresh: () => void;
 }
 
-const VIEW_MODES: { value: ViewMode; label: string }[] = [
-  { value: "flat", label: "扁平" },
-  { value: "tree", label: "树形" },
-  { value: "act", label: "按幕" },
-];
-
 export default function ChapterTreePanel({
   volumes, currentChapter, currentScene, chapterStatus, sceneStatus,
   onSelectChapter, onSelectScene, onAddChapter, onRefresh,
 }: Props) {
-  const [viewMode, setViewMode] = useState<ViewMode>("flat");
-
   // Track which volumes are open. The useState initializer runs only on
   // first mount — when the workspace's async load later populates `volumes`,
   // we still need the user to see the chapters, so an effect below opens any
@@ -141,24 +131,6 @@ export default function ChapterTreePanel({
             className="px-2 py-0.5 rounded text-xs bg-primary-container text-surface-container-low hover:opacity-90"
           >+ 新章节</button>
         </div>
-      </div>
-
-      <div className="flex rounded border border-outline-variant overflow-hidden text-xs">
-        {VIEW_MODES.map((m) => (
-          <button
-            key={m.value}
-            type="button"
-            data-testid={`view-mode-${m.value}`}
-            onClick={() => setViewMode(m.value)}
-            className={`flex-1 py-1 font-body-ui transition-colors ${
-              viewMode === m.value
-                ? "bg-primary-container text-surface-container-low"
-                : "text-system-log hover:bg-surface-container"
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
       </div>
 
       <div className="space-y-3">

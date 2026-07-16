@@ -102,40 +102,6 @@ describe("ChapterTreePanel", () => {
     expect(onAdd).toHaveBeenCalled();
   });
 
-  it("renders all three view-mode buttons (扁平 / 树形 / 按幕)", () => {
-    render(
-      <ChapterTreePanel
-        volumes={VOLUMES}
-        currentChapter={1}
-        currentScene="1-1"
-        onSelectChapter={() => {}}
-        onSelectScene={() => {}}
-        onAddChapter={() => {}}
-        onRefresh={() => {}}
-      />,
-    );
-    expect(screen.getByTestId("view-mode-flat")).toBeInTheDocument();
-    expect(screen.getByTestId("view-mode-tree")).toBeInTheDocument();
-    expect(screen.getByTestId("view-mode-act")).toBeInTheDocument();
-  });
-
-  it("clicking a view-mode button highlights it (v1.8: label-only, no filter)", () => {
-    render(
-      <ChapterTreePanel
-        volumes={VOLUMES}
-        currentChapter={1}
-        currentScene="1-1"
-        onSelectChapter={() => {}}
-        onSelectScene={() => {}}
-        onAddChapter={() => {}}
-        onRefresh={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("view-mode-tree"));
-    expect(screen.getByTestId("view-mode-tree").className).toContain("bg-primary-container");
-    expect(screen.getByTestId("view-mode-flat").className).not.toContain("bg-primary-container");
-  });
-
   it("renders volume headers with name + chapter range + count", () => {
     const volumes: WorkspaceVolumeGroup[] = [
       { name: "第一卷", chapter_range: "1-30", summary: "初入江湖", chapters: [CHAPTERS[0]] },

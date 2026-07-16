@@ -85,6 +85,7 @@ export interface AutopilotSession {
     description: string;
     kind?: string;
     chapter?: number;
+    chapter_number?: number;
     scene_id?: string | null;
     progress_pct?: number;
     started_at?: string | null;

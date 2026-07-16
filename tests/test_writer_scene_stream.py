@@ -9,8 +9,6 @@ this file verifies the writer-level wrapper:
 """
 
 import asyncio
-from pathlib import Path
-from types import SimpleNamespace
 import pytest
 
 from backend.agents.base_agent import StreamChunk
@@ -43,16 +41,9 @@ def test_write_scene_stream_uses_scene_writing_template():
         StreamChunk(text="", finish_reason="stop"),
     ]
     fake = _FakeBaseAgent(chunks)
-    # Bypass __init__; we only need .write_scene_stream() which uses self
+    # Bypass __init__; we only need .write_scene_stream() which uses self.generate_from_template_stream
     writer = WriterAgent.__new__(WriterAgent)
-    writer._FakeBaseAgent = fake  # not used directly; just for clarity
-
-    # Inject the streaming-only delegate onto the writer
-    writer._stream_delegate = fake
-
-    # Monkey-patch the method we want to test by indirecting through a tiny shim:
-    # we call writer.write_scene_stream, but it normally calls self.generate_from_template_stream.
-    # Replace that bound method with our fake.
+    # Replace that bound method with our fake so write_scene_stream sees the canned stream.
     writer.generate_from_template_stream = fake.generate_from_template_stream
 
     async def _collect():

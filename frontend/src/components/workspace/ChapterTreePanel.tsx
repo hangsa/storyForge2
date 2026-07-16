@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ChapterStatus } from "../../types/chapter";
 
 export interface WorkspaceSceneNode {
   scene_id: string;
@@ -15,8 +16,6 @@ export interface WorkspaceChapterNode {
   theme?: string;
   scenes: WorkspaceSceneNode[];
 }
-
-export type ChapterStatus = "completed" | "writing" | "planned";
 
 /** Status info for the current chapter's scenes. Keyed by scene_id (e.g. "1-2"). */
 export type SceneStatusMap = Record<string, boolean>;
@@ -45,7 +44,8 @@ interface Props {
   sceneStatus?: SceneStatusMap;
   onSelectChapter: (chapter_number: number) => void;
   onSelectScene: (chapter_number: number, scene_id: string) => void;
-  onAddChapter: () => void;
+  /** Pass undefined to hide the "+ 新章节" button (managed mode has no manual chapter-adding workflow). */
+  onAddChapter?: () => void;
   onRefresh: () => void;
 }
 
@@ -124,12 +124,14 @@ export default function ChapterTreePanel({
             onClick={onRefresh}
             className="px-2 py-0.5 rounded text-xs bg-surface-container text-system-log hover:text-primary"
           >刷新</button>
-          <button
-            type="button"
-            data-testid="add-chapter"
-            onClick={onAddChapter}
-            className="px-2 py-0.5 rounded text-xs bg-primary-container text-surface-container-low hover:opacity-90"
-          >+ 新章节</button>
+          {onAddChapter && (
+            <button
+              type="button"
+              data-testid="add-chapter"
+              onClick={onAddChapter}
+              className="px-2 py-0.5 rounded text-xs bg-primary-container text-surface-container-low hover:opacity-90"
+            >+ 新章节</button>
+          )}
         </div>
       </div>
 

@@ -7,12 +7,11 @@ import { useToast } from "../hooks/useToast";
 import { computePlannedTotal } from "../utils/outline";
 import WorkspaceTopBar from "../components/workspace/WorkspaceTopBar";
 import WorkspaceLayout from "../components/workspace/WorkspaceLayout";
-import ManagedDashboard, { type DashboardChapter } from "../components/workspace/ManagedDashboard";
 import ChapterTreePanel, {
-  type ChapterStatus,
   type WorkspaceChapterNode,
   type WorkspaceVolumeGroup,
 } from "../components/workspace/ChapterTreePanel";
+import type { ChapterStatus } from "../types/chapter";
 import WritingArea from "../components/workspace/WritingArea";
 import ContextPanel from "../components/workspace/ContextPanel";
 import ModeSwitchConfirmModal from "../components/workspace/ModeSwitchConfirmModal";
@@ -21,9 +20,17 @@ import AutopilotMiddlePanel from "../components/workspace/AutopilotMiddlePanel";
 import AddChaptersModal, { type AddChaptersProgress } from "../components/workspace/AddChaptersModal";
 import ConfirmDialog from "../components/shared/ConfirmDialog";
 
-// Map progress.json's `status` field onto ManagedDashboard's chapter status.
-// `in_progress` is the writer-side term; the dashboard surfaces it as "writing".
-function mapProgressStatus(s: string): DashboardChapter["status"] {
+// Internal record for progress.json-derived chapter status. Kept local to
+// this page (not exported) — the canonical `ChapterStatus` union lives in
+// types/chapter.ts and is shared between ChapterTreePanel and ManagedDashboard.
+interface ProgressChapterRow {
+  chapter_number: number;
+  status: ChapterStatus;
+}
+
+// Map progress.json's `status` field onto ChapterStatus.
+// `in_progress` is the writer-side term; the panel surfaces it as "writing".
+function mapProgressStatus(s: string): ChapterStatus {
   if (s === "completed") return "completed";
   if (s === "in_progress") return "writing";
   if (s === "pending") return "planned";
@@ -108,7 +115,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
 
   const [projectName, setProjectName] = useState("加载中…");
 
-  const [chapters, setChapters] = useState<DashboardChapter[]>([]);
+  const [chapters, setChapters] = useState<ProgressChapterRow[]>([]);
   const [manualChapters, setManualChapters] = useState<WorkspaceChapterNode[]>([]);
   const [novelOutline, setNovelOutline] = useState<NovelOutline | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -156,21 +163,16 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   );
 
   // chapterStatus: derived from the existing `chapters` array (already mapped
-  // through mapProgressStatus into DashboardChapter["status"]). The
-  // DashboardChapter["status"] union is closed (no defensive `as string` —
-  // if a new state is added upstream, this memo will surface a TS error
-  // rather than silently rendering as "planned").
+  // through mapProgressStatus into ChapterStatus). The ChapterStatus union is
+  // closed (no defensive `as string` — if a new state is added upstream,
+  // this memo will surface a TS error rather than silently rendering as
+  // "planned"). This map is passed to <ChapterTreePanel> as an overlay in
+  // BOTH manual and managed modes so the column shows the same status badges
+  // regardless of mode.
   const chapterStatus = useMemo<Record<number, ChapterStatus>>(() => {
     const m: Record<number, ChapterStatus> = {};
     for (const c of chapters) {
-      if (c.status === "completed") {
-        m[c.chapter_number] = "completed";
-      } else if (c.status === "writing") {
-        m[c.chapter_number] = "writing";
-      } else {
-        // "planned" | "pending" both render as 未写
-        m[c.chapter_number] = "planned";
-      }
+      m[c.chapter_number] = c.status;
     }
     return m;
   }, [chapters]);
@@ -298,7 +300,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
       .getStage4Progress(projectId)
       .then((p: { chapters?: Array<{ chapter_number: number; status: string }> }) => {
         if (cancelled) return;
-        const mapped: DashboardChapter[] = (p?.chapters ?? []).map((c) => ({
+        const mapped: ProgressChapterRow[] = (p?.chapters ?? []).map((c) => ({
           chapter_number: c.chapter_number,
           status: mapProgressStatus(c.status),
         }));
@@ -382,7 +384,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     setMode(next);
   };
 
-  const onDashboardChapterClick = (n: number, status: DashboardChapter["status"]) => {
+  const onDashboardChapterClick = (n: number, status: ChapterStatus) => {
     if (status === "writing") {
       setConfirmKind("take-over");
       setTakeOverChapter(n);
@@ -391,6 +393,8 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
       return;
     }
     setCurrentChapter(n);
+    const ch = manualChapters.find((c) => c.chapter_number === n);
+    setCurrentScene(ch?.scenes[0]?.scene_id ?? null);
     setMode("manual");
     // v1.9 layer 3 fix: drilling into a completed/pending chapter also exits
     // managed mode, so the autopilot session must stop for the same reason
@@ -506,45 +510,36 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
       <WorkspaceLayout
         mode={mode}
         left={
-          mode === "managed" ? (
-            <ManagedDashboard
-              projectId={projectId}
-              chapters={chapters}
-              onChapterClick={onDashboardChapterClick}
-              // No-op: there is no backend endpoint to add a chapter outside the
-              // outline workflow. Refresh re-fetches the real list.
-              onAddChapter={() => {}}
-              onRefresh={() => setReloadKey((k) => k + 1)}
-            />
-          ) : (
-            <ChapterTreePanel
-              volumes={volumeGroups}
-              currentChapter={currentChapter}
-              currentScene={currentScene}
-              chapterStatus={chapterStatus}
-              sceneStatus={sceneStatus}
-              onSelectChapter={(n) => {
-                setCurrentChapter(n);
-                const ch = manualChapters.find((c) => c.chapter_number === n);
-                setCurrentScene(ch?.scenes[0]?.scene_id ?? null);
-              }}
-              onSelectScene={(n, s) => { setCurrentChapter(n); setCurrentScene(s); }}
-              onAddChapter={() => setAddOpen(true)}
-              onRefresh={async () => {
-                if (!projectId) return;
-                try {
-                  const r = await api.repairProgress(projectId);
-                  if (r.repaired_chapters.length > 0) {
-                    show(`已推进 ${r.repaired_chapters.length} 个章节`);
-                  }
-                } catch (e) {
-                  const msg = e instanceof Error ? e.message : String(e);
-                  show(`章节收尾失败：${msg}`);
+          // v1.9 T4: both modes now render the same <ChapterTreePanel />.
+          // The only difference is `onAddChapter` — managed mode passes
+          // undefined so the "+ 新章节" button is hidden (autopilot
+          // manages chapter creation). The take-over decision (status
+          // === "writing" → modal; otherwise drill into manual) lives
+          // here, in the unified handler, since both modes share the
+          // same status overlay.
+          <ChapterTreePanel
+            volumes={volumeGroups}
+            currentChapter={currentChapter}
+            currentScene={currentScene}
+            chapterStatus={chapterStatus}
+            sceneStatus={sceneStatus}
+            onSelectChapter={(n) => onDashboardChapterClick(n, chapterStatus[n] ?? "pending")}
+            onSelectScene={(n, s) => { setCurrentChapter(n); setCurrentScene(s); }}
+            onAddChapter={mode === "managed" ? undefined : () => setAddOpen(true)}
+            onRefresh={async () => {
+              if (!projectId) return;
+              try {
+                const r = await api.repairProgress(projectId);
+                if (r.repaired_chapters.length > 0) {
+                  show(`已推进 ${r.repaired_chapters.length} 个章节`);
                 }
-                setReloadKey((k) => k + 1);
-              }}
-            />
-          )
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                show(`章节收尾失败：${msg}`);
+              }
+              setReloadKey((k) => k + 1);
+            }}
+          />
         }
         center={
           mode === "manual" ? (

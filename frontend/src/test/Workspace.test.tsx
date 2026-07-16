@@ -529,16 +529,24 @@ describe("Workspace integration", () => {
     expect(mockedStopAutopilotSession).not.toHaveBeenCalled();
   });
 
-  it("clicking a 'writing' chapter cell opens the take-over confirm modal (not direct switch)", async () => {
+  it("clicking a 'writing' chapter row opens the take-over confirm modal (not direct switch)", async () => {
+    // v1.9 T4: managed mode now renders the same <ChapterTreePanel /> as
+    // manual mode (chapter rows use testid `chapter-N`, not `chapter-cell-N`).
     // Both WorkspacePage and WorkspaceTopBar call getStage4Progress on
     // mount, so we need TWO once-only overrides — one per caller.
     const chapter4 = [{ chapter_number: 4, status: "in_progress" }];
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
+    // The unified ChapterTreePanel renders chapters from manualChapters
+    // (outline.json), not from progress.json. So chapter 4 must be in the
+    // outline too, otherwise the row won't render.
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [{ chapter_number: 4, title: "第四章", scene_plan: [{ scene_number: 1 }] }],
+    });
     setup("/project/p1/workspace?mode=managed");
-    // The useEffect fetch is async; wait for chapter-cell-4 to render.
-    expect(await screen.findByTestId("chapter-cell-4")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("chapter-cell-4"));
+    // The useEffect fetch is async; wait for chapter-4 to render.
+    expect(await screen.findByTestId("chapter-4")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("chapter-4"));
     expect(screen.getByTestId("mode-switch-confirm")).toBeInTheDocument();
     expect(localStorage.getItem("storyforge.workspace.mode")).toBeNull(); // still on managed
   });
@@ -547,16 +555,16 @@ describe("Workspace integration", () => {
     const chapter4 = [{ chapter_number: 4, status: "in_progress" }];
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
-    // Take-over drills down into the chapter tree (manual mode) — we need
-    // chapter 4 to also be in the outline so a scene can be selected.
+    // Take-over drills down into the chapter tree (manual mode) — chapter 4
+    // must be in the outline so the unified tree shows it.
     mockedGetOutline.mockResolvedValueOnce({
       chapters: [
         { chapter_number: 4, title: "第四章", scene_plan: [{ scene_number: 1 }] },
       ],
     });
     setup("/project/p1/workspace?mode=managed");
-    expect(await screen.findByTestId("chapter-cell-4")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("chapter-cell-4"));
+    expect(await screen.findByTestId("chapter-4")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("chapter-4"));
     // uncheck "等待完成" so we take over immediately
     const waitCheckbox = screen.getByTestId("confirm-wait-finish") as HTMLInputElement;
     fireEvent.change(waitCheckbox, { target: { checked: false } });
@@ -660,13 +668,16 @@ describe("Workspace integration", () => {
     expect(rollback.title).toContain("v1.9.1");
   });
 
-  it("new project with empty progress.json renders no chapter cells in managed mode", async () => {
-    // Default mock returns { chapters: [] } — no chapter-cell-* should render.
+  it("new project with empty progress.json renders no chapter rows in managed mode", async () => {
+    // Default mock returns { chapters: [] } and default mock returns empty
+    // outline — no chapter-* rows should render. v1.9 T4: managed mode now
+    // uses the unified ChapterTreePanel (testid `chapter-N`), not the
+    // legacy `chapter-cell-N` grid.
     setup("/project/p1/workspace?mode=managed");
     // useEffect runs after mount; wait for it to settle.
     await waitFor(() => expect(mockedGetStage4Progress).toHaveBeenCalledWith("p1"));
-    expect(screen.queryByTestId("chapter-cell-1")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("chapter-cell-2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chapter-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chapter-2")).not.toBeInTheDocument();
   });
 
   it("TopBar progress ring shows the novel_outline-derived total (0 / 150) for new project", async () => {
@@ -711,8 +722,10 @@ describe("Workspace integration", () => {
   it("refresh that fails leaves an empty chapter list (no stale data)", async () => {
     // First two calls (WorkspacePage mount + WorkspaceTopBar mount) succeed
     // with 2 chapters. Third call (WorkspacePage after refresh click) rejects.
-    // The UI must show no chapter cells after the refresh, not the pre-
+    // The UI must show no chapter rows after the refresh, not the pre-
     // refresh data — that's the "we don't know what's on disk" truthful state.
+    // v1.9 T4: managed mode now uses the unified ChapterTreePanel, so the
+    // outline must also contain the chapters for the rows to render.
     mockedGetStage4Progress
       .mockResolvedValueOnce({
         chapters: [
@@ -729,17 +742,23 @@ describe("Workspace integration", () => {
         total_chapters: 7,
       })
       .mockRejectedValueOnce(new Error("network down"));
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
+        { chapter_number: 2, title: "第二章", scene_plan: [{ scene_number: 1 }] },
+      ],
+    });
     setup("/project/p1/workspace?mode=managed");
-    // First load renders the 2 cells.
-    expect(await screen.findByTestId("chapter-cell-1")).toBeInTheDocument();
-    expect(screen.getByTestId("chapter-cell-2")).toBeInTheDocument();
+    // First load renders the 2 rows.
+    expect(await screen.findByTestId("chapter-1")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-2")).toBeInTheDocument();
     // Click the workspace "刷新" button.
     fireEvent.click(screen.getByTestId("refresh"));
-    // After the failed refresh the cells are gone — stale data cleared.
+    // After the failed refresh the rows are gone — stale data cleared.
     await waitFor(() => {
-      expect(screen.queryByTestId("chapter-cell-1")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("chapter-1")).not.toBeInTheDocument();
     });
-    expect(screen.queryByTestId("chapter-cell-2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chapter-2")).not.toBeInTheDocument();
   });
 
   // Bug 1 fix regression — clicking "+ 新章节" on the manual-mode tree

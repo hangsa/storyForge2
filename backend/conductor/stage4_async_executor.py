@@ -13,9 +13,10 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from backend.models.autopilot_session import QueueItem
+from backend.models.autopilot_session import QueueItem, SessionState
 
 from backend.api.stage4_writing import (
+    OutlineExhaustedError,
     _write_scene_chapter, _write_scene_chapter_stream, _advance_chapter,
 )
 from backend.conductor.autopilot_runner_async import is_chapter_complete
@@ -241,8 +242,24 @@ class AsyncStage4Executor:
         return {"status": "fail", "error": "no_done_event"}
 
     async def _archival(self, item: QueueItem, project_id: str) -> dict:
-        await _advance_chapter(project_id=project_id)
         mgr = self._mgr_for(project_id)
+        try:
+            await _advance_chapter(project_id=project_id)
+        except OutlineExhaustedError as exc:
+            # T1: _advance_chapter raises when current_chapter has reached the
+            # outline's max. The HTTP wrapper translates this to 400, but inside
+            # the autopilot loop we want a clean exit: stop the session and
+            # surface a structured status so the runner's main loop sees an
+            # empty queue on its next iteration and exits.
+            current = mgr.load()
+            if current is not None and current.state == SessionState.RUNNING:
+                mgr.stop()
+            return {
+                "status": "stopped",
+                "reason": "outline_exhausted",
+                "current_chapter": exc.current_chapter,
+                "outline_max": exc.outline_max,
+            }
         progress = _read_progress(self._projects_dir, project_id)
         outline = _read_outline(self._projects_dir, project_id)
         next_ch = progress.get("current_chapter", item.chapter_number + 1)

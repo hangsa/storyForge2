@@ -1234,10 +1234,18 @@ async def repair_progress(data: dict):
     advance current_chapter forward. Pure state-machine repair — no LLM,
     no L2 update, no checkpoint. Idempotent.
 
+    Also scrubs empty scaffold chapters past the outline's maximum chapter
+    number and caps current_chapter at outline_max+1 (the chapter that
+    follows the last planned one is the natural "ready to write" slot).
+    Refuses to run when an autopilot session is in the running state —
+    the runner owns the in-memory session state and concurrent repair
+    could clobber its progress.json writes.
+
     Request: {project_id: string}
     Response detail: {
       repaired_chapters: number[],   // sorted ascending
-      current_chapter: number        // may equal old value if no advance needed
+      current_chapter: number,       // may equal old value if no advance needed
+      dropped_scaffolds: int,        // empty chapters past outline max that were removed
     }
     """
     project_id = data.get("project_id", "")
@@ -1256,12 +1264,34 @@ async def repair_progress(data: dict):
                     "message": f"项目 {project_id} 不存在", "detail": {}},
         )
 
+    # Guard: do not repair while an autopilot session is running. The runner
+    # owns progress.json and concurrent repair could clobber its writes.
+    try:
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import SessionState
+        ap_mgr = AutopilotSessionManager(fm.projects_dir, project_id)
+        ap_session = ap_mgr.load()
+        if ap_session is not None and ap_session.state == SessionState.RUNNING:
+            raise HTTPException(
+                status_code=409,
+                detail={"error": True, "code": "AUTOPILOT_ACTIVE",
+                        "message": "Autopilot 正在运行，无法执行修复",
+                        "detail": {"current_state": "running"}},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # A corrupt session.json should not block the repair — log and continue.
+        logger.warning("repair-progress: autopilot guard skipped for %s: %s",
+                       project_id, e)
+
     progress = fm.read_json(project_id, "progress.json")
     if progress is None:
         # No progress yet — nothing to repair
         return {
             "error": False, "code": "OK", "message": "",
-            "detail": {"repaired_chapters": [], "current_chapter": 1},
+            "detail": {"repaired_chapters": [], "current_chapter": 1,
+                       "dropped_scaffolds": 0},
         }
 
     outline = fm.read_json(project_id, "outline.json") or {}
@@ -1294,12 +1324,43 @@ async def repair_progress(data: dict):
             ch_progress["status"] = "completed"
             repaired.append(ch_num)
 
-    if repaired:
-        # current_chapter only moves forward — never regresses
-        old_current = progress.get("current_chapter", 1)
-        new_current = max(old_current, max(repaired) + 1)
+    # Scaffold scrub + current_chapter cap.
+    # outline_max is the highest chapter_number in outline.json. Anything
+    # past it with no scenes is an empty placeholder created in error; drop
+    # it. current_chapter is then capped to outline_max+1 — the slot
+    # immediately after the last planned chapter, which is the natural
+    # "ready to write" target.
+    outline_max = _outline_max_chapter(project_id)
+    dropped_scaffolds = 0
+    cap_applied = False
+    if outline_max is not None:
+        kept: list[dict] = []
+        for ch in progress.get("chapters", []):
+            ch_num = ch.get("chapter_number")
+            scenes = ch.get("scenes", [])
+            if (
+                isinstance(ch_num, int)
+                and ch_num > outline_max
+                and not scenes
+            ):
+                dropped_scaffolds += 1
+                continue
+            kept.append(ch)
+        if dropped_scaffolds:
+            progress["chapters"] = kept
+        old_current = progress.get("current_chapter", 1) or 1
+        new_current = min(old_current, outline_max + 1)
         if new_current != old_current:
             progress["current_chapter"] = new_current
+            cap_applied = True
+
+    if repaired or dropped_scaffolds or cap_applied:
+        # current_chapter only moves forward from repairs — never regresses
+        if repaired:
+            old_current = progress.get("current_chapter", 1)
+            new_current = max(old_current, max(repaired) + 1)
+            if new_current != old_current:
+                progress["current_chapter"] = new_current
         fm.write_json(project_id, "progress.json", progress)
 
     return {
@@ -1308,6 +1369,7 @@ async def repair_progress(data: dict):
         "detail": {
             "repaired_chapters": sorted(repaired),
             "current_chapter": progress.get("current_chapter", 1),
+            "dropped_scaffolds": dropped_scaffolds,
         },
     }
 

@@ -1,7 +1,7 @@
 from pathlib import Path
-from typing import Optional
+from typing import AsyncIterator, Optional
 
-from backend.agents.base_agent import BaseAgent, LLMResponse
+from backend.agents.base_agent import BaseAgent, LLMResponse, StreamChunk
 
 
 def _build_custom_style_desc(custom_style_config) -> str:
@@ -181,6 +181,46 @@ class WriterAgent(BaseAgent):
         return await self.generate_from_template(
             "scene_writing", **template_vars, **kwargs
         )
+
+    async def write_scene_stream(
+        self,
+        *,
+        genre: str,
+        concept: dict,
+        world_rules: dict,
+        characters: list[dict],
+        scene_plan: dict,
+        l0_context: str = "",
+        l1_context: str = "",
+        l2_context: str = "",
+        l3_context: str = "",
+        l4_context: str = "",
+        growth_stage_hint: str = "",
+        character_growth_context: str = "",
+        style_template: Optional[dict] = None,
+        storyos_state: Optional[dict] = None,
+        reader_os_warnings: str = "",
+        custom_style_config=None,
+        **kwargs,
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream version of write_scene().
+
+        Same template-variable assembly as write_scene() — calls _build_base_vars()
+        with the same args — but pipes the rendered prompt through
+        generate_from_template_stream() instead of generate_from_template().
+        """
+        template_vars = self._build_base_vars(
+            genre, concept, world_rules, characters, scene_plan,
+            l0_context, l1_context,
+            l2_context, l3_context, l4_context, growth_stage_hint,
+            character_growth_context,
+            custom_style_config_desc=_build_custom_style_desc(custom_style_config),
+        )
+        template_vars["reader_os_warnings"] = reader_os_warnings
+        async for chunk in self.generate_from_template_stream(
+            "scene_writing", **template_vars, **kwargs
+        ):
+            yield chunk
 
     async def rewrite_scene(
         self,

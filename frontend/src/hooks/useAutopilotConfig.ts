@@ -42,7 +42,7 @@ export function useAutopilotConfig(projectId: string) {
   const submit = useCallback(async () => {
     setSubmitting(true);
     try {
-      await startAutopilotSession(projectId, config);
+      return await startAutopilotSession(projectId, config);
     } finally {
       setSubmitting(false);
     }

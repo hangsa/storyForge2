@@ -78,6 +78,13 @@ vi.mock("../api/autopilot", () => ({
   resumeAutopilotSession: vi.fn().mockResolvedValue(undefined),
 }));
 
+/* useToast is called inside useAutopilotSession (added when no_work_to_do
+ * surface area was moved out of ManagedStartModal into the hook itself).
+ * This test wraps no provider, so we mock useToast to a no-op. */
+vi.mock("../hooks/useToast", () => ({
+  useToast: () => ({ show: vi.fn(), dismiss: vi.fn() }),
+}));
+
 import * as api from "../api/autopilot";
 import { useAutopilotSession } from "../hooks/useAutopilotSession";
 

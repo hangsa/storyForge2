@@ -117,7 +117,6 @@ export default function AutopilotMiddlePanel({ projectId }: Props) {
             state={state}
             currentTask={currentTask}
             queue={queue}
-            events={events}
             sseStatus={sseStatus}
             stopReason={session?.stop_reason ?? null}
             onStart={() => onAction("启动托管", () => start(config))}
@@ -161,7 +160,6 @@ interface CockpitViewProps {
     priority?: number;
     payload?: { scene_number?: number };
   }>;
-  events: Array<{ event: string; data: unknown; id?: number }>;
   sseStatus: "connecting" | "connected" | "reconnecting" | "error";
   /** Short tag like "outline_exhausted" set by mgr.stop(reason=...). */
   stopReason?: string | null;
@@ -173,10 +171,9 @@ interface CockpitViewProps {
 
 function CockpitView({
   projectId,
-  state, currentTask, queue, events, sseStatus, stopReason,
+  state, currentTask, queue, sseStatus, stopReason,
   onStart, onPause, onResume, onStop,
 }: CockpitViewProps) {
-  const recentEvents = events.slice(-12).reverse();
   const badge = STATE_BADGE[state];
   const chapterNum = currentTask?.chapter_number ?? currentTask?.chapter;
   const sceneId = currentTask?.scene_id;
@@ -352,37 +349,6 @@ function CockpitView({
           triggers an SSE reconnect with Last-Event-ID set by the browser, so
           the buffer rebuilds from SceneChunkStore without losing text. */}
       <ChapterStreamPanel projectId={projectId} sessionState={state} stopReason={stopReason ?? null} />
-
-      {/* Live event feed */}
-      <section>
-        <h3 className="font-label-mono text-system-log text-[11px] uppercase tracking-wider mb-2">
-          实时事件流
-        </h3>
-        <ul
-          data-testid="autopilot-cockpit-events"
-          className="space-y-1.5 text-xs font-body-ui"
-        >
-          {recentEvents.length === 0 && (
-            <li className="text-system-log/60 italic">— 暂无事件 —</li>
-          )}
-          {recentEvents.map((e, idx) => (
-            <li
-              key={e.id ?? `${e.event}-${idx}`}
-              data-testid={`autopilot-cockpit-event-${idx}`}
-              className="flex items-baseline gap-2 px-3 py-1.5 rounded bg-surface-container"
-            >
-              <span className="font-label-mono text-[10px] text-system-log shrink-0">
-                {LOG_EVENT_LABELS[e.event] ?? e.event}
-              </span>
-              <span className="text-system-log truncate">
-                {e.data && typeof e.data === "object"
-                  ? JSON.stringify(e.data).slice(0, 120)
-                  : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

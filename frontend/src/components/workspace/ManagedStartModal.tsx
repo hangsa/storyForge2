@@ -72,7 +72,34 @@ export default function ManagedStartModal({
             disabled={submitting}
             onClick={async () => {
               try {
-                await submit();
+                const result = await submit();
+                // Backend flags this when seed_queue found zero work to do
+                // (every chapter already complete). Without the toast the user
+                // just sees a "运行中" flash → "已停止" with no explanation,
+                // looking like the button is broken.
+                const resp = result as {
+                  no_work_to_do?: boolean;
+                  outline_max?: number;
+                  fallback_applied?: boolean;
+                  repaired_chapters?: number[];
+                  message?: string;
+                } | null;
+                // eslint-disable-next-line no-console
+                console.log("[managed-start] response:", resp);
+                if (resp?.no_work_to_do) {
+                  const lines: string[] = [];
+                  if (resp.message) {
+                    lines.push(resp.message);
+                  } else {
+                    lines.push(`项目已全部写完（共 ${resp.outline_max ?? 0} 章），无新任务可推进。`);
+                  }
+                  if (resp.repaired_chapters && resp.repaired_chapters.length > 0) {
+                    lines.push(
+                      `已自动修复 ${resp.repaired_chapters.length} 个卡死章节：${resp.repaired_chapters.join(", ")}`,
+                    );
+                  }
+                  show(lines.join("\n"));
+                }
                 onStarted();
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);

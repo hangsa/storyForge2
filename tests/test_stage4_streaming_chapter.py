@@ -207,3 +207,132 @@ def test_streaming_status_reflects_breaker_result(tmp_path, monkeypatch):
     events = asyncio.run(_collect())
     done = [e for e in events if e["event"] == "done"][0]
     assert done["status"] == "force_passed"
+
+# --- _normalize_scene_text: reasoning-model artifact stripping ----------------
+# MiniMax-M3 emits a <think>...</think> chain-of-thought preamble and
+# JSON-escaped quotes (char=\"沈渡\") in SF_LOG tags. Both broke fact guard on
+# proj_cc4ca4ae (2026-07-17): escaped quotes made PARAM_PATTERN find 0 params,
+# the breaker returned "retry", and the scene re-enqueued forever.
+
+from backend.utils.regex_patterns import SF_LOG_PATTERN, PARAM_PATTERN
+
+
+def test_normalize_strips_think_block():
+    raw = "<think>Let me plan this scene.\nSF_LOG tags: mystery_clue</think>正文开始。"
+    assert sw._normalize_scene_text(raw) == "正文开始。"
+
+
+def test_normalize_strips_dangling_think_block():
+    # Truncated stream: opening <think> with no close → drop from it onward.
+    raw = "正文。<think>reasoning cut off mid-stream"
+    assert sw._normalize_scene_text(raw) == "正文。"
+
+
+def test_normalize_unescapes_quotes_so_sf_log_params_parse():
+    raw = (
+        "正文内容。\n"
+        '<!-- SF_LOG character_location_change char=\\"沈渡\\" '
+        'from=\\"校园\\" to=\\"图书馆\\" -->'
+    )
+    cleaned = sw._normalize_scene_text(raw)
+    logs = SF_LOG_PATTERN.findall(cleaned)
+    assert len(logs) == 1
+    _log_type, params_str = logs[0]
+    # Before the fix this was 0; the escaped quotes hid every key=value pair.
+    assert len(PARAM_PATTERN.findall(params_str)) == 3
+
+
+def test_normalize_noop_on_clean_text():
+    raw = '正文。<!-- SF_LOG mystery_clue id="m1" clue="线索" -->'
+    assert sw._normalize_scene_text(raw) == raw
+
+
+def test_normalize_handles_empty():
+    assert sw._normalize_scene_text("") == ""
+
+
+# --- JSON wrapper handling (v1.9.1 streaming fix, 2026-07-17) -----------
+# The scene_writing prompt uses output_format.type=json; MiniMax-M3 therefore
+# wraps the body in `{"text":"..."}` even on the streaming path that bypasses
+# json_mode. The wrapper + JSON-escaped newlines / quotes used to leak into
+# draft.md and the cockpit live stream — see proj_cc4ca4ae ch28-30 drafts
+# for the literal corruption. These tests pin the fix.
+
+import json as _json
+
+
+def test_normalize_extracts_text_from_json_wrapper():
+    raw = (
+        '正文："第一段。\\n\\n第二段。"'
+    )
+    wrapped = (
+        "```json\n"
+        + _json.dumps({"text": "正文：第一段。\n\n第二段。"}, ensure_ascii=False)
+        + "\n```"
+    )
+    cleaned = sw._normalize_scene_text(wrapped)
+    assert cleaned == "正文：第一段。\n\n第二段。"
+
+
+def test_normalize_extracts_text_from_bare_json():
+    """No markdown code fence — some runs emit bare JSON."""
+    payload = _json.dumps({"text": "夜色如墨。\n\n沈渡在前。"}, ensure_ascii=False)
+    cleaned = sw._normalize_scene_text(payload)
+    assert cleaned == "夜色如墨。\n\n沈渡在前。"
+
+
+def test_normalize_extracts_text_after_think_and_json_fence():
+    """Real-world shape from proj_cc4ca4ae ch28_scene_006 (2026-07-17):
+    3-layer envelope (think preamble + json code fence + {"text":"..."} wrapper).
+    The first real draft after the v1.9.1 fix should round-trip to the inner text.
+    """
+    inner = "门被踹开的瞬间，整个房间的空气像被抽走了三度。"
+    body = (
+        "```json\n"
+        + _json.dumps({"text": inner}, ensure_ascii=False)
+        + "\n```"
+    )
+    # Build the think-markers dynamically so this file's angle brackets
+    # are not parsed as anything fragile.
+    open_think = chr(60) + "think" + chr(62)
+    close_think = chr(60) + "/think" + chr(62)
+    raw = open_think + "some reasoning that should vanish" + close_think + "\n\n" + body
+    cleaned = sw._normalize_scene_text(raw)
+    assert cleaned == inner
+
+
+
+def test_normalize_unescapes_quote_in_json_text():
+    """SF_LOG tags inside the wrapped JSON text come back with real quotes;
+    no extra unescape needed. But the wrapper itself uses \" — make sure
+    json.loads gets us clean quotes (the contract above already covers this
+    in test_normalize_extracts_text_from_json_wrapper)."""
+    inner = '<!-- SF_LOG mystery_clue id="m1" clue="线索" -->'
+    wrapped = (
+        "```json\n"
+        + _json.dumps({"text": inner}, ensure_ascii=False)
+        + "\n```"
+    )
+    cleaned = sw._normalize_scene_text(wrapped)
+    assert cleaned == inner
+
+
+def test_normalize_passthrough_when_no_json():
+    """If the LLM ignores the JSON hint and emits raw prose, do nothing."""
+    raw = '夜色如墨。<!-- SF_LOG mystery_clue id="m1" clue="线索" -->'
+    assert sw._normalize_scene_text(raw) == raw
+
+
+def test_normalize_extracts_text_from_invalid_json_wrapper_with_unescaped_quotes():
+    """Real-world shape from proj_cc4ca4ae ch31_scene_001 (2026-07-17):
+    the model emits a {"text":"..."} wrapper but writes dialogue with
+    UNESCAPED ASCII double quotes inside the string, so json.loads fails
+    ("Expecting ',' delimiter"). The normalizer must still unwrap via a
+    regex fallback and unescape \\n / \\t / \\" so the persisted draft is
+    clean prose, not the literal JSON envelope."""
+    # Note the inner dialogue quotes are raw " — this is what breaks json.loads.
+    raw = '{\n  "text": "电话挂断了。\\n\\n"沈哥，是你吗？"他没应声。\\n\\n夜色如墨。"\n}'
+    cleaned = sw._normalize_scene_text(raw)
+    assert cleaned == '电话挂断了。\n\n"沈哥，是你吗？"他没应声。\n\n夜色如墨。'
+    assert not cleaned.startswith("{")
+    assert "\\n" not in cleaned

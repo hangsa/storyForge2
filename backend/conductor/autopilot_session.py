@@ -43,6 +43,12 @@ class AutopilotSessionManager:
         # so subsequent saves don't re-broadcast old events. Starts at 0 for
         # fresh managers so the first write-through publishes its append.
         self._last_published_count: int = 0
+        # State value from the most recent save. Used to detect transitions so
+        # we can push a fresh "snapshot" event to SSE subscribers on change —
+        # otherwise the UI holds the state it received on initial connect
+        # forever (AutopilotMiddlePanel only refreshes session from snapshot
+        # events; task_start / task_complete don't carry the new state value).
+        self._last_published_state: Optional[str] = None
 
     @property
     def session_path(self) -> Path:
@@ -69,6 +75,7 @@ class AutopilotSessionManager:
             # Mark all loaded history as already-published so recover /
             # heartbeat flows don't re-broadcast old events on first save.
             self._last_published_count = len(s.history)
+            self._last_published_state = s.state.value
             return s
         except Exception as e:
             # Spec L286: corrupt file → treat as no session (don't crash server)
@@ -94,6 +101,24 @@ class AutopilotSessionManager:
         for event in new_events:
             self._publish_event(session, event)
         self._last_published_count = len(session.history)
+        # If the session state changed since the last save, push a fresh
+        # session snapshot to SSE subscribers. Without this the cockpit UI
+        # holds the state it received on initial connect forever, because
+        # AutopilotMiddlePanel only refreshes `session` from "snapshot"
+        # events (task_start / task_complete don't carry the new state). Bug
+        # surfaced 2026-07-17 on proj_cc4ca4ae: state transitioned to
+        # "stopped" but the UI stayed on "AI 正在准备下一任务…" because it
+        # still saw state="running" from the connect-time snapshot.
+        prev_state = self._last_published_state
+        new_state = session.state.value
+        if prev_state != new_state and self._broadcaster is not None:
+            try:
+                snap = _session_to_dict(session)
+                self._broadcaster.publish("snapshot", snap)
+            except Exception as e:
+                logger.debug("snapshot broadcast skipped for %s: %s",
+                             self._project_id, e)
+        self._last_published_state = new_state
 
     def _publish_event(self, s: AutopilotSession, event: "SessionEvent") -> None:
         """Push an event onto the SSE broadcaster. No-op if no broadcaster.
@@ -168,6 +193,15 @@ class AutopilotSessionManager:
             return s
         s2 = self._sm.resume(s)
         self.save(s2)
+        # 熔断状态从 paused → running 等价于"熔断关闭"。force_pass_count
+        # 不会自动清零（spec：保留历史，只 reset 后再次跨阈值才会再次
+        # 触发自动暂停），但状态机视角下电路已重新闭合。
+        import logging
+        logging.getLogger(__name__).info(
+            "[熔断关闭] project=%s 用户手动恢复（paused→running）。"
+            "force_pass_count=%d（历史保留，下次跨阈值仍会再次自动暂停）。",
+            s.project_id, s2.circuit.force_pass_count,
+        )
         return s2
 
     def intervene(self, action: str) -> AutopilotSession:
@@ -252,6 +286,7 @@ class AutopilotSessionManager:
         new count crosses CIRCUIT_THRESHOLD (3) and state==running, transitions
         to paused via `circuit_open`. Used by AsyncAutopilotRunner on the
         scene_status=='force_passed' branch."""
+        import logging
         from datetime import datetime, timezone
         from backend.conductor.autopilot_runner import CIRCUIT_THRESHOLD
         s = self.load() or self._empty_session()
@@ -269,7 +304,20 @@ class AutopilotSessionManager:
         if crossed and s2.state == SessionState.RUNNING:
             s3 = self._sm.circuit_open(s2)
             self.save(s3)
+            logging.getLogger(__name__).warning(
+                "[熔断开启] project=%s force_pass_count=%d 触发自动暂停（阈值=%d）；"
+                "scene_status=force_passed 累积已达上限。请检查 fact_guard 失败原因后手动恢复。",
+                s.project_id, new_count, CIRCUIT_THRESHOLD,
+            )
             return s3
+        if new_count >= CIRCUIT_THRESHOLD:
+            # 阈值之上但已处于 paused（多次 auto-pause 累计）：持续提醒，
+            # 不要让用户误以为熔断状态在阈值之后"自动恢复"。
+            logging.getLogger(__name__).warning(
+                "[熔断持续] project=%s force_pass_count=%d 阈值=%d 已开启；"
+                "session 处于 %s，需手动恢复。",
+                s.project_id, new_count, CIRCUIT_THRESHOLD, s2.state.value,
+            )
         return s2
 
 

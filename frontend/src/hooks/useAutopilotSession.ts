@@ -10,6 +10,7 @@ import {
   pauseAutopilotSession,
   resumeAutopilotSession,
 } from "../api/autopilot";
+import { useToast } from "./useToast";
 
 export type SSEStatus = "connecting" | "connected" | "reconnecting" | "error";
 
@@ -35,6 +36,7 @@ export function useAutopilotSession(
   const reconnectAttempts = useRef(0);
   const handleRef = useRef<{ close: () => void } | null>(null);
   const cancelledRef = useRef(false);
+  const { show: showToast } = useToast();
 
   const refresh = useCallback(async () => {
     const s = await getAutopilotSession(projectId);
@@ -88,8 +90,41 @@ export function useAutopilotSession(
     async (config: ManagedStartConfig) => {
       const next = await startAutopilotSession(projectId, config);
       setSession(next);
+      // Backend sets `no_work_to_do: true` on the response when seed_queue
+      // found zero scenes to enqueue (every chapter already complete). The
+      // cockpit's "启动托管" button calls this hook directly (bypassing the
+      // ManagedStartModal) so the no-work check has to live here, not just
+      // in the modal — otherwise the user sees a running→stopped flash with
+      // no explanation. The modal reads the same field for parity.
+      //
+      // 2026-07-17 fix (proj_cc4ca4ae): prefer the server's `message` field
+      // when present — it now distinguishes "all done" from "scope was
+      // widened but still nothing left" (the latter used to masquerade as
+      // "项目已全部写完（共 33 章）" which was misleading). Falls back to the
+      // old client-side template if the server didn't include a message.
+      const detail = next as {
+        no_work_to_do?: boolean;
+        outline_max?: number;
+        fallback_applied?: boolean;
+        repaired_chapters?: number[];
+        message?: string;
+      } | null;
+      if (detail?.no_work_to_do) {
+        const lines: string[] = [];
+        if (detail.message) {
+          lines.push(detail.message);
+        } else {
+          lines.push(`项目已全部写完（共 ${detail.outline_max ?? 0} 章），无新任务可推进。`);
+        }
+        if (detail.repaired_chapters && detail.repaired_chapters.length > 0) {
+          lines.push(
+            `已自动修复 ${detail.repaired_chapters.length} 个卡死章节：${detail.repaired_chapters.join(", ")}`,
+          );
+        }
+        showToast(lines.join("\n"));
+      }
     },
-    [projectId],
+    [projectId, showToast],
   );
 
   const stop = useCallback(async () => {

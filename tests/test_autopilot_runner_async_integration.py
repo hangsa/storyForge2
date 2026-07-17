@@ -102,8 +102,8 @@ class TestEndToEndOneChapter:
         progress = json.loads(
             (projects_dir / "p1" / "progress.json").read_text()
         )
-        n = seed_queue(mgr, outline, progress, None, ManagedStartConfig())
-        assert n == 3  # chapter 1 has 3 scenes; chapter 2 gets seeded after archival
+        result = seed_queue(mgr, outline, progress, None, ManagedStartConfig())
+        assert result.enqueued == 3  # chapter 1 has 3 scenes; chapter 2 gets seeded after archival
         mgr.start(ManagedStartConfig())  # state -> running
         executor = FakeStage4Executor(
             mgr, projects_dir,
@@ -329,8 +329,8 @@ class TestZombieScenesAreRewritten:
         progress = json.loads(
             (projects_dir / "p1" / "progress.json").read_text()
         )
-        n = seed_queue(mgr, outline, progress, None, ManagedStartConfig())
-        assert n == 1  # zombie is re-enqueued
+        result = seed_queue(mgr, outline, progress, None, ManagedStartConfig())
+        assert result.enqueued == 1  # zombie is re-enqueued
         mgr.start(ManagedStartConfig())
         executor = FakeStage4Executor(mgr, projects_dir, breaker_result="passed")
         runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")

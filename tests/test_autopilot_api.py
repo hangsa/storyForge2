@@ -204,3 +204,162 @@ class TestStartSpawnsRunner:
         # (The runner itself may have already finished by the time we check --
         # the spec only requires the runner is SPAWNED, not that it lingers.)
         assert body["queue"] is not None
+
+
+# --- /session/start surfaces no_work_to_do when seed_queue is empty ----------
+# Companion to the loop-service test: confirms the API merges the "no work"
+# signal into the response so the UI can show a friendly toast.
+
+class TestStartNoWorkFlag:
+    def test_start_returns_no_work_when_seed_queue_empty(
+        self, projects_dir, client, monkeypatch,
+    ):
+        from backend.api import autopilot as ap_mod
+
+        proj = "p_no_work"
+        (projects_dir / proj).mkdir(parents=True, exist_ok=True)
+        (projects_dir / proj / "project.json").write_text(
+            json.dumps({"id": proj, "title": "no-work", "current_stage": "STAGE4"}),
+            encoding="utf-8",
+        )
+        (projects_dir / proj / "outline.json").write_text(
+            json.dumps({
+                "chapters": [{
+                    "chapter_number": 1,
+                    "scene_plan": [{"scene_number": 1}],
+                }],
+            }),
+            encoding="utf-8",
+        )
+        (projects_dir / proj / "progress.json").write_text(
+            json.dumps({
+                "current_chapter": 2,
+                "chapters": [{
+                    "chapter_number": 1,
+                    "status": "completed",
+                    "scenes": [{"scene_number": 1, "status": "completed"}],
+                }],
+            }),
+            encoding="utf-8",
+        )
+
+        # Force ensure() to return a "no_work_to_do" EnsureResult without
+        # depending on the exact seed_queue logic (which we cover at the
+        # unit level in test_autopilot_loop.py::TestEnsureReturnContract).
+        from backend.conductor.autopilot_loop import EnsureResult
+        from backend.conductor.autopilot_runner_async import SeedResult
+        async def _ensure_returns_no_work(*args, **kwargs):
+            return EnsureResult(
+                outcome="no_work_to_do",
+                seed_result=SeedResult(
+                    enqueued=0, scope_used="all_planned", fallback_applied=False,
+                ),
+                repaired_chapters=[],
+            )
+        monkeypatch.setattr(
+            client.app.state.loop_service, "ensure", _ensure_returns_no_work,
+        )
+
+        resp = client.post(
+            f"/api/v1/projects/{proj}/autopilot/session/start",
+            json={"scope": "all_planned", "cadence": "balanced",
+                  "policy": "auto", "notify": "milestones"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["detail"]["no_work_to_do"] is True
+        assert body["detail"]["outline_max"] == 1
+        # 2026-07-17 fix: surface the scope + repair info so the UI can
+        # tell the user WHY seed_queue found nothing (the "all 33 chapters
+        # done" message used to be the only signal — wrong when scope was
+        # too narrow or stuck chapters were repaired).
+        assert body["detail"]["requested_scope"] == "all_planned"
+        assert body["detail"]["scope_used"] == "all_planned"
+        assert body["detail"]["fallback_applied"] is False
+        assert body["detail"]["repaired_chapters"] == []
+
+    def test_start_message_distinguishes_fallback_from_all_done(
+        self, projects_dir, client, monkeypatch,
+    ):
+        """When scope was widened (fallback_applied), the API message must
+        reflect that — otherwise the user sees the same misleading 'all
+        done' toast as before."""
+        from backend.conductor.autopilot_loop import EnsureResult
+        from backend.conductor.autopilot_runner_async import SeedResult
+
+        proj = "p_fallback"
+        (projects_dir / proj).mkdir(parents=True, exist_ok=True)
+        (projects_dir / proj / "project.json").write_text(
+            json.dumps({"id": proj, "title": "fb", "current_stage": "STAGE4"}),
+            encoding="utf-8",
+        )
+        (projects_dir / proj / "outline.json").write_text(
+            json.dumps({"chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+            ]}), encoding="utf-8",
+        )
+
+        async def _ensure(*args, **kwargs):
+            return EnsureResult(
+                outcome="no_work_to_do",
+                seed_result=SeedResult(
+                    enqueued=0, scope_used="all_planned", fallback_applied=True,
+                ),
+                repaired_chapters=[],
+            )
+        monkeypatch.setattr(client.app.state.loop_service, "ensure", _ensure)
+
+        resp = client.post(
+            f"/api/v1/projects/{proj}/autopilot/session/start",
+            json={"scope": "next_chapter", "cadence": "balanced",
+                  "policy": "auto", "notify": "milestones"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["detail"]["no_work_to_do"] is True
+        assert body["detail"]["requested_scope"] == "next_chapter"
+        assert body["detail"]["scope_used"] == "all_planned"
+        assert body["detail"]["fallback_applied"] is True
+        # Message must mention the auto-widened scope so the user
+        # understands why 'all_planned' produced nothing.
+        msg = body["message"]
+        assert "next_chapter" in msg or "扩展" in msg or "widened" in msg.lower()
+
+    def test_start_message_says_all_done_when_no_fallback(
+        self, projects_dir, client, monkeypatch,
+    ):
+        from backend.conductor.autopilot_loop import EnsureResult
+        from backend.conductor.autopilot_runner_async import SeedResult
+
+        proj = "p_alldone"
+        (projects_dir / proj).mkdir(parents=True, exist_ok=True)
+        (projects_dir / proj / "project.json").write_text(
+            json.dumps({"id": proj, "title": "ad", "current_stage": "STAGE4"}),
+            encoding="utf-8",
+        )
+        (projects_dir / proj / "outline.json").write_text(
+            json.dumps({"chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 3, "scene_plan": [{"scene_number": 1}]},
+            ]}), encoding="utf-8",
+        )
+
+        async def _ensure(*args, **kwargs):
+            return EnsureResult(
+                outcome="no_work_to_do",
+                seed_result=SeedResult(
+                    enqueued=0, scope_used="all_planned", fallback_applied=False,
+                ),
+                repaired_chapters=[2],
+            )
+        monkeypatch.setattr(client.app.state.loop_service, "ensure", _ensure)
+
+        resp = client.post(
+            f"/api/v1/projects/{proj}/autopilot/session/start",
+            json={"scope": "all_planned", "cadence": "balanced",
+                  "policy": "auto", "notify": "milestones"},
+        )
+        body = resp.json()
+        assert body["detail"]["repaired_chapters"] == [2]
+        assert "全部写完" in body["message"]

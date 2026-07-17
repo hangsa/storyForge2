@@ -601,8 +601,10 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("autopilot-cockpit-current-task")).toBeInTheDocument();
     expect(screen.getByTestId("autopilot-cockpit-current-task").textContent).toContain("writing ch7");
 
-    // Step 3: feed a partial event sequence — recent events appear in the
-    // cockpit live feed.
+    // Step 3: feed a partial event sequence. v1.9.1 moved the event feed
+    // out of the cockpit (which now focuses on the live writing stream)
+    // and into the 监控日志 tab; verify it's no longer in the cockpit, then
+    // switch tabs to see them in the log.
     mockEvents = [
       { event: "task_start", data: { description: "writing ch7" }, id: 1 },
       { event: "circuit_open", data: { reason: "guard" }, id: 2 },
@@ -617,8 +619,10 @@ describe("Workspace integration", () => {
         </Routes>
       </MemoryRouter>,
     );
-    const cockpitEvents = screen.getAllByTestId(/^autopilot-cockpit-event-/);
-    expect(cockpitEvents.length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByTestId("autopilot-cockpit-events")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("autopilot-tab-log"));
+    const logRows = screen.getAllByTestId(/^autopilot-log-row-/);
+    expect(logRows.length).toBeGreaterThanOrEqual(3);
 
     // Step 4: switch to dashboard tab — queue and event stats appear.
     mockSession = { ...mockSession, queue: [{ id: "q1", description: "review" }] };

@@ -102,7 +102,61 @@ async def start_session(project_id: str, data: dict, request: Request):
     # Spawn the runner.
     loop = _loop_svc(request)
     executor = _executor_for(request, project_id)
-    await loop.ensure(project_id, mgr, executor, cfg)
+    ensure_result = await loop.ensure(project_id, mgr, executor, cfg)
+    if ensure_result.outcome == "no_work_to_do":
+        # Build a short summary so the UI can render a friendly, HONEST
+        # message. We used to say "all 33 chapters done" whenever seed_queue
+        # returned 0 — that was wrong because seed_queue can also return 0
+        # when the user's saved scope (e.g. next_chapter) is too narrow
+        # (proj_cc4ca4ae 2026-07-17). Now we distinguish the cases:
+        #   - scope was widened → "scope auto-widened, but nothing left"
+        #   - everything really is done → "all done"
+        # Re-load the session because ensure() called mgr.stop() which
+        # wrote a fresh snapshot; the `s` we got from mgr.start() still
+        # shows state="running".
+        post = mgr.load() or s
+        outline_max = max(
+            (c.get("chapter_number") for c in (
+                json.loads(outline_path.read_text(encoding="utf-8")).get("chapters", [])
+            ) if c.get("chapter_number") is not None),
+            default=0,
+        )
+        # current_chapter lives in progress.json (NOT on the session).
+        progress_path = settings.projects_dir / project_id / "progress.json"
+        current_chapter: Optional[int] = None
+        if progress_path.exists():
+            try:
+                prog = json.loads(progress_path.read_text(encoding="utf-8"))
+                cc = prog.get("current_chapter")
+                if isinstance(cc, int):
+                    current_chapter = cc
+            except Exception:
+                pass  # best-effort — UI has outline_max as the load-bearing field
+        seed_result = ensure_result.seed_result
+        repaired = ensure_result.repaired_chapters
+        if seed_result and seed_result.fallback_applied:
+            message = (
+                f"scope=next_chapter 当前章节已完成；"
+                f"已自动扩展至 all_planned，但大纲共 {outline_max} 章内"
+                f"亦无新章节可推进。"
+            )
+        else:
+            message = (
+                f"项目已全部写完（共 {outline_max} 章），无新任务可推进。"
+            )
+        detail = _session_to_dict(post)
+        detail["no_work_to_do"] = True
+        detail["outline_max"] = outline_max
+        detail["current_chapter"] = current_chapter
+        detail["requested_scope"] = cfg.scope
+        detail["scope_used"] = (
+            seed_result.scope_used if seed_result else cfg.scope
+        )
+        detail["fallback_applied"] = (
+            seed_result.fallback_applied if seed_result else False
+        )
+        detail["repaired_chapters"] = repaired
+        return _envelope(detail, message)
     return _envelope(_session_to_dict(s), "session started")
 
 

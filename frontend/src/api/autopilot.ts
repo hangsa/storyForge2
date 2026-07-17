@@ -103,6 +103,35 @@ export interface AutopilotSession {
   /** Short tag like "outline_exhausted" set when the runner stops the session
    * via mgr.stop(reason=...). Only meaningful when state === "stopped". */
   stop_reason?: string | null;
+  /** Set on /session/start responses when seed_queue found zero work to do
+   * (every chapter already complete). Frontend uses this to surface a
+   * "project all done" toast instead of leaving the user staring at a
+   * session that flipped running→stopped in ~50ms. */
+  no_work_to_do?: boolean;
+  /** Outline's maximum chapter_number. Sent alongside no_work_to_do so the
+   * UI can render "项目已全部写完 (共 N 章)". */
+  outline_max?: number;
+  /** current_chapter from progress.json at the time seed_queue returned 0. */
+  current_chapter?: number;
+  /** Scope the user originally requested (e.g. "next_chapter"). */
+  requested_scope?: "all_planned" | "next_chapter";
+  /** Scope that actually produced the (empty) queue — may differ from
+   * requested_scope when seed_queue auto-widened next_chapter → all_planned.
+   * Used to render an honest message distinguishing "your scope was too
+   * narrow" from "the project really is finished". */
+  scope_used?: "all_planned" | "next_chapter";
+  /** True when seed_queue widened the scope because next_chapter yielded
+   * zero but later chapters had unfinished scenes (proj_cc4ca4ae 2026-07-17). */
+  fallback_applied?: boolean;
+  /** Chapter numbers that repair_stuck_chapters flipped from
+   * in_progress → completed before seeding (mid-run crashes that left
+   * chapters half-finalized). UI surfaces these so users see what was
+   * auto-recovered. */
+  repaired_chapters?: number[];
+  /** Server-provided human message. When present, prefer this over a
+   * client-side template — it now distinguishes the fallback case from
+   * the all-done case. */
+  message?: string;
 }
 
 export async function getAutopilotSession(projectId: string): Promise<AutopilotSession> {

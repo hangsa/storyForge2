@@ -273,3 +273,51 @@ class TestSsePublish:
         # Triggering heartbeat() causes a save() with no new history → nothing published.
         mgr.heartbeat()
         assert bc.history == []
+
+
+# --- save() broadcasts a "snapshot" event on state transition -----------------
+# Bug surfaced 2026-07-17 on proj_cc4ca4ae: AutopilotMiddlePanel only refreshes
+# its `session` from "snapshot" events. When the runner transitioned
+# running→stopped without emitting a snapshot, the UI held state="running"
+# forever, displaying "AI 正在准备下一任务…" with no way to refresh.
+#
+# Fix: save() pushes a fresh session dict to the broadcaster whenever
+# session.state.value changes from the last published value.
+
+from backend.utils.sse_broadcaster import SSEBroadcaster
+
+
+class TestStateTransitionBroadcasts:
+    def _snaps_since(self, bc, since_id):
+        return [ev for ev in bc.history if ev.event == "snapshot" and ev.id > since_id]
+
+    def test_save_publishes_snapshot_on_state_change(self, projects_dir):
+        bc = SSEBroadcaster()
+        mgr = AutopilotSessionManager(projects_dir, "p1", broadcaster=bc)
+        mgr.start(ManagedStartConfig())
+        since = bc.history[-1].id if bc.history else 0
+        mgr.stop()
+        snaps = self._snaps_since(bc, since)
+        assert len(snaps) == 1
+        assert snaps[0].data["state"] == "stopped"
+
+    def test_save_does_not_publish_snapshot_when_state_unchanged(self, projects_dir):
+        bc = SSEBroadcaster()
+        mgr = AutopilotSessionManager(projects_dir, "p1", broadcaster=bc)
+        mgr.start(ManagedStartConfig())
+        since = bc.history[-1].id if bc.history else 0
+        mgr.heartbeat()
+        mgr.heartbeat()
+        assert self._snaps_since(bc, since) == []
+
+    def test_save_publishes_snapshot_for_each_transition(self, projects_dir):
+        bc = SSEBroadcaster()
+        mgr = AutopilotSessionManager(projects_dir, "p1", broadcaster=bc)
+        mgr.start(ManagedStartConfig())
+        since = bc.history[-1].id if bc.history else 0
+        mgr.stop()    # RUNNING -> STOPPED
+        mgr.start(ManagedStartConfig())  # STOPPED -> RUNNING
+        mgr.stop()    # RUNNING -> STOPPED
+        snaps = self._snaps_since(bc, since)
+        assert len(snaps) == 3
+        assert [ev.data["state"] for ev in snaps] == ["stopped", "running", "stopped"]

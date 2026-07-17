@@ -17,6 +17,10 @@ system_prompt: |
   SF_LOG 标签格式（HTML注释语法，读者不可见）：
   <!-- SF_LOG <类型> <参数列表> -->
 
+  重要：SF_LOG 标签内的引号必须使用直引号（"..."或'...'），不要写成
+  JSON/转义形式（如 \"...\"）。后端正则解析器只识别直引号，转义引号
+  会导致 SF_LOG 整条标签被判为格式错误、整个场景被熔断器重写。
+
   支持的 SF_LOG 类型及参数：
   - character_relation_change: char_a="A" char_b="B" status="新状态" trigger="触发事件"
   - character_emotion: char="角色名" emotion="情绪" trigger="触发事件"

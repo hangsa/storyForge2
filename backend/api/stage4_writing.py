@@ -28,6 +28,107 @@ stage4_router = APIRouter(prefix="/api/stage4", tags=["stage4"])
 fm = FileManager(settings.projects_dir)
 logger = logging.getLogger(__name__)
 
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_DANGLING_THINK_RE = re.compile(r"<think>.*\Z", re.DOTALL | re.IGNORECASE)
+_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*\n|\n```\s*$", re.MULTILINE)
+# Fallback for invalid {"text":"..."} wrappers (unescaped inner quotes break
+# json.loads). Greedy .* grabs the whole body up to the final closing quote.
+_JSON_TEXT_WRAPPER_RE = re.compile(r'^\{\s*"text"\s*:\s*"(.*)"\s*\}$', re.DOTALL)
+_JSON_ESCAPE_RE = re.compile(r"\\(.)")
+_JSON_ESCAPE_MAP = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/"}
+
+def _normalize_scene_text(text: str) -> str:
+    """Strip reasoning-model artifacts from raw LLM scene output before it is
+    fact-guarded and persisted to draft.md.
+
+    MiniMax-M3 (and other reasoning models) emit artifacts that break the
+    deterministic SF_LOG parser and pollute the saved draft:
+
+      1. A think-block chain-of-thought preamble. Left in place it
+         becomes part of the reader-facing draft AND its stray "SF_LOG tags:
+         character_location_change" style planning text confuses log parsing.
+      2. JSON-escaped quotes inside SF_LOG tags, e.g. `char=\"沈渡\"` instead
+         of `char="沈渡"`. PARAM_PATTERN only matches real quote characters,
+         so every escaped tag reports "缺少有效的参数", the circuit breaker
+         returns "retry", the scene never reaches a DONE status, and
+         seed_queue() re-enqueues it forever (the proj_cc4ca4ae "writes one
+         scene then stops" symptom, 2026-07-17).
+      3. A `{"text":"..."}` JSON wrapper plus a markdown ```json fence. The
+         scene_writing prompt declares output_format.type=json, so even on the
+         streaming path (which sets json_mode=False) MiniMax-M3 still emits
+         the wrapper. Left in place, the literal wrapper / code fence /
+         ASCII-escaped \\n\\n sequences land in draft.md and the cockpit
+         live stream -- observed 2026-07-17 on proj_cc4ca4ae ch28-ch30 (the
+         ch28 draft opens with a think-block followed by ` ```json ` and
+         a 14 KB JSON object whose text value contains literal \\n\\n). Fix
+         sequence:
+           - strip markdown ```json / ``` fences
+           - if the result parses as a JSON object with a string `text` field,
+             use that field (json.loads already unescapes \\n / \" / \\t)
+           - then apply the existing think-strip + quote-unescape passes
+
+    Backslash-quote sequences (and bare think markers) never occur
+    intentionally in Chinese web-novel prose, so the unescape is safe to
+    apply globally as a defense-in-depth pass after the JSON extraction.
+    """
+    if not text:
+        return text
+
+    cleaned = text
+
+    # 1. Strip think-block chain-of-thought first so the JSON-extraction
+    #    pass below sees bare JSON without a leading prose preamble (real
+    #    runs on proj_cc4ca4ae ch28+ emit think-block + json fence in that
+    #    order -- the think-block must be removed before trying to parse).
+    cleaned = _THINK_BLOCK_RE.sub("", cleaned)
+    if "<think>" in cleaned.lower():
+        cleaned = _DANGLING_THINK_RE.sub("", cleaned)
+
+    # 2. Strip a leading/trailing markdown code fence (` ```json ` or ` ``` `).
+    cleaned = _FENCE_RE.sub("", cleaned)
+
+    # 3. If the (de-fenced) content is a single JSON object with a string
+    #    `text` field, use that field. json.loads also unescapes the JSON
+    #    escape sequences (\n / \" / \t) so we do not need a manual
+    #    replacement after this point.
+    extracted = None
+    stripped = cleaned.strip()
+    if stripped.startswith("{") and stripped.endswith("}"):
+        try:
+            parsed = json.loads(stripped)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, dict):
+            value = parsed.get("text")
+            if isinstance(value, str):
+                extracted = value
+
+        # Fallback: the model frequently emits a {"text":"..."} wrapper whose
+        # prose contains UNESCAPED ASCII double quotes (Chinese dialogue like
+        # `"沈哥"`), which makes json.loads fail ("Expecting ',' delimiter").
+        # Without this, the literal wrapper — braces, `"text":`, and
+        # ASCII-escaped \\n\\n — lands in draft.md verbatim (proj_cc4ca4ae
+        # ch31_scene_001, 2026-07-17). Pull the text body out with a greedy
+        # regex and manually unescape the JSON escapes json.loads would have
+        # handled. `\\(.)` matches each escape atomically left-to-right so a
+        # literal `\\\\` is consumed as one unit.
+        if extracted is None:
+            m = _JSON_TEXT_WRAPPER_RE.match(stripped)
+            if m:
+                extracted = _JSON_ESCAPE_RE.sub(
+                    lambda mm: _JSON_ESCAPE_MAP.get(mm.group(1), mm.group(1)),
+                    m.group(1),
+                )
+
+    if extracted is not None:
+        cleaned = extracted
+
+    # 4. Backslash-quote unescape (defense in depth - covers any model that
+    #    emits escaped quotes outside the JSON wrapper as well).
+    cleaned = cleaned.replace('\\"', '"')
+
+    return cleaned.strip()
+
 
 class OutlineExhaustedError(Exception):
     """Raised by _advance_chapter when current_chapter is at or past
@@ -385,6 +486,7 @@ async def _write_scene_chapter(
                         "message": str(e), "detail": {}},
             )
         draft_text = result.get("text", "")
+        draft_text = _normalize_scene_text(draft_text)
 
     if not draft_text or not draft_text.strip():
         raise HTTPException(
@@ -774,6 +876,14 @@ async def _write_scene_chapter_stream(
         ev = await try_flush(force=True)
         if ev is not None:
             yield ev
+
+        # Strip reasoning-model artifacts (<think> block, escaped quotes) from
+        # the assembled text BEFORE fact guard / StoryOS parsing / draft.md
+        # write. See _normalize_scene_text() for why. The live chunks already
+        # streamed to the cockpit may still contain the raw <think> preamble;
+        # only the persisted draft and the deterministic parsers see the
+        # cleaned form.
+        assembled_text = _normalize_scene_text(assembled_text)
 
         if not assembled_text.strip():
             yield {"event": "failed",

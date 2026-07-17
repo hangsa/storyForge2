@@ -145,6 +145,12 @@ class AutopilotRunner:
         sm = SessionStateMachine()
         s2 = sm.circuit_open(s)
         self._mgr.save(s2)
+        import logging
+        logging.getLogger(__name__).warning(
+            "[熔断开启] project=%s force_pass_count=%d 触发自动暂停（同步路径）。"
+            "请检查 fact_guard 失败原因后手动恢复。",
+            s.project_id, s2.circuit.force_pass_count,
+        )
 
     def sync_circuit_breaker(self) -> dict:
         """Task 1.7: pull new force_pass events from the injected CircuitBreaker.

@@ -189,6 +189,21 @@ class AsyncAutopilotRunner:
             self._mgr.drop_queue(item.id)
             return {"picked": item.id, "completed": False, "error": str(e)}
 
+        # The streaming executor returns a structured dict with
+        # `status: "fail"` when the LLM returned no usable text (e.g. an API
+        # auth failure surfaced as a `scene_failed` event). Without this
+        # check the runner drops the queue item and marks the task complete
+        # — which lies to the cockpit UI ("task_complete" history event)
+        # AND keeps the failed item out of progress.json, so the next
+        # seed_queue() re-enqueues it and the loop spins forever on bad
+        # credentials. Fixed 2026-07-17 after proj_cc4ca4ae burned through
+        # its 64-item queue in ~3 minutes with no drafts and no progress.
+        if isinstance(result, dict) and result.get("status") == "fail":
+            err = result.get("error", "scene write failed")
+            self._mgr.fail_current_task(error=err)
+            self._mgr.drop_queue(item.id)
+            return {"picked": item.id, "completed": False, "error": err}
+
         # Success path: drop queue item + complete current_task.
         self._mgr.drop_queue(item.id)
         self._mgr.complete_current_task()

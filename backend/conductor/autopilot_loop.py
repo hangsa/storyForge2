@@ -120,9 +120,18 @@ class AutopilotLoopService:
         task = self._tasks.get(project_id)
         return task is not None and not task.done()
 
-    async def recover_running_sessions(self, projects_dir: Path) -> None:
+    async def recover_running_sessions(
+        self, projects_dir: Path, broadcaster=None,
+    ) -> None:
         """Called from FastAPI startup. Resumes sessions in 'running' state
-        that have a recent last_heartbeat_at; downgrades stale ones to paused."""
+        that have a recent last_heartbeat_at; downgrades stale ones to paused.
+
+        `broadcaster` is forwarded to the per-session executor so recovery
+        on a server restart publishes scene chunks on the same SSE channel
+        that the live cockpit UI subscribes to. Without this, the recovered
+        executor uses a private broadcaster and silently drops every event
+        (the same bug fixed in main.py at v1.9 Direction B on 2026-07-17 —
+        proj_cc4ca4ae was the trigger)."""
         from datetime import datetime, timezone
         from backend.conductor.autopilot_session import AutopilotSessionManager
         from backend.conductor.stage4_async_executor import AsyncStage4Executor
@@ -184,5 +193,5 @@ class AutopilotLoopService:
                 cfg_obj = ManagedStartConfig(**cfg)
             except Exception:
                 cfg_obj = ManagedStartConfig()
-            executor = AsyncStage4Executor(projects_dir)
+            executor = AsyncStage4Executor(projects_dir, broadcaster=broadcaster)
             await self.ensure(pid, mgr, executor, cfg_obj)

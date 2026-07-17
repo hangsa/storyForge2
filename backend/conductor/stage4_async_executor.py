@@ -66,6 +66,64 @@ def _canonical_scene_status(raw: str) -> str:
     return _BREAKER_TO_SCENE_STATUS.get(raw, raw)
 
 
+def _write_scene_progress(
+    projects_dir: Path,
+    project_id: str,
+    chapter_number: int,
+    scene_number: int,
+    breaker_result: str,
+    attempt: int = 1,
+    coherence_score: int = 100,
+) -> None:
+    """Append/upsert a scene_progress entry on progress.json after a scene
+    write completes. Mirrors the bookkeeping _write_scene_chapter() does at
+    the end of its non-streaming path; the streaming twin intentionally
+    leaves this to the executor (per the contract documented in
+    stage4_writing.py:845-850 — "executor owns the cross-file bookkeeping").
+
+    Without this, the runner's `seed_queue()` keeps re-adding the same
+    unfinished scenes to the queue because progress.json never marks them
+    completed — and after the queue appears to drain (because the runner
+    drops each item after a streaming write that didn't persist), the
+    autopilot session auto-stops with no work to show for it. Found and
+    fixed 2026-07-17 after proj_cc4ca4ae produced completed chapter streams
+    but never advanced past current_chapter=21.
+    """
+    from backend.utils.file_manager import FileManager
+    fm = FileManager(projects_dir)
+    progress = fm.read_json(project_id, "progress.json") or {}
+    progress.setdefault("project_id", project_id)
+    progress.setdefault("current_chapter", chapter_number)
+    progress.setdefault("chapters", [])
+
+    chapter_progress = next(
+        (ch for ch in progress["chapters"]
+         if ch.get("chapter_number") == chapter_number),
+        None,
+    )
+    if chapter_progress is None:
+        chapter_progress = {
+            "chapter_number": chapter_number,
+            "status": "in_progress",
+            "scenes": [],
+        }
+        progress["chapters"].append(chapter_progress)
+
+    scene_progress = next(
+        (s for s in chapter_progress.get("scenes", [])
+         if s.get("scene_number") == scene_number),
+        None,
+    )
+    if scene_progress is None:
+        chapter_progress.setdefault("scenes", []).append({
+            "scene_number": scene_number,
+            "status": "completed" if breaker_result == "passed" else breaker_result,
+            "retry_count": attempt - 1,
+            "coherence_score": coherence_score,
+        })
+    fm.write_json(project_id, "progress.json", progress)
+
+
 def _maybe_enqueue_archival(
     mgr, projects_dir: Path, project_id: str, chapter_number: int
 ) -> bool:
@@ -214,6 +272,14 @@ class AsyncStage4Executor:
                         "total_chars": len(event.get("draft_text", "")),
                     })
                     chunk_store.clear()  # draft.md is the new source-of-truth
+                    # Persist progress.json for the completed scene — see
+                    # _write_scene_progress() docstring for why this is here
+                    # rather than inside _write_scene_chapter_stream().
+                    _write_scene_progress(
+                        self._projects_dir, project_id, chapter, scene,
+                        breaker_result=event.get("status", "passed"),
+                        attempt=event.get("attempt", 1),
+                    )
                     _maybe_enqueue_archival(
                         mgr, self._projects_dir, project_id, chapter,
                     )

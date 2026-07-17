@@ -63,13 +63,16 @@ describe("AutopilotMiddlePanel with ChapterStreamPanel", () => {
     expect(panel.textContent).toContain("第 17 章 第 2 场景");
   });
 
-  it("does not render ChapterStreamPanel when no stream ever started", () => {
+  it("always renders ChapterStreamPanel with a waiting placeholder", () => {
     lastHookReturn = {
       text: "", lastSeq: 0, active: false, failed: false,
       error: null, charCount: 0, current: null,
     };
     render(<AutopilotMiddlePanel projectId="p" />);
-    expect(screen.queryByTestId("chapter-stream-panel")).toBeNull();
+    // Panel is now always visible so the user sees the connection is live
+    // and knows a preview is coming — no more invisible-while-waiting UX.
+    const panel = screen.getByTestId("chapter-stream-panel");
+    expect(panel.textContent).toMatch(/等待 AI 开始下一场景|等待 AI 输出第一个字/);
   });
 
   it("projects the panel inside the cockpit tab only (not on dashboard tab)", async () => {

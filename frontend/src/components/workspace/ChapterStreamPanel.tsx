@@ -25,16 +25,15 @@ export default function ChapterStreamPanel({ projectId }: Props) {
     setAutoScroll(atBottom);
   };
 
-  // Hide entirely until a scene has produced at least one chunk or scene_start.
-  if (!stream.current && !stream.text) {
-    return null;
-  }
-
+  // Always render the panel so users see the connection is live. Show a
+  // "waiting" placeholder before any scene has produced text.
   const statusLabel = stream.failed
     ? `✗ 写入失败 · 已保留 ${stream.charCount} 字`
     : stream.active
       ? `● 正在写入 · ${stream.charCount} 字`
-      : `○ 空闲 · 最近 ${stream.charCount} 字`;
+      : stream.text
+        ? `○ 空闲 · 最近 ${stream.charCount} 字`
+        : `○ 等待 AI 开始下一场景`;
 
   const statusClass = stream.failed
     ? "text-error"
@@ -63,7 +62,11 @@ export default function ChapterStreamPanel({ projectId }: Props) {
         className="px-5 py-4 text-sm font-body-ui leading-7 max-h-[340px] overflow-y-auto whitespace-pre-wrap"
       >
         {stream.text || (
-          <span className="text-system-log/60 italic">— 等待 AI 输出第一个字 —</span>
+          <span className="text-system-log/60 italic">
+            {stream.failed
+              ? "— 等待重试或新场景 —"
+              : "— 等待 AI 输出第一个字 —"}
+          </span>
         )}
         {stream.active && (
           <span className="animate-pulse text-primary-container">▌</span>

@@ -14,13 +14,15 @@ describe("ChapterStreamPanel", () => {
     lastHookReturn = null;
   });
 
-  it("renders nothing when never received a scene", () => {
+  it("renders a waiting placeholder when no scene has started yet", () => {
     lastHookReturn = {
       text: "", lastSeq: 0, active: false, failed: false,
       error: null, charCount: 0, current: null,
     };
-    const { container } = render(<ChapterStreamPanel projectId="p1" />);
-    expect(container.firstChild).toBeNull();
+    render(<ChapterStreamPanel projectId="p1" />);
+    // Always rendered so the user sees the connection is live.
+    const panel = screen.getByTestId("chapter-stream-panel");
+    expect(panel.textContent).toMatch(/等待 AI 开始下一场景/);
   });
 
   it("renders idle state with previous scene's text", () => {

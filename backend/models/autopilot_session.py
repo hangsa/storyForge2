@@ -100,6 +100,10 @@ class AutopilotSession:
     queue: list
     history: list
     circuit: CircuitSnapshot
+    # Reason set when state transitions to STOPPED via stop(reason=...).
+    # None for sessions that were never explicitly stopped, or for sessions
+    # saved before this field existed (back-compat).
+    stop_reason: Optional[str] = None
 
 
 # --- Helpers ---
@@ -121,6 +125,7 @@ def _append_event(s: AutopilotSession, type_: str, **fields) -> AutopilotSession
         started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
         current_task=s.current_task, queue=list(s.queue),
         history=s.history + [event], circuit=s.circuit,
+        stop_reason=s.stop_reason,
     )
 
 

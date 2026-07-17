@@ -102,6 +102,31 @@ async def generate_outline(data: dict):
     merged_outline = {"chapters": existing_chapters}
     fm.write_json(project_id, "outline.json", merged_outline)
 
+    # Keep progress.json's stored total_chapters in sync — without this,
+    # the /stage4/progress endpoint reports a stale denominator ("X / 20")
+    # when the user has extended the outline to e.g. 30 via the
+    # "+ 新章节" UI. Take max(stored, novel_outline, outline_count).
+    progress = fm.read_json(project_id, "progress.json") or {}
+    novel_outline = fm.read_json(project_id, "novel_outline.json") or {}
+    novel_total = 0
+    for volume in (novel_outline.get("volumes", []) or []):
+        if not isinstance(volume, dict):
+            continue
+        rng = volume.get("chapter_range", "")
+        if not isinstance(rng, str) or "-" not in rng:
+            continue
+        try:
+            end = int(rng.split("-")[-1])
+            novel_total = max(novel_total, end)
+        except (ValueError, IndexError):
+            continue
+    outline_count = len(merged_outline["chapters"])
+    stored_total = progress.get("total_chapters") or 0
+    refreshed = max(stored_total, novel_total, outline_count)
+    if refreshed and refreshed != stored_total:
+        progress["total_chapters"] = refreshed
+        fm.write_json(project_id, "progress.json", progress)
+
     # Auto-generate growth curves for characters without them, then bind to outline
     from backend.growth_curve.auto_generator import auto_generate_growth_curves
     from backend.growth_curve.binder import bind_growth_curve_to_outline

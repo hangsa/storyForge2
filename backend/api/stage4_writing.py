@@ -1363,6 +1363,22 @@ async def repair_progress(data: dict):
                 progress["current_chapter"] = new_current
         fm.write_json(project_id, "progress.json", progress)
 
+    # Refresh total_chapters from live sources. The stored value can become
+    # stale when the user extends outline.json via /stage3/generate (the
+    # "+ 新章节" button writes only to outline.json, leaving progress.json's
+    # snapshot behind). Take the max so we never regress the denominator.
+    live_novel_outline = fm.read_json(project_id, "novel_outline.json") or {}
+    live_novel_total = _planned_chapter_total_from_novel_outline(live_novel_outline)
+    live_outline_total = outline_max or 0
+    stored_total = progress.get("total_chapters") or 0
+    refreshed_total = max(stored_total, live_novel_total, live_outline_total)
+    if refreshed_total and refreshed_total != stored_total:
+        progress["total_chapters"] = refreshed_total
+        # Persist even when nothing else changed so the refresh survives
+        # subsequent GETs. This is a deliberate side effect of repair-progress.
+        if not (repaired or dropped_scaffolds or cap_applied):
+            fm.write_json(project_id, "progress.json", progress)
+
     return {
         "error": False, "code": "OK",
         "message": f"已修复 {len(repaired)} 个章节",
@@ -1370,6 +1386,7 @@ async def repair_progress(data: dict):
             "repaired_chapters": sorted(repaired),
             "current_chapter": progress.get("current_chapter", 1),
             "dropped_scaffolds": dropped_scaffolds,
+            "total_chapters": progress.get("total_chapters"),
         },
     }
 

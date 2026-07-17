@@ -253,7 +253,11 @@ class AsyncStage4Executor:
             # empty queue on its next iteration and exits.
             current = mgr.load()
             if current is not None and current.state == SessionState.RUNNING:
-                mgr.stop()
+                mgr.stop(reason="outline_exhausted")
+            else:
+                # Already stopped — still record the reason on the session
+                # so the UI can explain why nothing further is happening.
+                mgr.stop(reason="outline_exhausted")
             return {
                 "status": "stopped",
                 "reason": "outline_exhausted",

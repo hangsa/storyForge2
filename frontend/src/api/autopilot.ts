@@ -100,6 +100,9 @@ export interface AutopilotSession {
   }>;
   history: unknown[];
   config: ManagedStartConfig | null;
+  /** Short tag like "outline_exhausted" set when the runner stops the session
+   * via mgr.stop(reason=...). Only meaningful when state === "stopped". */
+  stop_reason?: string | null;
 }
 
 export async function getAutopilotSession(projectId: string): Promise<AutopilotSession> {

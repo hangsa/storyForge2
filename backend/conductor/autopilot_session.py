@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -57,6 +57,7 @@ class AutopilotSessionManager:
             config=ManagedStartConfig(), started_at=None,
             last_heartbeat_at=None, current_task=None,
             queue=[], history=[], circuit=CircuitSnapshot(),
+            stop_reason=None,
         )
 
     def load(self) -> Optional[AutopilotSession]:
@@ -129,11 +130,27 @@ class AutopilotSessionManager:
         self.save(s2)
         return s2
 
-    def stop(self) -> AutopilotSession:
+    def stop(self, reason: Optional[str] = None) -> AutopilotSession:
+        """Transition the session to STOPPED. Idempotent — calling on an
+        already-stopped session returns it unchanged.
+
+        `reason` is a short human-readable tag (e.g. "outline_exhausted",
+        "user_requested") persisted on the session so the UI can surface
+        why autopilot stopped. Replacing the reason on a subsequent stop
+        call is allowed.
+        """
         s = self.load() or self._empty_session()
         if s.state == SessionState.STOPPED:
+            # Allow updating the reason even when already stopped (e.g. the
+            # runner adds context after the initial stop).
+            if reason is not None and s.stop_reason != reason:
+                s2 = replace(s, stop_reason=reason)
+                self.save(s2)
+                return s2
             return s
         s2 = self._sm.stop(s)
+        if reason is not None:
+            s2 = replace(s2, stop_reason=reason)
         self.save(s2)
         return s2
 
@@ -269,6 +286,7 @@ def _session_to_dict(s: AutopilotSession) -> dict:
         "queue": [asdict(q) for q in s.queue],
         "history": [asdict(e) for e in s.history],
         "circuit": asdict(s.circuit),
+        "stop_reason": s.stop_reason,
     }
 
 
@@ -283,4 +301,5 @@ def _dict_to_session(d: dict) -> AutopilotSession:
         queue=[QueueItem(**q) for q in d.get("queue", [])],
         history=[SessionEvent(**e) for e in d.get("history", [])],
         circuit=CircuitSnapshot(**d.get("circuit", {})),
+        stop_reason=d.get("stop_reason"),
     )

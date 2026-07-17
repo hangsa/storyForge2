@@ -119,6 +119,7 @@ export default function AutopilotMiddlePanel({ projectId }: Props) {
             queue={queue}
             events={events}
             sseStatus={sseStatus}
+            stopReason={session?.stop_reason ?? null}
             onStart={() => onAction("启动托管", () => start(config))}
             onPause={() => onAction("暂停托管", () => pause())}
             onResume={() => onAction("继续托管", () => resume())}
@@ -162,6 +163,8 @@ interface CockpitViewProps {
   }>;
   events: Array<{ event: string; data: unknown; id?: number }>;
   sseStatus: "connecting" | "connected" | "reconnecting" | "error";
+  /** Short tag like "outline_exhausted" set by mgr.stop(reason=...). */
+  stopReason?: string | null;
   onStart: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -170,7 +173,7 @@ interface CockpitViewProps {
 
 function CockpitView({
   projectId,
-  state, currentTask, queue, events, sseStatus,
+  state, currentTask, queue, events, sseStatus, stopReason,
   onStart, onPause, onResume, onStop,
 }: CockpitViewProps) {
   const recentEvents = events.slice(-12).reverse();
@@ -348,7 +351,7 @@ function CockpitView({
           actively being written. Tab-switching unmounts this; re-mounting it
           triggers an SSE reconnect with Last-Event-ID set by the browser, so
           the buffer rebuilds from SceneChunkStore without losing text. */}
-      <ChapterStreamPanel projectId={projectId} />
+      <ChapterStreamPanel projectId={projectId} sessionState={state} stopReason={stopReason ?? null} />
 
       {/* Live event feed */}
       <section>

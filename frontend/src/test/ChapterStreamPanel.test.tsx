@@ -90,4 +90,68 @@ describe("ChapterStreamPanel", () => {
     // After text grow, scrollTop should be set to scrollHeight - clientHeight.
     expect(container.scrollTop).toBe(660);
   });
+
+  it("surfaces outline_exhausted reason when session is stopped", () => {
+    lastHookReturn = {
+      text: "", lastSeq: 0, active: false, failed: false,
+      error: null, charCount: 0, current: null,
+    };
+    render(
+      <ChapterStreamPanel
+        projectId="p1"
+        sessionState="stopped"
+        stopReason="outline_exhausted"
+      />,
+    );
+    const panel = screen.getByTestId("chapter-stream-panel");
+    expect(panel.textContent).toMatch(/已停止/);
+    expect(panel.textContent).toMatch(/大纲已用完/);
+    // Empty placeholder should reflect the stopped state, not "等待 AI..."
+    expect(panel.textContent).not.toMatch(/等待 AI 开始下一场景/);
+  });
+
+  it("surfaces user_requested stop reason with friendly label", () => {
+    lastHookReturn = {
+      text: "", lastSeq: 0, active: false, failed: false,
+      error: null, charCount: 0, current: null,
+    };
+    render(
+      <ChapterStreamPanel
+        projectId="p1"
+        sessionState="stopped"
+        stopReason="user_requested"
+      />,
+    );
+    const panel = screen.getByTestId("chapter-stream-panel");
+    expect(panel.textContent).toMatch(/已停止/);
+    expect(panel.textContent).toMatch(/用户手动停止/);
+  });
+
+  it("falls back to a generic stopped label when stopReason is missing", () => {
+    lastHookReturn = {
+      text: "", lastSeq: 0, active: false, failed: false,
+      error: null, charCount: 0, current: null,
+    };
+    render(<ChapterStreamPanel projectId="p1" sessionState="stopped" />);
+    const panel = screen.getByTestId("chapter-stream-panel");
+    expect(panel.textContent).toMatch(/已停止/);
+    expect(panel.textContent).toMatch(/未启动托管/);
+  });
+
+  it("still shows the writing state even when sessionState is stopped (transient)", () => {
+    // Defensive: if a chunk arrives while the runner is shutting down, the
+    // streaming status takes precedence over the stopped status.
+    lastHookReturn = {
+      text: "沈渡", lastSeq: 1, active: true, failed: false,
+      error: null, charCount: 2, current: { chapter: 1, scene: 1 },
+    };
+    render(
+      <ChapterStreamPanel
+        projectId="p1"
+        sessionState="stopped"
+        stopReason="outline_exhausted"
+      />,
+    );
+    expect(screen.getByTestId("chapter-stream-panel").textContent).toMatch(/正在写入/);
+  });
 });

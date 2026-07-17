@@ -273,7 +273,7 @@ async def chapter_stream(
     last_event_id: Optional[int] = Header(None, alias="Last-Event-ID"),
 ):
     """SSE endpoint that relays the per-chunk `scene_chunk` event stream plus
-    `scene_start` / `scene_done` / `scene_failed` / `idle`.
+    `scene_start` / `scene_done` / `scene_failed` / `idle` / `scene_transition`.
 
     Reconnect补发: browser-managed `Last-Event-ID` HTTP header is read on every
     connect. Server replays all chunks with seq > Last-Event-ID from the
@@ -286,8 +286,19 @@ async def chapter_stream(
 
     The flow re-checks `current_task.kind == "write_scene"` every 5 seconds; if
     the active task is no longer a scene write (e.g. mid-flight switch to
-    archival), the endpoint emits an `idle` event and closes the stream —
-    subscribers don't sit waiting forever for events that won't arrive.
+    archival, or the brief moment between scene_done and the next scene_start
+    when complete_current_task has cleared the task), the endpoint emits a
+    `scene_transition` event but **keeps the stream open** so the next
+    scene_start flows through without the browser reconnecting. Subscribers
+    no longer thrash on idle+close during routine scene transitions.
+
+    The single-shot `idle: no_active_write_scene` branch at the top of the
+    endpoint still fires for the initial connect when there's no session at
+    all (or no write_scene task) — that case legitimately has nothing to
+    subscribe to, so closing is correct there.
+
+    The 5-second poll interval is exposed as the module-level constant
+    `_CHAPTER_STREAM_TASK_CHECK_INTERVAL` so tests can shrink it.
     """
     err = _ensure_project_exists(project_id)
     if err is not None:
@@ -349,12 +360,23 @@ async def chapter_stream(
         # ---- Live subscription
         async for ev in broadcaster.subscribe(last_event_id):
             now = time.monotonic()
-            if now - last_task_check > 5.0:
+            if now - last_task_check > _CHAPTER_STREAM_TASK_CHECK_INTERVAL:
                 last_task_check = now
                 cur = (_read_raw_session(project_id) or {}).get("current_task") or {}
                 if cur.get("kind") != "write_scene":
-                    yield _format_sse("idle", {"reason": "current_task_changed"}, id_=None)
-                    return
+                    # Notify the cockpit that we're between scenes / doing
+                    # archival, but KEEP THE STREAM OPEN so the next
+                    # scene_start (or scene_done of an in-flight archive)
+                    # flows through without the browser reconnecting. This
+                    # is the fix for 2026-07-17 proj_cc4ca4ae where the
+                    # cockpit stuck on the previous scene's text between
+                    # scene_done and the next scene_start because every
+                    # reconnect hit the same no-write_scene state.
+                    yield _format_sse("scene_transition", {
+                        "reason": "current_task_changed",
+                        "chapter_number": cur.get("chapter_number"),
+                    }, id_=None)
+                    continue
             if ev.event in ("scene_chunk", "scene_done", "scene_failed", "scene_start"):
                 yield _format_sse(ev.event, ev.data, id_=ev.id)
             elif ev.event == "heartbeat":
@@ -362,6 +384,12 @@ async def chapter_stream(
             await asyncio.sleep(0)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# Seconds between current_task re-checks inside chapter_stream. Exposed at
+# module scope so tests can monkey-patch it (see
+# test_endpoint_emits_scene_transition_when_current_task_changes_mid_stream).
+_CHAPTER_STREAM_TASK_CHECK_INTERVAL = 5.0
 
 
 def _format_sse(event: str, data: dict, id_: Optional[int]) -> bytes:

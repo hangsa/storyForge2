@@ -209,12 +209,18 @@ export type ChapterStreamIdle = {
   data: { reason: string };
 };
 
+export type ChapterStreamSceneTransition = {
+  event: "scene_transition";
+  data: { reason: string; chapter_number: number | null };
+};
+
 export type ChapterStreamEvent =
   | ChapterStreamSceneStart
   | ChapterStreamChunk
   | ChapterStreamDone
   | ChapterStreamFailed
-  | ChapterStreamIdle;
+  | ChapterStreamIdle
+  | ChapterStreamSceneTransition;
 
 const CHAPTER_STREAM_EVENTS = [
   "scene_start",
@@ -222,6 +228,7 @@ const CHAPTER_STREAM_EVENTS = [
   "scene_done",
   "scene_failed",
   "idle",
+  "scene_transition",
 ] as const;
 
 /**

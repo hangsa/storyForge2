@@ -77,6 +77,7 @@ beforeEach(() => {
     );
     for (const evt of [
       "scene_start", "scene_chunk", "scene_done", "scene_failed", "idle",
+      "scene_transition",
     ] as const) {
       inst.addEventListener(evt, (raw: MessageEvent) => {
         handlers.onEvent({
@@ -140,6 +141,100 @@ describe("useChapterStream", () => {
     });
   });
 
+  it("clears text immediately on scene_transition and resyncs on next scene_start", async () => {
+    // Bug 2026-07-17: when the runner is between scenes, the backend emits
+    // a `scene_transition` event (replacing the old `idle: current_task_changed
+    // + close` behavior that caused reconnect thrash). The cockpit must
+    // clear the previous scene's text right away and show a transitional
+    // hint, then update normally when the next scene_start arrives.
+    const { result } = renderHook(() => useChapterStream("proj_a"));
+    const inst = findInstance();
+
+    act(() => {
+      inst.emit("scene_start", { chapter_number: 17, scene_number: 2 });
+      inst.emit("scene_chunk",
+        { seq: 1, chapter_number: 17, scene_number: 2, text: "旧" });
+    });
+    await waitFor(() => {
+      expect(result.current.text).toBe("旧");
+    });
+
+    act(() => {
+      inst.emit("scene_transition",
+        { reason: "current_task_changed", chapter_number: 17 });
+    });
+
+    await waitFor(() => {
+      expect(result.current.text).toBe("");
+      expect(result.current.active).toBe(false);
+      expect(result.current.current).toBeNull();
+    });
+
+    // The connection must stay open — the same EventSource receives the
+    // next scene_start.
+    act(() => {
+      inst.emit("scene_start", { chapter_number: 17, scene_number: 3 });
+      inst.emit("scene_chunk",
+        { seq: 1, chapter_number: 17, scene_number: 3, text: "新" });
+    });
+
+    await waitFor(() => {
+      expect(result.current.text).toBe("新");
+      expect(result.current.current).toEqual({ chapter: 17, scene: 3 });
+      expect(result.current.active).toBe(true);
+    });
+    // Confirm we did NOT reconnect — the same instance received both events.
+    expect((MockEventSource as any).instances.length).toBe(1);
+  });
+
+  it("clears text and updates header when next scene_start arrives after scene_done", async () => {
+    // Bug 2026-07-17: cockpit showed the previous scene's text and the old
+    // ch/scene header even after the runner moved on to the next scene.
+    // After scene_done, the hook calls scheduleReopen(true) which closes the
+    // old SSE and opens a new one. The new connection then receives
+    // scene_start for the next scene — text must reset to empty, header must
+    // show the new ch/scene, and chunks for the new scene must accumulate.
+    const { result } = renderHook(() => useChapterStream("proj_a"));
+    const inst1 = findInstance();
+
+    // First scene: streaming normally.
+    act(() => {
+      inst1.emit("scene_start", { chapter_number: 17, scene_number: 2 });
+      inst1.emit("scene_chunk",
+        { seq: 1, chapter_number: 17, scene_number: 2, text: "夜风如刀" });
+    });
+    await waitFor(() => {
+      expect(result.current.text).toBe("夜风如刀");
+      expect(result.current.current).toEqual({ chapter: 17, scene: 2 });
+    });
+
+    // scene_done → scheduleReopen(true) → new EventSource is opened.
+    act(() => {
+      inst1.emit("scene_done",
+        { chapter_number: 17, scene_number: 2, status: "completed", total_chars: 4 });
+    });
+
+    // After close + reopen, there should be a 2nd EventSource.
+    await waitFor(() => {
+      expect((MockEventSource as any).instances.length).toBe(2);
+    });
+    const inst2 = findInstance();
+
+    // New scene starts on the new connection — text must clear and header
+    // must update to the new ch/scene.
+    act(() => {
+      inst2.emit("scene_start", { chapter_number: 17, scene_number: 3 });
+      inst2.emit("scene_chunk",
+        { seq: 1, chapter_number: 17, scene_number: 3, text: "新章开端" });
+    });
+
+    await waitFor(() => {
+      expect(result.current.text).toBe("新章开端");
+      expect(result.current.current).toEqual({ chapter: 17, scene: 3 });
+      expect(result.current.active).toBe(true);
+    });
+  });
+
   it("ignores chunks for an older scene (stale-chunk guard)", async () => {
     const { result } = renderHook(() => useChapterStream("proj_a"));
     const inst = findInstance();
@@ -156,6 +251,50 @@ describe("useChapterStream", () => {
     await waitFor(() => {
       expect(result.current.text).toBe("新");
     });
+  });
+
+  it("does not loop on replayed scene_done from broadcaster history", async () => {
+    // Bug 2026-07-17: when the hook reconnects via scheduleReopen(true)
+    // after scene_done, the new EventSource has no Last-Event-ID (close +
+    // new EventSource is a fresh connection). The backend therefore replays
+    // the FULL broadcaster history, which includes the scene_done we just
+    // processed. The scene_done handler called scheduleReopen(true) again,
+    // which closed and re-opened yet another EventSource — infinite loop,
+    // and the new scene_start never gets processed because the connection
+    // is being torn down before it arrives.
+    const { result } = renderHook(() => useChapterStream("proj_a"));
+    const inst1 = findInstance();
+
+    act(() => {
+      inst1.emit("scene_start", { chapter_number: 31, scene_number: 3 });
+      inst1.emit("scene_done",
+        { chapter_number: 31, scene_number: 3, status: "completed" });
+    });
+
+    // Wait for the post-scene_done reopen.
+    await waitFor(() => {
+      expect((MockEventSource as any).instances.length).toBe(2);
+    });
+    const inst2 = findInstance();
+
+    // Backend history replay (no Last-Event-ID) sends the OLD scene_done
+    // first. The hook MUST ignore it — otherwise it tears down inst2 again
+    // before the real scene_start for the new scene can arrive.
+    act(() => {
+      inst2.emit("scene_done",
+        { chapter_number: 31, scene_number: 3, status: "completed" });
+      inst2.emit("scene_start", { chapter_number: 31, scene_number: 4 });
+      inst2.emit("scene_chunk",
+        { seq: 1, chapter_number: 31, scene_number: 4, text: "新场景" });
+    });
+
+    await waitFor(() => {
+      expect(result.current.text).toBe("新场景");
+      expect(result.current.current).toEqual({ chapter: 31, scene: 4 });
+      expect(result.current.active).toBe(true);
+    });
+    // Confirm we didn't thrash — at most 1 extra connection beyond inst2.
+    expect((MockEventSource as any).instances.length).toBeLessThanOrEqual(3);
   });
 
   it("accepts scene_chunk replayed WITHOUT a prior scene_start (live reconnect)", async () => {

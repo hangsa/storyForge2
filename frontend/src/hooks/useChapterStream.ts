@@ -130,6 +130,18 @@ export function useChapterStream(projectId: string): ChapterStreamState {
               text: prev.text || (ev.data.partial_text ?? ""),
             }));
             scheduleReopen(true);
+          } else if (ev.event === "scene_transition") {
+            // Runner is between scenes (or doing archival). The backend
+            // keeps the SSE stream open so the next scene_start flows
+            // through on the SAME connection. Clear text + refs so the
+            // cockpit visually transitions to "next scene in progress"
+            // instead of stuck on the previous scene's text.
+            lastSeqRef.current = 0;
+            currentSceneRef.current = null;
+            setState({
+              ...INITIAL_STATE,
+              active: false,
+            });
           } else if (ev.event === "idle") {
             setState((prev) => ({ ...prev, active: false }));
           }

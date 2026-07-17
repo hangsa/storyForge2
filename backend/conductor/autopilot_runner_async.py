@@ -8,6 +8,7 @@ and the loop-bookkeeping in `backend/conductor/autopilot_loop.py`.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import Optional, Protocol
 
 from backend.models.autopilot_session import (
@@ -16,6 +17,61 @@ from backend.models.autopilot_session import (
 
 
 DONE_STATUSES = frozenset({"completed", "force_passed", "skipped"})
+
+
+# Row-major queue priority scheme: chapters are processed in chapter_number
+# order; within a chapter, scenes run in scene_number order. The 1000x gap
+# between chapter buckets leaves 998 scene slots plus one archival slot per
+# chapter (well above any realistic outline). The archive slot sits after the
+# chapter's scenes and before the next chapter's first scene.
+#
+# Invariants:
+#   scene_priority(N, M) < scene_priority(N, M+1)        (within chapter)
+#   scene_priority(N, last) < archive_priority(N)         (archival after last scene)
+#   archive_priority(N) < scene_priority(N+1, 1)          (archival before next chapter)
+#
+# Why row-major (and not column-major as before):
+#   - Aligns with StoryForge's per-chapter MemoryOS cache (L1/L4/L2 survive
+#     across scenes in the same chapter). Column-major thrashes the cache
+#     every scene → ~60% extra context-assembly overhead per the design doc.
+#   - Net-novel authoring works chapter-by-chapter; writing ch31.scene_4
+#     "knows" all of ch31 already exists.
+#   - Eliminates the "ch32.scene_1 written before ch31.scene_4" forward-leak
+#     where MemoryOS L2 was missing the just-prior chapter's summary.
+PRIORITY_SCALE_PER_CHAPTER = 1000
+ARCHIVE_PRIORITY_OFFSET = 999  # archive runs after all scenes in its chapter
+
+
+def scene_priority(chapter_number: int, scene_number: int) -> int:
+    """Lower = earlier. Row-major: chapter_number then scene_number."""
+    return chapter_number * PRIORITY_SCALE_PER_CHAPTER + scene_number
+
+
+def archive_priority(chapter_number: int) -> int:
+    """Just above the chapter's last scene, below the next chapter's first scene."""
+    return chapter_number * PRIORITY_SCALE_PER_CHAPTER + ARCHIVE_PRIORITY_OFFSET
+
+
+@dataclass
+class SeedResult:
+    """Outcome of seed_queue. Distinguishes "scope was widened automatically
+    because the requested scope had nothing left to do" from "everything
+    really is done" — without this distinction the API's no_work_to_do
+    branch can't tell the user what actually happened (bug 2026-07-17:
+    proj_cc4ca4ae saw a misleading "all 33 chapters done" toast when in
+    reality the user's stale scope=next_chapter was the blocker).
+
+    `enqueued` is the number of NEW queue items added by this call. `matched`
+    is the total number of unfinished scenes in the requested scope
+    (including scenes already in the queue from a previous call). The two
+    diverge once seed_queue becomes idempotent: a restart against a queue
+    that already holds its target scenes returns enqueued=0 but matched>0,
+    which means "nothing new, but there's still work — keep running."
+    """
+    enqueued: int
+    scope_used: str
+    fallback_applied: bool
+    matched: int = 0
 
 
 class AsyncTaskExecutor(Protocol):
@@ -59,21 +115,77 @@ def is_chapter_complete(
     return True
 
 
+def repair_stuck_chapters(progress: dict, outline: dict) -> list:
+    """Flip chapters stuck at status='in_progress' despite all outline scenes
+    being terminal to status='completed'. Mutates `progress` in place;
+    returns the sorted chapter_numbers that were repaired.
+
+    Pure on its inputs (no I/O). The caller is responsible for persisting
+    `progress` afterwards if disk durability is wanted.
+
+    Why this exists: the executor finalizes scenes one at a time and only
+    flips the chapter status after the last scene lands. If the runner stops
+    between those two writes (manual stop, server restart, force-passed
+    mid-flight), the chapter is left half-finalized forever. Without an
+    explicit repair, the autopilot sees "this chapter is still in progress"
+    and refuses to advance. surfacing 2026-07-17 on proj_cc4ca4ae where
+    chapters 21-30 had every scene completed but chapter.status was still
+    'in_progress'.
+    """
+    outline_chapters_by_num = {
+        c.get("chapter_number"): c for c in (outline.get("chapters") or [])
+    }
+    repaired: list = []
+    for ch in progress.get("chapters", []) or []:
+        if ch.get("status") != "in_progress":
+            continue
+        ch_num = ch.get("chapter_number")
+        outline_ch = outline_chapters_by_num.get(ch_num)
+        if outline_ch is None:
+            continue  # no ground truth → skip defensively
+        planned = outline_ch.get("scene_plan", []) or []
+        if not planned:
+            continue
+        if is_chapter_complete(ch.get("scenes", []) or [], planned):
+            ch["status"] = "completed"
+            repaired.append(ch_num)
+    repaired.sort()
+    return repaired
+
+
 def seed_queue(
     mgr: "AutopilotSessionManager",
     outline: dict,
     progress: Optional[dict],
     novel_outline: Optional[dict],
     cfg: ManagedStartConfig,
-) -> int:
+) -> SeedResult:
     """Translate (outline, progress, novel_outline, cfg) into QueueItems
-    appended to mgr.queue. Returns count of items enqueued.
+    appended to mgr.queue. Returns a SeedResult describing what was enqueued.
+
+    Idempotent: items with deterministic ids (`write-{ch}-{scene}`,
+    `archive-{ch}`) already present in mgr.queue are skipped, so a restart
+    that re-runs seed_queue against a non-empty queue grows the queue by
+    zero. Without this, every restart doubled or tripled the queue and
+    history ballooned with thousands of `queue_add` events (bug 2026-07-17
+    proj_cc4ca4ae: queue grew 10 → 20 → 30 across three restarts).
+
+    Auto-fallback: when cfg.scope == "next_chapter" but the scoped chapter
+    has zero unfinished scenes in progress.json (so the first pass enqueues
+    0), retry with target=all_chapters. This protects against stale
+    "next_chapter" intent sitting in session.json from a previous run —
+    without the fallback the UI shows a misleading "project complete" toast
+    (bug 2026-07-17 on proj_cc4ca4ae: ch21 was already done but ch31-33 had
+    no progress at all, so a meaningful plan existed below the scoped
+    chapter). The fallback decision uses `matched` (total unfinished scenes
+    in the requested scope), not `enqueued` (newly added), so a re-start
+    whose work is already queued doesn't silently widen scope.
 
     Pure-ish: the only side effect is `mgr.add_queue(...)` (which writes
     session.json). No HTTP, no LLM, no executor.
     """
     if not outline or not outline.get("chapters"):
-        return 0
+        return SeedResult(enqueued=0, scope_used=cfg.scope, fallback_applied=False)
     progress = progress or {}
     chapters = progress.get("chapters", []) or []
     progress_by_chapter = {
@@ -81,9 +193,50 @@ def seed_queue(
     }
     current_chapter = progress.get("current_chapter", 1)
 
-    # Decide which chapters to enqueue based on scope.
     all_chapters = outline["chapters"]
-    if cfg.scope == "next_chapter":
+
+    # First pass with the requested scope.
+    first_seeded, first_matched = _enqueue_for_scope(
+        mgr, all_chapters, progress_by_chapter, cfg.scope, current_chapter,
+    )
+
+    # Fallback: next_chapter's scope produced ZERO candidates (the chapter
+    # is genuinely complete), but later chapters may still have unfinished
+    # scenes. Use matched (not enqueued) so a re-start whose work is
+    # already queued doesn't trigger fallback.
+    if first_matched == 0 and cfg.scope == "next_chapter":
+        second_seeded, _ = _enqueue_for_scope(
+            mgr, all_chapters, progress_by_chapter,
+            target_scope="all_planned", current_chapter=current_chapter,
+        )
+        if second_seeded > 0:
+            return SeedResult(
+                enqueued=second_seeded, scope_used="all_planned",
+                fallback_applied=True, matched=first_matched,
+            )
+
+    return SeedResult(
+        enqueued=first_seeded, scope_used=cfg.scope, fallback_applied=False,
+        matched=first_matched,
+    )
+
+
+def _enqueue_for_scope(
+    mgr: "AutopilotSessionManager",
+    all_chapters: list,
+    progress_by_chapter: dict,
+    target_scope: str,
+    current_chapter: int,
+) -> tuple[int, int]:
+    """Enqueue unfinished scenes for chapters matching `target_scope`.
+    Returns `(seeded, matched)`:
+      - `seeded`: number of NEW queue items added (excludes items already
+        in mgr.queue with the same deterministic id).
+      - `matched`: total number of unfinished scenes in scope (including
+        those already queued — needed by the caller to decide fallback).
+
+    Pure-ish (only side effect is via mgr.add_queue)."""
+    if target_scope == "next_chapter":
         target_chapters = [
             ch for ch in all_chapters
             if ch.get("chapter_number") == current_chapter
@@ -91,7 +244,15 @@ def seed_queue(
     else:  # "all_planned"
         target_chapters = list(all_chapters)
 
+    # Snapshot existing queue ids once. Reading mgr.queue inside the loop
+    # would force a session.json load per scene; this keeps dedup O(n).
+    # mgr.load() can return None if the session file doesn't exist yet
+    # (e.g. seed_queue called before mgr.start()) — treat that as empty.
+    snapshot = mgr.load()
+    existing_ids = {q.id for q in (snapshot.queue or [])} if snapshot else set()
+
     seeded = 0
+    matched = 0
     for ch in target_chapters:
         ch_num = ch.get("chapter_number")
         scene_plan = ch.get("scene_plan", []) or []
@@ -107,17 +268,22 @@ def seed_queue(
             n = s.get("scene_number")
             if n in done_nums:
                 continue
+            item_id = f"write-{ch_num}-{n}"
+            matched += 1
+            if item_id in existing_ids:
+                continue
             item = QueueItem(
-                id=f"write-{ch_num}-{n}",
+                id=item_id,
                 kind="write_scene",
                 chapter_number=ch_num,
                 scheduled_at=None,
-                priority=20 + n,   # archival uses priority 10 (lower = earlier)
+                priority=scene_priority(ch_num, n),  # row-major; archival uses archive_priority
                 payload={"scene_number": n},
             )
             mgr.add_queue(item)
+            existing_ids.add(item_id)
             seeded += 1
-    return seeded
+    return seeded, matched
 
 
 class AsyncAutopilotRunner:

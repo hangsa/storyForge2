@@ -10,12 +10,16 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from backend.conductor.autopilot_session import AutopilotSessionManager
-    from backend.conductor.autopilot_runner_async import AsyncTaskExecutor
+    from backend.conductor.autopilot_runner_async import (
+        AsyncTaskExecutor, SeedResult,
+    )
     from backend.models.autopilot_session import ManagedStartConfig
+
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +74,24 @@ def _read_novel_outline(projects_dir: Path, project_id: str):
         return None
 
 
+@dataclass
+class EnsureResult:
+    """Outcome of AutopilotLoopService.ensure(). Carries enough context for
+    the API to render an honest message — not just "all done" but the
+    distinction between "we repaired stuck chapters", "your scope was
+    widened automatically", and "there really is nothing left to write"
+    (bug 2026-07-17 proj_cc4ca4ae: the latter was being conflated)."""
+    outcome: str            # "started" | "already_running" | "no_work_to_do"
+    seed_result: Optional["SeedResult"] = None
+    repaired_chapters: list = field(default_factory=list)
+
+
 class AutopilotLoopService:
     """Per-project asyncio task bookkeeping. Lives in app.state.loop_service."""
 
     def __init__(self) -> None:
         self._tasks: dict = {}
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
 
     async def ensure(
         self,
@@ -83,27 +99,83 @@ class AutopilotLoopService:
         mgr: "AutopilotSessionManager",
         executor: "AsyncTaskExecutor",
         cfg: "ManagedStartConfig",
-    ) -> None:
-        """Spawn a runner task for project_id if not already running. Idempotent."""
+    ) -> EnsureResult:
+        """Spawn a runner task for project_id if not already running. Idempotent.
+
+        Returns an EnsureResult carrying:
+          - outcome: "started" | "already_running" | "no_work_to_do"
+          - seed_result: SeedResult (enqueued count, scope used, fallback flag)
+          - repaired_chapters: chapter numbers flipped from in_progress to
+            completed because their scenes were already terminal
+
+        The richer return shape lets the API distinguish "your scope was
+        too narrow and we widened it" from "the project really is finished"
+        — without that distinction the 2026-07-17 proj_cc4ca4ae UI showed
+        a misleading "all 33 chapters done" toast when ch21 was already
+        done but ch31-33 had no progress at all.
+        """
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             existing = self._tasks.get(project_id)
             if existing and not existing.done():
-                return
+                return EnsureResult(outcome="already_running")
             projects_dir = mgr._projects_dir
             outline = _read_outline(projects_dir, project_id)
             progress = _read_progress(projects_dir, project_id)
             novel_outline = _read_novel_outline(projects_dir, project_id)
-            from backend.conductor.autopilot_runner_async import seed_queue
-            seeded = seed_queue(mgr, outline, progress, novel_outline, cfg)
-            if seeded == 0:
+
+            # Repair chapters stuck at status='in_progress' despite all
+            # outline scenes being terminal. Pure on the in-memory dict; we
+            # persist back to disk so seed_queue + the UI both see the
+            # corrected state. Without this, the executor's mid-run stop can
+            # leave chapters half-finalized forever (proj_cc4ca4ae 2026-07-17
+            # had ch21-30 stuck this way).
+            from backend.conductor.autopilot_runner_async import (
+                repair_stuck_chapters, seed_queue,
+            )
+            repaired = repair_stuck_chapters(progress, outline)
+            if repaired and progress:
+                # Best-effort persist; failure here must not block start.
+                progress_path = projects_dir / project_id / "progress.json"
+                try:
+                    progress_path.write_text(
+                        json.dumps(progress, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    logger.warning(
+                        "autopilot start: failed to persist repaired progress for %s (chapters=%s)",
+                        project_id, repaired, exc_info=True,
+                    )
+
+            seed_result = seed_queue(mgr, outline, progress, novel_outline, cfg)
+            # Use queue length, not seed_result.enqueued, to decide no-work.
+            # seed_queue is idempotent: a re-start whose target scenes are
+            # already in mgr.queue returns enqueued=0 but the queue itself
+            # still has work. If we treated enqueued==0 as "nothing to do",
+            # every restart would stop the session and orphan the queued
+            # items (bug 2026-07-17 proj_cc4ca4ae).
+            post_snapshot = mgr.load()
+            queue_len = len(post_snapshot.queue) if post_snapshot else 0
+            if queue_len == 0:
                 # Nothing to do — don't spawn a loop that would immediately exit.
                 mgr.stop()
-                return
+                return EnsureResult(
+                    outcome="no_work_to_do",
+                    seed_result=seed_result,
+                    repaired_chapters=repaired,
+                )
             task = asyncio.create_task(
                 _runner_loop_task(self, project_id, mgr, executor, cfg),
                 name=f"autopilot-{project_id}",
             )
             self._tasks[project_id] = task
+            return EnsureResult(
+                outcome="started",
+                seed_result=seed_result,
+                repaired_chapters=repaired,
+            )
 
     async def cancel(self, project_id: str) -> None:
         """Cancel + await the task. No-op if no task exists."""

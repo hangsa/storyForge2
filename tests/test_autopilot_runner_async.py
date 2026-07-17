@@ -4,7 +4,11 @@ the AutopilotSession queue. Spec: docs/superpowers/specs/2026-07-14-...
 from __future__ import annotations
 import pytest
 
-from backend.conductor.autopilot_runner_async import is_chapter_complete
+from backend.conductor.autopilot_runner_async import (
+    archive_priority,
+    is_chapter_complete,
+    scene_priority,
+)
 
 
 def _scene(scene_number: int, status: str = "completed") -> dict:
@@ -131,18 +135,19 @@ class TestSeedQueue:
             ]},
             progress=None, novel_outline=None, cfg=ManagedStartConfig(),
         )
-        assert n == 5  # 3 + 2
+        assert n.enqueued == 5  # 3 + 2
         s = mgr.load()
         assert len(s.queue) == 5
-        # add_queue sorts by priority. Priority = 20 + scene_number, so
-        # ch1s1(21)/ch2s1(21)/ch1s2(22)/ch2s2(22)/ch1s3(23).
-        nums = [q.payload["scene_number"] for q in s.queue
-                if q.kind == "write_scene"]
-        chapters = [q.chapter_number for q in s.queue if q.kind == "write_scene"]
-        assert chapters == [1, 2, 1, 2, 1]
-        assert nums == [1, 1, 2, 2, 3]
-        # Priorities match: 20 + scene_number (sorted ascending by add_queue).
-        assert [q.priority for q in s.queue if q.kind == "write_scene"] == [21, 21, 22, 22, 23]
+        # Row-major: chapter_number then scene_number (ch1's scenes all before ch2's).
+        # Priority = chapter * 1000 + scene_number.
+        ch_scene_pairs = [
+            (q.chapter_number, q.payload["scene_number"])
+            for q in s.queue if q.kind == "write_scene"
+        ]
+        assert ch_scene_pairs == [(1, 1), (1, 2), (1, 3), (2, 1), (2, 2)]
+        assert [q.priority for q in s.queue if q.kind == "write_scene"] == [
+            1001, 1002, 1003, 2001, 2002,
+        ]  # noqa: E501
 
     def test_all_planned_skips_completed_scenes(self, mgr, projects_dir):
         """Spec §5 row 5: progress shorter than outline; only enqueue missing."""
@@ -163,7 +168,7 @@ class TestSeedQueue:
             ]},
             novel_outline=None, cfg=ManagedStartConfig(),
         )
-        assert n == 2  # scenes 2 and 3 only
+        assert n.enqueued == 2  # scenes 2 and 3 only
         nums = [q.payload["scene_number"] for q in mgr.load().queue]
         assert nums == [2, 3]
 
@@ -179,7 +184,7 @@ class TestSeedQueue:
             novel_outline=None,
             cfg=ManagedStartConfig(scope="next_chapter"),
         )
-        assert n == 1
+        assert n.enqueued == 1
         assert mgr.load().queue[0].chapter_number == 2
 
     def test_chapter_fully_done_is_skipped(self, mgr):
@@ -197,7 +202,7 @@ class TestSeedQueue:
             ]},
             novel_outline=None, cfg=ManagedStartConfig(),
         )
-        assert n == 0
+        assert n.enqueued == 0
 
     def test_zombie_scene_is_re_enqueued(self, mgr):
         """Spec §5 row 7: in_progress scene is treated as not yet done."""
@@ -213,10 +218,12 @@ class TestSeedQueue:
             ]},
             novel_outline=None, cfg=ManagedStartConfig(),
         )
-        assert n == 1
+        assert n.enqueued == 1
 
     def test_returns_zero_when_nothing_to_do(self, mgr):
-        n = seed_queue(
+        from backend.conductor.autopilot_runner_async import seed_queue
+        from backend.models.autopilot_session import ManagedStartConfig
+        result = seed_queue(
             mgr,
             outline={"chapters": [
                 {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
@@ -228,7 +235,487 @@ class TestSeedQueue:
             ]},
             novel_outline=None, cfg=ManagedStartConfig(),
         )
-        assert n == 0
+        assert result.enqueued == 0
+        assert result.scope_used == "all_planned"
+        assert result.fallback_applied is False
+
+    def test_seed_queue_is_idempotent_when_called_twice(self, mgr):
+        """Bug 2026-07-17 proj_cc4ca4ae: every "启动托管" click called
+        seed_queue, and each call appended all 10 scenes again because
+        QueueItem ids are deterministic but mgr.add_queue never dedupes.
+        Over 3 restarts the queue grew 10→20→30 and history ballooned
+        with thousands of `queue_add` events. seed_queue must be idempotent:
+        calling it twice on the same mgr without draining the queue must
+        leave the queue length unchanged."""
+        outline = {"chapters": [
+            {"chapter_number": 1, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2}, {"scene_number": 3},
+            ]},
+            {"chapter_number": 2, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2},
+            ]},
+        ]}
+        first = seed_queue(
+            mgr, outline=outline, progress=None,
+            novel_outline=None, cfg=ManagedStartConfig(),
+        )
+        assert first.enqueued == 5
+        queue_len_after_first = len(mgr.load().queue)
+        assert queue_len_after_first == 5
+
+        # Second call: same scope, same mgr, queue not drained.
+        # Must not grow. seed_queue reports enqueued=0 because every item
+        # is already in the queue.
+        second = seed_queue(
+            mgr, outline=outline, progress=None,
+            novel_outline=None, cfg=ManagedStartConfig(),
+        )
+        assert second.enqueued == 0
+        assert len(mgr.load().queue) == queue_len_after_first
+
+        # Third call: still idempotent.
+        third = seed_queue(
+            mgr, outline=outline, progress=None,
+            novel_outline=None, cfg=ManagedStartConfig(),
+        )
+        assert third.enqueued == 0
+        assert len(mgr.load().queue) == queue_len_after_first
+
+    def test_seed_queue_dedup_across_scope_changes(self, mgr):
+        """Calling seed_queue with all_planned after some scenes were already
+        queued must not re-add them, regardless of which scope populated the
+        queue first."""
+        # Simulate a previous start that seeded ch1 scene 1 via the older
+        # non-deduping path.
+        mgr.add_queue(QueueItem(
+            id="write-1-1", kind="write_scene", chapter_number=1,
+            scheduled_at=None, priority=21, payload={"scene_number": 1},
+        ))
+        result = seed_queue(
+            mgr,
+            outline={"chapters": [
+                {"chapter_number": 1, "scene_plan": [
+                    {"scene_number": 1}, {"scene_number": 2}, {"scene_number": 3},
+                ]},
+            ]},
+            progress=None, novel_outline=None,
+            cfg=ManagedStartConfig(),
+        )
+        # Only ch1 scene 2 and 3 are new; scene 1 was already in queue.
+        assert result.enqueued == 2
+        nums = sorted(q.payload["scene_number"] for q in mgr.load().queue
+                      if q.kind == "write_scene")
+        assert nums == [1, 2, 3]  # no duplicate
+
+
+class TestSeedQueueNextChapterFallback:
+    """Bug 2026-07-17 proj_cc4ca4ae: scope=next_chapter with current_chapter
+    already complete returned 0 and triggered a misleading 'all 33 chapters
+    done' toast, even though ch31-33 had no progress at all. seed_queue must
+    auto-fallback to all_planned when next_chapter produces zero items but
+    later chapters still have unfinished scenes."""
+
+    def test_fallback_when_next_chapter_complete_but_later_chapters_unfinished(self, mgr):
+        from backend.conductor.autopilot_runner_async import seed_queue
+        from backend.models.autopilot_session import ManagedStartConfig
+        # current_chapter=2, ch2's scene is completed (the only scene in ch2's
+        # plan). ch3 has 2 unfinished scenes.
+        result = seed_queue(
+            mgr,
+            outline={"chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 3, "scene_plan": [
+                    {"scene_number": 1}, {"scene_number": 2},
+                ]},
+            ]},
+            progress={"current_chapter": 2, "chapters": [
+                {"chapter_number": 1, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+                {"chapter_number": 2, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+            ]},
+            novel_outline=None,
+            cfg=ManagedStartConfig(scope="next_chapter"),
+        )
+        assert result.enqueued == 2
+        assert result.scope_used == "all_planned"
+        assert result.fallback_applied is True
+        # The ch3 scenes are in the queue.
+        chapters = sorted({q.chapter_number for q in mgr.load().queue})
+        assert chapters == [3]
+
+    def test_no_fallback_when_next_chapter_has_work(self, mgr):
+        """Sanity: when the scoped chapter itself has unfinished scenes, no
+        fallback should occur and only that chapter's scenes are enqueued."""
+        from backend.conductor.autopilot_runner_async import seed_queue
+        from backend.models.autopilot_session import ManagedStartConfig
+        result = seed_queue(
+            mgr,
+            outline={"chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
+            ]},
+            progress={"current_chapter": 2, "chapters": [
+                {"chapter_number": 1, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+            ]},
+            novel_outline=None,
+            cfg=ManagedStartConfig(scope="next_chapter"),
+        )
+        assert result.enqueued == 1
+        assert result.scope_used == "next_chapter"
+        assert result.fallback_applied is False
+
+    def test_no_fallback_when_all_planned_scope_used(self, mgr):
+        """Sanity: all_planned is the natural scope for fallback targets;
+        calling it explicitly never reports a fallback."""
+        from backend.conductor.autopilot_runner_async import seed_queue
+        from backend.models.autopilot_session import ManagedStartConfig
+        result = seed_queue(
+            mgr,
+            outline={"chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+            ]},
+            progress=None, novel_outline=None,
+            cfg=ManagedStartConfig(scope="all_planned"),
+        )
+        assert result.enqueued == 1
+        assert result.scope_used == "all_planned"
+        assert result.fallback_applied is False
+
+    def test_returns_zero_with_no_fallback_when_all_truly_done(self, mgr):
+        """When all chapters are genuinely complete, seed_queue must still
+        return 0 with no fallback (otherwise we'd enqueue phantom scenes)."""
+        from backend.conductor.autopilot_runner_async import seed_queue
+        from backend.models.autopilot_session import ManagedStartConfig
+        result = seed_queue(
+            mgr,
+            outline={"chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+            ]},
+            progress={"current_chapter": 2, "chapters": [
+                {"chapter_number": 1, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+            ]},
+            novel_outline=None,
+            cfg=ManagedStartConfig(scope="next_chapter"),
+        )
+        assert result.enqueued == 0
+        assert result.fallback_applied is False
+
+    def test_no_fallback_when_next_chapter_work_already_queued(self, mgr):
+        """Dedup interaction: with idempotent seeding, scope=next_chapter
+        may return enqueued=0 because its scene is already in the queue
+        (e.g., a previous start seeded it). The fallback decision must be
+        based on whether the requested scope has any candidates (matched>0),
+        not on whether we just added new items (enqueued==0). Otherwise
+        every restart would silently widen the scope to all_planned and
+        the UI would mysteriously churn through chapters the user didn't
+        ask for. Bug 2026-07-17 proj_cc4ca4ae: this exact interaction
+        combined with the 30-item queue growth."""
+        from backend.conductor.autopilot_runner_async import seed_queue
+        from backend.models.autopilot_session import ManagedStartConfig
+        # current_chapter=2, ch2's scene is unfinished, but already in queue
+        # from a prior seed_queue call (simulated here by pre-loading the
+        # queue with the deterministic QueueItem id).
+        mgr.add_queue(QueueItem(
+            id="write-2-1", kind="write_scene", chapter_number=2,
+            scheduled_at=None, priority=21, payload={"scene_number": 1},
+        ))
+        result = seed_queue(
+            mgr,
+            outline={"chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 3, "scene_plan": [{"scene_number": 1}]},
+            ]},
+            progress={"current_chapter": 2, "chapters": [
+                {"chapter_number": 1, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+            ]},
+            novel_outline=None,
+            cfg=ManagedStartConfig(scope="next_chapter"),
+        )
+        # ch2 has work (matched>0), and even though we added 0 new items
+        # (dedup), we must NOT fall back to all_planned and silently
+        # enqueue ch3.
+        assert result.enqueued == 0
+        assert result.matched == 1  # the scope has one candidate
+        assert result.scope_used == "next_chapter"
+        assert result.fallback_applied is False
+        # And critically: ch3's scene must NOT have been added.
+        ids = {q.id for q in mgr.load().queue}
+        assert "write-3-1" not in ids
+        assert ids == {"write-2-1"}
+
+    def test_fallback_fires_when_next_chapter_has_zero_candidates(self, mgr):
+        """The companion case: when the requested scope has zero candidates
+        (the chapter is genuinely done in progress.json) and later chapters
+        have unfinished scenes, fall back to all_planned. matched==0 here
+        (ch2's scene is already a DONE_STATUS in progress.json)."""
+        from backend.conductor.autopilot_runner_async import seed_queue
+        from backend.models.autopilot_session import ManagedStartConfig
+        result = seed_queue(
+            mgr,
+            outline={"chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 3, "scene_plan": [
+                    {"scene_number": 1}, {"scene_number": 2},
+                ]},
+            ]},
+            progress={"current_chapter": 2, "chapters": [
+                {"chapter_number": 1, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+                {"chapter_number": 2, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+            ]},
+            novel_outline=None,
+            cfg=ManagedStartConfig(scope="next_chapter"),
+        )
+        assert result.matched == 0  # ch2 has no candidates
+        assert result.enqueued == 2  # fallback enqueued ch3's two scenes
+        assert result.scope_used == "all_planned"
+        assert result.fallback_applied is True
+
+
+class TestRowMajorPriority:
+    """Bug 2026-07-17: seed_queue used column-major priority (20 + scene_number),
+    which interleaved scene N of every chapter before scene N+1 of any chapter.
+    This forced per-scene cache rebuilds (L1/L4/L2 invalidated at every chapter
+    transition) and broke narrative coherence — ch32.scene_1 was written
+    before ch31.scene_2, so MemoryOS L2 had only ch30's summary when writing
+    ch32. Fixed by switching to row-major priority (chapter * 1000 + scene)."""
+
+    def test_chapters_seeded_in_chapter_order_not_scene_order(self, mgr):
+        """Outline: ch1 has 3 scenes, ch2 has 2 scenes. seed_queue must place
+        all of ch1's scenes BEFORE any of ch2's scenes."""
+        outline = {"chapters": [
+            {"chapter_number": 1, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2}, {"scene_number": 3},
+            ]},
+            {"chapter_number": 2, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2},
+            ]},
+        ]}
+        seed_queue(
+            mgr, outline=outline, progress=None, novel_outline=None,
+            cfg=ManagedStartConfig(),
+        )
+        chapters = [q.chapter_number for q in mgr.load().queue
+                    if q.kind == "write_scene"]
+        scenes = [q.payload["scene_number"] for q in mgr.load().queue
+                  if q.kind == "write_scene"]
+        assert chapters == [1, 1, 1, 2, 2]
+        assert scenes == [1, 2, 3, 1, 2]
+
+    def test_scene_priorities_are_unique_within_a_chapter(self, mgr):
+        """Each scene in a chapter gets a distinct priority (strictly increasing
+        with scene_number)."""
+        outline = {"chapters": [
+            {"chapter_number": 5, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2}, {"scene_number": 3},
+                {"scene_number": 4},
+            ]},
+        ]}
+        seed_queue(
+            mgr, outline=outline, progress=None, novel_outline=None,
+            cfg=ManagedStartConfig(),
+        )
+        priorities = [q.priority for q in mgr.load().queue
+                      if q.kind == "write_scene"]
+        assert priorities == sorted(priorities)  # monotonic non-decreasing
+        assert len(set(priorities)) == len(priorities)  # all unique
+
+    def test_chapter_boundary_respected_across_three_chapters(self, mgr):
+        """The largest priority in chapter N must be smaller than the smallest
+        priority in chapter N+1 (no inter-chapter interleaving)."""
+        outline = {"chapters": [
+            {"chapter_number": 1, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2},
+            ]},
+            {"chapter_number": 2, "scene_plan": [
+                {"scene_number": 1},
+            ]},
+            {"chapter_number": 3, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2}, {"scene_number": 3},
+            ]},
+        ]}
+        seed_queue(
+            mgr, outline=outline, progress=None, novel_outline=None,
+            cfg=ManagedStartConfig(),
+        )
+        queue = [q for q in mgr.load().queue if q.kind == "write_scene"]
+        groups = {}
+        for q in queue:
+            groups.setdefault(q.chapter_number, []).append(q.priority)
+        # Within each chapter: priorities sorted ascending
+        for ch, ps in groups.items():
+            assert ps == sorted(ps), f"chapter {ch} priorities not ascending"
+        # Cross-chapter: max of N < min of N+1
+        sorted_chs = sorted(groups.keys())
+        for a, b in zip(sorted_chs, sorted_chs[1:]):
+            assert max(groups[a]) < min(groups[b]), (
+                f"chapter {a} max ({max(groups[a])}) not < chapter {b} min "
+                f"({min(groups[b])})"
+            )
+
+    def test_priority_formula_is_documented_and_increasing_with_chapter(self, mgr):
+        """Sanity: priority is positive, monotonically increases with chapter
+        AND with scene_number, and the formula is chapter*1000 + scene."""
+        outline = {"chapters": [
+            {"chapter_number": 7, "scene_plan": [{"scene_number": 2}]},
+            {"chapter_number": 8, "scene_plan": [{"scene_number": 1}]},
+        ]}
+        seed_queue(
+            mgr, outline=outline, progress=None, novel_outline=None,
+            cfg=ManagedStartConfig(),
+        )
+        priorities = {(q.chapter_number, q.payload["scene_number"]): q.priority
+                      for q in mgr.load().queue if q.kind == "write_scene"}
+        assert priorities[(7, 2)] == 7002
+        assert priorities[(8, 1)] == 8001
+        assert priorities[(7, 2)] < priorities[(8, 1)]
+
+    def test_archive_priority_sits_between_chapters(self):
+        assert scene_priority(7, 998) < archive_priority(7)
+        assert archive_priority(7) < scene_priority(8, 1)
+
+
+class TestRepairStuckChapters:
+    """Bug 2026-07-17 proj_cc4ca4ae: chapters 21-30 had status='in_progress'
+    in progress.json but every scene was already 'completed' (writes finished,
+    chapter-level flip never happened — probably because the runner stopped
+    between scene-finalize and chapter-finalize). Without a repair, the
+    autopilot looks 'halfway done' forever and users see stale state. We
+    auto-flip such chapters in-memory before seed_queue runs."""
+
+    def test_flips_in_progress_chapter_when_all_scenes_completed(self):
+        from backend.conductor.autopilot_runner_async import repair_stuck_chapters
+        progress = {
+            "current_chapter": 21,
+            "chapters": [
+                {"chapter_number": 21, "status": "in_progress", "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                    {"scene_number": 2, "status": "completed"},
+                    {"scene_number": 3, "status": "completed"},
+                ]},
+            ],
+        }
+        outline = {"chapters": [
+            {"chapter_number": 21, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2}, {"scene_number": 3},
+            ]},
+        ]}
+        repaired = repair_stuck_chapters(progress, outline)
+        assert repaired == [21]
+        assert progress["chapters"][0]["status"] == "completed"
+
+    def test_force_passed_and_skipped_count_as_done(self):
+        from backend.conductor.autopilot_runner_async import repair_stuck_chapters
+        progress = {"chapters": [
+            {"chapter_number": 5, "status": "in_progress", "scenes": [
+                {"scene_number": 1, "status": "completed"},
+                {"scene_number": 2, "status": "force_passed"},
+                {"scene_number": 3, "status": "skipped"},
+            ]},
+        ]}
+        outline = {"chapters": [
+            {"chapter_number": 5, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2}, {"scene_number": 3},
+            ]},
+        ]}
+        assert repair_stuck_chapters(progress, outline) == [5]
+
+    def test_leaves_in_progress_chapter_alone_when_scene_still_pending(self):
+        from backend.conductor.autopilot_runner_async import repair_stuck_chapters
+        progress = {"chapters": [
+            {"chapter_number": 7, "status": "in_progress", "scenes": [
+                {"scene_number": 1, "status": "completed"},
+                {"scene_number": 2, "status": "in_progress"},
+            ]},
+        ]}
+        outline = {"chapters": [
+            {"chapter_number": 7, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2},
+            ]},
+        ]}
+        assert repair_stuck_chapters(progress, outline) == []
+        assert progress["chapters"][0]["status"] == "in_progress"
+
+    def test_leaves_completed_chapter_alone(self):
+        from backend.conductor.autopilot_runner_async import repair_stuck_chapters
+        progress = {"chapters": [
+            {"chapter_number": 3, "status": "completed", "scenes": [
+                {"scene_number": 1, "status": "completed"},
+            ]},
+        ]}
+        outline = {"chapters": [
+            {"chapter_number": 3, "scene_plan": [{"scene_number": 1}]},
+        ]}
+        assert repair_stuck_chapters(progress, outline) == []
+
+    def test_repairs_multiple_chapters_at_once(self):
+        from backend.conductor.autopilot_runner_async import repair_stuck_chapters
+        progress = {"chapters": [
+            {"chapter_number": 1, "status": "completed", "scenes": [
+                {"scene_number": 1, "status": "completed"},
+            ]},
+            {"chapter_number": 2, "status": "in_progress", "scenes": [
+                {"scene_number": 1, "status": "completed"},
+            ]},
+            {"chapter_number": 3, "status": "in_progress", "scenes": [
+                {"scene_number": 1, "status": "in_progress"},
+            ]},
+            {"chapter_number": 4, "status": "in_progress", "scenes": [
+                {"scene_number": 1, "status": "completed"},
+                {"scene_number": 2, "status": "completed"},
+            ]},
+        ]}
+        outline = {"chapters": [
+            {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+            {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
+            {"chapter_number": 3, "scene_plan": [{"scene_number": 1}]},
+            {"chapter_number": 4, "scene_plan": [
+                {"scene_number": 1}, {"scene_number": 2},
+            ]},
+        ]}
+        assert repair_stuck_chapters(progress, outline) == [2, 4]
+        statuses = {ch["chapter_number"]: ch["status"] for ch in progress["chapters"]}
+        assert statuses == {1: "completed", 2: "completed", 3: "in_progress", 4: "completed"}
+
+    def test_skips_chapter_without_outline_match(self):
+        """Defensive: a progress entry whose chapter_number isn't in the
+        outline (e.g. scrubbed) shouldn't be touched — we have no ground truth."""
+        from backend.conductor.autopilot_runner_async import repair_stuck_chapters
+        progress = {"chapters": [
+            {"chapter_number": 99, "status": "in_progress", "scenes": [
+                {"scene_number": 1, "status": "completed"},
+            ]},
+        ]}
+        outline = {"chapters": [
+            {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+        ]}
+        assert repair_stuck_chapters(progress, outline) == []
+        assert progress["chapters"][0]["status"] == "in_progress"
+
+    def test_skips_chapter_with_empty_scene_plan(self):
+        from backend.conductor.autopilot_runner_async import repair_stuck_chapters
+        progress = {"chapters": [
+            {"chapter_number": 8, "status": "in_progress", "scenes": []},
+        ]}
+        outline = {"chapters": [
+            {"chapter_number": 8, "scene_plan": []},
+        ]}
+        assert repair_stuck_chapters(progress, outline) == []
 
 
 import json
@@ -324,10 +811,17 @@ class TestFakeStage4Executor:
                       payload={"scene_number": 2}),
             project_id="p1",
         )
+        await executor.execute(
+            QueueItem(id="w-1-2-retry", kind="write_scene", chapter_number=1,
+                      scheduled_at=None, priority=22,
+                      payload={"scene_number": 2}),
+            project_id="p1",
+        )
         archival = [q for q in mgr.load().queue if q.kind == "archival"]
         assert len(archival) == 1
         assert archival[0].chapter_number == 1
-        assert archival[0].priority == 10  # ahead of next chapter's write_scene
+        # Row-major: archive chapter 1 after its scenes and before chapter 2.
+        assert archival[0].priority == 1999
 
     @pytest.mark.asyncio
     async def test_archival_advances_and_seeds_next_chapter(
@@ -344,6 +838,10 @@ class TestFakeStage4Executor:
         prog_path.write_text(json.dumps(prog), encoding="utf-8")
 
         mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(
+            id="write-2-1", kind="write_scene", chapter_number=2,
+            scheduled_at=None, priority=2001, payload={"scene_number": 1},
+        ))
         executor = FakeStage4Executor(
             mgr, projects_dir,
             draft_factory=lambda c, s: f"<d {c}-{s}>",
@@ -360,8 +858,9 @@ class TestFakeStage4Executor:
             (projects_dir / "p1" / "progress.json").read_text()
         )
         assert progress["current_chapter"] == 2
-        kinds = [q.kind for q in mgr.load().queue]
-        assert "write_scene" in kinds
+        seeded = [q for q in mgr.load().queue if q.kind == "write_scene"]
+        assert len(seeded) == 1
+        assert seeded[0].priority == 2001
 
     @pytest.mark.asyncio
     async def test_archival_failure_raises_so_runner_pauses(
@@ -457,6 +956,10 @@ class TestAsyncStage4ExecutorControlFlow:
         monkeypatch.setattr(mod, "_advance_chapter", fake_advance_chapter)
 
         executor = AsyncStage4Executor(projects_dir)
+        executor._mgr_for("p1").add_queue(QueueItem(
+            id="write-2-1", kind="write_scene", chapter_number=2,
+            scheduled_at=None, priority=2001, payload={"scene_number": 1},
+        ))
         result = await executor.execute(
             QueueItem(id="a-1", kind="archival", chapter_number=1,
                       scheduled_at=None, priority=10, payload={}),
@@ -464,6 +967,12 @@ class TestAsyncStage4ExecutorControlFlow:
         )
         assert result["status"] == "ok"
         assert result["advanced"] is True
+        seeded = [
+            q for q in executor._mgr_for("p1").load().queue
+            if q.kind == "write_scene"
+        ]
+        assert len(seeded) == 1
+        assert seeded[0].priority == 2001
 
     @pytest.mark.asyncio
     async def test_unsupported_kind_raises_value_error(

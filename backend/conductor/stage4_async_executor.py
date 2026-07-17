@@ -17,9 +17,14 @@ from backend.models.autopilot_session import QueueItem, SessionState
 
 from backend.api.stage4_writing import (
     OutlineExhaustedError,
+    _normalize_scene_text,
     _write_scene_chapter, _write_scene_chapter_stream, _advance_chapter,
 )
-from backend.conductor.autopilot_runner_async import is_chapter_complete
+from backend.conductor.autopilot_runner_async import (
+    archive_priority,
+    is_chapter_complete,
+    scene_priority,
+)
 
 
 def _read_outline(projects_dir: Path, project_id: str) -> dict:
@@ -124,13 +129,21 @@ def _write_scene_progress(
     fm.write_json(project_id, "progress.json", progress)
 
 
+def _add_queue_if_absent(mgr, item: QueueItem) -> bool:
+    current = mgr.load()
+    if current is not None and any(queued.id == item.id for queued in current.queue):
+        return False
+    mgr.add_queue(item)
+    return True
+
+
 def _maybe_enqueue_archival(
     mgr, projects_dir: Path, project_id: str, chapter_number: int
 ) -> bool:
     """If the given chapter is now complete (per is_chapter_complete), enqueue
-    an archival item with priority 10 (ahead of any next-chapter write_scene).
-    Returns True if enqueued. Used by both AsyncStage4Executor and
-    FakeStage4Executor to keep the post-write control flow in one place."""
+    an archival item after the chapter's last scene and before the next
+    chapter's first scene. Returns True if enqueued. Used by both executors
+    to keep the post-write control flow in one place."""
     progress = _read_progress(projects_dir, project_id)
     outline = _read_outline(projects_dir, project_id)
     ch_p = next(
@@ -146,15 +159,14 @@ def _maybe_enqueue_archival(
     if ch_p and ch_o and is_chapter_complete(
         ch_p.get("scenes", []), ch_o.get("scene_plan", []),
     ):
-        mgr.add_queue(QueueItem(
+        return _add_queue_if_absent(mgr, QueueItem(
             id=f"archive-{chapter_number}",
             kind="archival",
             chapter_number=chapter_number,
             scheduled_at=None,
-            priority=10,
+            priority=archive_priority(chapter_number),
             payload={},
         ))
-        return True
     return False
 
 
@@ -257,7 +269,20 @@ class AsyncStage4Executor:
                 scene_number=scene,
             ):
                 if event["event"] == "chunk":
-                    record = chunk_store.append(event["text"])
+                    # Strip reasoning-model artifacts (think-block + JSON
+                    # wrapper leftovers) BEFORE storing and publishing, so
+                    # the cockpit live stream AND the SceneChunkStore replay
+                    # both see clean prose. See _normalize_scene_text's
+                    # docstring for why this matters — the per-chunk pass
+                    # handles early-arriving think blocks; the post-stream
+                    # pass at the end handles the complete JSON wrapper.
+                    raw = event["text"]
+                    normalized = _normalize_scene_text(raw)
+                    # Skip the chunk entirely if normalization empties it
+                    # (e.g. a chunk that was 100% think-block content).
+                    if not normalized:
+                        continue
+                    record = chunk_store.append(normalized)
                     self._broadcaster.publish("scene_chunk", {
                         "seq": record.seq,
                         "chapter_number": record.chapter_number,
@@ -337,12 +362,12 @@ class AsyncStage4Executor:
         if next_ch_entry is None:
             return {"status": "ok", "advanced": True, "next": None}
         for s in next_ch_entry.get("scene_plan", []):
-            mgr.add_queue(QueueItem(
+            _add_queue_if_absent(mgr, QueueItem(
                 id=f"write-{next_ch}-{s['scene_number']}",
                 kind="write_scene",
                 chapter_number=next_ch,
                 scheduled_at=None,
-                priority=20 + s["scene_number"],
+                priority=scene_priority(next_ch, s["scene_number"]),
                 payload={"scene_number": s["scene_number"]},
             ))
         return {"status": "ok", "advanced": True, "next": next_ch}
@@ -399,12 +424,12 @@ class FakeStage4Executor:
             if next_ch_entry is None:
                 return {"status": "ok", "advanced": True, "next": None}
             for s in next_ch_entry.get("scene_plan", []):
-                self._mgr.add_queue(QueueItem(
+                _add_queue_if_absent(self._mgr, QueueItem(
                     id=f"write-{next_ch}-{s['scene_number']}",
                     kind="write_scene",
                     chapter_number=next_ch,
                     scheduled_at=None,
-                    priority=20 + s["scene_number"],
+                    priority=scene_priority(next_ch, s["scene_number"]),
                     payload={"scene_number": s["scene_number"]},
                 ))
             return {"status": "ok", "advanced": True, "next": next_ch}

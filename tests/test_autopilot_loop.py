@@ -21,6 +21,19 @@ def projects_dir(tmp_path: Path):
 
 
 class TestLoopLifecycle:
+    def test_construct_without_current_event_loop(self):
+        policy = asyncio.get_event_loop_policy()
+        try:
+            previous_loop = policy.get_event_loop()
+        except RuntimeError:
+            previous_loop = None
+        policy.set_event_loop(None)
+        try:
+            svc = AutopilotLoopService()
+        finally:
+            policy.set_event_loop(previous_loop)
+        assert svc.is_running("p1") is False
+
     @pytest.mark.asyncio
     async def test_ensure_is_idempotent(self, projects_dir):
         from backend.conductor.autopilot_session import AutopilotSessionManager
@@ -224,3 +237,249 @@ class TestCrashRecovery:
         assert payload["state"] == "running"
         # Cleanup
         await svc.cancel(pid)
+
+# --- ensure() return contract -------------------------------------------------
+# Found 2026-07-17: clicking "启动托管" on a project with all chapters already
+# complete looks broken — the session flips running→stopped in ~50ms with no
+# feedback. ensure() now returns a string so the API can surface a friendly
+# "project all done" message instead.
+
+class TestEnsureReturnContract:
+    @pytest.mark.asyncio
+    async def test_ensure_returns_started_when_seeded(self, projects_dir):
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig, SessionState
+        # Outline with one unfinished chapter so seed_queue returns > 0.
+        (projects_dir / "p1" / "outline.json").write_text(
+            json.dumps({
+                "chapters": [{
+                    "chapter_number": 1,
+                    "scene_plan": [{"scene_number": 1}, {"scene_number": 2}],
+                }],
+            }),
+            encoding="utf-8",
+        )
+        svc = AutopilotLoopService()
+        mgr = AutopilotSessionManager(projects_dir, "p1")
+        mgr.start(ManagedStartConfig())
+
+        class StubExec:
+            async def execute(self, item, project_id):
+                return {"status": "ok"}
+        result = await svc.ensure("p1", mgr, StubExec(), ManagedStartConfig())
+        assert result.outcome == "started"
+        assert svc.is_running("p1") is True
+        await svc.cancel("p1")
+
+    @pytest.mark.asyncio
+    async def test_ensure_returns_no_work_to_do_when_all_complete(self, projects_dir):
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig, SessionState
+        # Outline + progress where every scene is already completed.
+        (projects_dir / "p1" / "outline.json").write_text(
+            json.dumps({
+                "chapters": [{
+                    "chapter_number": 1,
+                    "scene_plan": [{"scene_number": 1}],
+                }],
+            }),
+            encoding="utf-8",
+        )
+        (projects_dir / "p1" / "progress.json").write_text(
+            json.dumps({
+                "current_chapter": 2,
+                "chapters": [{
+                    "chapter_number": 1,
+                    "status": "completed",
+                    "scenes": [{"scene_number": 1, "status": "completed"}],
+                }],
+            }),
+            encoding="utf-8",
+        )
+        svc = AutopilotLoopService()
+        mgr = AutopilotSessionManager(projects_dir, "p1")
+        mgr.start(ManagedStartConfig())
+
+        class StubExec:
+            async def execute(self, item, project_id):
+                return {"status": "ok"}
+        result = await svc.ensure("p1", mgr, StubExec(), ManagedStartConfig())
+        assert result.outcome == "no_work_to_do"
+        assert result.seed_result.enqueued == 0
+        assert result.repaired_chapters == []
+        # Critical: session MUST be stopped in this branch so the state
+        # machine is consistent (otherwise a subsequent /start would flip
+        # the state again and seed_queue would still return 0, creating
+        # the original "click does nothing" bug).
+        assert mgr.load().state == SessionState.STOPPED
+        assert svc.is_running("p1") is False
+
+    @pytest.mark.asyncio
+    async def test_ensure_repairs_stuck_chapters_before_seed(self, projects_dir):
+        """Bug 2026-07-17 proj_cc4ca4ae: chapters 21-30 had status='in_progress'
+        in progress.json but every scene was 'completed'. ensure() must
+        auto-repair those before seeding so seed_queue sees the corrected
+        state. Repaired chapters are returned in the result so the API can
+        surface them in the no_work_to_do toast / response."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig
+        # Outline says ch2 has 2 scenes; progress says ch2 is in_progress
+        # with both scenes completed → repair should flip it. ch3 is
+        # genuinely unfinished, so seed_queue enqueues it (and ch2 is
+        # already correct post-repair, so no scene there).
+        (projects_dir / "p1" / "outline.json").write_text(json.dumps({
+            "chapters": [
+                {"chapter_number": 2, "scene_plan": [
+                    {"scene_number": 1}, {"scene_number": 2},
+                ]},
+                {"chapter_number": 3, "scene_plan": [
+                    {"scene_number": 1},
+                ]},
+            ],
+        }), encoding="utf-8")
+        (projects_dir / "p1" / "progress.json").write_text(json.dumps({
+            "current_chapter": 2,
+            "chapters": [
+                {"chapter_number": 2, "status": "in_progress", "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                    {"scene_number": 2, "status": "completed"},
+                ]},
+                {"chapter_number": 3, "status": "in_progress", "scenes": [
+                    {"scene_number": 1, "status": "in_progress"},
+                ]},
+            ],
+        }), encoding="utf-8")
+        svc = AutopilotLoopService()
+        mgr = AutopilotSessionManager(projects_dir, "p1")
+        mgr.start(ManagedStartConfig())
+
+        class StubExec:
+            async def execute(self, item, project_id):
+                return {"status": "ok"}
+
+        result = await svc.ensure("p1", mgr, StubExec(), ManagedStartConfig())
+        assert result.outcome == "started"
+        assert result.repaired_chapters == [2]
+        # The repair is persisted to disk so subsequent reads see it.
+        from pathlib import Path
+        persisted = json.loads(
+            (Path(projects_dir) / "p1" / "progress.json").read_text()
+        )
+        ch2 = next(c for c in persisted["chapters"] if c["chapter_number"] == 2)
+        assert ch2["status"] == "completed"
+        await svc.cancel("p1")
+
+    @pytest.mark.asyncio
+    async def test_ensure_returns_seed_result_with_fallback_info(self, projects_dir):
+        """When seed_queue auto-fallbacks from next_chapter to all_planned,
+        the API needs to know so it can show the user a clear message
+        instead of 'all done'."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig
+        (projects_dir / "p1" / "outline.json").write_text(json.dumps({
+            "chapters": [
+                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 3, "scene_plan": [{"scene_number": 1}]},
+            ],
+        }), encoding="utf-8")
+        # current_chapter=2 with ch2's scene already done → fallback should
+        # widen scope to all_planned and enqueue ch3.
+        (projects_dir / "p1" / "progress.json").write_text(json.dumps({
+            "current_chapter": 2,
+            "chapters": [
+                {"chapter_number": 1, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+                {"chapter_number": 2, "scenes": [
+                    {"scene_number": 1, "status": "completed"},
+                ]},
+            ],
+        }), encoding="utf-8")
+        svc = AutopilotLoopService()
+        mgr = AutopilotSessionManager(projects_dir, "p1")
+        mgr.start(ManagedStartConfig(scope="next_chapter"))
+
+        class StubExec:
+            async def execute(self, item, project_id):
+                return {"status": "ok"}
+
+        result = await svc.ensure(
+            "p1", mgr, StubExec(), ManagedStartConfig(scope="next_chapter"),
+        )
+        assert result.outcome == "started"
+        assert result.seed_result.fallback_applied is True
+        assert result.seed_result.scope_used == "all_planned"
+        assert result.seed_result.enqueued == 1
+        await svc.cancel("p1")
+
+    @pytest.mark.asyncio
+    async def test_ensure_returns_already_running_when_task_in_flight(self, projects_dir):
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import ManagedStartConfig
+        (projects_dir / "p1" / "outline.json").write_text(
+            json.dumps({
+                "chapters": [{
+                    "chapter_number": 1,
+                    "scene_plan": [{"scene_number": 1}, {"scene_number": 2}],
+                }],
+            }),
+            encoding="utf-8",
+        )
+        svc = AutopilotLoopService()
+        mgr = AutopilotSessionManager(projects_dir, "p1")
+        mgr.start(ManagedStartConfig())
+
+        class SlowExec:
+            async def execute(self, item, project_id):
+                await asyncio.sleep(10)  # hold the task alive
+                return {"status": "ok"}
+        first = await svc.ensure("p1", mgr, SlowExec(), ManagedStartConfig())
+        second = await svc.ensure("p1", mgr, SlowExec(), ManagedStartConfig())
+        assert first.outcome == "started"
+        assert second.outcome == "already_running"
+        await svc.cancel("p1")
+
+    @pytest.mark.asyncio
+    async def test_ensure_returns_started_when_queue_pre_seeded(self, projects_dir):
+        """Bug 2026-07-17 proj_cc4ca4ae: ensure() used `seed_result.enqueued==0`
+        to decide no_work_to_do, but with idempotent seeding a re-start adds
+        0 items because they're already in the queue. Without this fix,
+        ensure() would return no_work_to_do and never spawn the loop, so
+        the queue would sit forever. ensure() must instead check whether
+        the queue has work (len(mgr.load().queue) == 0), since dedup means
+        enqueued==0 is no longer equivalent to "nothing to do"."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        from backend.models.autopilot_session import (
+            ManagedStartConfig, QueueItem,
+        )
+        (projects_dir / "p1" / "outline.json").write_text(
+            json.dumps({
+                "chapters": [{
+                    "chapter_number": 1,
+                    "scene_plan": [{"scene_number": 1}],
+                }],
+            }),
+            encoding="utf-8",
+        )
+        svc = AutopilotLoopService()
+        mgr = AutopilotSessionManager(projects_dir, "p1")
+        mgr.start(ManagedStartConfig())
+        # Pre-seed the queue, simulating a prior start whose loop drained
+        # partially and stopped. ensure() must NOT report no_work_to_do.
+        mgr.add_queue(QueueItem(
+            id="write-1-1", kind="write_scene", chapter_number=1,
+            scheduled_at=None, priority=21, payload={"scene_number": 1},
+        ))
+
+        class StubExec:
+            async def execute(self, item, project_id):
+                return {"status": "ok"}
+
+        result = await svc.ensure("p1", mgr, StubExec(), ManagedStartConfig())
+        # With the fix: queue is non-empty → outcome=started and task spawned.
+        # Without the fix: enqueued==0 → outcome=no_work_to_do and session
+        # stops, leaving the queued item orphaned (this is the bug).
+        assert result.outcome == "started"
+        assert svc.is_running("p1") is True
+        await svc.cancel("p1")

@@ -12,8 +12,9 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def projects_dir(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    from backend.api.stage4_fact_guard import fm
-    fm.projects_dir = tmp_path
+    from backend.api import stage4_fact_guard, stage4_writing
+    monkeypatch.setattr(stage4_fact_guard.fm, "projects_dir", tmp_path)
+    monkeypatch.setattr(stage4_writing.fm, "projects_dir", tmp_path)
     return tmp_path
 
 

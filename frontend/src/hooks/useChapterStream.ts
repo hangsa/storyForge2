@@ -82,13 +82,28 @@ export function useChapterStream(projectId: string): ChapterStreamState {
               current: currentSceneRef.current,
             });
           } else if (ev.event === "scene_chunk") {
-            const cur = currentSceneRef.current;
-            // Stale-chunk guard: ch/scene must match current scene
-            if (
-              !cur ||
+            let cur = currentSceneRef.current;
+            // Lazy init on first chunk — covers the SceneChunkStore replay
+            // path (backend emits chunks before scene_start when a browser
+            // connects mid-stream). SceneChunkStore is constructed only for
+            // the active chapter/scene, so any chunk we see here is for
+            // the live scene.
+            if (!cur) {
+              cur = {
+                chapter: ev.data.chapter_number,
+                scene: ev.data.scene_number,
+              };
+              currentSceneRef.current = cur;
+              setState((prev) => ({
+                ...INITIAL_STATE,
+                active: true,
+                current: cur,
+              }));
+            } else if (
               ev.data.chapter_number !== cur.chapter ||
               ev.data.scene_number !== cur.scene
             ) {
+              // Stale-chunk guard: ch/scene must match current scene
               return;
             }
             // Dedup: same seq we've already seen (reconnect case)

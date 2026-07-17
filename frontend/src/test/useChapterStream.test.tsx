@@ -158,6 +158,31 @@ describe("useChapterStream", () => {
     });
   });
 
+  it("accepts scene_chunk replayed WITHOUT a prior scene_start (live reconnect)", async () => {
+    // Bug 2026-07-17: when the browser opens a fresh SSE connection to a
+    // project mid-stream, the backend's /chapter-stream replays existing
+    // chunks from SceneChunkStore BEFORE any scene_start has been emitted
+    // on the live broadcaster. The stale-chunk guard used to drop them
+    // because currentSceneRef was still null, leaving the cockpit stuck on
+    // "等待 AI 开始下一场景" until the next scene_start arrived.
+    const { result } = renderHook(() => useChapterStream("proj_a"));
+    const inst = findInstance();
+
+    act(() => {
+      // No scene_start — only chunks. This mimics the SceneChunkStore
+      // replay path on a fresh browser connect.
+      inst.emit("scene_chunk",
+        { seq: 1, chapter_number: 17, scene_number: 2, text: "夜" });
+      inst.emit("scene_chunk",
+        { seq: 2, chapter_number: 17, scene_number: 2, text: "风" });
+    });
+
+    await waitFor(() => {
+      expect(result.current.text).toBe("夜风");
+      expect(result.current.current).toEqual({ chapter: 17, scene: 2 });
+    });
+  });
+
   it("ignores chunks whose seq <= lastSeq (dedup on reconnect)", async () => {
     const { result } = renderHook(() => useChapterStream("proj_a"));
     const inst = findInstance();

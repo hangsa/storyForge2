@@ -108,34 +108,23 @@ describe("BookShelf", () => {
     expect(await screen.findByText("雪落无声")).toBeInTheDocument();
   });
 
-  it("batch-delete popconfirm calls bulkDeleteProjects on confirm", async () => {
-    (api.bulkDeleteProjects as ReturnType<typeof vi.fn>).mockResolvedValue({
-      deleted: ["proj_a", "proj_b"], failed: [], deleted_count: 2, failed_count: 0,
-    });
-    const onProjectsDeleted = vi.fn();
-    renderShelf({ onProjectsDeleted });
+  it("does not render the '多选' button on the shelf (it moved to the 查看全部 modal)", async () => {
+    // The shelf is now display-only — selection / bulk-delete lives in the
+    // modal. Asserting absence here guards against accidentally re-adding the
+    // button to the shelf header.
+    renderShelf();
+    await screen.findByText("诡眼少年");
+    expect(screen.queryByRole("button", { name: /多选/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
+  });
+
+  it("opening the 查看全部 modal surfaces the 多选 button", async () => {
+    renderShelf();
     await screen.findByText("诡眼少年");
     await act(async () => {
-      screen.getByRole("button", { name: /多选/ }).click();
+      screen.getByRole("button", { name: /查看全部/ }).click();
     });
-    // Select first two cards.
-    const selectButtons = await screen.findAllByRole("button", { name: "选择" });
-    await act(async () => {
-      selectButtons[0].click();
-      selectButtons[1].click();
-    });
-    await act(async () => {
-      screen.getByRole("button", { name: /批量删除/ }).click();
-    });
-    await act(async () => {
-      screen.getByRole("button", { name: "确认删除" }).click();
-    });
-    expect(api.bulkDeleteProjects).toHaveBeenCalledTimes(1);
-    expect(api.bulkDeleteProjects).toHaveBeenCalledWith(
-      expect.arrayContaining(["proj_a", "proj_b"]),
-    );
-    // v1.8.2: BookShelf now delegates project-list pruning to the parent.
-    expect(onProjectsDeleted).toHaveBeenCalledWith(["proj_a", "proj_b"]);
+    expect(await screen.findByRole("button", { name: /多选/ })).toBeInTheDocument();
   });
 
   it("INIT-stage book click navigates to the wizard deep-link", async () => {

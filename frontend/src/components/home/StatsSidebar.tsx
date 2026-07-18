@@ -86,7 +86,7 @@ export default function StatsSidebar({
             <StageDistribution distribution={stats?.stage_distribution ?? null} />
           </section>
 
-          <section className="p-4 mt-auto">
+          <section className="p-4">
             <div className="font-label-mono text-[10px] text-system-log uppercase tracking-wider mb-2">
               快捷操作
             </div>

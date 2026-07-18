@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api, { Character, CharacterSet } from "../../../api/client";
+import { useAutoHeight } from "../../../hooks/useAutoHeight";
 
 interface BaseEditorProps {
   projectId: string;
@@ -182,24 +183,11 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
               </div>
             </div>
 
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">说话风格</label>
-              <textarea
-                value={c.voice_signature.speech_style}
-                onChange={(e) => updateChar(idx, setField(c, "voice_signature.speech_style", e.target.value))}
-                rows={2}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
-              />
-            </div>
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">内心活动 (thought_patterns)</label>
-              <textarea
-                value={c.voice_signature.thought_patterns}
-                onChange={(e) => updateChar(idx, setField(c, "voice_signature.thought_patterns", e.target.value))}
-                rows={2}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
-              />
-            </div>
+            <VoiceFields
+              character={c}
+              onSpeechChange={(v) => updateChar(idx, setField(c, "voice_signature.speech_style", v))}
+              onThoughtChange={(v) => updateChar(idx, setField(c, "voice_signature.thought_patterns", v))}
+            />
             <div>
               <label className="block font-label-mono text-system-log mb-1 text-xs">禁忌 (taboos, 、)</label>
               <input
@@ -236,5 +224,45 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
         >{busy ? "保存中…" : "保存"}</button>
       </footer>
     </div>
+  );
+}
+
+/** Sub-component for the two free-form voice_signature textareas of ONE
+ *  character. Split out so `useAutoHeight` can be called per-textarea
+ *  inside the Rules of Hooks (it's illegal to call hooks inside .map()). */
+function VoiceFields({
+  character,
+  onSpeechChange,
+  onThoughtChange,
+}: {
+  character: Character;
+  onSpeechChange: (v: string) => void;
+  onThoughtChange: (v: string) => void;
+}) {
+  const speechRef = useRef<HTMLTextAreaElement>(null);
+  const thoughtRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(speechRef, [character.voice_signature.speech_style]);
+  useAutoHeight(thoughtRef, [character.voice_signature.thought_patterns]);
+  return (
+    <>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">说话风格</label>
+        <textarea
+          ref={speechRef}
+          value={character.voice_signature.speech_style}
+          onChange={(e) => onSpeechChange(e.target.value)}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+        />
+      </div>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">内心活动 (thought_patterns)</label>
+        <textarea
+          ref={thoughtRef}
+          value={character.voice_signature.thought_patterns}
+          onChange={(e) => onThoughtChange(e.target.value)}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+        />
+      </div>
+    </>
   );
 }

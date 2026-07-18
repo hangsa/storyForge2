@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import api, { NovelOutline } from "../../../api/client";
+import api, {
+  NovelOutline,
+  VolumeDivision,
+  GrowthMilestone,
+  KeyPlotPoint,
+} from "../../../api/client";
+import { useAutoHeight } from "../../../hooks/useAutoHeight";
 
 interface BaseEditorProps {
   projectId: string;
@@ -40,6 +46,8 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
   const [error, setError] = useState<string | null>(null);
   const novelRef = useRef(novel);
   novelRef.current = novel;
+  const themeRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(themeRef, [novel.core_conflict_theme ?? ""]);
 
   useEffect(() => {
     setNovel(readNovel(data));
@@ -85,186 +93,56 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
       <div>
         <label className="block font-label-mono text-system-log mb-1 text-xs">核心冲突 / 主题</label>
         <textarea
+          ref={themeRef}
           data-testid="novel-outline-theme"
           value={novel.core_conflict_theme ?? ""}
           onChange={(e) => setNovel({ ...novel, core_conflict_theme: e.target.value })}
-          rows={2}
-          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
         />
       </div>
 
       <Section title={`全卷划分（${novel.volumes.length} 卷）`}>
         {novel.volumes.map((v, idx) => (
-          <div key={idx} className="p-2 border border-outline-variant rounded-lg space-y-1">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">卷名</label>
-                <input
-                  data-testid={`novel-outline-volume-${idx}-name`}
-                  value={v.name}
-                  onChange={(e) => {
-                    const next = novel.volumes.slice();
-                    next[idx] = { ...next[idx], name: e.target.value };
-                    setNovel({ ...novel, volumes: next });
-                  }}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">章节范围</label>
-                <input
-                  data-testid={`novel-outline-volume-${idx}-range`}
-                  value={v.chapter_range}
-                  onChange={(e) => {
-                    const next = novel.volumes.slice();
-                    next[idx] = { ...next[idx], chapter_range: e.target.value };
-                    setNovel({ ...novel, volumes: next });
-                  }}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">概要</label>
-              <textarea
-                data-testid={`novel-outline-volume-${idx}-summary`}
-                value={v.summary}
-                onChange={(e) => {
-                  const next = novel.volumes.slice();
-                  next[idx] = { ...next[idx], summary: e.target.value };
-                  setNovel({ ...novel, volumes: next });
-                }}
-                rows={2}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
-              />
-            </div>
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">
-                关键事件（、分隔）
-              </label>
-              <input
-                data-testid={`novel-outline-volume-${idx}-events`}
-                value={(v.key_events ?? []).join("、")}
-                onChange={(e) => {
-                  const next = novel.volumes.slice();
-                  next[idx] = { ...next[idx], key_events: e.target.value.split(/[、,]/).map((x) => x.trim()).filter(Boolean) };
-                  setNovel({ ...novel, volumes: next });
-                }}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-              />
-            </div>
-          </div>
+          <VolumeCard
+            key={idx}
+            idx={idx}
+            volume={v}
+            onUpdate={(next) => {
+              const list = novel.volumes.slice();
+              list[idx] = next;
+              setNovel({ ...novel, volumes: list });
+            }}
+          />
         ))}
       </Section>
 
       <Section title={`主角成长弧线（${novel.mc_growth_arc.length} 阶段）`}>
         {novel.mc_growth_arc.map((m, idx) => (
-          <div key={idx} className="p-2 border border-outline-variant rounded-lg space-y-1">
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">阶段标签</label>
-              <input
-                data-testid={`novel-outline-mc-${idx}-label`}
-                value={m.label}
-                onChange={(e) => {
-                  const next = novel.mc_growth_arc.slice();
-                  next[idx] = { ...next[idx], label: e.target.value };
-                  setNovel({ ...novel, mc_growth_arc: next });
-                }}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">目标章节范围</label>
-                <input
-                  data-testid={`novel-outline-mc-${idx}-range`}
-                  value={m.target_chapter_range}
-                  onChange={(e) => {
-                    const next = novel.mc_growth_arc.slice();
-                    next[idx] = { ...next[idx], target_chapter_range: e.target.value };
-                    setNovel({ ...novel, mc_growth_arc: next });
-                  }}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
-              <textarea
-                data-testid={`novel-outline-mc-${idx}-description`}
-                value={m.description}
-                onChange={(e) => {
-                  const next = novel.mc_growth_arc.slice();
-                  next[idx] = { ...next[idx], description: e.target.value };
-                  setNovel({ ...novel, mc_growth_arc: next });
-                }}
-                rows={2}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
-              />
-            </div>
-          </div>
+          <GrowthMilestoneCard
+            key={idx}
+            idx={idx}
+            milestone={m}
+            onUpdate={(next) => {
+              const list = novel.mc_growth_arc.slice();
+              list[idx] = next;
+              setNovel({ ...novel, mc_growth_arc: list });
+            }}
+          />
         ))}
       </Section>
 
       <Section title={`必出场关键剧情点（${novel.key_plot_points.length} 个）`}>
         {novel.key_plot_points.map((p, idx) => (
-          <div key={idx} className="p-2 border border-outline-variant rounded-lg space-y-1">
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">标题</label>
-              <input
-                data-testid={`novel-outline-plot-${idx}-title`}
-                value={p.title}
-                onChange={(e) => {
-                  const next = novel.key_plot_points.slice();
-                  next[idx] = { ...next[idx], title: e.target.value };
-                  setNovel({ ...novel, key_plot_points: next });
-                }}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">必出场卷</label>
-                <input
-                  data-testid={`novel-outline-plot-${idx}-volume`}
-                  value={p.must_appear_in_volume}
-                  onChange={(e) => {
-                    const next = novel.key_plot_points.slice();
-                    next[idx] = { ...next[idx], must_appear_in_volume: e.target.value };
-                    setNovel({ ...novel, key_plot_points: next });
-                  }}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">触发章节提示</label>
-                <input
-                  data-testid={`novel-outline-plot-${idx}-hint`}
-                  value={p.trigger_chapter_hint}
-                  onChange={(e) => {
-                    const next = novel.key_plot_points.slice();
-                    next[idx] = { ...next[idx], trigger_chapter_hint: e.target.value };
-                    setNovel({ ...novel, key_plot_points: next });
-                  }}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
-              <textarea
-                data-testid={`novel-outline-plot-${idx}-description`}
-                value={p.description}
-                onChange={(e) => {
-                  const next = novel.key_plot_points.slice();
-                  next[idx] = { ...next[idx], description: e.target.value };
-                  setNovel({ ...novel, key_plot_points: next });
-                }}
-                rows={2}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
-              />
-            </div>
-          </div>
+          <PlotPointCard
+            key={idx}
+            idx={idx}
+            point={p}
+            onUpdate={(next) => {
+              const list = novel.key_plot_points.slice();
+              list[idx] = next;
+              setNovel({ ...novel, key_plot_points: list });
+            }}
+          />
         ))}
       </Section>
 
@@ -300,6 +178,152 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="space-y-2">
       <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">{title}</div>
       <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function VolumeCard({
+  idx, volume, onUpdate,
+}: { idx: number; volume: VolumeDivision; onUpdate: (v: VolumeDivision) => void }) {
+  const summaryRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(summaryRef, [volume.summary]);
+  return (
+    <div className="p-2 border border-outline-variant rounded-lg space-y-1">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">卷名</label>
+          <input
+            data-testid={`novel-outline-volume-${idx}-name`}
+            value={volume.name}
+            onChange={(e) => onUpdate({ ...volume, name: e.target.value })}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+          />
+        </div>
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">章节范围</label>
+          <input
+            data-testid={`novel-outline-volume-${idx}-range`}
+            value={volume.chapter_range}
+            onChange={(e) => onUpdate({ ...volume, chapter_range: e.target.value })}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">概要</label>
+        <textarea
+          ref={summaryRef}
+          data-testid={`novel-outline-volume-${idx}-summary`}
+          value={volume.summary}
+          onChange={(e) => onUpdate({ ...volume, summary: e.target.value })}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+        />
+      </div>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">
+          关键事件（、分隔）
+        </label>
+        <input
+          data-testid={`novel-outline-volume-${idx}-events`}
+          value={(volume.key_events ?? []).join("、")}
+          onChange={(e) => onUpdate({
+            ...volume,
+            key_events: e.target.value.split(/[、,]/).map((x) => x.trim()).filter(Boolean),
+          })}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+        />
+      </div>
+    </div>
+  );
+}
+
+function GrowthMilestoneCard({
+  idx, milestone, onUpdate,
+}: { idx: number; milestone: GrowthMilestone; onUpdate: (m: GrowthMilestone) => void }) {
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(descRef, [milestone.description]);
+  return (
+    <div className="p-2 border border-outline-variant rounded-lg space-y-1">
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">阶段标签</label>
+        <input
+          data-testid={`novel-outline-mc-${idx}-label`}
+          value={milestone.label}
+          onChange={(e) => onUpdate({ ...milestone, label: e.target.value })}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">目标章节范围</label>
+          <input
+            data-testid={`novel-outline-mc-${idx}-range`}
+            value={milestone.target_chapter_range}
+            onChange={(e) => onUpdate({ ...milestone, target_chapter_range: e.target.value })}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
+        <textarea
+          ref={descRef}
+          data-testid={`novel-outline-mc-${idx}-description`}
+          value={milestone.description}
+          onChange={(e) => onUpdate({ ...milestone, description: e.target.value })}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+        />
+      </div>
+    </div>
+  );
+}
+
+function PlotPointCard({
+  idx, point, onUpdate,
+}: { idx: number; point: KeyPlotPoint; onUpdate: (p: KeyPlotPoint) => void }) {
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(descRef, [point.description]);
+  return (
+    <div className="p-2 border border-outline-variant rounded-lg space-y-1">
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">标题</label>
+        <input
+          data-testid={`novel-outline-plot-${idx}-title`}
+          value={point.title}
+          onChange={(e) => onUpdate({ ...point, title: e.target.value })}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">必出场卷</label>
+          <input
+            data-testid={`novel-outline-plot-${idx}-volume`}
+            value={point.must_appear_in_volume}
+            onChange={(e) => onUpdate({ ...point, must_appear_in_volume: e.target.value })}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+          />
+        </div>
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">触发章节提示</label>
+          <input
+            data-testid={`novel-outline-plot-${idx}-hint`}
+            value={point.trigger_chapter_hint}
+            onChange={(e) => onUpdate({ ...point, trigger_chapter_hint: e.target.value })}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
+        <textarea
+          ref={descRef}
+          data-testid={`novel-outline-plot-${idx}-description`}
+          value={point.description}
+          onChange={(e) => onUpdate({ ...point, description: e.target.value })}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+        />
+      </div>
     </div>
   );
 }

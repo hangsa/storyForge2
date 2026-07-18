@@ -327,4 +327,108 @@ describe("ContextPanel", () => {
       expect(save).toBeDisabled();
     });
   });
+
+  // Regression: the right-panel concept/world/character/outline editors used
+  // to render textareas with `rows={N}` + `resize-y`, which fixed the box
+  // height regardless of content length. Now they auto-grow to scrollHeight,
+  // so the box height follows the typed-in text. The visible signal:
+  //   - no `rows` attribute on the rendered <textarea>
+  //   - inline style.height is set by useAutoHeight (a non-empty Npx value)
+  //   - the overflow-hidden class is applied (we don't want a nested
+  //     scrollbar inside the auto-grown box).
+  describe("auto-grow textareas (right-panel height follows content)", () => {
+    function stubLayout(textarea: HTMLElement, scrollHeight: number) {
+      Object.defineProperty(textarea, "scrollHeight", {
+        configurable: true,
+        get: () => scrollHeight,
+      });
+    }
+
+    it("concept premise textarea grows to scrollHeight (no fixed rows)", async () => {
+      mockedGetConcept.mockResolvedValueOnce({
+        concept: { title: "x", genre: "x", premise: "短", tone: "x", theme: "x", target_audience: "x", style_template: "x" },
+        story_dna: { core_contradiction: { statement: "x", side_a: "x", side_b: "x" }, value_stack: [] },
+      });
+      setupActivePanel("/workspace?mode=manual&panel=concept");
+      const premise = (await screen.findByTestId("concept-premise")) as HTMLTextAreaElement;
+      expect(premise.getAttribute("rows")).toBeNull();
+      stubLayout(premise, 96);
+      // Type more content → hook re-measures with stubbed scrollHeight.
+      fireEvent.change(premise, { target: { value: premise.value + "追加内容" } });
+      expect(premise.style.height).toBe("96px");
+      expect(premise.className).toContain("overflow-hidden");
+    });
+
+    it("world geography textarea has no fixed rows and is overflow-hidden", async () => {
+      mockedGetWorld.mockResolvedValueOnce({
+        era: "x", geography: "九州",
+        era_social_structure: null, era_cultural_history: null,
+        power_system: { name: "灵气", description: "x", stages: [], core_rules: [], ceilings: [], cost_system: "" },
+        factions: [], core_rules: [],
+      });
+      setupActivePanel("/workspace?mode=manual&panel=world");
+      const geo = (await screen.findByTestId("world-geography")) as HTMLTextAreaElement;
+      expect(geo.getAttribute("rows")).toBeNull();
+      expect(geo.className).toContain("overflow-hidden");
+    });
+
+    it("novel-outline theme textarea grows to scrollHeight", async () => {
+      mockedGetNovelOutline.mockResolvedValueOnce({
+        core_conflict_theme: "凡人 vs 天道",
+        volumes: [], mc_growth_arc: [], key_plot_points: [],
+        generated_at: "", updated_at: "",
+      });
+      setupActivePanel("/workspace?mode=manual&panel=outline");
+      const theme = (await screen.findByTestId("novel-outline-theme")) as HTMLTextAreaElement;
+      expect(theme.getAttribute("rows")).toBeNull();
+      stubLayout(theme, 144);
+      fireEvent.change(theme, { target: { value: theme.value + " 再展开" } });
+      expect(theme.style.height).toBe("144px");
+      expect(theme.className).toContain("overflow-hidden");
+    });
+
+    it("character voice_signature textareas (per-character) auto-grow", async () => {
+      mockedGetCharacter.mockResolvedValueOnce({
+        characters: [
+          {
+            id: "c1", name: "林峰", is_core_character: true, character_type: "protagonist",
+            personality: { beliefs: [], desires: [], fears: [], values: [], core_traits: [] },
+            current_state: { location: "", physical_condition: "", emotional: "", known_secrets: [] },
+            voice_signature: { speech_style: "简短", thought_patterns: "", taboos: [] },
+            unknown_to_character: [], relations: {},
+            growth_curve: null,
+          },
+        ],
+        current: { id: "c1", name: "林峰" },
+      });
+      setupActivePanel("/workspace?mode=manual&panel=character");
+      await screen.findByTestId("character-editor");
+      // Find both textareas (speech_style + thought_patterns) — neither has rows.
+      const textareas = document.querySelectorAll("textarea") as NodeListOf<HTMLTextAreaElement>;
+      const voiceAreas = Array.from(textareas).filter(
+        (t) => t.getAttribute("rows") === null && t.className.includes("overflow-hidden"),
+      );
+      expect(voiceAreas.length).toBeGreaterThanOrEqual(2);
+      for (const ta of voiceAreas) {
+        expect(ta.getAttribute("rows")).toBeNull();
+        expect(ta.className).toContain("overflow-hidden");
+      }
+    });
+
+    it("volume summary textarea auto-grows", async () => {
+      mockedGetNovelOutline.mockResolvedValueOnce({
+        core_conflict_theme: "x",
+        volumes: [{ name: "v1", chapter_range: "1-30", summary: "s", key_events: ["e1"] }],
+        mc_growth_arc: [], key_plot_points: [],
+        generated_at: "", updated_at: "",
+      });
+      setupActivePanel("/workspace?mode=manual&panel=outline");
+      const summary = (await screen.findByTestId("novel-outline-volume-0-summary")) as HTMLTextAreaElement;
+      expect(summary.getAttribute("rows")).toBeNull();
+      stubLayout(summary, 72);
+      fireEvent.change(summary, { target: { value: summary.value + " 补全概要" } });
+      expect(summary.style.height).toBe("72px");
+      expect(summary.className).toContain("overflow-hidden");
+    });
+  });
 });

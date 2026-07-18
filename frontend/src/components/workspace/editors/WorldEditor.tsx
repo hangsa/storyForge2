@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api, { World } from "../../../api/client";
+import { useAutoHeight } from "../../../hooks/useAutoHeight";
 
 interface BaseEditorProps {
   projectId: string;
@@ -45,6 +46,10 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
   const [error, setError] = useState<string | null>(null);
   const worldRef = useRef(world);
   worldRef.current = world;
+  const geographyRef = useRef<HTMLTextAreaElement>(null);
+  const powerDescriptionRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(geographyRef, [world.geography]);
+  useAutoHeight(powerDescriptionRef, [world.power_system.description]);
 
   useEffect(() => {
     setWorld(readWorld(data));
@@ -91,11 +96,11 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
       <div>
         <label className="block font-label-mono text-system-log mb-1 text-xs">地理 (geography)</label>
         <textarea
+          ref={geographyRef}
           data-testid="world-geography"
           value={world.geography}
           onChange={(e) => setWorld({ ...world, geography: e.target.value })}
-          rows={2}
-          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -133,11 +138,11 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
         <div>
           <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
           <textarea
+            ref={powerDescriptionRef}
             data-testid="world-power-description"
             value={ps.description}
             onChange={(e) => setPs("description", e.target.value)}
-            rows={2}
-            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
           />
         </div>
         <div>

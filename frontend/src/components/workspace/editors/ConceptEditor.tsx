@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api, { Concept, ConceptResponse, StoryDNA } from "../../../api/client";
+import { useAutoHeight } from "../../../hooks/useAutoHeight";
 
 interface BaseEditorProps {
   projectId: string;
@@ -40,6 +41,14 @@ export default function ConceptEditor({ projectId, data, onSaved, readOnly }: Ba
   conceptRef.current = concept;
   const dnaRef = useRef(dna);
   dnaRef.current = dna;
+  const premiseRef = useRef<HTMLTextAreaElement>(null);
+  const statementRef = useRef<HTMLTextAreaElement>(null);
+  const sideARef = useRef<HTMLTextAreaElement>(null);
+  const sideBRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(premiseRef, [concept.premise]);
+  useAutoHeight(statementRef, [dna.core_contradiction.statement]);
+  useAutoHeight(sideARef, [dna.core_contradiction.side_a]);
+  useAutoHeight(sideBRef, [dna.core_contradiction.side_b]);
 
   // Re-seed local state whenever the parent's data refetch lands (e.g. after
   // a save). Without this the form would keep showing the user's edits even
@@ -95,11 +104,11 @@ export default function ConceptEditor({ projectId, data, onSaved, readOnly }: Ba
       <div>
         <label className="block font-label-mono text-system-log mb-1 text-xs">前提 (premise)</label>
         <textarea
+          ref={premiseRef}
           data-testid="concept-premise"
           value={concept.premise}
           onChange={(e) => setConcept({ ...concept, premise: e.target.value })}
-          rows={3}
-          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -144,29 +153,29 @@ export default function ConceptEditor({ projectId, data, onSaved, readOnly }: Ba
       <div className="border-t border-outline-variant pt-3 space-y-2">
         <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">核心矛盾 (Story DNA)</div>
         <textarea
+          ref={statementRef}
           data-testid="concept-statement"
           value={dna.core_contradiction.statement}
           onChange={(e) => setDna({ ...dna, core_contradiction: { ...dna.core_contradiction, statement: e.target.value } })}
-          rows={2}
           placeholder="一句话概述核心冲突"
-          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
         />
         <div className="grid grid-cols-2 gap-3">
           <textarea
+            ref={sideARef}
             data-testid="concept-side-a"
             value={dna.core_contradiction.side_a}
             onChange={(e) => setDna({ ...dna, core_contradiction: { ...dna.core_contradiction, side_a: e.target.value } })}
-            rows={2}
             placeholder="立场 A"
-            className="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+            className="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
           />
           <textarea
+            ref={sideBRef}
             data-testid="concept-side-b"
             value={dna.core_contradiction.side_b}
             onChange={(e) => setDna({ ...dna, core_contradiction: { ...dna.core_contradiction, side_b: e.target.value } })}
-            rows={2}
             placeholder="立场 B"
-            className="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+            className="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
           />
         </div>
       </div>

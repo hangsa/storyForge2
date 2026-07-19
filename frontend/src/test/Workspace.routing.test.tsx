@@ -9,9 +9,25 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-import WorkspacePage from "../pages/WorkspacePage";
+vi.mock("../hooks/useAutopilotSession", () => ({
+  useAutopilotSession: vi.fn(),
+}));
 
-beforeEach(() => sessionStorage.clear());
+import WorkspacePage from "../pages/WorkspacePage";
+import { ToastProvider } from "../hooks/useToast";
+import { useAutopilotSession } from "../hooks/useAutopilotSession";
+
+const noop = vi.fn().mockResolvedValue(undefined);
+
+beforeEach(() => {
+  sessionStorage.clear();
+  vi.mocked(useAutopilotSession).mockImplementation(() => ({
+    session: { state: "stopped", current_task: null, queue: [], history: [], config: null },
+    events: [],
+    status: "idle",
+    start: noop, stop: noop, pause: noop, resume: noop, refresh: noop,
+  }));
+});
 
 /**
  * Records the post-render location into a global so tests can assert on it.
@@ -32,23 +48,27 @@ function LocationSpy() {
 function withPath(path: string) {
   globalThis.__lastLocation = undefined;
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <LocationSpy />
-      <Routes>
-        <Route path="/workspace" element={<WorkspacePage projectId="p" />} />
-        <Route path="/stage4" element={<Navigate replace to="/workspace?mode=manual" />} />
-        <Route path="/stage5" element={<Navigate replace to="/workspace?mode=manual&panel=diagnosis" />} />
-        <Route path="/stage6" element={<Navigate replace to="/workspace?mode=manual&panel=export" />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <LocationSpy />
+        <Routes>
+          <Route path="/workspace" element={<WorkspacePage projectId="p" />} />
+          <Route path="/stage4" element={<Navigate replace to="/workspace?mode=manual" />} />
+          <Route path="/stage5" element={<Navigate replace to="/workspace?mode=manual&panel=diagnosis" />} />
+          <Route path="/stage6" element={<Navigate replace to="/workspace?mode=manual&panel=export" />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   );
 }
 
 describe("Workspace routing", () => {
-  it("renders /workspace with mode=managed by default", () => {
+  // v1.9: workspace defaults to manual mode so all entry points (bookshelf,
+  // wizard, init) land the user on the chapter tree + writing area.
+  it("renders /workspace with mode=manual by default", () => {
     withPath("/workspace");
     expect(screen.getByTestId("workspace-page")).toBeInTheDocument();
-    expect(screen.getByTestId("mode-managed").className).toContain("bg-primary-container");
+    expect(screen.getByTestId("mode-manual").className).toContain("bg-primary-container");
   });
   it("renders /workspace?mode=manual", () => {
     withPath("/workspace?mode=manual");
@@ -69,12 +89,11 @@ describe("Workspace routing", () => {
     expect(globalThis.__lastLocation?.pathname).toBe("/workspace");
     expect(globalThis.__lastLocation?.search).toBe("?mode=manual&panel=export");
   });
-  it("clicking the manual switcher opens confirm modal; confirming persists 'manual' to localStorage", () => {
+  it("clicking the managed switcher from default-manual opens the start modal", async () => {
     withPath("/workspace");
-    fireEvent.click(screen.getByTestId("mode-manual"));
-    expect(screen.getByTestId("mode-switch-confirm")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("confirm-confirm"));
-    expect(localStorage.getItem("storyforge.workspace.mode")).toBe("manual");
+    fireEvent.click(screen.getByTestId("mode-managed"));
+    // manual → managed goes through the start modal (was: confirm modal).
+    expect(await screen.findByTestId("managed-start-modal")).toBeInTheDocument();
   });
 });
 

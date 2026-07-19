@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from backend.agents.base_agent import BaseAgent
 from backend.utils.json_parser import parse_json_text
 from backend.utils.regex_patterns import (
     SF_LOG_PATTERN,
@@ -54,17 +55,42 @@ class NarrativeGuardResult:
     tokens_used: int = 0
 
 
-class ReviewerAgent:
-    """Fact Guard reviewer + v1.6 Narrative Guard + Style Guard L3. Checks 1-5 are zero-LLM."""
+class ReviewerAgent(BaseAgent):
+    """Fact Guard reviewer + v1.6 Narrative Guard + Style Guard L3. Checks 1-5 are zero-LLM.
 
-    def __init__(self, project_id: str, model_router=None) -> None:
+    v1.9: now inherits `BaseAgent` so the 3-tier prompt override chain
+    (YAML → global → project) applies to the `narrative_guard` template.
+    Constructor signature preserves the pre-existing `model_router=` kwarg
+    so existing call sites stay compatible.
+    """
+
+    def __init__(
+        self,
+        project_id: str,
+        model_router=None,
+        override_store=None,
+        global_override_store=None,
+        prompts_dir=None,
+    ) -> None:
+        super().__init__(
+            project_id=project_id,
+            model_router=model_router,
+            override_store=override_store,
+            global_override_store=global_override_store,
+            prompts_dir=prompts_dir,
+        )
         self._project_id = project_id
-        self._router = model_router
         self._prechecker = None
         if model_router is not None:
             try:
                 from backend.semantic_precheck.prechecker import SemanticPrechecker
-                self._prechecker = SemanticPrechecker(model_router=model_router)
+                self._prechecker = SemanticPrechecker(
+                    model_router=model_router,
+                    project_id=project_id,
+                    override_store=override_store,
+                    global_override_store=global_override_store,
+                    prompts_dir=prompts_dir,
+                )
             except Exception as e:
                 logger.warning("Failed to init SemanticPrechecker: %s", e)
 
@@ -494,31 +520,31 @@ class ReviewerAgent:
         # Truncate scene text to ~6K tokens (≈ 12K chars for Chinese)
         scene_snippet = scene_text[:12000] if len(scene_text) > 12000 else scene_text
 
-        # Load prompt template
-        from pathlib import Path
-        import yaml
-        prompt_path = Path("backend/prompts/narrative_guard.yaml")
-        if not prompt_path.exists():
+        # v1.9: Load narrative_guard through the 3-tier override chain
+        # (YAML → global → project) via BaseAgent.load_prompt.
+        try:
+            prompt = self.load_prompt("narrative_guard", project_id=self._project_id)
+        except FileNotFoundError:
             logger.warning("narrative_guard.yaml not found, skipping Narrative Guard")
             return NarrativeGuardResult(
                 overall_assessment="Narrative Guard prompt 未找到，已跳过",
             )
 
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            prompt_data = yaml.safe_load(f) or {}
-
-        system_prompt = prompt_data.get("system_prompt", "")
-        user_template = prompt_data.get("user_prompt_template", "")
-
-        user_prompt = user_template.format(
-            scene_text=scene_snippet,
-            character_behavior_summary=character_behavior_summary,
-            voice_signatures=voice_signatures,
-            unknown_to_character=unknown_to_character,
-        )
+        try:
+            user_prompt = prompt.format_user(
+                scene_text=scene_snippet,
+                character_behavior_summary=character_behavior_summary,
+                voice_signatures=voice_signatures,
+                unknown_to_character=unknown_to_character,
+            )
+        except (KeyError, IndexError) as e:
+            logger.warning("narrative_guard template format failed: %s", e)
+            return NarrativeGuardResult(
+                overall_assessment="Narrative Guard 模板变量缺失，已跳过",
+            )
 
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": prompt.system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 

@@ -23,11 +23,15 @@ export function useWorkspaceMode(): {
     }
   })();
 
+  // v1.9: default is "manual" so multiple workspace entry points (bookshelf,
+  // wizard completion, init page) all land the user on the chapter tree +
+  // writing area. Users opt into managed mode (autopilot) explicitly via the
+  // top-bar switcher.
   const mode: WorkspaceMode = isValid(urlMode)
     ? urlMode
     : isValid(stored)
     ? (stored as WorkspaceMode)
-    : "managed";
+    : "manual";
 
   const setMode = useCallback(
     (m: WorkspaceMode) => {

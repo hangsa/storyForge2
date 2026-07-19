@@ -99,4 +99,40 @@ describe("OutlineStep", () => {
     });
     await waitFor(() => expect(api.updateNovelOutline).toHaveBeenCalledTimes(1));
   });
+
+  it("core_conflict_theme textarea is 5 rows tall (enriched description)", async () => {
+    (api.generateNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(SAMPLE_OUTLINE);
+    setup();
+    const textarea = (await screen.findByTestId("outline-form")).querySelector("textarea");
+    expect(textarea).not.toBeNull();
+    expect(textarea!.getAttribute("rows")).toBe("5");
+  });
+
+  it("renders every volume with name, chapter_range, summary, and key_events", async () => {
+    const rich = {
+      core_conflict_theme: "x",
+      volumes: [
+        { name: "第一卷 阴阳初现", chapter_range: "1-50", summary: "阴阳眼觉醒", key_events: ["事件A", "事件B"] },
+        { name: "第二卷 暗界迷踪", chapter_range: "51-100", summary: "身世揭露", key_events: ["事件C"] },
+      ],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    };
+    (api.generateNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(rich);
+    setup();
+    const form = await screen.findByTestId("outline-form");
+    const list = form.querySelector("[data-testid='outline-volumes']");
+    expect(list).not.toBeNull();
+    const items = list!.querySelectorAll("[data-testid='outline-volume']");
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toContain("第一卷 阴阳初现");
+    expect(items[0].textContent).toContain("1-50");
+    expect(items[0].textContent).toContain("阴阳眼觉醒");
+    expect(items[0].textContent).toContain("事件A");
+    expect(items[0].textContent).toContain("事件B");
+    expect(items[1].textContent).toContain("第二卷 暗界迷踪");
+    expect(items[1].textContent).toContain("51-100");
+  });
 });

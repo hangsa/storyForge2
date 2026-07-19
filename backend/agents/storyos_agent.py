@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Union
 
+from backend.agents.base_agent import BaseAgent
 from backend.config import settings
 from backend.utils.regex_patterns import (
     SF_LOG_PATTERN,
@@ -445,17 +446,34 @@ class SFLogDiffReport:
     tokens_used: int = 0
 
 
-class SFLogSuggestionEngine:
+class SFLogSuggestionEngine(BaseAgent):
     """Analyzes user edits to a Scene and proposes SF_LOG changes.
 
     Two phases:
     1. Deterministic: parse deleted SF_LOG tags from the original text.
     2. Tier 3 LLM (optional): detect new/modified events implied by the diff.
+
+    v1.9: now inherits `BaseAgent` so the 3-tier prompt override chain
+    (YAML → global → project) applies to `sf_log_suggestion`. The prompt is
+    re-read on every `analyze_diff()` call so prompt-plaza edits take effect
+    without a process restart.
     """
 
-    def __init__(self, model_router) -> None:
-        self._router = model_router
-        self._prompt = self._load_prompt()
+    def __init__(
+        self,
+        model_router,
+        project_id: str = "",
+        prompts_dir: Optional[Path] = None,
+        override_store=None,
+        global_override_store=None,
+    ) -> None:
+        super().__init__(
+            project_id=project_id,
+            prompts_dir=prompts_dir,
+            model_router=model_router,
+            override_store=override_store,
+            global_override_store=global_override_store,
+        )
 
     async def analyze_diff(
         self,
@@ -466,7 +484,7 @@ class SFLogSuggestionEngine:
     ) -> SFLogDiffReport:
         deleted = self._detect_deleted_logs(original_text, modified_text)
 
-        if self._router is None or not self._prompt:
+        if self._router is None:
             return SFLogDiffReport(
                 original_text=original_text,
                 modified_text=modified_text,
@@ -527,21 +545,11 @@ class SFLogSuggestionEngine:
         return out
 
     def _load_prompt(self) -> Optional[dict]:
-        path = Path("backend/prompts/sf_log_suggestion.yaml")
-        if not path.exists():
-            logger.warning("sf_log_suggestion.yaml not found at %s", path)
-            return None
-        try:
-            import yaml
-            with open(path, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-        except Exception as e:
-            logger.warning("Failed to load sf_log_suggestion.yaml: %s", e)
-            return None
-        return {
-            "system_prompt": data.get("system_prompt", "").strip(),
-            "user_template": data.get("user_prompt_template", "").strip(),
-        }
+        """DEPRECATED: kept as a no-op shim for any older callers that still
+        expect a `{system_prompt, user_template}` dict. Real load now happens
+        per-call inside `_run_llm_phase()` via `self.load_prompt()`.
+        """
+        return None
 
     async def _run_llm_phase(
         self,
@@ -561,13 +569,32 @@ class SFLogSuggestionEngine:
         existing_str = ", ".join(log.get("type", "") for log in existing_logs) or "（无）"
         chars_str = "、".join(character_names) if character_names else "（未指定）"
 
-        user_prompt = self._prompt["user_template"].format(
-            diff_text=diff_text[:1500],
-            existing_logs=existing_str,
-            character_names=chars_str,
-        )
+        # v1.9: load sf_log_suggestion through the 3-tier override chain
+        # (YAML → global → project). Per-call load so plaza edits apply
+        # without a process restart.
+        try:
+            prompt = self.load_prompt("sf_log_suggestion")
+        except FileNotFoundError:
+            logger.warning("sf_log_suggestion prompt not found, skipping LLM phase")
+            return SFLogDiffReport(
+                original_text=original, modified_text=modified,
+                deleted_logs=deleted, suggestions=[], tokens_used=0,
+            )
+
+        try:
+            user_prompt = prompt.format_user(
+                diff_text=diff_text[:1500],
+                existing_logs=existing_str,
+                character_names=chars_str,
+            )
+        except (KeyError, IndexError) as e:
+            logger.warning("sf_log_suggestion template format failed: %s", e)
+            return SFLogDiffReport(
+                original_text=original, modified_text=modified,
+                deleted_logs=deleted, suggestions=[], tokens_used=0,
+            )
         messages = [
-            {"role": "system", "content": self._prompt["system_prompt"]},
+            {"role": "system", "content": prompt.system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 

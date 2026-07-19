@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-import yaml
+from backend.agents.base_agent import BaseAgent
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +43,31 @@ class PrecheckResult:
     skipped_reason: str = ""   # populated when prechecker short-circuits
 
 
-class SemanticPrechecker:
-    """Tier-3 SF_LOG miss detector. Never blocks."""
+class SemanticPrechecker(BaseAgent):
+    """Tier-3 SF_LOG miss detector. Never blocks.
+
+    v1.9: inherits `BaseAgent` so the 3-tier prompt override chain
+    (YAML → global → project) applies to `semantic_precheck`. The prompt is
+    re-read on every `check()` call so plaza edits apply without a restart.
+    """
 
     TARGET_EVENT_TYPES = TARGET_EVENT_TYPES
 
-    def __init__(self, model_router) -> None:
-        self._router = model_router
-        self._prompt = self._load_prompt()
+    def __init__(
+        self,
+        model_router,
+        project_id: str = "",
+        prompts_dir: Optional[Path] = None,
+        override_store=None,
+        global_override_store=None,
+    ) -> None:
+        super().__init__(
+            project_id=project_id,
+            prompts_dir=prompts_dir,
+            model_router=model_router,
+            override_store=override_store,
+            global_override_store=global_override_store,
+        )
 
     # --- public ---
 
@@ -71,12 +88,6 @@ class SemanticPrechecker:
                 skipped_reason="no model_router configured",
             )
 
-        if not self._prompt:
-            return PrecheckResult(
-                precheck_passed=True,
-                skipped_reason="semantic_precheck.yaml not found",
-            )
-
         if not scene_text or not scene_text.strip():
             return PrecheckResult(
                 precheck_passed=True,
@@ -84,24 +95,6 @@ class SemanticPrechecker:
             )
 
         return await self._run_llm(scene_text, scene_plan, character_names)
-
-    # --- private ---
-
-    def _load_prompt(self) -> Optional[dict]:
-        path = Path("backend/prompts/semantic_precheck.yaml")
-        if not path.exists():
-            logger.warning("semantic_precheck.yaml not found at %s", path)
-            return None
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-        except Exception as e:
-            logger.warning("Failed to load semantic_precheck.yaml: %s", e)
-            return None
-        return {
-            "system_prompt": data.get("system_prompt", "").strip(),
-            "user_template": data.get("user_prompt_template", "").strip(),
-        }
 
     async def _run_llm(
         self,
@@ -115,13 +108,29 @@ class SemanticPrechecker:
         chars_str = "、".join(character_names) if character_names else "（未指定）"
         declared_str = ", ".join(declared) if declared else "（无）"
 
-        user_prompt = self._prompt["user_template"].format(
+        # v1.9: load semantic_precheck through the 3-tier override chain
+        # (YAML → global → project). Per-call load so plaza edits apply
+        # without a process restart.
+        try:
+            prompt = self.load_prompt("semantic_precheck")
+        except FileNotFoundError:
+            logger.warning("semantic_precheck prompt not found, skipping")
+            return PrecheckResult(
+                precheck_passed=True,
+                skipped_reason="semantic_precheck.yaml not found",
+            )
+
+        try:
+            user_prompt = prompt.format_user(
             scene_text=snippet,
             declared_changes=declared_str,
             character_names=chars_str,
         )
+        except (KeyError, IndexError) as e:
+            logger.warning("semantic_precheck template format failed: %s", e)
+            return PrecheckResult(precheck_passed=True, skipped_reason=f"template error: {e}")
         messages = [
-            {"role": "system", "content": self._prompt["system_prompt"]},
+            {"role": "system", "content": prompt.system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 

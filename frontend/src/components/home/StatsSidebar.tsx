@@ -13,6 +13,9 @@ interface StatsSidebarProps {
   statsLoading: boolean;
   onRefresh: () => void;
   refreshing: boolean;
+  onOpenPlaza?: () => void;
+  plazaDisabled?: boolean;
+  plazaTooltip?: string;
 }
 
 export default function StatsSidebar({
@@ -20,6 +23,9 @@ export default function StatsSidebar({
   statsLoading,
   onRefresh,
   refreshing,
+  onOpenPlaza,
+  plazaDisabled,
+  plazaTooltip,
 }: StatsSidebarProps) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
@@ -86,11 +92,17 @@ export default function StatsSidebar({
             <StageDistribution distribution={stats?.stage_distribution ?? null} />
           </section>
 
-          <section className="p-4 mt-auto">
+          <section className="p-4">
             <div className="font-label-mono text-[10px] text-system-log uppercase tracking-wider mb-2">
               快捷操作
             </div>
-            <QuickActions onRefresh={onRefresh} refreshing={refreshing} />
+            <QuickActions
+              onRefresh={onRefresh}
+              refreshing={refreshing}
+              onOpenPlaza={onOpenPlaza}
+              plazaDisabled={plazaDisabled}
+              plazaTooltip={plazaTooltip}
+            />
             {statsLoading && (
               <div className="mt-3 text-[10px] font-label-mono text-system-log/60">
                 加载中…
@@ -106,7 +118,13 @@ export default function StatsSidebar({
             auto_stories
           </span>
           <div className="flex-1 w-full px-2">
-            <QuickActions onRefresh={onRefresh} refreshing={refreshing} />
+            <QuickActions
+              onRefresh={onRefresh}
+              refreshing={refreshing}
+              onOpenPlaza={onOpenPlaza}
+              plazaDisabled={plazaDisabled}
+              plazaTooltip={plazaTooltip}
+            />
           </div>
         </div>
       )}

@@ -45,6 +45,16 @@ interface WizardState {
   data: WizardData;
   errorMessage: string | null;
   /**
+   * True once the file-based prefill useEffect has finished running (whether
+   * or not it found any files). Steps with an auto-trigger (OutlineStep,
+   * ChapterOutlineStep, WorldStep, etc.) must wait for this before deciding
+   * to call `generate*` — without it, the auto-trigger fires synchronously
+   * on mount before the async prefill can hydrate wizard.data from disk,
+   * which manifests as "re-entering the wizard regenerates content the user
+   * already paid for" (e.g. proj_cc4ca4ae regression, v1.8.2).
+   */
+  prefillComplete: boolean;
+  /**
    * The current step's "next" action — handled by the modal footer. Each step
    * registers its own handler via useEffect and clears it on unmount.
    */
@@ -61,6 +71,16 @@ interface WizardState {
 type WizardAction =
   | { type: "START_STEP"; step: number }
   | { type: "STEP_COMPLETED"; step: number; patch: Partial<WizardData> }
+  /**
+   * Step generated content via an auto-trigger but did NOT advance the
+   * user's position (the user still has to click "下一步" to confirm).
+   * Mark it generated: add to completedSteps, write `data`, set
+   * status="completed", but DO NOT touch currentStep. This is what keeps
+   * the step reachable in the indicator after the user navigates to an
+   * earlier step — without it, completedSteps stays stale and the step
+   * becomes "pending" (gray) — see PROJ_proj_cc4ca4ae_report.
+   */
+  | { type: "MARK_STEP_GENERATED"; step: number; patch: Partial<WizardData> }
   | { type: "STEP_SKIPPED"; step: number }
   | { type: "JUMP_TO"; step: number }
   | { type: "STATUS"; status: WizardStatus; errorMessage?: string | null }
@@ -77,6 +97,7 @@ type WizardAction =
       data: Partial<WizardData>;
       nextStep: number;
     }
+  | { type: "PREFLILL_COMPLETE" }
   | {
       type: "SET_NEXT_HANDLER";
       handler: (() => void) | null;
@@ -94,6 +115,7 @@ const initialState: WizardState = {
   status: "idle",
   data: EMPTY_DATA,
   errorMessage: null,
+  prefillComplete: false,
   nextHandler: null,
   nextDisabled: false,
   regenerateHandler: null,
@@ -143,6 +165,19 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
           : [...state.completedSteps, action.step].sort((a, b) => a - b),
         currentStep: Math.min(action.step + 1, TOTAL_STEPS),
       };
+    case "MARK_STEP_GENERATED": {
+      const { step, patch } = action;
+      const nextCompleted = state.completedSteps.includes(step)
+        ? state.completedSteps
+        : [...state.completedSteps, step].sort((a, b) => a - b);
+      return {
+        ...state,
+        status: "completed",
+        completedSteps: nextCompleted,
+        data: { ...state.data, ...patch },
+        // currentStep intentionally unchanged — user has not clicked "下一步" yet.
+      };
+    }
     case "JUMP_TO":
       return {
         ...state,
@@ -164,6 +199,7 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
         ...state,
         completedSteps: mergedCompleted,
         data: { ...state.data, ...action.data },
+        prefillComplete: true,
       };
     }
     case "HYDRATE_FROM_FILES_AND_ADVANCE": {
@@ -175,8 +211,11 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
         completedSteps: mergedCompleted,
         data: { ...state.data, ...action.data },
         currentStep: action.nextStep,
+        prefillComplete: true,
       };
     }
+    case "PREFLILL_COMPLETE":
+      return { ...state, prefillComplete: true };
     case "SET_NEXT_HANDLER":
       return { ...state, nextHandler: action.handler, nextDisabled: action.disabled };
     case "SET_REGENERATE_HANDLER":
@@ -202,6 +241,11 @@ function loadPersisted(projectId: string): WizardState | null {
         status: parsed.status || "idle",
         data: { ...EMPTY_DATA, ...parsed.data },
         errorMessage: parsed.errorMessage || null,
+        // SessionStorage can be stale (e.g., user closed on step 5 without
+        // saving, leaving data.novel_outline=null even though the file exists
+        // on disk). Force prefill to run again by setting prefillComplete=false
+        // regardless of what sessionStorage held.
+        prefillComplete: false,
         nextHandler: null,
         nextDisabled: false,
         regenerateHandler: null,
@@ -217,6 +261,15 @@ function loadPersisted(projectId: string): WizardState | null {
 interface WizardContextValue extends WizardState {
   startStep: (step: number) => void;
   saveStep: (step: number, patch: Partial<WizardData>) => void;
+  /**
+   * Mark a step as having generated content (auto-trigger completed). Adds
+   * the step to completedSteps, writes the patch to data, and sets
+   * status="completed" — but DOES NOT advance currentStep. Use this when
+   * the LLM call wrote content directly to disk and the user still has to
+   * click "下一步" to confirm (i.e., generated = data on disk, completed =
+   * user reviewed & acknowledged).
+   */
+  markStepGenerated: (step: number, patch: Partial<WizardData>) => void;
   skipStep: (step: number) => void;
   jumpToStep: (step: number) => void;
   setStatus: (status: WizardStatus, errorMessage?: string | null) => void;
@@ -226,6 +279,12 @@ interface WizardContextValue extends WizardState {
     data: Partial<WizardData>,
     nextStep: number,
   ) => void;
+  /**
+   * Signal that the prefill useEffect has finished running. Use this when
+   * prefill found no files to hydrate (the hydrate* actions above already
+   * mark prefillComplete=true as a side effect).
+   */
+  markPrefillComplete: () => void;
   reset: () => void;
   /**
    * Each step registers its "next" and "regenerate" handlers here so the
@@ -292,6 +351,7 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
     ...state,
     startStep: (step) => dispatch({ type: "START_STEP", step }),
     saveStep: (step, patch) => dispatch({ type: "STEP_COMPLETED", step, patch }),
+    markStepGenerated: (step, patch) => dispatch({ type: "MARK_STEP_GENERATED", step, patch }),
     skipStep: (step) => dispatch({ type: "STEP_SKIPPED", step }),
     jumpToStep: (step) => dispatch({ type: "JUMP_TO", step }),
     setStatus: (status, errorMessage) => dispatch({ type: "STATUS", status, errorMessage }),
@@ -299,6 +359,7 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
       dispatch({ type: "HYDRATE_FROM_FILES", completedSteps, data }),
     hydrateFromFilesAndAdvance: (completedSteps, data, nextStep) =>
       dispatch({ type: "HYDRATE_FROM_FILES_AND_ADVANCE", completedSteps, data, nextStep }),
+    markPrefillComplete: () => dispatch({ type: "PREFLILL_COMPLETE" }),
     setNextHandler: (handler, disabled = false) =>
       dispatch({ type: "SET_NEXT_HANDLER", handler, disabled }),
     setRegenerateHandler: (handler, disabled = false) =>

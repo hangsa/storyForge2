@@ -1,6 +1,9 @@
 interface QuickActionsProps {
   onRefresh: () => void;
   refreshing: boolean;
+  onOpenPlaza?: () => void;
+  plazaDisabled?: boolean;
+  plazaTooltip?: string;
 }
 
 interface Action {
@@ -12,7 +15,7 @@ interface Action {
   testId: string;
 }
 
-export default function QuickActions({ onRefresh, refreshing }: QuickActionsProps) {
+export default function QuickActions({ onRefresh, refreshing, onOpenPlaza, plazaDisabled, plazaTooltip }: QuickActionsProps) {
   const actions: Action[] = [
     {
       label: "AI 控制台",
@@ -24,8 +27,9 @@ export default function QuickActions({ onRefresh, refreshing }: QuickActionsProp
     {
       label: "提示词广场",
       icon: "forum",
-      disabled: true,
-      tooltip: "即将推出",
+      onClick: onOpenPlaza,
+      disabled: plazaDisabled,
+      tooltip: plazaTooltip,
       testId: "qa-prompt-square",
     },
     {

@@ -1,10 +1,24 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+const OUTLINE_COLLAPSED_KEY = "storyforge.workspace.outline-collapsed";
 
 export interface WritingCurrent {
   chapter_number: number;
   chapter_title: string;
+  /** Chapter-level theme (from outline.json). Optional. */
+  chapter_theme?: string;
   scene_id: string;
   scene_title: string;
+  /** Scene-level outline details (from outline.json scene_plan). All optional
+   *  — older outline.json files written before these fields were introduced
+   *  are still loadable. */
+  scene_goal?: string;
+  scene_conflict?: string;
+  scene_emotional_arc?: string;
+  scene_narrative_role?: string;
+  scene_beat_type?: string;
+  /** Back-compat field — single-line summary shown when no structured fields
+   *  are present. Prefer reading chapter_theme/scene_goal/etc. */
   outline_summary?: string;
 }
 
@@ -51,6 +65,22 @@ export default function WritingArea({
     );
   }
 
+  const [outlineCollapsed, setOutlineCollapsed] = useState<boolean>(() => {
+    if (typeof localStorage === "undefined") return false;
+    try {
+      return localStorage.getItem(OUTLINE_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(OUTLINE_COLLAPSED_KEY, outlineCollapsed ? "1" : "0");
+    } catch {
+      // localStorage unavailable (SSR, quota) — non-fatal.
+    }
+  }, [outlineCollapsed]);
+
   const wordCount = useMemo(
     () => content.replace(/\s+/g, "").length,
     [content],
@@ -60,21 +90,76 @@ export default function WritingArea({
     <div data-testid="writing-area" className="h-full flex flex-col">
       <header className="px-6 py-3 border-b border-outline-variant">
         <div className="flex items-center gap-2 font-label-mono text-[10px] uppercase tracking-wider text-system-log">
-          第 {current.chapter_number} 章
+          第 {current.chapter_number} 章 ·{" "}
+          <span data-testid="writing-chapter-title">{current.chapter_title}</span>
         </div>
-        <h2 data-testid="writing-chapter-title" className="font-display text-primary text-lg">
-          {current.chapter_title}
-        </h2>
-        <div data-testid="writing-scene-title" className="font-body-ui text-sm text-system-log mt-1">
+        <div data-testid="writing-scene-title" className="font-display text-primary text-base mt-1">
           {current.scene_id} · {current.scene_title}
         </div>
-        {current.outline_summary && (
-          <p
-            data-testid="writing-outline-summary"
-            className="font-body-narrative text-xs text-system-log mt-2 italic"
+        {/* v1.8 Bug 2 fix: surface real outline content above the editor.
+            Chapter theme + scene goal/conflict/emotional_arc rendered as
+            labeled rows when present. Older outline.json files fall back to
+            the single-line outline_summary (or hide the block entirely). */}
+        {(current.chapter_theme || current.scene_goal || current.scene_conflict || current.scene_emotional_arc || current.outline_summary) && (
+          <div
+            data-testid="writing-outline-block"
+            className="mt-3 p-3 bg-surface-container rounded-lg border border-outline-variant"
           >
-            大纲：{current.outline_summary}
-          </p>
+            <button
+              type="button"
+              data-testid="writing-outline-toggle"
+              onClick={() => setOutlineCollapsed((c) => !c)}
+              aria-expanded={!outlineCollapsed}
+              aria-controls="writing-outline-rows"
+              className="flex items-center gap-1 font-label-mono text-[10px] uppercase tracking-wider text-system-log/70 hover:text-system-log w-full text-left"
+            >
+              <span className="text-xs leading-none">{outlineCollapsed ? "▸" : "▾"}</span>
+              <span>{outlineCollapsed ? "显示大纲信息" : "收起大纲信息"}</span>
+            </button>
+            {!outlineCollapsed && (
+              <div id="writing-outline-rows" data-testid="writing-outline-rows" className="space-y-1 mt-2">
+                {current.chapter_theme && (
+                  <p data-testid="writing-chapter-theme" className="font-body-narrative text-xs text-system-log">
+                    <span className="font-label-mono text-system-log/70 mr-1">主题：</span>
+                    {current.chapter_theme}
+                  </p>
+                )}
+                {current.scene_goal && (
+                  <p data-testid="writing-scene-goal" className="font-body-narrative text-xs text-system-log">
+                    <span className="font-label-mono text-system-log/70 mr-1">目标：</span>
+                    {current.scene_goal}
+                  </p>
+                )}
+                {current.scene_conflict && (
+                  <p data-testid="writing-scene-conflict" className="font-body-narrative text-xs text-system-log">
+                    <span className="font-label-mono text-system-log/70 mr-1">冲突：</span>
+                    {current.scene_conflict}
+                  </p>
+                )}
+                {current.scene_emotional_arc && (
+                  <p data-testid="writing-scene-emotional-arc" className="font-body-narrative text-xs text-system-log">
+                    <span className="font-label-mono text-system-log/70 mr-1">情绪弧线：</span>
+                    {current.scene_emotional_arc}
+                  </p>
+                )}
+                {current.scene_narrative_role && (
+                  <p data-testid="writing-scene-role" className="font-body-narrative text-xs text-system-log">
+                    <span className="font-label-mono text-system-log/70 mr-1">叙事角色：</span>
+                    {current.scene_narrative_role}
+                    {current.scene_beat_type && <> · {current.scene_beat_type}</>}
+                  </p>
+                )}
+                {!current.chapter_theme && !current.scene_goal && current.outline_summary && (
+                  <p
+                    data-testid="writing-outline-summary"
+                    className="font-body-narrative text-xs text-system-log italic"
+                  >
+                    大纲：{current.outline_summary}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </header>
 

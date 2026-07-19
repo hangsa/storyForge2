@@ -357,6 +357,70 @@ describe("WizardContext", () => {
     expect(result.current.data.story_dna?.core_contradiction.side_b).toBe("守护者");
   });
 
+  // v1.8.4: handleStart() in each step component generates content (LLM
+  // call) and writes it directly to backend, but does NOT advance the
+  // user's wizard position — the user clicks "下一步" to confirm. Without
+  // markStepGenerated, the generated content reaches `data` (via the
+  // component's local state) but `completedSteps` is never updated, so
+  // when the user navigates away and back, the step is unreachable
+  // (PROJ_proj_cc4ca4ae_report: step 6 became grayed out).
+  it("markStepGenerated adds step to completedSteps and writes data, without advancing currentStep", () => {
+    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    act(() => result.current.startStep(2));
+    act(() =>
+      result.current.markStepGenerated(2, {
+        world: {
+          era: "Generated",
+          geography: "World",
+          power_system: {
+            name: "",
+            description: "",
+            stages: [],
+            core_rules: [],
+            ceilings: [],
+          },
+          factions: [],
+          core_rules: [],
+        },
+      })
+    );
+    expect(result.current.completedSteps).toContain(2);
+    expect(result.current.data.world?.era).toBe("Generated");
+    expect(result.current.currentStep).toBe(2); // NOT advanced — user must click "下一步"
+    expect(result.current.status).toBe("completed");
+  });
+
+  it("markStepGenerated is idempotent (calling twice does not duplicate or corrupt completedSteps)", () => {
+    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    act(() => result.current.startStep(5));
+    act(() =>
+      result.current.markStepGenerated(5, {
+        novel_outline: {
+          core_conflict_theme: "first",
+          volumes: [],
+          mc_growth_arc: [],
+          key_plot_points: [],
+          generated_at: "",
+          updated_at: "",
+        },
+      })
+    );
+    act(() =>
+      result.current.markStepGenerated(5, {
+        novel_outline: {
+          core_conflict_theme: "second",
+          volumes: [],
+          mc_growth_arc: [],
+          key_plot_points: [],
+          generated_at: "",
+          updated_at: "",
+        },
+      })
+    );
+    expect(result.current.completedSteps).toEqual([5]);
+    expect(result.current.data.novel_outline?.core_conflict_theme).toBe("second");
+  });
+
   it("saveStep with only concept patch leaves story_dna intact", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     // Seed story_dna first via hydrate (covers the realistic path: user

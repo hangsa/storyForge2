@@ -13,7 +13,7 @@ class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -28,30 +28,49 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch (e) {
     clearTimeout(timer);
     if (e instanceof DOMException && e.name === "AbortError") {
-      throw new ApiError("TIMEOUT", "请求超时", {});
+      throw new ApiError("TIMEOUT", "请求超时", { path });
     }
-    throw new ApiError("NETWORK_ERROR", "网络请求失败", {});
+    throw new ApiError("NETWORK_ERROR", "网络请求失败", { path, message: e instanceof Error ? e.message : String(e) });
   } finally {
     clearTimeout(timer);
   }
 
-  let json: Record<string, unknown>;
-  try {
-    json = await res.json();
-  } catch {
-    throw new ApiError(
-      "PARSE_ERROR",
-      `服务器返回无效响应 (${res.status})`,
-      {}
-    );
+  // Read the body as text first so a 5xx with non-JSON body (e.g. upstream
+  // proxy truncating a 500 page) surfaces the actual payload in the error
+  // instead of the bare "服务器返回无效响应 (500)".
+  const rawText = await res.text();
+  let json: Record<string, unknown> | null = null;
+  if (rawText) {
+    try {
+      json = JSON.parse(rawText);
+    } catch {
+      // Non-JSON body. If the status is in 2xx, the server lied about the
+      // content-type; if 5xx, an upstream/proxy returned a non-JSON error
+      // page. Surface the actual text so the user can see what came back.
+      if (res.status >= 500) {
+        const preview = rawText.slice(0, 200);
+        throw new ApiError(
+          "PARSE_ERROR",
+          `服务器返回无效响应 (${res.status}) ${method} ${path}: ${preview}`,
+          { path, status: res.status, bodyPreview: preview },
+        );
+      }
+      throw new ApiError(
+        "PARSE_ERROR",
+        `服务器返回无效响应 (${res.status}) ${method} ${path}`,
+        { path, status: res.status, bodyPreview: rawText.slice(0, 200) },
+      );
+    }
   }
 
   // FastAPI wraps HTTPException detail: {"detail": {"error": true, "code": "X", ...}}
-  const detailObj = json.detail as Record<string, unknown> | undefined;
-  const topError = json.error;
+  // If rawText was empty, json is null — but then topError/nestedError are
+  // also undefined, so we fall through to the return below.
+  const detailObj = (json?.detail as Record<string, unknown> | undefined) ?? undefined;
+  const topError = json?.error;
   const nestedError = detailObj && typeof detailObj === "object" ? detailObj.error : undefined;
   if (topError || nestedError) {
-    const payload = nestedError ? detailObj! : json;
+    const payload = (nestedError ? detailObj : json) as Record<string, unknown>;
     throw new ApiError(
       (payload.code as string) || "UNKNOWN",
       (payload.message as string) || "未知错误",
@@ -59,7 +78,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     );
   }
 
-  return (json.detail as T) ?? (json as T);
+  return (json!.detail as T) ?? (json as T);
 }
 
 // --- Type definitions (mirror Pydantic models) ---
@@ -262,6 +281,10 @@ export interface Outline {
   chapters: Array<{
     chapter_number: number;
     title: string;
+    /** 本章核心主题（per backend/prompts/outline_generation.yaml）。
+     *  Optional in older outline.json files written before the field was
+     *  introduced; readers must tolerate absence. */
+    theme?: string;
     scene_plan: ScenePlan[];
   }>;
 }
@@ -826,6 +849,18 @@ export const api = {
       custom_style_config: data.custom_style_config ?? null,
     }),
 
+  factGuard: (data: {
+    project_id: string;
+    chapter_number: number;
+    scene_number: number;
+    draft_text: string;
+  }) =>
+    request<{
+      all_passed: boolean;
+      checks: Array<{ name: string; passed: boolean; detail: string }>;
+      coherence_score: number;
+    }>("POST", "/stage4/fact-guard", data),
+
   forcePass: (data: { project_id: string; scene_number: number }) =>
     request<void>("POST", "/stage4/force-pass", data),
 
@@ -844,6 +879,15 @@ export const api = {
       "GET", `/stage4/scene-draft?project_id=${projectId}&chapter_number=${chapterNumber}&scene_number=${sceneNumber}`
     ),
 
+  getSceneDrafts: (projectId: string, chapterNumber: number) =>
+    request<{
+      chapter_number: number;
+      scenes: Array<{ scene_number: number; has_draft: boolean }>;
+    }>(
+      "GET",
+      `/stage4/scene-drafts?project_id=${projectId}&chapter_number=${chapterNumber}`,
+    ),
+
   updateSceneDraft: (data: { project_id: string; chapter_number: number; scene_number: number; draft_text: string }) =>
     request<{ chapter_number: number; scene_number: number }>(
       "PUT", "/stage4/scene-draft", data
@@ -852,6 +896,11 @@ export const api = {
   advanceChapter: (projectId: string) =>
     request<{ status: string; from_chapter: number; to_chapter: number; reader_os_snapshot: Record<string, unknown>; l2_summary: Record<string, unknown> }>(
       "POST", "/stage4/advance-chapter", { project_id: projectId }
+    ),
+
+  repairProgress: (projectId: string) =>
+    request<{ repaired_chapters: number[]; current_chapter: number }>(
+      "POST", "/stage4/repair-progress", { project_id: projectId }
     ),
 
   getRegistry: (projectId: string, registryType: string) =>
@@ -1007,6 +1056,31 @@ export const api = {
   applySFLogSuggestions: (projectId: string, sceneId: string, text: string, suggestions: SFLogSuggestion[]) =>
     request<{ updated_text: string }>("PUT", `/v1/projects/${projectId}/scenes/${sceneId}/sf-logs`,
       { text, suggestions }),
+
+  // --- v1.9 AutopilotSession (Stage 1 backend + Stage 2 SSE) ---
+  getAutopilotSession: (projectId: string) =>
+    request<unknown>("GET", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session`),
+
+  startAutopilotSession: (projectId: string, config: Record<string, unknown>) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/start`, config),
+
+  stopAutopilotSession: (projectId: string) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/stop`),
+
+  pauseAutopilotSession: (projectId: string) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/pause`),
+
+  resumeAutopilotSession: (projectId: string) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/resume`),
+
+  interveneAutopilotSession: (projectId: string, action: string) =>
+    request<unknown>("POST", `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/intervene`, { action }),
+
+  getAutopilotHistory: (projectId: string, cursor?: string) =>
+    request<unknown>(
+      "GET",
+      `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`
+    ),
 };
 
 export { ApiError };

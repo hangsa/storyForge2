@@ -1,0 +1,385 @@
+"""Async runner + helpers for AutopilotRunner wiring.
+
+Spec: docs/superpowers/specs/2026-07-14-v1.9-autopilot-runner-wiring-design.md
+§§3, 5. This file is intentionally thin: pure helpers + a small Protocol.
+The production executor lives in `backend/conductor/stage4_async_executor.py`
+and the loop-bookkeeping in `backend/conductor/autopilot_loop.py`.
+"""
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass
+from typing import Optional, Protocol
+
+from backend.models.autopilot_session import (
+    CurrentTask, ManagedStartConfig, QueueItem, SessionState,
+)
+
+
+DONE_STATUSES = frozenset({"completed", "force_passed", "skipped"})
+
+
+# Row-major queue priority scheme: chapters are processed in chapter_number
+# order; within a chapter, scenes run in scene_number order. The 1000x gap
+# between chapter buckets leaves 998 scene slots plus one archival slot per
+# chapter (well above any realistic outline). The archive slot sits after the
+# chapter's scenes and before the next chapter's first scene.
+#
+# Invariants:
+#   scene_priority(N, M) < scene_priority(N, M+1)        (within chapter)
+#   scene_priority(N, last) < archive_priority(N)         (archival after last scene)
+#   archive_priority(N) < scene_priority(N+1, 1)          (archival before next chapter)
+#
+# Why row-major (and not column-major as before):
+#   - Aligns with StoryForge's per-chapter MemoryOS cache (L1/L4/L2 survive
+#     across scenes in the same chapter). Column-major thrashes the cache
+#     every scene → ~60% extra context-assembly overhead per the design doc.
+#   - Net-novel authoring works chapter-by-chapter; writing ch31.scene_4
+#     "knows" all of ch31 already exists.
+#   - Eliminates the "ch32.scene_1 written before ch31.scene_4" forward-leak
+#     where MemoryOS L2 was missing the just-prior chapter's summary.
+PRIORITY_SCALE_PER_CHAPTER = 1000
+ARCHIVE_PRIORITY_OFFSET = 999  # archive runs after all scenes in its chapter
+
+
+def scene_priority(chapter_number: int, scene_number: int) -> int:
+    """Lower = earlier. Row-major: chapter_number then scene_number."""
+    return chapter_number * PRIORITY_SCALE_PER_CHAPTER + scene_number
+
+
+def archive_priority(chapter_number: int) -> int:
+    """Just above the chapter's last scene, below the next chapter's first scene."""
+    return chapter_number * PRIORITY_SCALE_PER_CHAPTER + ARCHIVE_PRIORITY_OFFSET
+
+
+@dataclass
+class SeedResult:
+    """Outcome of seed_queue. Distinguishes "scope was widened automatically
+    because the requested scope had nothing left to do" from "everything
+    really is done" — without this distinction the API's no_work_to_do
+    branch can't tell the user what actually happened (bug 2026-07-17:
+    proj_cc4ca4ae saw a misleading "all 33 chapters done" toast when in
+    reality the user's stale scope=next_chapter was the blocker).
+
+    `enqueued` is the number of NEW queue items added by this call. `matched`
+    is the total number of unfinished scenes in the requested scope
+    (including scenes already in the queue from a previous call). The two
+    diverge once seed_queue becomes idempotent: a restart against a queue
+    that already holds its target scenes returns enqueued=0 but matched>0,
+    which means "nothing new, but there's still work — keep running."
+    """
+    enqueued: int
+    scope_used: str
+    fallback_applied: bool
+    matched: int = 0
+
+
+class AsyncTaskExecutor(Protocol):
+    """The runner only knows this Protocol. Production: AsyncStage4Executor.
+    Tests: FakeStage4Executor."""
+
+    async def execute(self, item: QueueItem, project_id: str) -> dict:
+        ...
+
+    async def execute_stream(self, item: QueueItem, project_id: str) -> dict:
+        """Streaming twin. Implementations may delegate to execute() if they
+        don't yet support streaming (FakeStage4Executor pre-Plan-3 still does)."""
+        ...
+
+
+CADENCE_DELAYS = {"fast": 0.5, "balanced": 2.0, "careful": 5.0}
+
+
+def is_chapter_complete(
+    progress_scenes: list,
+    expected_scene_plan: list,
+) -> bool:
+    """Spec §5 rule rows 5, 6, 7. Pure — no I/O.
+
+    A chapter is complete when, for every scene in the outline (in order),
+    the matching progress entry exists with a status in {completed, force_passed,
+    skipped}. Extra progress entries beyond the outline's length are ignored
+    (defensive against outline edits mid-run).
+    """
+    if not expected_scene_plan:
+        return True  # nothing planned → trivially done
+    plan_nums = [s.get("scene_number") for s in expected_scene_plan]
+    progress_by_num = {
+        s.get("scene_number"): s.get("status")
+        for s in progress_scenes
+    }
+    for n in plan_nums:
+        status = progress_by_num.get(n)
+        if status not in DONE_STATUSES:
+            return False
+    return True
+
+
+def repair_stuck_chapters(progress: dict, outline: dict) -> list:
+    """Flip chapters stuck at status='in_progress' despite all outline scenes
+    being terminal to status='completed'. Mutates `progress` in place;
+    returns the sorted chapter_numbers that were repaired.
+
+    Pure on its inputs (no I/O). The caller is responsible for persisting
+    `progress` afterwards if disk durability is wanted.
+
+    Why this exists: the executor finalizes scenes one at a time and only
+    flips the chapter status after the last scene lands. If the runner stops
+    between those two writes (manual stop, server restart, force-passed
+    mid-flight), the chapter is left half-finalized forever. Without an
+    explicit repair, the autopilot sees "this chapter is still in progress"
+    and refuses to advance. surfacing 2026-07-17 on proj_cc4ca4ae where
+    chapters 21-30 had every scene completed but chapter.status was still
+    'in_progress'.
+    """
+    outline_chapters_by_num = {
+        c.get("chapter_number"): c for c in (outline.get("chapters") or [])
+    }
+    repaired: list = []
+    for ch in progress.get("chapters", []) or []:
+        if ch.get("status") != "in_progress":
+            continue
+        ch_num = ch.get("chapter_number")
+        outline_ch = outline_chapters_by_num.get(ch_num)
+        if outline_ch is None:
+            continue  # no ground truth → skip defensively
+        planned = outline_ch.get("scene_plan", []) or []
+        if not planned:
+            continue
+        if is_chapter_complete(ch.get("scenes", []) or [], planned):
+            ch["status"] = "completed"
+            repaired.append(ch_num)
+    repaired.sort()
+    return repaired
+
+
+def seed_queue(
+    mgr: "AutopilotSessionManager",
+    outline: dict,
+    progress: Optional[dict],
+    novel_outline: Optional[dict],
+    cfg: ManagedStartConfig,
+) -> SeedResult:
+    """Translate (outline, progress, novel_outline, cfg) into QueueItems
+    appended to mgr.queue. Returns a SeedResult describing what was enqueued.
+
+    Idempotent: items with deterministic ids (`write-{ch}-{scene}`,
+    `archive-{ch}`) already present in mgr.queue are skipped, so a restart
+    that re-runs seed_queue against a non-empty queue grows the queue by
+    zero. Without this, every restart doubled or tripled the queue and
+    history ballooned with thousands of `queue_add` events (bug 2026-07-17
+    proj_cc4ca4ae: queue grew 10 → 20 → 30 across three restarts).
+
+    Auto-fallback: when cfg.scope == "next_chapter" but the scoped chapter
+    has zero unfinished scenes in progress.json (so the first pass enqueues
+    0), retry with target=all_chapters. This protects against stale
+    "next_chapter" intent sitting in session.json from a previous run —
+    without the fallback the UI shows a misleading "project complete" toast
+    (bug 2026-07-17 on proj_cc4ca4ae: ch21 was already done but ch31-33 had
+    no progress at all, so a meaningful plan existed below the scoped
+    chapter). The fallback decision uses `matched` (total unfinished scenes
+    in the requested scope), not `enqueued` (newly added), so a re-start
+    whose work is already queued doesn't silently widen scope.
+
+    Pure-ish: the only side effect is `mgr.add_queue(...)` (which writes
+    session.json). No HTTP, no LLM, no executor.
+    """
+    if not outline or not outline.get("chapters"):
+        return SeedResult(enqueued=0, scope_used=cfg.scope, fallback_applied=False)
+    progress = progress or {}
+    chapters = progress.get("chapters", []) or []
+    progress_by_chapter = {
+        ch.get("chapter_number"): ch for ch in chapters
+    }
+    current_chapter = progress.get("current_chapter", 1)
+
+    all_chapters = outline["chapters"]
+
+    # First pass with the requested scope.
+    first_seeded, first_matched = _enqueue_for_scope(
+        mgr, all_chapters, progress_by_chapter, cfg.scope, current_chapter,
+    )
+
+    # Fallback: next_chapter's scope produced ZERO candidates (the chapter
+    # is genuinely complete), but later chapters may still have unfinished
+    # scenes. Use matched (not enqueued) so a re-start whose work is
+    # already queued doesn't trigger fallback.
+    if first_matched == 0 and cfg.scope == "next_chapter":
+        second_seeded, _ = _enqueue_for_scope(
+            mgr, all_chapters, progress_by_chapter,
+            target_scope="all_planned", current_chapter=current_chapter,
+        )
+        if second_seeded > 0:
+            return SeedResult(
+                enqueued=second_seeded, scope_used="all_planned",
+                fallback_applied=True, matched=first_matched,
+            )
+
+    return SeedResult(
+        enqueued=first_seeded, scope_used=cfg.scope, fallback_applied=False,
+        matched=first_matched,
+    )
+
+
+def _enqueue_for_scope(
+    mgr: "AutopilotSessionManager",
+    all_chapters: list,
+    progress_by_chapter: dict,
+    target_scope: str,
+    current_chapter: int,
+) -> tuple[int, int]:
+    """Enqueue unfinished scenes for chapters matching `target_scope`.
+    Returns `(seeded, matched)`:
+      - `seeded`: number of NEW queue items added (excludes items already
+        in mgr.queue with the same deterministic id).
+      - `matched`: total number of unfinished scenes in scope (including
+        those already queued — needed by the caller to decide fallback).
+
+    Pure-ish (only side effect is via mgr.add_queue)."""
+    if target_scope == "next_chapter":
+        target_chapters = [
+            ch for ch in all_chapters
+            if ch.get("chapter_number") == current_chapter
+        ]
+    else:  # "all_planned"
+        target_chapters = list(all_chapters)
+
+    # Snapshot existing queue ids once. Reading mgr.queue inside the loop
+    # would force a session.json load per scene; this keeps dedup O(n).
+    # mgr.load() can return None if the session file doesn't exist yet
+    # (e.g. seed_queue called before mgr.start()) — treat that as empty.
+    snapshot = mgr.load()
+    existing_ids = {q.id for q in (snapshot.queue or [])} if snapshot else set()
+
+    seeded = 0
+    matched = 0
+    for ch in target_chapters:
+        ch_num = ch.get("chapter_number")
+        scene_plan = ch.get("scene_plan", []) or []
+        if not scene_plan:
+            continue
+        ch_progress = progress_by_chapter.get(ch_num, {})
+        done_nums = {
+            s.get("scene_number")
+            for s in ch_progress.get("scenes", []) or []
+            if s.get("status") in DONE_STATUSES
+        }
+        for s in scene_plan:
+            n = s.get("scene_number")
+            if n in done_nums:
+                continue
+            item_id = f"write-{ch_num}-{n}"
+            matched += 1
+            if item_id in existing_ids:
+                continue
+            item = QueueItem(
+                id=item_id,
+                kind="write_scene",
+                chapter_number=ch_num,
+                scheduled_at=None,
+                priority=scene_priority(ch_num, n),  # row-major; archival uses archive_priority
+                payload={"scene_number": n},
+            )
+            mgr.add_queue(item)
+            existing_ids.add(item_id)
+            seeded += 1
+    return seeded, matched
+
+
+class AsyncAutopilotRunner:
+    """Drives the session queue. Exits when state != running or queue empty."""
+
+    def __init__(
+        self,
+        mgr: "AutopilotSessionManager",
+        executor: AsyncTaskExecutor,
+        cadence: str = "balanced",
+    ) -> None:
+        self._mgr = mgr
+        self._executor = executor
+        self._cadence_delay = CADENCE_DELAYS.get(cadence, CADENCE_DELAYS["balanced"])
+
+    def _pick_next(self, queue: list) -> Optional[QueueItem]:
+        if not queue:
+            return None
+        return min(queue, key=lambda q: q.priority)
+
+    async def run(self) -> None:
+        """Main loop. Exits on state != running, or when queue is exhausted
+        (auto-stop in that case)."""
+        while True:
+            # Layer 1 fix: keep last_heartbeat_at fresh so recover_running_sessions
+            # can detect a dead runner. Without this the field is always null and
+            # the stale-session downgrade never fires. Called once per iteration
+            # (each iteration already has asyncio.sleep(self._cadence_delay)
+            # = 0.5/2/5s, well under the 30s staleness threshold).
+            self._mgr.heartbeat()
+            s = self._mgr.load()
+            if s is None or s.state != SessionState.RUNNING:
+                return
+            item = self._pick_next(s.queue)
+            if item is None:
+                self._mgr.stop()
+                return
+            await self._step_one(item, project_id=s.project_id)
+            await asyncio.sleep(self._cadence_delay)
+
+    async def _step_one(self, item: QueueItem, project_id: str) -> dict:
+        """One iteration. Mirrors sync runner.step() but async + task_fail branch."""
+        task = CurrentTask(
+            kind=item.kind,
+            chapter_number=item.chapter_number,
+            scene_id=None,
+            status="active",
+            started_at=None,  # manager fills in if it cares
+            description=f"{item.kind} (chapter {item.chapter_number})",
+            progress_pct=0,
+        )
+        self._mgr.set_current_task(task)
+
+        try:
+            # Prefer execute_stream() when the executor implements it. This
+            # is the v1.10 Direction B wiring: streaming executors publish
+            # per-chunk events that the /chapter-stream SSE endpoint relays
+            # to the cockpit UI. Executors that haven't been upgraded yet
+            # (e.g. older FakeStage4Executor instances) fall back to
+            # execute() — they just won't stream.
+            executor_call = (
+                self._executor.execute_stream
+                if hasattr(self._executor, "execute_stream")
+                else self._executor.execute
+            )
+            result = await executor_call(item, project_id=project_id)
+        except Exception as e:
+            self._mgr.fail_current_task(error=str(e))
+            self._mgr.drop_queue(item.id)
+            return {"picked": item.id, "completed": False, "error": str(e)}
+
+        # The streaming executor returns a structured dict with
+        # `status: "fail"` when the LLM returned no usable text (e.g. an API
+        # auth failure surfaced as a `scene_failed` event). Without this
+        # check the runner drops the queue item and marks the task complete
+        # — which lies to the cockpit UI ("task_complete" history event)
+        # AND keeps the failed item out of progress.json, so the next
+        # seed_queue() re-enqueues it and the loop spins forever on bad
+        # credentials. Fixed 2026-07-17 after proj_cc4ca4ae burned through
+        # its 64-item queue in ~3 minutes with no drafts and no progress.
+        if isinstance(result, dict) and result.get("status") == "fail":
+            err = result.get("error", "scene write failed")
+            self._mgr.fail_current_task(error=err)
+            self._mgr.drop_queue(item.id)
+            return {"picked": item.id, "completed": False, "error": err}
+
+        # Success path: drop queue item + complete current_task.
+        self._mgr.drop_queue(item.id)
+        self._mgr.complete_current_task()
+
+        # Circuit breaker: only on force_passed scenes (spec §5 row 2).
+        # Delegate to mgr.record_force_pass_internal() which encapsulates the
+        # increment + threshold-check + circuit_open transition in one
+        # write-through (matches the existing sync runner's record_force_pass).
+        scene_status = result.get("scene_status") if isinstance(result, dict) else None
+        if scene_status == "force_passed":
+            self._mgr.record_force_pass_internal()
+
+        return {"picked": item.id, "completed": True, "result": result}

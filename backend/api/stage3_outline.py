@@ -8,6 +8,10 @@ from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDE
 from backend.conductor.branch_simulator import BranchSimulator
 from backend.agents.planner import PlannerAgent
 from backend.llm.model_router import get_model_router
+from backend.services.agent_prompt_stores import (
+    project_override_store,
+    global_override_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +76,11 @@ async def generate_outline(data: dict):
 
     novel_outline = fm.read_json(project_id, "novel_outline.json") or None
 
-    agent = PlannerAgent(project_id)
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         result, response = await agent.generate_outline(
             concept=concept_and_dna.get("concept", {}),
@@ -101,6 +109,31 @@ async def generate_outline(data: dict):
     existing_chapters.sort(key=lambda ch: ch.get("chapter_number", 0))
     merged_outline = {"chapters": existing_chapters}
     fm.write_json(project_id, "outline.json", merged_outline)
+
+    # Keep progress.json's stored total_chapters in sync — without this,
+    # the /stage4/progress endpoint reports a stale denominator ("X / 20")
+    # when the user has extended the outline to e.g. 30 via the
+    # "+ 新章节" UI. Take max(stored, novel_outline, outline_count).
+    progress = fm.read_json(project_id, "progress.json") or {}
+    novel_outline = fm.read_json(project_id, "novel_outline.json") or {}
+    novel_total = 0
+    for volume in (novel_outline.get("volumes", []) or []):
+        if not isinstance(volume, dict):
+            continue
+        rng = volume.get("chapter_range", "")
+        if not isinstance(rng, str) or "-" not in rng:
+            continue
+        try:
+            end = int(rng.split("-")[-1])
+            novel_total = max(novel_total, end)
+        except (ValueError, IndexError):
+            continue
+    outline_count = len(merged_outline["chapters"])
+    stored_total = progress.get("total_chapters") or 0
+    refreshed = max(stored_total, novel_total, outline_count)
+    if refreshed and refreshed != stored_total:
+        progress["total_chapters"] = refreshed
+        fm.write_json(project_id, "progress.json", progress)
 
     # Auto-generate growth curves for characters without them, then bind to outline
     from backend.growth_curve.auto_generator import auto_generate_growth_curves
@@ -205,7 +238,11 @@ async def generate_novel_outline(data: dict):
     # not exist; read_json returns None and the agent skips the section.
     map_data = fm.read_json(project_id, "map.json")
 
-    agent = PlannerAgent(project_id)
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         result, response = await agent.generate_novel_outline(
             concept=concept_and_dna.get("concept", {}),
@@ -327,6 +364,8 @@ async def simulate_branch(project_id: str, data: dict):
     simulator = BranchSimulator(
         projects_dir=settings.projects_dir,
         model_router=router,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
     )
 
     report = await simulator.simulate(project_id, description)
@@ -385,6 +424,8 @@ async def list_branch_history(project_id: str):
 
     simulator = BranchSimulator(
         projects_dir=settings.projects_dir,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
     )
     history = simulator.list_history(project_id)
 

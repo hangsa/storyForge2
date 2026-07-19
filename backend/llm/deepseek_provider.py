@@ -1,5 +1,7 @@
+from typing import AsyncIterator
+
 from openai import AsyncOpenAI
-from backend.llm.base_provider import BaseLLMProvider, LLMResponse, LLMConfig
+from backend.llm.base_provider import BaseLLMProvider, LLMResponse, LLMConfig, StreamChunk
 
 
 class DeepSeekProvider(BaseLLMProvider):
@@ -46,3 +48,40 @@ class DeepSeekProvider(BaseLLMProvider):
 
     def supports_json_mode(self) -> bool:
         return True
+
+    async def generate_stream(
+        self, system_prompt: str, user_prompt: str, **kwargs
+    ) -> AsyncIterator[StreamChunk]:
+        """Yield text deltas from the OpenAI SDK's chat.completions.create(stream=True).
+
+        Each streamed ChatCompletionChunk has delta.content (may be None for role-only
+        or interim chunks — skip those) and finish_reason. Stop iterating after the
+        first non-None finish_reason so the SDK's occasional post-finish chunks don't
+        reach the consumer.
+
+        json_mode is intentionally NOT threaded through: streaming + JSON is a
+        separate AC (the partial-JSON case can't be validated). The non-streaming
+        generate() supports json_mode.
+        """
+        max_tokens = kwargs.get("max_tokens", self.default_max_tokens)
+        temperature = kwargs.get("temperature", self.default_temperature)
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        stream = await self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            stream=True,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            if delta:
+                yield StreamChunk(text=delta)
+            if chunk.choices[0].finish_reason:
+                yield StreamChunk(text="", finish_reason=chunk.choices[0].finish_reason)
+                return

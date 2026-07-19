@@ -36,8 +36,11 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     setBusy(true);
     try {
       const result = await api.generateWorld(projectId);
-      setWorld({ ...EMPTY_WORLD, ...result });
-      wizard.setStatus("completed");
+      const merged = { ...EMPTY_WORLD, ...result };
+      setWorld(merged);
+      // v1.8.4: mark generated so step 2 stays reachable in the indicator
+      // when the user navigates away before clicking "下一步".
+      wizard.markStepGenerated(2, { world: merged });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "世界观生成失败");
     } finally {
@@ -80,9 +83,23 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     setWorld({ ...world, factions: world.factions.filter((_, i) => i !== index) });
   };
 
+  // Sync local `world` state from wizard.data when prefill lands. Only
+  // overwrite if the user hasn't typed anything (local state still EMPTY).
+  useEffect(() => {
+    const persisted = wizard.data.world;
+    if (persisted && world.era === "" && world.geography === "") {
+      setWorld(persisted);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizard.data.world]);
+
   // Auto-trigger generation on mount if no world has been generated yet.
   // Errors keep the error UI visible so the user can hit "重新生成" in the footer.
+  //
+  // v1.8.2: wait for prefill to finish before deciding — same race-condition
+  // fix as OutlineStep (proj_cc4ca4ae regression).
   useEffect(() => {
+    if (!wizard.prefillComplete) return;
     if (
       !wizard.data.world &&
       wizard.status !== "generating" &&
@@ -91,7 +108,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       handleStart();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [wizard.prefillComplete]);
 
   // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
   // just registers the handlers and the current busy state.

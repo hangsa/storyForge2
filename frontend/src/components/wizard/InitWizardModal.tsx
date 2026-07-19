@@ -36,7 +36,17 @@ const STEP_TITLES: Record<number, string> = {
 function hasContent(v: unknown): boolean {
   if (!v || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
-  return Object.values(o).some((x) => x !== null && x !== undefined && x !== "");
+  return Object.values(o).some((x) => {
+    if (x === null || x === undefined || x === "") return false;
+    // Empty array / object means the section is in its default/empty state,
+    // not actually filled in. Without this guard, the wizard prefill marks
+    // 角色设计 + 全书大纲 as completed for fresh projects — the backend
+    // returns {"characters": [], "current": {}} and {"chapters": []} as the
+    // "no content yet" payload, and `[]`/`{}` pass a naive truthy check.
+    if (Array.isArray(x) && x.length === 0) return false;
+    if (typeof x === "object" && Object.keys(x as object).length === 0) return false;
+    return true;
+  });
 }
 
 export default function InitWizardModal({ projectId, onDismiss, resume = false }: InitWizardModalProps) {
@@ -51,12 +61,18 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
   const wizard = useWizard();
   const navigate = useNavigate();
 
-  // Best-effort deep-link resume: if no completed steps are loaded, fetch the
-  // project's persisted files and mark steps completed via hydrateFromFiles.
-  // hydrateFromFiles is additive — a step the user just completed locally
-  // wins over the file fetch (see WizardContext.test.tsx "is additive" test).
+  // Best-effort deep-link resume: fetch the project's persisted files and
+  // mark steps completed via hydrateFromFiles. hydrateFromFiles is additive
+  // — a step the user just completed locally wins over the file fetch
+  // (see WizardContext.test.tsx "is additive" test).
+  //
+  // v1.8.2: prefill ALWAYS runs on mount, even when sessionStorage already
+  // holds a partial wizard state. The proj_cc4ca4ae regression showed that
+  // sessionStorage can be stale (user closed on step 5 before clicking
+  // "确认修改并继续", so data.novel_outline was null even though the file
+  // existed on disk). Skipping prefill in that case caused OutlineStep's
+  // auto-trigger to fire and regenerate content the user already paid for.
   useEffect(() => {
-    if (wizard.completedSteps.length > 0) return;
     let cancelled = false;
     (async () => {
       try {
@@ -86,12 +102,15 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           completed.push(3);
           data.characters = chars.value as CharacterSet;
         }
+        // Step mappings — must stay in sync with STEP_TITLES above:
+        //   5 = novel_outline.json (全书大纲)
+        //   6 = outline.json     (章节大纲 / chapter1_outline)
         if (novel.status === "fulfilled" && hasContent(novel.value)) {
-          completed.push(4);
+          completed.push(5);
           data.novel_outline = novel.value as NovelOutline;
         }
         if (outline.status === "fulfilled" && hasContent(outline.value)) {
-          completed.push(5);
+          completed.push(6);
           data.chapter1_outline = outline.value as Outline;
         }
         if (completed.length > 0) {
@@ -101,9 +120,15 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           } else {
             wizard.hydrateFromFiles(completed, data);
           }
+        } else {
+          // No files to hydrate — still mark prefill complete so steps with
+          // auto-triggers (OutlineStep etc.) can run their generation logic.
+          wizard.markPrefillComplete();
         }
       } catch {
-        // ignore prefill failures (e.g., 404 on first ever entry)
+        // ignore prefill failures (e.g., 404 on first ever entry) but still
+        // unblock auto-triggers so the user can proceed with a fresh project.
+        if (!cancelled) wizard.markPrefillComplete();
       }
     })();
     return () => {
@@ -119,8 +144,13 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
       // proceed even if advance fails (mirrors HomePage create behavior)
     }
     wizard.reset();
+    // Navigate BEFORE onDismiss: if onDismiss ever does anything other than
+    // `setState(null)` (e.g. window.location.assign, which fires a hard
+    // reload), calling navigate first ensures the workspace URL wins.
+    // WizardDeepLinkPage's previous window.location.assign("/") bug
+    // manifested as "complete wizard → land on / instead of /workspace".
+    navigate(`/project/${encodeURIComponent(projectId)}/workspace`);
     onDismiss();
-    navigate(`/project/${encodeURIComponent(projectId)}/workspace?mode=managed`);
   };
 
   return (

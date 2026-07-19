@@ -5,6 +5,7 @@ import ManifestoHeader from "../components/home/ManifestoHeader";
 import CreateProjectCard from "../components/home/CreateProjectCard";
 import BookShelf from "../components/home/BookShelf";
 import InitWizardModal from "../components/wizard/InitWizardModal";
+import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
 import { useProjectStats } from "../hooks/useProjectStats";
 
 export default function HomePage() {
@@ -13,6 +14,7 @@ export default function HomePage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
+  const [plazaOpen, setPlazaOpen] = useState(false);
 
   // v1.8.2: single source of truth for the project list. BookShelf used to
   // fetch /api/project/list on its own, doubling the round-trip on every
@@ -82,6 +84,10 @@ export default function HomePage() {
     }
   }, [refresh]);
 
+  const handleOpenPlaza = useCallback(() => {
+    setPlazaOpen(true);
+  }, []);
+
   return (
     <div className="min-h-screen bg-canvas-bg flex">
       <StatsSidebar
@@ -89,6 +95,7 @@ export default function HomePage() {
         statsLoading={statsLoading}
         onRefresh={handleRefresh}
         refreshing={refreshing}
+        onOpenPlaza={handleOpenPlaza}
       />
       <main className="flex-1 min-w-0 px-8 py-8 max-w-[1200px] mx-auto">
         <ManifestoHeader />
@@ -103,6 +110,12 @@ export default function HomePage() {
           onProjectsDeleted={handleProjectsDeleted}
         />
       </main>
+      <PromptPlazaModal
+        isOpen={plazaOpen}
+        projectId={null}
+        projectTitle={null}
+        onClose={() => setPlazaOpen(false)}
+      />
       {wizardProjectId && (
         <InitWizardModal
           projectId={wizardProjectId}

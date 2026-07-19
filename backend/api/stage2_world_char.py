@@ -5,6 +5,10 @@ from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
 from backend.models.character import Character as CharacterModel
+from backend.services.agent_prompt_stores import (
+    project_override_store,
+    global_override_store,
+)
 
 router = APIRouter(prefix="/api/stage2", tags=["stage2"])
 fm = FileManager(settings.projects_dir)
@@ -103,7 +107,11 @@ async def generate_world(data: dict):
         )
 
     project = fm.read_json(project_id, "project.json")
-    agent = PlannerAgent(project_id)
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         result, response = await agent.generate_world(
             concept=concept_and_dna.get("concept", {}),
@@ -174,7 +182,11 @@ async def generate_character(data: dict):
         fm.write_json(project_id, "characters.json", existing)
     existing_characters = existing.get("characters", [])
 
-    agent = PlannerAgent(project_id)
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         result, response = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),

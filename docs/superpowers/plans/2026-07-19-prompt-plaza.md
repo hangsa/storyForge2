@@ -1129,6 +1129,23 @@ YAML files at backend/prompts/ remain the read-only factory defaults."
 2. `request` **already unwraps the response envelope**: its last line is `return (json!.detail as T) ?? (json as T)`. So a backend response `{"error": false, "detail": {"prompts": [...]}}` is returned to the caller as `{"prompts": [...]}`. Generic types must therefore describe the **already-unwrapped** shape, NOT the `{ detail: ... }` wrapper.
 3. `ApiError` is already exported (line 1086). `API_BASE` is `/api`, so path `/projects/{id}/prompts/list` hits `/api/projects/{id}/prompts/list` — matching the router prefix. Do NOT prepend `/api`.
 
+**⚠️ Envelope shape deviation (resolved 2026-07-19, commit `4cb7921`):**
+
+The actual backend responses (per `tests/test_prompt_plaza_api.py` and `backend/api/prompt_plaza.py`) DO NOT match the codebase-standard `{error, code, message, detail}` envelope. They use a flattened shape that varies by endpoint:
+
+| Endpoint | Success body | Error body |
+|---|---|---|
+| `GET /list` | `{error, prompts: [...]}` (top-level) | `{"detail": {"code": "NOT_FOUND"}}` |
+| `GET /{name}` | `{error, name, builtin_yaml, override, effective}` (top-level) | `{"detail": {"code": "NOT_FOUND"}}` |
+| `PUT /{name}` | `{error, detail: {name, override, modified_at}, message}` | `{"detail": {"code": "VALIDATION_ERROR"\|"NOT_FOUND"}}` |
+| `DELETE /{name}` | `{error, detail: {name, status: "reset"}}` | `{"detail": {"code": "NOT_FOUND"}}` |
+
+The frontend generic types in Task 5 must describe these specific shapes (not a generic `{detail: ...}` wrapper).
+
+**⚠️ Pruning rule deviation (resolved 2026-07-19, commit `4cb7921`):**
+
+The original plan said `set_override` deletes the entry when all payload fields prune back to YAML defaults. The actual implementation (now in `backend/services/prompt_override_store.py`) keeps the entry with just `{_modified_at: "..."}` so the UI badge remains. DELETE is the only way to drop an entry entirely. This was a deliberate decision — both implementations satisfy the test contract, but "keep entry" preserves the "last touched" history the UI needs.
+
 - [ ] **Step 1: Export the `request` helper from client.ts**
 
 Open `frontend/src/api/client.ts`. Change line 16 from:

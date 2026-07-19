@@ -105,6 +105,43 @@ class TestGetDetail:
         assert resp.json()["detail"]["code"] == "NOT_FOUND"
 
 
+class TestBadProjectId:
+    """Bad project_id must return 400 with our envelope, not 500.
+
+    Path-traversal inputs that contain '/' or '..' can't reach this handler
+    — they're normalized at the routing layer (404 before any handler runs).
+    So we exercise only the cases that survive URL routing: leading dots
+    and surrounding whitespace.
+    """
+
+    @pytest.mark.parametrize("bad_id", [
+        "%2Ehidden",      # leading dot (URL-encoded so it survives routing)
+        "%20foo%20",      # surrounding whitespace
+    ])
+    def test_list_returns_400_envelope(self, client, bad_id):
+        resp = client.get(f"/api/projects/{bad_id}/prompts/list")
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
+
+    def test_get_returns_400_envelope(self, client):
+        resp = client.get("/api/projects/%2Ehidden/prompts/scene_writing")
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
+
+    def test_put_returns_400_envelope(self, client):
+        resp = client.put(
+            "/api/projects/%2Ehidden/prompts/scene_writing",
+            json={"system_prompt": "x"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
+
+    def test_delete_returns_400_envelope(self, client):
+        resp = client.delete("/api/projects/%20foo%20/prompts/scene_writing")
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
+
+
 class TestPutOverride:
     def test_writes_override_and_returns_200(self, client, real_projects_dir, project_id):
         resp = client.put(

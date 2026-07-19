@@ -48,6 +48,22 @@ def _store() -> PromptOverrideStore:
     )
 
 
+def _bad_project_id(project_id: str) -> None:
+    """Translate store-level ValueError into our 400 envelope.
+
+    The store validates project_id defensively (path traversal, etc.).
+    FastAPI would otherwise turn ValueError into a 500 — but bad IDs are
+    client input errors and should return 400 with our standard envelope.
+    """
+    try:
+        _store().validate_project_id(project_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail={
+            "error": True, "code": "VALIDATION_ERROR",
+            "message": f"Invalid project_id: {project_id!r}",
+        })
+
+
 # ----------------------------------------------------------------------
 # Routes — register list/export before {name} to avoid path collision
 # ----------------------------------------------------------------------
@@ -55,11 +71,13 @@ def _store() -> PromptOverrideStore:
 
 @router.get("/list")
 async def list_prompts(project_id: str):
+    _bad_project_id(project_id)
     return {"error": False, "prompts": _store().list_available(project_id)}
 
 
 @router.get("/{name}")
 async def get_prompt(project_id: str, name: str):
+    _bad_project_id(project_id)
     store = _store()
     try:
         # get_override_only validates name exists (via _load_yaml internally);
@@ -83,6 +101,7 @@ async def get_prompt(project_id: str, name: str):
 
 @router.put("/{name}")
 async def update_prompt(project_id: str, name: str, payload: PromptOverridePayload):
+    _bad_project_id(project_id)
     # Manual range validation so 400 returns our envelope, not FastAPI's 422.
     if payload.temperature is not None and not (0.0 <= payload.temperature <= 2.0):
         raise HTTPException(status_code=400, detail={
@@ -114,6 +133,7 @@ async def update_prompt(project_id: str, name: str, payload: PromptOverridePaylo
 
 @router.delete("/{name}")
 async def reset_prompt(project_id: str, name: str):
+    _bad_project_id(project_id)
     _store().delete_override(project_id, name)
     return {
         "error": False,

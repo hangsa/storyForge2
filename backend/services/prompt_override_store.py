@@ -73,6 +73,15 @@ class PromptOverrideStore:
             raise ValueError(f"Invalid project_id: {project_id!r}")
         return project_id
 
+    def validate_project_id(self, project_id: str) -> str:
+        """Public version of _validate_project_id for API-layer use.
+
+        Callers (HTTP routers) want to translate ValueError into a 400
+        response without having to reach into a private method. Same
+        behavior; just a non-underscore name for the public surface.
+        """
+        return self._validate_project_id(project_id)
+
     def _load_yaml(self, name: str) -> dict[str, Any]:
         """Load a YAML prompt file by base name (with or without .yaml)."""
         candidate = name if name.endswith(".yaml") else f"{name}.yaml"

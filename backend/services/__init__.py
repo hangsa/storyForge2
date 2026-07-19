@@ -1,0 +1,1 @@
+"""Backend services — reusable business logic decoupled from HTTP layer."""

@@ -2114,6 +2114,14 @@ git add frontend/src/components/home/promptPlaza/PromptEditPanel.tsx frontend/sr
 git commit -m "feat(plaza): PromptEditPanel — system + user textareas + advanced + dirty detection"
 ```
 
+**Plan deviation notes (caught during execution, see commit 9a3068c):**
+
+| # | Plan said | Actually shipped | Why |
+|---|---|---|---|
+| 1 | `setOutputFormatJson(of ? JSON.stringify(of, null, 2) : "{}")` | `setOutputFormatJson(of ? JSON.stringify(of) : "{}")` | Plan used pretty-print (indent=2) for init but compact form for dirty-check. With `effective.output_format = {type: "json"}`, the two strings never match → `dirty` is always true. Made both compact. |
+| 2 | Reset button: `disabled={!detail.override}` | Reset button always enabled | Plan spec + its own test contradicted: test uses `DETAIL.override = null` then clicks reset-button. Disabled buttons swallow clicks. Followed the test (TDD wins). Task 10 (modal) may want to conditionally render the button instead. |
+| 3 | Test import `../../../components/...` (3 ups) | Test import `../../components/...` (2 ups) | Plan typo — same class of bug as Task 7. `src/test/promptPlaza/X.test.tsx` → `src/components/...` is 2 ups. Matches the working `PromptListPanel.test.tsx` next door. |
+
 ---
 
 ## Task 10: PromptPlazaModal（含测试）

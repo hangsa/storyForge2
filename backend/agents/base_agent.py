@@ -49,12 +49,14 @@ class BaseAgent:
         project_id: str,
         prompts_dir: Optional[Path] = None,
         model_router: Optional[ModelRouter] = None,
+        override_store: Optional["PromptOverrideStore"] = None,
     ):
         self.project_id = project_id
         self.prompts_dir = Path(prompts_dir) if prompts_dir else settings.prompts_dir
         self._provider: Optional[BaseLLMProvider] = None
         self._usage_log_path: Optional[Path] = None
         self._router = model_router
+        self._override_store = override_store
 
     @property
     def provider(self) -> BaseLLMProvider:
@@ -75,7 +77,20 @@ class BaseAgent:
             self._usage_log_path = project_dir / "llm_usage.jsonl"
         return self._usage_log_path
 
-    def load_prompt(self, template_name: str) -> PromptTemplate:
+    def load_prompt(
+        self,
+        template_name: str,
+        project_id: Optional[str] = None,
+    ) -> PromptTemplate:
+        """Load a prompt template. If project_id is provided AND an override store
+        is configured, merge the project's overrides on top of the YAML default.
+        """
+        if project_id is not None and self._override_store is not None:
+            merged = self._override_store.get_effective(project_id, template_name)
+            return PromptTemplate(merged)
+        return self._load_prompt_from_yaml(template_name)
+
+    def _load_prompt_from_yaml(self, template_name: str) -> PromptTemplate:
         path = self.prompts_dir / f"{template_name}.yaml"
         if not path.exists():
             raise FileNotFoundError(f"Prompt template not found: {path}")

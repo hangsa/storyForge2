@@ -55,7 +55,7 @@ def _store() -> PromptOverrideStore:
 
 @router.get("/list")
 async def list_prompts(project_id: str):
-    return {"error": False, "code": "OK", "message": "", "detail": {"prompts": _store().list_available(project_id)}}
+    return {"error": False, "prompts": _store().list_available(project_id)}
 
 
 @router.get("/{name}")
@@ -71,16 +71,13 @@ async def get_prompt(project_id: str, name: str):
         raise HTTPException(status_code=404, detail={
             "error": True, "code": "NOT_FOUND",
             "message": f"Prompt template not found: {name}",
-            "detail": {"name": name},
         })
     return {
-        "error": False, "code": "OK", "message": "",
-        "detail": {
-            "name": name,
-            "builtin_yaml": builtin,
-            "override": override,
-            "effective": effective,
-        },
+        "error": False,
+        "name": name,
+        "builtin_yaml": builtin,
+        "override": override,
+        "effective": effective,
     }
 
 
@@ -91,13 +88,11 @@ async def update_prompt(project_id: str, name: str, payload: PromptOverridePaylo
         raise HTTPException(status_code=400, detail={
             "error": True, "code": "VALIDATION_ERROR",
             "message": "temperature 必须在 [0.0, 2.0] 范围内",
-            "detail": {"field": "temperature", "value": payload.temperature},
         })
     if payload.max_tokens is not None and not (1 <= payload.max_tokens <= 32768):
         raise HTTPException(status_code=400, detail={
             "error": True, "code": "VALIDATION_ERROR",
             "message": "max_tokens 必须在 [1, 32768] 范围内",
-            "detail": {"field": "max_tokens", "value": payload.max_tokens},
         })
     try:
         override = _store().set_override(project_id, name, payload.model_dump(exclude_none=True))
@@ -105,15 +100,15 @@ async def update_prompt(project_id: str, name: str, payload: PromptOverridePaylo
         raise HTTPException(status_code=404, detail={
             "error": True, "code": "NOT_FOUND",
             "message": f"Prompt template not found: {name}",
-            "detail": {"name": name},
         })
     return {
-        "error": False, "code": "OK", "message": "已保存",
+        "error": False,
         "detail": {
             "name": name,
             "override": override,
             "modified_at": override.get("_modified_at") if override else None,
         },
+        "message": "已保存",
     }
 
 
@@ -121,6 +116,7 @@ async def update_prompt(project_id: str, name: str, payload: PromptOverridePaylo
 async def reset_prompt(project_id: str, name: str):
     _store().delete_override(project_id, name)
     return {
-        "error": False, "code": "OK", "message": "已重置为默认值",
+        "error": False,
         "detail": {"name": name, "status": "reset"},
+        "message": "已重置为默认值",
     }

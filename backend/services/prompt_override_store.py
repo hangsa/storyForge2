@@ -163,13 +163,11 @@ class PromptOverrideStore:
         merged_fields = {**current_fields, **payload}
         pruned = self._pruned_override(name, merged_fields)
 
-        if len(pruned) == 1 and "_modified_at" in pruned:
-            # All payload fields reverted to default — remove the entry entirely
-            existing.pop(name, None)
-        else:
-            existing[name] = pruned
+        # Always keep the entry (with just _modified_at) so the UI can show
+        # "last touched at X". DELETE is the only way to drop the entry
+        # entirely; if the resulting JSON has no entries at all, drop the file.
+        existing[name] = pruned
 
-        # Don't write an empty JSON file
         if existing:
             self._write_overrides(project_id, existing)
         else:
@@ -177,7 +175,6 @@ class PromptOverrideStore:
             if path.exists():
                 path.unlink()
 
-        # Return the persisted override (may be None if all fields reverted)
         return existing.get(name) or {}
 
     def delete_override(self, project_id: str, name: str) -> None:

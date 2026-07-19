@@ -17,7 +17,7 @@ from backend.api import (
     project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing,
     stage5_diagnosis, stage6_export, style_extractor, conductor, storyos,
     settings_api, creative_canvas, growth_workshop, style_sandbox, autopilot,
-    stage4_fact_guard,
+    stage4_fact_guard, prompt_plaza,
 )
 from backend.api.autopilot import broadcaster as autopilot_broadcaster
 from backend.config import settings
@@ -88,6 +88,7 @@ app.include_router(growth_workshop.router)
 app.include_router(style_sandbox.router)
 app.include_router(stage3_outline.branch_router)
 app.include_router(autopilot.router)
+app.include_router(prompt_plaza.router)
 
 
 @app.exception_handler(Exception)

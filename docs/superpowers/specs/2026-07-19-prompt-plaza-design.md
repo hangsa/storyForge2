@@ -145,8 +145,8 @@ class PromptOverridePayload(BaseModel):
 ```typescript
 interface PromptSummary {
   name: string
-  category: string
-  label: string                  // 中文标签（来自 metadata 或 fallback to name）
+  category: string                  // 子目录名（如 "creative"）或 "" 表示根目录
+  label: string                     // 中文显示标签（来自 PROMPT_LABEL_OVERRIDES，fallback 到 name）
   has_override: boolean
   modified_at: string | null
   builtin: boolean
@@ -180,7 +180,7 @@ interface PromptDetail {
   "prompts": [
     {
       "name": "scene_writing",
-      "category": "writing",
+      "category": "",
       "label": "场景写作",
       "has_override": true,
       "modified_at": "2026-07-19T12:34:56Z",
@@ -188,8 +188,16 @@ interface PromptDetail {
     },
     {
       "name": "outline_generation",
-      "category": "outline",
+      "category": "",
       "label": "大纲生成",
+      "has_override": false,
+      "modified_at": null,
+      "builtin": true
+    },
+    {
+      "name": "creative_director_mutation",
+      "category": "creative",
+      "label": "创意·创意总监·变异",
       "has_override": false,
       "modified_at": null,
       "builtin": true

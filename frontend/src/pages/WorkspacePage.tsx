@@ -19,6 +19,7 @@ import ManagedStartModal, { type ManagedStartConfig } from "../components/worksp
 import AutopilotMiddlePanel from "../components/workspace/AutopilotMiddlePanel";
 import AddChaptersModal, { type AddChaptersProgress } from "../components/workspace/AddChaptersModal";
 import ConfirmDialog from "../components/shared/ConfirmDialog";
+import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
 
 // Internal record for progress.json-derived chapter status. Kept local to
 // this page (not exported) — the canonical `ChapterStatus` union lives in
@@ -144,6 +145,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const [takeOverChapter, setTakeOverChapter] = useState<number | null>(null);
   const [pendingTargetMode, setPendingTargetMode] = useState<"manual" | "managed" | null>(null);
   const [startOpen, setStartOpen] = useState(false);
+
+  // v1.9: AI 工具 dropdown opens the Prompt Plaza modal for THIS project
+  // (not the most-recent project like the home page entry).
+  const [plazaOpen, setPlazaOpen] = useState(false);
 
   // Bug 1 fix: + 新章节 wiring. Modal state + progress; currentMaxChapter
   // drives the "starting from chapter N" hint inside the modal.
@@ -505,6 +510,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         projectName={projectName}
         mode={mode}
         onModeChange={handleModeChange}
+        onOpenPlaza={() => setPlazaOpen(true)}
       />
 
       <WorkspaceLayout
@@ -695,6 +701,12 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
           if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
           await doRegenerate(sceneNumber);
         }}
+      />
+      <PromptPlazaModal
+        isOpen={plazaOpen}
+        projectId={projectId}
+        projectTitle={projectName === "加载中…" ? null : projectName}
+        onClose={() => setPlazaOpen(false)}
       />
     </div>
   );

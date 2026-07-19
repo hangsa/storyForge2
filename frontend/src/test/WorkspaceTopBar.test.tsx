@@ -117,7 +117,7 @@ describe("WorkspaceTopBar", () => {
     expect(onModeChange).toHaveBeenCalledWith("manual");
   });
 
-  it("renders disabled AI-tools button + back-home button", async () => {
+  it("renders AI-tools dropdown trigger + back-home button", async () => {
     const assignSpy = vi.fn();
     const original = window.location.assign;
     Object.defineProperty(window, "location", {
@@ -136,7 +136,11 @@ describe("WorkspaceTopBar", () => {
       await waitFor(() => {
         expect(screen.getByTestId("topbar-progress")).toBeInTheDocument();
       });
-      expect(screen.getByTestId("topbar-ai-tools")).toBeDisabled();
+      const trigger = screen.getByTestId("topbar-ai-tools");
+      expect(trigger).not.toBeDisabled();
+      expect(trigger).toHaveTextContent("AI 工具");
+      // Dropdown is closed by default
+      expect(screen.queryByTestId("topbar-ai-tools-dropdown")).not.toBeInTheDocument();
       const back = screen.getByTestId("topbar-back-home");
       expect(back).toBeInTheDocument();
       fireEvent.click(back);
@@ -147,6 +151,52 @@ describe("WorkspaceTopBar", () => {
         writable: true,
       });
     }
+  });
+
+  it("AI-tools dropdown opens on click and exposes 提示词广场 menu item", async () => {
+    const onOpenPlaza = vi.fn();
+    render(
+      <WorkspaceTopBar
+        projectId="p"
+        projectName="X"
+        mode="managed"
+        onModeChange={() => {}}
+        onOpenPlaza={onOpenPlaza}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("topbar-progress")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("topbar-ai-tools"));
+    const dropdown = screen.getByTestId("topbar-ai-tools-dropdown");
+    expect(dropdown).toBeInTheDocument();
+    const plazaItem = screen.getByTestId("topbar-ai-tools-plaza");
+    expect(plazaItem).toHaveTextContent("提示词广场");
+    fireEvent.click(plazaItem);
+    // Clicking the menu item invokes the parent's onOpenPlaza and closes the dropdown
+    expect(onOpenPlaza).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("topbar-ai-tools-dropdown")).not.toBeInTheDocument();
+  });
+
+  it("AI-tools dropdown closes on outside click", async () => {
+    render(
+      <div>
+        <div data-testid="outside">elsewhere</div>
+        <WorkspaceTopBar
+          projectId="p"
+          projectName="X"
+          mode="managed"
+          onModeChange={() => {}}
+        />
+      </div>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("topbar-progress")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("topbar-ai-tools"));
+    expect(screen.getByTestId("topbar-ai-tools-dropdown")).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByTestId("outside"));
+    expect(screen.queryByTestId("topbar-ai-tools-dropdown")).not.toBeInTheDocument();
   });
 
   it("progress ring reads from /stage4/progress (NOT getOutline)", async () => {

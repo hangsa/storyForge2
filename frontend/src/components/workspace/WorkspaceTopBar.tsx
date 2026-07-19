@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import WorkspaceModeSwitcher from "./WorkspaceModeSwitcher";
 import type { WorkspaceMode } from "../../hooks/useWorkspaceMode";
 import api from "../../api/client";
@@ -25,6 +25,7 @@ interface Props {
   projectName: string;
   mode: WorkspaceMode;
   onModeChange: (m: WorkspaceMode) => void;
+  onOpenPlaza?: () => void;
 }
 
 export default function WorkspaceTopBar({
@@ -32,9 +33,12 @@ export default function WorkspaceTopBar({
   projectName,
   mode,
   onModeChange,
+  onOpenPlaza,
 }: Props) {
   const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const { session } = useAutopilotSession(projectId);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -55,6 +59,25 @@ export default function WorkspaceTopBar({
       cancelled = true;
     };
   }, [projectId]);
+
+  // Close the AI-tools dropdown on outside click or ESC.
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
+        setToolsOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setToolsOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [toolsOpen]);
 
   const sessionState = session?.state ?? null;
   const showTask =
@@ -116,14 +139,39 @@ export default function WorkspaceTopBar({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          data-testid="topbar-ai-tools"
-          disabled
-          className="px-3 py-1 text-sm rounded-lg bg-surface-container text-system-log/50 cursor-not-allowed"
-        >
-          AI 工具
-        </button>
+        <div className="relative" ref={toolsRef}>
+          <button
+            type="button"
+            data-testid="topbar-ai-tools"
+            onClick={() => setToolsOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={toolsOpen}
+            className="px-3 py-1 text-sm rounded-lg bg-surface-container text-primary hover:bg-surface-container-high transition-colors"
+          >
+            AI 工具
+          </button>
+          {toolsOpen && (
+            <div
+              data-testid="topbar-ai-tools-dropdown"
+              role="menu"
+              className="absolute right-0 top-full mt-1 min-w-[180px] bg-surface-container-lowest border border-outline-variant rounded-lg shadow-lg z-40 py-1"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="topbar-ai-tools-plaza"
+                onClick={() => {
+                  setToolsOpen(false);
+                  onOpenPlaza?.();
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-primary hover:bg-surface-container flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-base">forum</span>
+                提示词广场
+              </button>
+            </div>
+          )}
+        </div>
         <WorkspaceModeSwitcher mode={mode} onChange={onModeChange} />
       </div>
     </header>

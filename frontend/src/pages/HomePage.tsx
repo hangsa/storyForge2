@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import api, { type ProjectSummary } from "../api/client";
 import StatsSidebar from "../components/home/StatsSidebar";
 import ManifestoHeader from "../components/home/ManifestoHeader";
 import CreateProjectCard from "../components/home/CreateProjectCard";
 import BookShelf from "../components/home/BookShelf";
 import InitWizardModal from "../components/wizard/InitWizardModal";
+import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
 import { useProjectStats } from "../hooks/useProjectStats";
 
 export default function HomePage() {
@@ -13,12 +14,18 @@ export default function HomePage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
+  const [plazaOpen, setPlazaOpen] = useState(false);
 
   // v1.8.2: single source of truth for the project list. BookShelf used to
   // fetch /api/project/list on its own, doubling the round-trip on every
   // home-page mount. Now HomePage fetches once and passes the result down.
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
+
+  const mostRecentProject = useMemo(() => {
+    if (projects.length === 0) return null;
+    return [...projects].sort((a, b) => b.updated_at - a.updated_at)[0];
+  }, [projects]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +89,10 @@ export default function HomePage() {
     }
   }, [refresh]);
 
+  const handleOpenPlaza = useCallback(() => {
+    if (mostRecentProject) setPlazaOpen(true);
+  }, [mostRecentProject]);
+
   return (
     <div className="min-h-screen bg-canvas-bg flex">
       <StatsSidebar
@@ -89,6 +100,9 @@ export default function HomePage() {
         statsLoading={statsLoading}
         onRefresh={handleRefresh}
         refreshing={refreshing}
+        onOpenPlaza={handleOpenPlaza}
+        plazaDisabled={!mostRecentProject}
+        plazaTooltip={mostRecentProject ? undefined : "请先创建项目"}
       />
       <main className="flex-1 min-w-0 px-8 py-8 max-w-[1200px] mx-auto">
         <ManifestoHeader />
@@ -103,6 +117,12 @@ export default function HomePage() {
           onProjectsDeleted={handleProjectsDeleted}
         />
       </main>
+      <PromptPlazaModal
+        isOpen={plazaOpen}
+        projectId={mostRecentProject?.id ?? null}
+        projectTitle={mostRecentProject?.title ?? null}
+        onClose={() => setPlazaOpen(false)}
+      />
       {wizardProjectId && (
         <InitWizardModal
           projectId={wizardProjectId}

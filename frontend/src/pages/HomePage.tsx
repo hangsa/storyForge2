@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import api, { type ProjectSummary } from "../api/client";
 import StatsSidebar from "../components/home/StatsSidebar";
 import ManifestoHeader from "../components/home/ManifestoHeader";
@@ -21,11 +21,6 @@ export default function HomePage() {
   // home-page mount. Now HomePage fetches once and passes the result down.
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
-
-  const mostRecentProject = useMemo(() => {
-    if (projects.length === 0) return null;
-    return [...projects].sort((a, b) => b.updated_at - a.updated_at)[0];
-  }, [projects]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,8 +85,8 @@ export default function HomePage() {
   }, [refresh]);
 
   const handleOpenPlaza = useCallback(() => {
-    if (mostRecentProject) setPlazaOpen(true);
-  }, [mostRecentProject]);
+    setPlazaOpen(true);
+  }, []);
 
   return (
     <div className="min-h-screen bg-canvas-bg flex">
@@ -101,8 +96,6 @@ export default function HomePage() {
         onRefresh={handleRefresh}
         refreshing={refreshing}
         onOpenPlaza={handleOpenPlaza}
-        plazaDisabled={!mostRecentProject}
-        plazaTooltip={mostRecentProject ? undefined : "请先创建项目"}
       />
       <main className="flex-1 min-w-0 px-8 py-8 max-w-[1200px] mx-auto">
         <ManifestoHeader />
@@ -119,8 +112,8 @@ export default function HomePage() {
       </main>
       <PromptPlazaModal
         isOpen={plazaOpen}
-        projectId={mostRecentProject?.id ?? null}
-        projectTitle={mostRecentProject?.title ?? null}
+        projectId={null}
+        projectTitle={null}
         onClose={() => setPlazaOpen(false)}
       />
       {wizardProjectId && (

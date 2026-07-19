@@ -89,5 +89,63 @@ export async function deletePlazaPrompt(
   );
 }
 
+// ----------------------------------------------------------------------
+// Global default endpoints (/api/prompts/defaults/*)
+// ----------------------------------------------------------------------
+
+/** GET /api/prompts/defaults/list
+ *
+ * Backend returns top-level `{ error, prompts: [...] }` (no `detail` wrapper).
+ * `request<T>` returns the JSON as-is (only unwraps when `detail` exists).
+ */
+export async function listDefaultPrompts(): Promise<PromptSummary[]> {
+  const data = await request<{ prompts: PromptSummary[] }>(
+    "GET",
+    `/prompts/defaults/list`,
+  );
+  return data.prompts;
+}
+
+/** GET /api/prompts/defaults/{name}
+ *
+ * Backend returns top-level `{ error, name, builtin_yaml, override, effective }`.
+ */
+export async function getDefaultPrompt(name: string): Promise<PromptDetail> {
+  return request<PromptDetail>(
+    "GET",
+    `/prompts/defaults/${encodeURIComponent(name)}`,
+  );
+}
+
+/** PUT /api/prompts/defaults/{name}
+ *
+ * Backend returns `{ error, detail: { name, override, modified_at }, message }`.
+ * `request<T>` unwraps `.detail` -> returns `{ name, override, modified_at }`.
+ */
+export async function putDefaultPrompt(
+  name: string,
+  payload: PromptOverridePayload,
+): Promise<{ name: string; override: Record<string, unknown> | null; modified_at: string | null }> {
+  return request<{ name: string; override: Record<string, unknown> | null; modified_at: string | null }>(
+    "PUT",
+    `/prompts/defaults/${encodeURIComponent(name)}`,
+    payload,
+  );
+}
+
+/** DELETE /api/prompts/defaults/{name}
+ *
+ * Backend returns `{ error, detail: { name, status: "reset" } }`.
+ * `request<T>` unwraps `.detail` -> returns `{ name, status }`.
+ */
+export async function deleteDefaultPrompt(
+  name: string,
+): Promise<{ name: string; status: string }> {
+  return request<{ name: string; status: string }>(
+    "DELETE",
+    `/prompts/defaults/${encodeURIComponent(name)}`,
+  );
+}
+
 // Re-export ApiError for convenience
 export { ApiError };

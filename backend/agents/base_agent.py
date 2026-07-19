@@ -94,18 +94,20 @@ class BaseAgent:
 
         Backward compat: with no stores configured, this returns YAML-only.
         With no project_id and no global store, this is still YAML-only.
+
+        Delegates to the module-level `load_prompt_effective` helper
+        (`backend.services.prompt_override_store`) so non-BaseAgent callers
+        (BranchSimulator, etc.) can reuse the same merge logic.
         """
-        # Layer 0: YAML (always)
-        data = self._load_prompt_dict_from_yaml(template_name)
-        # Layer 1: global (optional, project-independent)
-        if self._global_override_store is not None:
-            try:
-                data = self._global_override_store.get_effective(template_name, base=data)
-            except FileNotFoundError:
-                pass
-        # Layer 2: project (only when project_id is given)
-        if project_id is not None and self._override_store is not None:
-            data = self._override_store.get_effective(project_id, template_name, base=data)
+        from backend.services.prompt_override_store import load_prompt_effective
+
+        data = load_prompt_effective(
+            template_name,
+            project_id=project_id,
+            override_store=self._override_store,
+            global_override_store=self._global_override_store,
+            prompts_dir=self.prompts_dir,
+        )
         return PromptTemplate(data)
 
     def _load_prompt_dict_from_yaml(self, template_name: str) -> dict:
@@ -167,7 +169,11 @@ class BaseAgent:
         max_retries: int = 2,
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
-        prompt = self.load_prompt(template_name)
+        # v1.9: pass project_id so the 3-tier override chain (YAML → global →
+        # project) actually applies the project's override layer. Without this,
+        # load_prompt() silently skips Layer 2 and the user sees YAML defaults
+        # even after editing a prompt in the plaza.
+        prompt = self.load_prompt(template_name, project_id=self.project_id)
 
         system = prompt.format_system(**kwargs)
         user = prompt.format_user(**kwargs)
@@ -230,7 +236,8 @@ class BaseAgent:
         If tier-based streaming is later needed, add generate_with_tier_stream()
         that calls router.execute(stream=True) and yields the same StreamChunk shape.
         """
-        prompt = self.load_prompt(template_name)
+        # v1.9: same project_id fix as generate_from_template — see comment there.
+        prompt = self.load_prompt(template_name, project_id=self.project_id)
         async for chunk in self.generate_stream(
             system_prompt=prompt.format_system(**kwargs),
             user_prompt=prompt.format_user(**kwargs),

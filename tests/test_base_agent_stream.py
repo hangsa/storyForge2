@@ -118,7 +118,7 @@ def test_generate_from_template_stream_yields_provider_chunks(tmp_path, monkeypa
     provider = FakeStreamProvider(chunks)
     agent = BaseAgent(project_id="proj_stream_test")
     agent._provider = provider
-    monkeypatch.setattr(agent, "load_prompt", lambda name: FakePrompt())
+    monkeypatch.setattr(agent, "load_prompt", lambda name, project_id=None: FakePrompt())
 
     async def _collect():
         return [c async for c in agent.generate_from_template_stream("scene_writing")]

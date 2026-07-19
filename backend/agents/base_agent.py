@@ -50,6 +50,7 @@ class BaseAgent:
         prompts_dir: Optional[Path] = None,
         model_router: Optional[ModelRouter] = None,
         override_store: Optional["PromptOverrideStore"] = None,
+        global_override_store: Optional["GlobalPromptOverrideStore"] = None,
     ):
         self.project_id = project_id
         self.prompts_dir = Path(prompts_dir) if prompts_dir else settings.prompts_dir
@@ -57,6 +58,7 @@ class BaseAgent:
         self._usage_log_path: Optional[Path] = None
         self._router = model_router
         self._override_store = override_store
+        self._global_override_store = global_override_store
 
     @property
     def provider(self) -> BaseLLMProvider:
@@ -82,15 +84,31 @@ class BaseAgent:
         template_name: str,
         project_id: Optional[str] = None,
     ) -> PromptTemplate:
-        """Load a prompt template. If project_id is provided AND an override store
-        is configured, merge the project's overrides on top of the YAML default.
-        """
-        if project_id is not None and self._override_store is not None:
-            merged = self._override_store.get_effective(project_id, template_name)
-            return PromptTemplate(merged)
-        return self._load_prompt_from_yaml(template_name)
+        """Load a prompt template, composing the 3-tier override architecture:
 
-    def _load_prompt_from_yaml(self, template_name: str) -> PromptTemplate:
+        - Layer 0 (YAML): always the base.
+        - Layer 1 (Global): merged on top when a global override store is
+          configured — applies whether or not project_id is given.
+        - Layer 2 (Project): merged on top when project_id is given AND a
+          per-project override store is configured.
+
+        Backward compat: with no stores configured, this returns YAML-only.
+        With no project_id and no global store, this is still YAML-only.
+        """
+        # Layer 0: YAML (always)
+        data = self._load_prompt_dict_from_yaml(template_name)
+        # Layer 1: global (optional, project-independent)
+        if self._global_override_store is not None:
+            try:
+                data = self._global_override_store.get_effective(template_name, base=data)
+            except FileNotFoundError:
+                pass
+        # Layer 2: project (only when project_id is given)
+        if project_id is not None and self._override_store is not None:
+            data = self._override_store.get_effective(project_id, template_name, base=data)
+        return PromptTemplate(data)
+
+    def _load_prompt_dict_from_yaml(self, template_name: str) -> dict:
         path = self.prompts_dir / f"{template_name}.yaml"
         if not path.exists():
             raise FileNotFoundError(f"Prompt template not found: {path}")
@@ -98,7 +116,10 @@ class BaseAgent:
             data = yaml.safe_load(f)
         if data is None:
             raise ValueError(f"Empty prompt template: {path}")
-        return PromptTemplate(data)
+        return data
+
+    def _load_prompt_from_yaml(self, template_name: str) -> PromptTemplate:
+        return PromptTemplate(self._load_prompt_dict_from_yaml(template_name))
 
     async def generate(
         self,

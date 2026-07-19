@@ -1,7 +1,15 @@
-"""PromptOverrideStore — per-project JSON overrides on top of read-only YAML defaults.
+"""GlobalPromptOverrideStore — project-independent JSON overrides on top of YAML defaults.
 
-The store is the only writer to projects/{project_id}/prompt_overrides.json.
+This is Layer 1 in the 3-tier prompt architecture:
+- Layer 0 (YAML): backend/prompts/*.yaml — read-only factory defaults.
+- Layer 1 (Global): config/global_prompt_overrides.json — user-edited fallbacks
+  that apply to ALL projects when no project-specific override exists. (this file)
+- Layer 2 (Project): projects/{id}/prompt_overrides.json — per-project customizations.
+
+The store is the only writer to config/global_prompt_overrides.json.
 backend/prompts/*.yaml files are NEVER written; they remain the factory defaults.
+
+Mirrors PromptOverrideStore but with no project_id — there is a single global file.
 """
 
 from __future__ import annotations
@@ -13,35 +21,15 @@ from typing import Any
 
 import yaml
 
-
-PROMPT_CATEGORIES: dict[str, str] = {
-    "creative": "创意",
-    "character_designer": "角色",
-    "style_engine": "风格",
-    "": "其它",
-}
-
-PROMPT_LABEL_OVERRIDES: dict[str, str] = {
-    "scene_writing": "场景写作",
-    "outline_generation": "大纲生成",
-    "narrative_guard": "叙事守护",
-    "concept_generation": "概念生成",
-    "world_generation": "世界观生成",
-    "character_generation": "角色生成",
-    "chapter_summary": "章节摘要",
-    "scene_rewrite": "场景改写",
-    "semantic_precheck": "语义预检",
-    "sf_log_suggestion": "SF_LOG 建议",
-    "branch_simulation_llm": "分支模拟",
-    "canvas_to_concept": "画布转概念",
-}
+# Reuse the same label constants as the per-project store so the UI stays consistent.
+from backend.services.prompt_override_store import PROMPT_LABEL_OVERRIDES  # noqa: F401
 
 
-class PromptOverrideStore:
-    """Reads/writes projects/{project_id}/prompt_overrides.json."""
+class GlobalPromptOverrideStore:
+    """Reads/writes config/global_prompt_overrides.json."""
 
-    def __init__(self, projects_dir: Path, prompts_dir: Path) -> None:
-        self.projects_dir = Path(projects_dir)
+    def __init__(self, global_overrides_path: Path, prompts_dir: Path) -> None:
+        self.global_overrides_path = Path(global_overrides_path)
         self.prompts_dir = Path(prompts_dir)
 
     def _iter_yaml_files(self) -> list[tuple[Path, str]]:
@@ -59,28 +47,12 @@ class PromptOverrideStore:
             results.append((path, category))
         return results
 
-    def _validate_project_id(self, project_id: str) -> str:
-        """Reject empty, absolute, or path-traversing project IDs.
-
-        Raises ValueError on any unsafe input. Callers should let this
-        propagate so HTTP routers can translate it to a 400 response.
+    def validate_project_id(self, project_id: str | None = None) -> str | None:
+        """No-op for the global store — kept for interface symmetry with the
+        per-project store. Global overrides are not scoped to a project, so there
+        is nothing to validate. Always returns the input unchanged.
         """
-        if not project_id or not isinstance(project_id, str):
-            raise ValueError(f"Invalid project_id: {project_id!r}")
-        if "/" in project_id or "\\" in project_id or ".." in project_id:
-            raise ValueError(f"Invalid project_id (path traversal): {project_id!r}")
-        if project_id.startswith(".") or project_id != project_id.strip():
-            raise ValueError(f"Invalid project_id: {project_id!r}")
         return project_id
-
-    def validate_project_id(self, project_id: str) -> str:
-        """Public version of _validate_project_id for API-layer use.
-
-        Callers (HTTP routers) want to translate ValueError into a 400
-        response without having to reach into a private method. Same
-        behavior; just a non-underscore name for the public surface.
-        """
-        return self._validate_project_id(project_id)
 
     def _load_yaml(self, name: str) -> dict[str, Any]:
         """Load a YAML prompt file by base name (with or without .yaml)."""
@@ -93,27 +65,23 @@ class PromptOverrideStore:
                 return data
         raise FileNotFoundError(f"Prompt template not found: {name}")
 
-    def _override_path(self, project_id: str) -> Path:
-        self._validate_project_id(project_id)
-        return self.projects_dir / project_id / "prompt_overrides.json"
-
-    def _read_overrides(self, project_id: str) -> dict[str, Any]:
-        path = self._override_path(project_id)
+    def _read_overrides(self) -> dict[str, Any]:
+        path = self.global_overrides_path
         if not path.exists():
             return {}
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f) or {}
 
-    def _write_overrides(self, project_id: str, data: dict[str, Any]) -> None:
-        path = self._override_path(project_id)
+    def _write_overrides(self, data: dict[str, Any]) -> None:
+        path = self.global_overrides_path
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         tmp.replace(path)
 
-    def list_available(self, project_id: str) -> list[dict[str, Any]]:
-        overrides = self._read_overrides(project_id)
+    def list_available(self) -> list[dict[str, Any]]:
+        overrides = self._read_overrides()
         result: list[dict[str, Any]] = []
         for path, category in self._iter_yaml_files():
             name = path.stem
@@ -129,31 +97,25 @@ class PromptOverrideStore:
             })
         return result
 
-    def get_effective(
-        self,
-        project_id: str,
-        name: str,
-        base: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Merge the project's overrides on top of a base dict.
+    def get_effective(self, name: str, base: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Merge global overrides on top of a base dict.
 
         If base is None, the YAML default is loaded and used as the base.
-        Passing base lets a caller compose layers (e.g. YAML + global already
-        merged) without re-reading the YAML file. Backward compatible: existing
-        callers that omit base still get YAML + project override.
+        Passing base lets a caller compose layers (e.g. YAML already loaded)
+        without re-reading the YAML file.
         """
         if base is None:
             base = self._load_yaml(name)
-        overrides = self._read_overrides(project_id)
+        overrides = self._read_overrides()
         entry = overrides.get(name) or {}
         # Strip metadata keys before merging
         fields = {k: v for k, v in entry.items() if not k.startswith("_")}
         return {**base, **fields}
 
-    def get_override_only(self, project_id: str, name: str) -> dict[str, Any] | None:
+    def get_override_only(self, name: str) -> dict[str, Any] | None:
         # Validate name exists in YAML (raises FileNotFoundError if not)
         self._load_yaml(name)
-        overrides = self._read_overrides(project_id)
+        overrides = self._read_overrides()
         entry = overrides.get(name)
         return entry if entry else None
 
@@ -169,16 +131,11 @@ class PromptOverrideStore:
         pruned["_modified_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return pruned
 
-    def set_override(
-        self,
-        project_id: str,
-        name: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
+    def set_override(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         # Validate name exists in YAML (raises FileNotFoundError if not)
         self._load_yaml(name)
 
-        existing = self._read_overrides(project_id)
+        existing = self._read_overrides()
         current_entry = existing.get(name) or {}
         # Strip metadata before merging so payload doesn't clobber _modified_at
         current_fields = {k: v for k, v in current_entry.items() if not k.startswith("_")}
@@ -191,22 +148,22 @@ class PromptOverrideStore:
         existing[name] = pruned
 
         if existing:
-            self._write_overrides(project_id, existing)
+            self._write_overrides(existing)
         else:
-            path = self._override_path(project_id)
+            path = self.global_overrides_path
             if path.exists():
                 path.unlink()
 
         return existing.get(name) or {}
 
-    def delete_override(self, project_id: str, name: str) -> None:
-        existing = self._read_overrides(project_id)
+    def delete_override(self, name: str) -> None:
+        existing = self._read_overrides()
         if name not in existing:
             return
         existing.pop(name)
         if existing:
-            self._write_overrides(project_id, existing)
+            self._write_overrides(existing)
         else:
-            path = self._override_path(project_id)
+            path = self.global_overrides_path
             if path.exists():
                 path.unlink()

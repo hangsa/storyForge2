@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     projects_dir: Path = Path("projects")
     prompts_dir: Path = Path("backend/prompts")
     style_dir: Path = Path("data/style")
+    global_prompt_overrides_path: Path = Path("config/global_prompt_overrides.json")
 
     model_config = {"env_file": "backend/.env", "env_file_encoding": "utf-8"}
 

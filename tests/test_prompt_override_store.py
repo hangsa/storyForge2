@@ -217,3 +217,41 @@ class TestDeleteOverride:
         store = _make_store(prompts_dir, projects_dir)
         store.delete_override("proj_del3", "scene_writing")  # must not raise
         assert not (proj / "prompt_overrides.json").exists()
+
+
+class TestGetOverrideOnlyValidation:
+    def test_raises_when_name_not_found(self, prompts_dir, projects_dir):
+        store = _make_store(prompts_dir, projects_dir)
+        with pytest.raises(FileNotFoundError):
+            store.get_override_only("proj_x", "nonexistent_prompt")
+
+
+class TestProjectIdValidation:
+    @pytest.mark.parametrize("bad_id", [
+        "", " ", "../escape", "foo/bar", "foo\\bar", ".hidden", " foo ",
+    ])
+    def test_invalid_project_id_raises_on_read(self, prompts_dir, projects_dir, bad_id):
+        store = _make_store(prompts_dir, projects_dir)
+        with pytest.raises(ValueError):
+            store._read_overrides(bad_id)
+
+    @pytest.mark.parametrize("bad_id", ["../escape", "foo/bar"])
+    def test_invalid_project_id_raises_on_write(self, prompts_dir, projects_dir, bad_id):
+        store = _make_store(prompts_dir, projects_dir)
+        with pytest.raises(ValueError):
+            store._write_overrides(bad_id, {})
+
+    @pytest.mark.parametrize("bad_id", ["../escape", "foo/bar"])
+    def test_invalid_project_id_raises_on_delete(self, prompts_dir, projects_dir, bad_id):
+        store = _make_store(prompts_dir, projects_dir)
+        with pytest.raises(ValueError):
+            store.delete_override(bad_id, "scene_writing")
+
+    def test_valid_project_id_with_dot_inside_works(self, prompts_dir, projects_dir):
+        # Sanity check — legitimate IDs with internal dots shouldn't be rejected
+        proj = projects_dir / "proj.v1.0"
+        proj.mkdir()
+        store = _make_store(prompts_dir, projects_dir)
+        # Should not raise
+        result = store._read_overrides("proj.v1.0")
+        assert result == {}

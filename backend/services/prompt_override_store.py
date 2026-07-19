@@ -59,6 +59,20 @@ class PromptOverrideStore:
             results.append((path, category))
         return results
 
+    def _validate_project_id(self, project_id: str) -> str:
+        """Reject empty, absolute, or path-traversing project IDs.
+
+        Raises ValueError on any unsafe input. Callers should let this
+        propagate so HTTP routers can translate it to a 400 response.
+        """
+        if not project_id or not isinstance(project_id, str):
+            raise ValueError(f"Invalid project_id: {project_id!r}")
+        if "/" in project_id or "\\" in project_id or ".." in project_id:
+            raise ValueError(f"Invalid project_id (path traversal): {project_id!r}")
+        if project_id.startswith(".") or project_id != project_id.strip():
+            raise ValueError(f"Invalid project_id: {project_id!r}")
+        return project_id
+
     def _load_yaml(self, name: str) -> dict[str, Any]:
         """Load a YAML prompt file by base name (with or without .yaml)."""
         candidate = name if name.endswith(".yaml") else f"{name}.yaml"
@@ -71,6 +85,7 @@ class PromptOverrideStore:
         raise FileNotFoundError(f"Prompt template not found: {name}")
 
     def _override_path(self, project_id: str) -> Path:
+        self._validate_project_id(project_id)
         return self.projects_dir / project_id / "prompt_overrides.json"
 
     def _read_overrides(self, project_id: str) -> dict[str, Any]:
@@ -114,6 +129,8 @@ class PromptOverrideStore:
         return {**base, **fields}
 
     def get_override_only(self, project_id: str, name: str) -> dict[str, Any] | None:
+        # Validate name exists in YAML (raises FileNotFoundError if not)
+        self._load_yaml(name)
         overrides = self._read_overrides(project_id)
         entry = overrides.get(name)
         return entry if entry else None

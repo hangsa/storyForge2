@@ -9,9 +9,11 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
+
+from backend.config import settings
 
 
 PROMPT_CATEGORIES: dict[str, str] = {
@@ -210,3 +212,82 @@ class PromptOverrideStore:
             path = self._override_path(project_id)
             if path.exists():
                 path.unlink()
+
+
+# --- Free-function helpers + singleton accessor ----------------------------------
+# These let non-BaseAgent callers (BranchSimulator, etc.) reuse the 3-tier merge
+# logic without inheriting BaseAgent. Mirror the same shape as `get_model_router()`
+# (`backend/llm/model_router.py`) so the wiring is uniform across the codebase.
+
+
+_override_store_instance: Optional["PromptOverrideStore"] = None
+
+
+def _load_yaml_prompt(name: str, prompts_dir: Path) -> dict[str, Any]:
+    """Load a YAML prompt file by base name (with or without .yaml).
+
+    Names may be either a bare stem (`scene_writing`) or a subdir-qualified
+    stem (`character_designer/growth_discuss`). The latter resolves to
+    `<prompts_dir>/character_designer/growth_discuss.yaml` — same behavior as
+    the pre-existing `BaseAgent._load_prompt_dict_from_yaml` so that agents
+    using subdirs (character_designer, creative, style_engine) keep working.
+    """
+    candidate = name if name.endswith(".yaml") else f"{name}.yaml"
+    path = prompts_dir / candidate
+    if not path.exists():
+        raise FileNotFoundError(f"Prompt template not found: {name}")
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return data
+
+
+def load_prompt_effective(
+    name: str,
+    project_id: Optional[str] = None,
+    *,
+    override_store: Optional["PromptOverrideStore"] = None,
+    global_override_store: Optional["GlobalPromptOverrideStore"] = None,
+    prompts_dir: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Resolve the effective prompt dict by composing YAML → global → project.
+
+    Same 3-tier merge as `BaseAgent.load_prompt`, but returns a plain dict so
+    non-BaseAgent callers (BranchSimulator, etc.) can use it without inheriting
+    BaseAgent. The two override-store args are keyword-only and default to None:
+    passing None at any layer simply skips that layer (YAML-only).
+
+    Raises FileNotFoundError if `name` does not exist in YAML.
+    """
+    base = _load_yaml_prompt(name, prompts_dir or settings.prompts_dir)
+    if global_override_store is not None:
+        try:
+            base = global_override_store.get_effective(name, base=base)
+        except FileNotFoundError:
+            pass
+    if project_id is not None and override_store is not None:
+        base = override_store.get_effective(project_id, name, base=base)
+    return base
+
+
+def get_project_override_store() -> "PromptOverrideStore":
+    """Module-level singleton accessor — mirror of `get_model_router()`.
+
+    Lazy-inits once using `settings.projects_dir` + `settings.prompts_dir`.
+    Call sites that need to construct a BaseAgent subclass should pass the
+    returned instance as `override_store=` so the 3-tier merge in
+    `BaseAgent.load_prompt` actually sees Layer 2.
+    """
+    global _override_store_instance
+    if _override_store_instance is None:
+        _override_store_instance = PromptOverrideStore(
+            projects_dir=settings.projects_dir,
+            prompts_dir=settings.prompts_dir,
+        )
+    return _override_store_instance
+
+
+def reset_project_override_store() -> None:
+    """Test hook — clears the singleton so the next get_project_override_store()
+    call rebuilds from current settings. Mirror of `reset_model_router()`."""
+    global _override_store_instance
+    _override_store_instance = None

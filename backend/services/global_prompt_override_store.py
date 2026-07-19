@@ -17,9 +17,11 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
+
+from backend.config import settings
 
 # Reuse the same label constants as the per-project store so the UI stays consistent.
 from backend.services.prompt_override_store import PROMPT_LABEL_OVERRIDES  # noqa: F401
@@ -167,3 +169,26 @@ class GlobalPromptOverrideStore:
             path = self.global_overrides_path
             if path.exists():
                 path.unlink()
+
+
+# --- Singleton accessor ----------------------------------------------------------
+# Mirror of `get_project_override_store()` and `reset_model_router()` — see
+# `backend/services/prompt_override_store.py` for the parallel implementation.
+
+
+_global_override_store_instance: Optional["GlobalPromptOverrideStore"] = None
+
+
+def get_global_override_store() -> "GlobalPromptOverrideStore":
+    global _global_override_store_instance
+    if _global_override_store_instance is None:
+        _global_override_store_instance = GlobalPromptOverrideStore(
+            global_overrides_path=settings.global_prompt_overrides_path,
+            prompts_dir=settings.prompts_dir,
+        )
+    return _global_override_store_instance
+
+
+def reset_global_override_store() -> None:
+    global _global_override_store_instance
+    _global_override_store_instance = None

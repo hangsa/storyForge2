@@ -594,8 +594,16 @@ async def expand_node(project_id: str, data: dict):
     suggestion = ""
     try:
         from backend.agents.creative_director import CreativeDirector
+        from backend.services.agent_prompt_stores import (
+            project_override_store,
+            global_override_store,
+        )
 
-        director = CreativeDirector(project_id)
+        director = CreativeDirector(
+            project_id,
+            override_store=project_override_store(),
+            global_override_store=global_override_store(),
+        )
         canvas_stats = {
             "total_nodes": len(canvas["nodes"]),
             "depth_distribution": _compute_depth_distribution(canvas["nodes"]),
@@ -697,8 +705,16 @@ async def mutate_node(project_id: str, data: dict):
     recommendation = ""
     try:
         from backend.agents.creative_director import CreativeDirector
+        from backend.services.agent_prompt_stores import (
+            project_override_store,
+            global_override_store,
+        )
 
-        director = CreativeDirector(project_id)
+        director = CreativeDirector(
+            project_id,
+            override_store=project_override_store(),
+            global_override_store=global_override_store(),
+        )
         recommendation = await director.recommend_mutation(node)
     except Exception as exc:
         logger.warning("recommend_mutation failed: %s", exc)
@@ -1157,8 +1173,16 @@ async def select_path(project_id: str, data: dict):
     evaluation = ""
     try:
         from backend.agents.creative_director import CreativeDirector
+        from backend.services.agent_prompt_stores import (
+            project_override_store,
+            global_override_store,
+        )
 
-        director = CreativeDirector(project_id)
+        director = CreativeDirector(
+            project_id,
+            override_store=project_override_store(),
+            global_override_store=global_override_store(),
+        )
         path_nodes = [
             _dict_to_node(canvas["nodes"][nid]) for nid in path_node_ids
         ]
@@ -1497,8 +1521,16 @@ async def commit_canvas(project_id: str):
 
     # LLM translation
     from backend.agents.planner import PlannerAgent
+    from backend.services.agent_prompt_stores import (
+        project_override_store,
+        global_override_store,
+    )
 
-    agent = PlannerAgent(project_id)
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         result, _ = await agent.generate_concept_from_canvas(
             canvas_summary=canvas_summary,

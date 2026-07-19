@@ -208,8 +208,17 @@ async def discuss_endpoint(
     # Import lazily so the endpoint module loads even if the agents
     # package has optional dependencies missing in some environments.
     from backend.agents.character_designer import CharacterDesigner
+    from backend.services.agent_prompt_stores import (
+        project_override_store,
+        global_override_store,
+    )
 
-    agent = CharacterDesigner(project_id=project_id, model_router=router_instance)
+    agent = CharacterDesigner(
+        project_id=project_id,
+        model_router=router_instance,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         resp: WorkshopDiscussResponse = await agent.discuss(
             character=character, outline=outline, question=req.question,

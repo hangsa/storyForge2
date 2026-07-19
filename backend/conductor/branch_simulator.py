@@ -6,8 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-import yaml
-
 from backend.models.branch_simulation import BranchSimulationReport, LLMInference
 
 logger = logging.getLogger(__name__)
@@ -19,9 +17,18 @@ class BranchSimulator:
         self,
         projects_dir: Path,
         model_router=None,
+        override_store=None,
+        global_override_store=None,
     ) -> None:
         self._projects_dir = Path(projects_dir)
         self._router = model_router
+        # v1.9: injected prompt override stores — when set, the
+        # branch_simulation_llm prompt load honors the same 3-tier
+        # override chain (YAML → global → project) as BaseAgent.load_prompt.
+        # Keeping the class as `object` (not BaseAgent) because BranchSimulator
+        # doesn't talk to an LLM provider directly — only via Router.
+        self._override_store = override_store
+        self._global_override_store = global_override_store
 
     async def simulate(
         self, project_id: str, branch_description: str
@@ -174,13 +181,18 @@ class BranchSimulator:
         growth_str = json.dumps(det["growth_shifts"], ensure_ascii=False) if det["growth_shifts"] else "（无偏移）"
         metrics_str = json.dumps(det["reader_metrics"], ensure_ascii=False) if det["reader_metrics"] else "（无预测）"
 
-        prompt_path = Path(__file__).parent.parent / "prompts" / "branch_simulation_llm.yaml"
+        # v1.9: route through the 3-tier merge helper so per-project / global
+        # overrides apply to branch_simulation_llm.yaml at runtime.
+        from backend.services.prompt_override_store import load_prompt_effective
+
         try:
-            with open(prompt_path, encoding="utf-8") as f:
-                prompt_config = yaml.safe_load(f)
-            system_prompt = prompt_config["system_prompt"].strip()
-            user_prompt_template = prompt_config["user_prompt_template"].strip()
-            user_prompt = user_prompt_template.format(
+            prompt_data = load_prompt_effective(
+                "branch_simulation_llm",
+                override_store=self._override_store,
+                global_override_store=self._global_override_store,
+            )
+            system_prompt = prompt_data["system_prompt"].strip()
+            user_prompt = prompt_data["user_prompt_template"].strip().format(
                 description=description,
                 chapter_start=chapter_start,
                 chapter_end=chapter_end,
@@ -190,7 +202,9 @@ class BranchSimulator:
                 reader_metrics=metrics_str,
             )
         except Exception as e:
-            logger.warning("Failed to load branch simulation LLM prompts from %s, using fallback: %s", prompt_path, e)
+            logger.warning(
+                "Failed to load branch simulation LLM prompts (using fallback): %s", e
+            )
             system_prompt = (
                 "你是一位叙事分析师，擅长评估故事分支变更对叙事结构的影响。\n\n"
                 "你需要完成三项推理任务：\n"

@@ -8,6 +8,10 @@ from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDE
 from backend.conductor.branch_simulator import BranchSimulator
 from backend.agents.planner import PlannerAgent
 from backend.llm.model_router import get_model_router
+from backend.services.agent_prompt_stores import (
+    project_override_store,
+    global_override_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +76,11 @@ async def generate_outline(data: dict):
 
     novel_outline = fm.read_json(project_id, "novel_outline.json") or None
 
-    agent = PlannerAgent(project_id)
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         result, response = await agent.generate_outline(
             concept=concept_and_dna.get("concept", {}),
@@ -230,7 +238,11 @@ async def generate_novel_outline(data: dict):
     # not exist; read_json returns None and the agent skips the section.
     map_data = fm.read_json(project_id, "map.json")
 
-    agent = PlannerAgent(project_id)
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         result, response = await agent.generate_novel_outline(
             concept=concept_and_dna.get("concept", {}),
@@ -352,6 +364,8 @@ async def simulate_branch(project_id: str, data: dict):
     simulator = BranchSimulator(
         projects_dir=settings.projects_dir,
         model_router=router,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
     )
 
     report = await simulator.simulate(project_id, description)
@@ -410,6 +424,8 @@ async def list_branch_history(project_id: str):
 
     simulator = BranchSimulator(
         projects_dir=settings.projects_dir,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
     )
     history = simulator.list_history(project_id)
 

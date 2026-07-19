@@ -12,6 +12,10 @@ from fastapi import APIRouter, HTTPException
 
 from backend.api.stage4_writing import _load_context, _run_semantic_precheck
 from backend.agents.reviewer import ReviewerAgent
+from backend.services.agent_prompt_stores import (
+    project_override_store,
+    global_override_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +68,11 @@ async def fact_guard(data: dict):
         character_names=char_names,
     )
 
-    reviewer = ReviewerAgent(project_id)
+    reviewer = ReviewerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     fg_result = reviewer.run_fact_guard(
         draft_text=draft_text,
         characters=ctx["characters"],

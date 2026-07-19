@@ -17,6 +17,10 @@ from backend.agents.writer import WriterAgent
 from backend.agents.reviewer import ReviewerAgent
 from backend.agents.storyos_agent import StoryOSAgent
 from backend.agents.summary_archiver import SummaryArchiver
+from backend.services.agent_prompt_stores import (
+    project_override_store,
+    global_override_store,
+)
 from backend.memory_os.l0_runtime import L0Runtime
 from backend.memory_os.l1_hot import L1Hot
 from backend.memory_os.l2_warm import L2WarmMemory
@@ -192,7 +196,12 @@ async def _run_semantic_precheck(
         router = get_model_router()
         if router is None:
             return PrecheckResult(precheck_passed=True, skipped_reason="no router")
-        prechecker = SemanticPrechecker(model_router=router)
+        prechecker = SemanticPrechecker(
+            model_router=router,
+            project_id=project_id,
+            override_store=project_override_store(),
+            global_override_store=global_override_store(),
+        )
         return await prechecker.check(
             scene_text=scene_text,
             scene_plan=scene_plan or {},
@@ -439,8 +448,16 @@ async def _write_scene_chapter(
         ctx["characters"], chapter_number
     )
 
-    writer = WriterAgent(project_id)
-    reviewer = ReviewerAgent(project_id)
+    writer = WriterAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
+    reviewer = ReviewerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     registry_mgr = RegistryManager(project_id)
     storyos = StoryOSAgent(project_id, registry_manager=registry_mgr)
     breaker = CircuitBreaker()
@@ -802,8 +819,16 @@ async def _write_scene_chapter_stream(
         ctx["characters"], chapter_number
     )
 
-    writer = WriterAgent(project_id)
-    reviewer = ReviewerAgent(project_id)
+    writer = WriterAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
+    reviewer = ReviewerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     registry_mgr = RegistryManager(project_id)
     storyos = StoryOSAgent(project_id, registry_manager=registry_mgr)
     breaker = CircuitBreaker()
@@ -1050,7 +1075,11 @@ async def _advance_chapter(
                                     for log in parsed])
 
     ctx = _load_context(project_id, current_chapter)
-    archiver = SummaryArchiver(project_id)
+    archiver = SummaryArchiver(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     l2 = L2WarmMemory(project_id)
 
     if fake:
@@ -1707,7 +1736,11 @@ async def analyze_sf_log_diff(
     except Exception:
         router = None
 
-    engine = SFLogSuggestionEngine(model_router=router)
+    engine = SFLogSuggestionEngine(
+        model_router=router,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     report = await engine.analyze_diff(
         original_text=original,
         modified_text=modified,
@@ -1768,7 +1801,11 @@ def apply_sf_log_suggestions(
             location_hint=s.get("location_hint", ""),
             reason=s.get("reason", ""),
         ))
-    engine = SFLogSuggestionEngine(model_router=None)
+    engine = SFLogSuggestionEngine(
+        model_router=None,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     updated = engine.apply_suggestions(text, suggestions)
     return {"scene_id": scene_id, "updated_text": updated}
 

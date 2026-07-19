@@ -19,8 +19,16 @@ class CharacterDesigner(BaseAgent):
         project_id: str,
         prompts_dir: Optional[Path] = None,
         model_router=None,
+        override_store=None,
+        global_override_store=None,
     ):
-        super().__init__(project_id=project_id, prompts_dir=prompts_dir, model_router=model_router)
+        super().__init__(
+            project_id=project_id,
+            prompts_dir=prompts_dir,
+            model_router=model_router,
+            override_store=override_store,
+            global_override_store=global_override_store,
+        )
 
     @staticmethod
     def _stages_text(character: dict) -> str:

@@ -4,6 +4,10 @@ from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
+from backend.services.agent_prompt_stores import (
+    project_override_store,
+    global_override_store,
+)
 
 router = APIRouter(prefix="/api/stage1", tags=["stage1"])
 fm = FileManager(settings.projects_dir)
@@ -54,7 +58,11 @@ async def generate_concept(data: dict):
             detail={"error": True, "code": "PROJECT_NOT_FOUND", "message": f"项目 {project_id} 不存在", "detail": {}},
         )
 
-    agent = PlannerAgent(project_id)
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
     try:
         result, response = await agent.generate_concept_and_dna(
             initial_intent=project.get("initial_intent", {}).get("free_text", ""),

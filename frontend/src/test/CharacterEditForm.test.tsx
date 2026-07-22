@@ -100,4 +100,46 @@ describe("CharacterEditForm", () => {
       expect(screen.getByText(/保存失败/)).toBeInTheDocument();
     });
   });
+
+  it("relations editor: adding a relation patches the relations dict", async () => {
+    const BOB = { ...ALICE, id: "char_bob", name: "Bob" };
+    render(
+      <MemoryRouter>
+        <CharacterEditForm projectId="p1" character={ALICE} allCharacters={[ALICE, BOB]} onComplete={vi.fn()} onCancel={vi.fn()} />
+      </MemoryRouter>,
+    );
+    const addBtn = screen.getByTestId("relations-add-button");
+    fireEvent.click(addBtn);
+    const select = screen.getByTestId("relations-target-select");
+    fireEvent.change(select, { target: { value: "char_bob" } });
+    const statusInput = screen.getByTestId("relations-new-status");
+    fireEvent.change(statusInput, { target: { value: "ally" } });
+    fireEvent.click(screen.getByTestId("relations-confirm-add"));
+    await waitFor(() => {
+      const calls = (api.patchCharacter as ReturnType<typeof vi.fn>).mock.calls;
+      const hasRelationCall = calls.some(([_pid, _cid, patch]) =>
+        patch.relations && Object.keys(patch.relations).includes("char_bob")
+      );
+      expect(hasRelationCall).toBe(true);
+    });
+  });
+
+  it("relations editor: removing a relation patches the relations dict", async () => {
+    const ALICE_WITH_REL = { ...ALICE, relations: { char_bob: { status: "ally", history: [], last_update_chapter: 0 } } };
+    const BOB = { ...ALICE, id: "char_bob", name: "Bob" };
+    render(
+      <MemoryRouter>
+        <CharacterEditForm projectId="p1" character={ALICE_WITH_REL} allCharacters={[ALICE_WITH_REL, BOB]} onComplete={vi.fn()} onCancel={vi.fn()} />
+      </MemoryRouter>,
+    );
+    const removeBtn = screen.getByTestId("relations-remove-char_bob");
+    fireEvent.click(removeBtn);
+    await waitFor(() => {
+      const calls = (api.patchCharacter as ReturnType<typeof vi.fn>).mock.calls;
+      const hasRemoveCall = calls.some(([_pid, _cid, patch]) =>
+        patch.relations && !("char_bob" in patch.relations)
+      );
+      expect(hasRemoveCall).toBe(true);
+    });
+  });
 });

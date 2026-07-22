@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { Character, CharacterSet } from "../../api/client";
 import { useWizard } from "./WizardContext";
+import CharacterEditForm from "./CharacterEditForm";
 
 interface CharacterStepProps {
   projectId: string;
@@ -41,6 +42,9 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   // Mirror latest state for handlers registered in the modal footer (limited deps).
   const charactersRef = useRef(characters);
   charactersRef.current = characters;
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
 
   const handleBatchStart = async () => {
     wizard.startStep(3);
@@ -85,6 +89,14 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     }
   };
 
+  const requestRegenerate = () => {
+    if (characters && characters.characters.length > 0) {
+      setRegenerateConfirmOpen(true);
+      return;
+    }
+    void handleBatchStart();
+  };
+
   const handleNext = async () => {
     const current = charactersRef.current;
     if (!current) return;
@@ -103,6 +115,45 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingId) return;
+    const targetId = deletingId;
+    setDeletingId(null);
+    try {
+      await api.deleteCharacter(projectId, targetId);
+      const list = (characters?.characters ?? []).filter((c) => c.id !== targetId);
+      const current = characters?.current;
+      const next = {
+        characters: list,
+        current: current && current.id !== targetId ? current : list[0],
+      };
+      setCharacters(next);
+      wizard.saveStep(3, { characters: next });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "角色删除失败");
+    }
+  };
+
+  const handleRegenerateConfirm = async () => {
+    setRegenerateConfirmOpen(false);
+    await handleBatchStart();
+  };
+
+  const handleEditComplete = (updated: Character) => {
+    setEditingId(null);
+    const list = (characters?.characters ?? []).map((c) => (c.id === updated.id ? { ...c, ...updated } : c));
+    const next = { characters: list, current: characters?.current ?? list[0] };
+    setCharacters(next);
+  };
+
+  const handleEditCancel = () => setEditingId(null);
+
+  const inboundRelationCount = (targetId: string): number => {
+    return (characters?.characters ?? []).filter(
+      (c) => c.id !== targetId && c.relations && targetId in c.relations,
+    ).length;
   };
 
   const hasCharacters = !!characters && characters.characters.length > 0;
@@ -175,7 +226,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       hasChars ||
       wizard.status === "completed" ||
       wizard.status === "error";
-    wizard.setRegenerateHandler(canRegenerate ? handleBatchStart : null, busy);
+    wizard.setRegenerateHandler(canRegenerate ? requestRegenerate : null, busy);
     wizard.setNextHandler(hasChars ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
@@ -219,80 +270,106 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                       {c.is_core_character ? " · 核心角色" : ""}
                     </div>
                   </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid={`character-edit-${c.id}`}
+                      onClick={() => setEditingId(c.id)}
+                      className="p-1 text-system-log/70 hover:text-primary-container"
+                      aria-label="编辑"
+                    >✏️</button>
+                    <button
+                      type="button"
+                      data-testid={`character-delete-${c.id}`}
+                      onClick={() => setDeletingId(c.id)}
+                      className="p-1 text-system-log/70 hover:text-error"
+                      aria-label="删除"
+                    >🗑️</button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-outline-variant pt-3">
-                  {/* 人格层 */}
-                  <div data-testid={`character-${c.id}-personality`} className="space-y-2">
-                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">人格层</div>
-                    {([
-                      ["core_traits", "核心特质"],
-                      ["beliefs", "信念"],
-                      ["desires", "欲望"],
-                      ["fears", "恐惧"],
-                      ["values", "价值观"],
-                    ] as const).map(([key, label]) => (
-                      <div key={key}>
-                        <div className="font-label-mono text-system-log/80 text-[10px]">{label}</div>
+                {editingId === c.id ? (
+                  <CharacterEditForm
+                    projectId={projectId}
+                    character={c}
+                    allCharacters={characters?.characters ?? []}
+                    onComplete={handleEditComplete}
+                    onCancel={() => handleEditCancel()}
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-outline-variant pt-3">
+                    {/* 人格层 */}
+                    <div data-testid={`character-${c.id}-personality`} className="space-y-2">
+                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">人格层</div>
+                      {([
+                        ["core_traits", "核心特质"],
+                        ["beliefs", "信念"],
+                        ["desires", "欲望"],
+                        ["fears", "恐惧"],
+                        ["values", "价值观"],
+                      ] as const).map(([key, label]) => (
+                        <div key={key}>
+                          <div className="font-label-mono text-system-log/80 text-[10px]">{label}</div>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {renderTags(c.personality?.[key])}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 声音签名 */}
+                    <div data-testid={`character-${c.id}-voice`} className="space-y-2">
+                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音签名</div>
+                      <div>
+                        <div className="font-label-mono text-system-log/80 text-[10px]">语言风格</div>
+                        <p className="font-body-narrative text-primary text-xs mt-0.5">
+                          {c.voice_signature?.speech_style || <span className="text-system-log/40">—</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <div className="font-label-mono text-system-log/80 text-[10px]">思维模式</div>
+                        <p className="font-body-narrative text-primary text-xs mt-0.5">
+                          {c.voice_signature?.thought_patterns || <span className="text-system-log/40">—</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <div className="font-label-mono text-system-log/80 text-[10px]">行为禁忌</div>
                         <div className="flex flex-wrap gap-1 mt-0.5">
-                          {renderTags(c.personality?.[key])}
+                          {renderTags(c.voice_signature?.taboos)}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
 
-                  {/* 声音签名 */}
-                  <div data-testid={`character-${c.id}-voice`} className="space-y-2">
-                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音签名</div>
-                    <div>
-                      <div className="font-label-mono text-system-log/80 text-[10px]">语言风格</div>
-                      <p className="font-body-narrative text-primary text-xs mt-0.5">
-                        {c.voice_signature?.speech_style || <span className="text-system-log/40">—</span>}
-                      </p>
-                    </div>
-                    <div>
-                      <div className="font-label-mono text-system-log/80 text-[10px]">思维模式</div>
-                      <p className="font-body-narrative text-primary text-xs mt-0.5">
-                        {c.voice_signature?.thought_patterns || <span className="text-system-log/40">—</span>}
-                      </p>
-                    </div>
-                    <div>
-                      <div className="font-label-mono text-system-log/80 text-[10px]">行为禁忌</div>
-                      <div className="flex flex-wrap gap-1 mt-0.5">
-                        {renderTags(c.voice_signature?.taboos)}
-                      </div>
+                    {/* 角色关系 */}
+                    <div data-testid={`character-${c.id}-relations`} className="space-y-2">
+                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色关系</div>
+                      {Object.keys(c.relations ?? {}).length === 0 ? (
+                        <p className="font-body-ui text-system-log/40 text-xs">暂无</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {Object.entries(c.relations ?? {}).map(([targetId, rel]) => (
+                            <li
+                              key={targetId}
+                              className="flex items-center justify-between gap-2 p-1.5 bg-surface-container-low rounded"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-label-mono text-primary text-xs truncate">
+                                  {nameById.get(targetId) || targetId}
+                                </div>
+                                <div className="font-body-ui text-system-log/70 text-[10px]">
+                                  第{rel.last_update_chapter}章更新
+                                </div>
+                              </div>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-body-ui shrink-0 ${relationStatusStyle(rel.status)}`}>
+                                {rel.status}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
-
-                  {/* 角色关系 */}
-                  <div data-testid={`character-${c.id}-relations`} className="space-y-2">
-                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色关系</div>
-                    {Object.keys(c.relations ?? {}).length === 0 ? (
-                      <p className="font-body-ui text-system-log/40 text-xs">暂无</p>
-                    ) : (
-                      <ul className="space-y-1.5">
-                        {Object.entries(c.relations ?? {}).map(([targetId, rel]) => (
-                          <li
-                            key={targetId}
-                            className="flex items-center justify-between gap-2 p-1.5 bg-surface-container-low rounded"
-                          >
-                            <div className="min-w-0">
-                              <div className="font-label-mono text-primary text-xs truncate">
-                                {nameById.get(targetId) || targetId}
-                              </div>
-                              <div className="font-body-ui text-system-log/70 text-[10px]">
-                                第{rel.last_update_chapter}章更新
-                              </div>
-                            </div>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-body-ui shrink-0 ${relationStatusStyle(rel.status)}`}>
-                              {rel.status}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
+                )}
               </li>
             ))}
           </ul>
@@ -323,6 +400,63 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
           </p>
 
           {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {deletingId && (() => {
+        const target = characters?.characters.find((c) => c.id === deletingId);
+        if (!target) return null;
+        const cascade = inboundRelationCount(deletingId);
+        return (
+          <div data-testid="delete-confirm-modal" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-surface-container p-6 rounded-lg max-w-md space-y-4">
+              <h3 className="font-display text-lg text-primary">删除「{target.name || "未命名"}」？</h3>
+              <p className="font-body-ui text-sm text-system-log">
+                将同时清理 <strong>{cascade}</strong> 个反向关系。
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  data-testid="delete-cancel-button"
+                  onClick={() => setDeletingId(null)}
+                  className="px-3 py-1 text-xs bg-surface-container-low text-system-log rounded-lg"
+                >取消</button>
+                <button
+                  type="button"
+                  data-testid="delete-confirm-button"
+                  onClick={() => void handleDeleteConfirm()}
+                  className="px-4 py-1 text-xs bg-error text-on-error rounded-lg"
+                >确认删除</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Regenerate confirmation modal */}
+      {regenerateConfirmOpen && (
+        <div data-testid="regenerate-confirm-modal" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-container p-6 rounded-lg max-w-md space-y-4">
+            <h3 className="font-display text-lg text-primary">重新生成所有角色？</h3>
+            <p className="font-body-ui text-sm text-system-log">
+              现有 <strong>{characters?.characters.length ?? 0}</strong> 个角色（包含你的编辑）将被覆盖，无法恢复。
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                data-testid="regenerate-cancel-button"
+                onClick={() => setRegenerateConfirmOpen(false)}
+                className="px-3 py-1 text-xs bg-surface-container-low text-system-log rounded-lg"
+              >取消</button>
+              <button
+                type="button"
+                data-testid="regenerate-confirm-button"
+                onClick={() => void handleRegenerateConfirm()}
+                className="px-4 py-1 text-xs bg-error text-on-error rounded-lg"
+              >确认重新生成</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -119,9 +119,14 @@ describe("CharacterStep", () => {
     setup();
     await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(6));
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
-    // Click regenerate — should call generateCharacter 6 more times, replace list.
+    // Click regenerate — opens a confirmation modal (v1.9). Confirm it to
+    // start the fresh batch.
     await act(async () => {
       screen.getByTestId("wizard-regenerate").click();
+    });
+    await waitFor(() => expect(screen.getByTestId("regenerate-confirm-modal")).toBeInTheDocument());
+    await act(async () => {
+      screen.getByTestId("regenerate-confirm-button").click();
     });
     await waitFor(() => expect(api.generateCharacter).toHaveBeenCalledTimes(12));
     expect(screen.getByTestId("character-list").children).toHaveLength(6);

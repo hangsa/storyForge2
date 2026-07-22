@@ -41,13 +41,14 @@ const ROLE_LABELS: Record<Character["character_type"], string> = {
 /**
  * In-place editor for Stage2 Character set. v1.8 Bug 3 fix. Renders each
  * character as a collapsible card with editable name/role and chip-style
- * fields for personality/voice. Adding/removing characters is intentionally
- * out of scope — Stage2 wizard owns that workflow.
+ * fields for personality/voice. Add/delete supported via generate/delete
+ * endpoints (v1.9 wizard character CRUD).
  */
 export default function CharacterEditor({ projectId, data, onSaved, readOnly }: BaseEditorProps) {
   const [set, setSet] = useState<CharacterSet>(() => readSet(data));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const setRef = useRef(set);
   setRef.current = set;
 
@@ -86,6 +87,36 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
     setError(null);
   };
 
+  const handleDeleteClick = (id: string) => setDeletingId(id);
+  const handleDeleteConfirm = async () => {
+    if (!deletingId) return;
+    const target = deletingId;
+    setDeletingId(null);
+    try {
+      await api.deleteCharacter(projectId, target);
+      setSet((prev) => {
+        const next = prev.characters.filter((c) => c.id !== target);
+        return { ...prev, characters: next, current: next[0] ?? (null as unknown as Character) };
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "删除失败");
+    }
+  };
+
+  const handleNewCharacter = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.generateCharacter(projectId, undefined);
+      const list = result.characters ?? [];
+      setSet({ characters: list, current: list[0] ?? (null as unknown as Character) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "新建失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (set.characters.length === 0) {
     return (
       <div data-testid="character-editor" className="space-y-3">
@@ -99,16 +130,34 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
 
   return (
     <div data-testid="character-editor" className="space-y-3">
-      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
-        角色 ({set.characters.length} 个 — 详细增删请到 Stage2)
+      <div className="flex items-center justify-between">
+        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+          角色 ({set.characters.length} 个)
+        </div>
+        <button
+          type="button"
+          data-testid="character-new-button"
+          onClick={() => void handleNewCharacter()}
+          disabled={busy}
+          className="px-2 py-0.5 text-[11px] border border-dashed border-outline-variant text-system-log/70 rounded hover:text-primary-container hover:border-primary-container/50 disabled:opacity-40"
+        >+ 新建角色</button>
       </div>
       {set.characters.map((c, idx) => (
         <details key={c.id ?? idx} className="border border-outline-variant rounded-lg">
-          <summary className="cursor-pointer px-3 py-2 font-body-ui text-sm text-primary">
-            {c.name || "未命名角色"}{" "}
-            <span className="text-system-log/60 text-xs">
-              ({ROLE_LABELS[c.character_type] ?? c.character_type})
+          <summary className="cursor-pointer px-3 py-2 font-body-ui text-sm text-primary flex items-center justify-between">
+            <span>
+              {c.name || "未命名角色"}{" "}
+              <span className="text-system-log/60 text-xs">
+                ({ROLE_LABELS[c.character_type] ?? c.character_type})
+              </span>
             </span>
+            <button
+              type="button"
+              data-testid={`character-delete-${idx}`}
+              onClick={(e) => { e.preventDefault(); handleDeleteClick(c.id); }}
+              className="text-system-log/60 hover:text-error text-xs px-1"
+              aria-label="删除"
+            >🗑️</button>
           </summary>
           <div className="px-3 py-2 space-y-2 border-t border-outline-variant">
             <div className="grid grid-cols-2 gap-2">
@@ -223,6 +272,33 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
           className="px-4 py-1 text-xs bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
         >{busy ? "保存中…" : "保存"}</button>
       </footer>
+
+      {deletingId && (
+        <div data-testid="delete-confirm-modal" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-surface-container p-6 rounded-lg max-w-md space-y-4">
+            <h3 className="font-display text-lg text-primary">
+              删除「{set.characters.find((c) => c.id === deletingId)?.name || "未命名"}」？
+            </h3>
+            <p className="font-body-ui text-sm text-system-log">
+              将清理 {set.characters.filter((c) => c.id !== deletingId && c.relations && deletingId in c.relations).length} 个反向关系。
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                data-testid="delete-cancel-button"
+                onClick={() => setDeletingId(null)}
+                className="px-3 py-1 text-xs bg-surface-container-low text-system-log rounded-lg"
+              >取消</button>
+              <button
+                type="button"
+                data-testid="delete-confirm-button"
+                onClick={() => void handleDeleteConfirm()}
+                className="px-4 py-1 text-xs bg-error text-on-error rounded-lg"
+              >确认删除</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

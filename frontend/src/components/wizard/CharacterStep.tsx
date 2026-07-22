@@ -119,6 +119,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
 
   const handleDeleteConfirm = async () => {
     if (!deletingId) return;
+    if (busy) return;
     const targetId = deletingId;
     setDeletingId(null);
     try {

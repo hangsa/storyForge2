@@ -254,8 +254,14 @@ export interface Character {
     taboos: string[];
   };
   unknown_to_character: string[];
-  relations: Record<string, { status: string; history: Array<Record<string, unknown>>; last_update_chapter: number }>;
+  relations: Record<string, RelationStatus>;
   growth_curve: GrowthCurve | null;
+}
+
+export interface RelationStatus {
+  status: string;
+  history: Array<Record<string, unknown>>;
+  last_update_chapter: number;
 }
 
 export interface CharacterSet {

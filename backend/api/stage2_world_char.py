@@ -4,7 +4,7 @@ from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
-from backend.models.character import Character as CharacterModel
+from backend.models.character import Character as CharacterModel, CharacterPatch
 from backend.services.agent_prompt_stores import (
     project_override_store,
     global_override_store,
@@ -12,6 +12,10 @@ from backend.services.agent_prompt_stores import (
 
 router = APIRouter(prefix="/api/stage2", tags=["stage2"])
 fm = FileManager(settings.projects_dir)
+
+
+def _file_manager() -> FileManager:
+    return FileManager(settings.projects_dir)
 
 
 @router.get("/world")
@@ -45,7 +49,8 @@ async def get_character(project_id: str = Query(...), character_index: int = Que
             data = {"characters": [data]}
         else:
             data = {"characters": []}
-        fm.write_json(project_id, "characters.json", data)
+        _file_manager().write_json(project_id, "characters.json", data)
+
 
     characters = (data or {}).get("characters", [])
 
@@ -264,9 +269,98 @@ async def update_character(data: dict):
 
     fm.write_json(project_id, "characters.json", character_data)
 
+
+def _not_found(msg: str) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={"error": True, "code": "NOT_FOUND", "message": msg, "detail": {}},
+    )
+
+
+@router.patch("/character/{character_id}")
+async def patch_character(
+    character_id: str,
+    project_id: str = Query(...),
+    payload: CharacterPatch = None,
+):
+    """Partial-update one character. Only fields present in `payload` are written;
+    other fields are preserved. Returns the updated character dict."""
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+    if payload is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "请求体不能为空", "detail": {}},
+        )
+
+    data = _file_manager().read_json(project_id, "characters.json") or {}
+    characters = data.get("characters", [])
+    target = next((c for c in characters if c.get("id") == character_id), None)
+    if target is None:
+        raise _not_found(f"角色不存在: {character_id}")
+
+    patch_dict = payload.model_dump(exclude_none=True)
+    if "character_type" in patch_dict and patch_dict["character_type"] not in {
+        "protagonist", "antagonist", "supporting", "mentor"
+    }:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "character_type 无效", "detail": {}},
+        )
+    for key, value in patch_dict.items():
+        target[key] = value
+
+    _file_manager().write_json(project_id, "characters.json", data)
+
+
     return {
         "error": False,
         "code": "OK",
         "message": "角色已更新",
-        "detail": character_data,
+        "detail": target,
+    }
+
+
+@router.delete("/character/{character_id}")
+async def delete_character(character_id: str, project_id: str = Query(...)):
+    """Delete one character and clean up inbound `relations` references in
+    every other character. Returns `cascaded_relation_removals` count."""
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    data = _file_manager().read_json(project_id, "characters.json") or {}
+    characters = data.get("characters", [])
+    target_idx = next(
+        (i for i, c in enumerate(characters) if c.get("id") == character_id),
+        None,
+    )
+    if target_idx is None:
+        raise _not_found(f"角色不存在: {character_id}")
+
+    cascaded = 0
+    for c in characters:
+        if c.get("id") == character_id:
+            continue
+        relations = c.get("relations") or {}
+        if character_id in relations:
+            del relations[character_id]
+            c["relations"] = relations
+            cascaded += 1
+
+    characters.pop(target_idx)
+    data["characters"] = characters
+    _file_manager().write_json(project_id, "characters.json", data)
+
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "角色已删除",
+        "detail": {"deleted_id": character_id, "cascaded_relation_removals": cascaded},
     }

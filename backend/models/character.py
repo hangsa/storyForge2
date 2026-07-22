@@ -85,3 +85,16 @@ class Character(BaseModel):
 
 class CharacterSet(BaseModel):
     characters: list[Character] = []
+
+
+class CharacterPatch(BaseModel):
+    """Partial-update payload for PATCH /stage2/character/{cid}.
+    All fields optional; only those present are written to disk."""
+    name: Optional[str] = None
+    character_type: Optional[str] = None
+    is_core_character: Optional[bool] = None
+    personality: Optional[Personality] = None
+    voice_signature: Optional[VoiceSignature] = None
+    current_state: Optional[CharacterCurrentState] = None
+    unknown_to_character: Optional[list[str]] = None
+    relations: Optional[dict[str, RelationStatus]] = None

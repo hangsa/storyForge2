@@ -27,6 +27,61 @@ const debounce = (ms: number) => {
   };
 };
 
+function labelOf(k: "beliefs" | "desires" | "fears" | "values" | "core_traits"): string {
+  return { beliefs: "信念", desires: "欲望", fears: "恐惧", values: "价值观", core_traits: "核心特质" }[k];
+}
+
+// Hoisted to module scope so the component identity is stable across parent
+// renders — otherwise every save-state transition (idle → saving → idle) would
+// unmount and remount every chip instance, wiping focus and in-progress drafts.
+function ChipArray({
+  label,
+  arr,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  arr: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState("");
+  return (
+    <div>
+      <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">{label}</label>
+      <div className="flex flex-wrap gap-1 mb-1">
+        {arr.map((chip, i) => (
+          <span
+            key={i}
+            className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-low rounded text-[11px] font-body-narrative text-primary"
+          >
+            {chip}
+            <button
+              type="button"
+              onClick={() => onChange(arr.filter((_, j) => j !== i))}
+              className="text-system-log/60 hover:text-error"
+              aria-label="删除"
+            >×</button>
+          </span>
+        ))}
+      </div>
+      <input
+        value={draft || arr.join("、")}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && draft.trim()) {
+            e.preventDefault();
+            onChange([...arr, draft.trim()]);
+            setDraft("");
+          }
+        }}
+        placeholder={placeholder ?? "回车添加"}
+        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+      />
+    </div>
+  );
+}
+
 export default function CharacterEditForm({ projectId, character, allCharacters, onComplete, onCancel }: Props) {
   const [local, setLocal] = useState<Character>(character);
   const [status, setStatus] = useState<SaveStatus>("idle");
@@ -61,6 +116,15 @@ export default function CharacterEditForm({ projectId, character, allCharacters,
   };
 
   const handleBlurNested = (patch: Partial<Character>) => {
+    const key = Object.keys(patch)[0] as keyof Character;
+    // Compare against the canonical prop value, not the local optimistic copy:
+    // the local copy was just updated by onChange, so comparing against it here
+    // would always short-circuit and skip the PATCH. For nested objects,
+    // JSON-stringify for a structural comparison; for arrays (relations,
+    // unknown_to_character), direct compare works.
+    const prev = character[key];
+    const next = patch[key];
+    if (JSON.stringify(prev) === JSON.stringify(next)) return;
     queuePatch(patch);
   };
 
@@ -72,54 +136,8 @@ export default function CharacterEditForm({ projectId, character, allCharacters,
     onCancel(true);
   };
 
-  // Chip-array helpers — used for all 5 personality + taboos + unknown + known_secrets
-  const ChipArray = ({
-    label,
-    arr,
-    onChange,
-    placeholder,
-  }: {
-    label: string;
-    arr: string[];
-    onChange: (next: string[]) => void;
-    placeholder?: string;
-  }) => {
-    const [draft, setDraft] = useState("");
-    return (
-      <div>
-        <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">{label}</label>
-        <div className="flex flex-wrap gap-1 mb-1">
-          {arr.map((chip, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-low rounded text-[11px] font-body-narrative text-primary"
-            >
-              {chip}
-              <button
-                type="button"
-                onClick={() => onChange(arr.filter((_, j) => j !== i))}
-                className="text-system-log/60 hover:text-error"
-                aria-label="删除"
-              >×</button>
-            </span>
-          ))}
-        </div>
-        <input
-          value={draft || arr.join("、")}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && draft.trim()) {
-              e.preventDefault();
-              onChange([...arr, draft.trim()]);
-              setDraft("");
-            }
-          }}
-          placeholder={placeholder ?? "回车添加"}
-          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-        />
-      </div>
-    );
-  };
+  // ChipArray is hoisted to module scope (see below) so it doesn't re-mount on
+  // every parent render — that would lose focus and in-progress draft state.
 
   return (
     <div data-testid={`character-${character.id}-edit-form`} className="space-y-3">
@@ -320,8 +338,4 @@ export default function CharacterEditForm({ projectId, character, allCharacters,
       </div>
     </div>
   );
-}
-
-function labelOf(k: "beliefs" | "desires" | "fears" | "values" | "core_traits"): string {
-  return { beliefs: "信念", desires: "欲望", fears: "恐惧", values: "价值观", core_traits: "核心特质" }[k];
 }

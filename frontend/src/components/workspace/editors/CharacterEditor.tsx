@@ -138,7 +138,8 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
           type="button"
           data-testid="character-new-button"
           onClick={() => void handleNewCharacter()}
-          disabled={busy}
+          disabled={busy || readOnly}
+          title={readOnly ? "托管运行中,元数据已锁定" : undefined}
           className="px-2 py-0.5 text-[11px] border border-dashed border-outline-variant text-system-log/70 rounded hover:text-primary-container hover:border-primary-container/50 disabled:opacity-40"
         >+ 新建角色</button>
       </div>
@@ -155,7 +156,9 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
               type="button"
               data-testid={`character-delete-${idx}`}
               onClick={(e) => { e.preventDefault(); handleDeleteClick(c.id); }}
-              className="text-system-log/60 hover:text-error text-xs px-1"
+              disabled={readOnly}
+              title={readOnly ? "托管运行中,元数据已锁定" : undefined}
+              className="text-system-log/60 hover:text-error text-xs px-1 disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label="删除"
             >🗑️</button>
           </summary>
@@ -293,7 +296,9 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
                 type="button"
                 data-testid="delete-confirm-button"
                 onClick={() => void handleDeleteConfirm()}
-                className="px-4 py-1 text-xs bg-error text-on-error rounded-lg"
+                disabled={readOnly}
+                title={readOnly ? "托管运行中,元数据已锁定" : undefined}
+                className="px-4 py-1 text-xs bg-error text-on-error rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
               >确认删除</button>
             </div>
           </div>

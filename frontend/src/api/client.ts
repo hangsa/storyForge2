@@ -771,6 +771,26 @@ export const api = {
   updateCharacter: (projectId: string, characterData: CharacterSet) =>
     request<void>("PUT", "/stage2/character", { project_id: projectId, characters: characterData.characters }),
 
+  patchCharacter: (
+    projectId: string,
+    characterId: string,
+    patch: Partial<Character>,
+  ): Promise<Character> =>
+    request<Character>(
+      "PATCH",
+      `/stage2/character/${encodeURIComponent(characterId)}?project_id=${encodeURIComponent(projectId)}`,
+      patch,
+    ),
+
+  deleteCharacter: (
+    projectId: string,
+    characterId: string,
+  ): Promise<{ deleted_id: string; cascaded_relation_removals: number }> =>
+    request<{ deleted_id: string; cascaded_relation_removals: number }>(
+      "DELETE",
+      `/stage2/character/${encodeURIComponent(characterId)}?project_id=${encodeURIComponent(projectId)}`,
+    ),
+
   growthWorkshopCheck: (projectId: string, characterId: string) =>
     request<WorkshopCheckResult>(
       "POST",

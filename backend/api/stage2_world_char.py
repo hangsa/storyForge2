@@ -51,7 +51,6 @@ async def get_character(project_id: str = Query(...), character_index: int = Que
             data = {"characters": []}
         _file_manager().write_json(project_id, "characters.json", data)
 
-
     characters = (data or {}).get("characters", [])
 
     # Fill missing nested fields with Pydantic model defaults (defense against incomplete LLM output)
@@ -315,7 +314,6 @@ async def patch_character(
 
     _file_manager().write_json(project_id, "characters.json", data)
 
-
     return {
         "error": False,
         "code": "OK",
@@ -356,7 +354,6 @@ async def delete_character(character_id: str, project_id: str = Query(...)):
     characters.pop(target_idx)
     data["characters"] = characters
     _file_manager().write_json(project_id, "characters.json", data)
-
 
     return {
         "error": False,

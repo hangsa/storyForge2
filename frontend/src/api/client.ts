@@ -78,7 +78,8 @@ export async function request<T>(method: string, path: string, body?: unknown): 
     );
   }
 
-  return (json!.detail as T) ?? (json as T);
+  if (json === null) return null as T;
+  return (json.detail as T) ?? (json as T);
 }
 
 // --- Type definitions (mirror Pydantic models) ---

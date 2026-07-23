@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import api, { ApiError } from "../api/client";
+import api, { ApiError, request } from "../api/client";
 
 describe("ApiError", () => {
   it("creates error with code and message", () => {
@@ -73,6 +73,26 @@ function makeNonJsonResponse(body: string, init: { status?: number } = {}): Resp
     json: async () => { throw new SyntaxError("Unexpected token < in JSON at position 0"); },
   } as Response;
 }
+
+describe("empty success response handling", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it("returns null for a successful JSON null response", async () => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(makeJsonResponse(null));
+
+    await expect(request<void>("PUT", "/stage2/character", {})).resolves.toBeNull();
+  });
+
+  it("returns null for a successful response with no body", async () => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(makeJsonResponse(undefined));
+
+    await expect(request<void>("PUT", "/stage2/character", {})).resolves.toBeNull();
+  });
+});
 
 describe("stage4 exemptions + sf-log + precheck client", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;

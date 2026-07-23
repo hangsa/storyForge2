@@ -51,6 +51,24 @@ def project_with_characters(tmp_path, monkeypatch):
     return pid, fm
 
 
+def test_put_character_returns_success_envelope(client, project_with_characters):
+    pid, fm = project_with_characters
+    character_data = fm.read_json(pid, "characters.json")
+
+    r = client.put(
+        "/api/stage2/character",
+        json={"project_id": pid, "character": character_data},
+    )
+
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "error": False,
+        "code": "OK",
+        "message": "角色已更新",
+        "detail": character_data,
+    }
+
+
 def test_patch_single_field_updates_only_that_field(client, project_with_characters):
     pid, _ = project_with_characters
     r = client.patch(f"/api/stage2/character/char_alice?project_id={pid}", json={"name": "Alicia"})

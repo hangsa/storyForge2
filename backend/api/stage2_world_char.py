@@ -268,6 +268,13 @@ async def update_character(data: dict):
 
     fm.write_json(project_id, "characters.json", character_data)
 
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "角色已更新",
+        "detail": character_data,
+    }
+
 
 def _not_found(msg: str) -> HTTPException:
     return HTTPException(

@@ -1029,10 +1029,16 @@ class TestAsyncAutopilotRunner:
 
     @pytest.mark.asyncio
     async def test_step_emits_task_fail_on_executor_exception(
-        self, mgr, projects_dir, fake_project
+        self, mgr, projects_dir, fake_project, monkeypatch
     ):
+        """Retry-then-pause: 3 consecutive failures → session paused with
+        scene_write_failed reason, queue item preserved so resume() can
+        re-pick it, task_fail event emitted."""
         from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
-        from backend.conductor.stage4_async_executor import FakeStage4Executor
+        from backend.conductor import autopilot_runner_async as runner_mod
+        # Shrink backoffs so the test doesn't wait 90s for retries.
+        monkeypatch.setattr(runner_mod, "SCENE_WRITE_RETRY_BACKOFFS", (0, 0))
+
         mgr.start(ManagedStartConfig())
         mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
                                 scheduled_at=None, priority=21,
@@ -1046,7 +1052,6 @@ class TestAsyncAutopilotRunner:
 
         executor = BoomExecutor()
         runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
-        # run a single step
         s = mgr.load()
         item = runner._pick_next(s.queue)
         await runner._step_one(item, "p1")
@@ -1055,9 +1060,17 @@ class TestAsyncAutopilotRunner:
         assert "task_fail" in events
         # current_task was cleared
         assert mgr.load().current_task is None
-        # item dropped from queue (failure path)
-        assert all(q.id != "w-1-1" for q in mgr.load().queue)
-        # force_pass_count NOT incremented
+        # Session is paused (not stopped)
+        assert mgr.load().state.value == "paused"
+        # pause_reason describes the failure
+        reason = mgr.load().pause_reason
+        assert reason is not None
+        assert reason.startswith("scene_write_failed:write-1-1:")
+        assert "LLM 5xx" in reason
+        # Queue item is PRESERVED so resume() can re-pick it
+        ids = [q.id for q in mgr.load().queue]
+        assert "w-1-1" in ids
+        # force_pass_count NOT incremented (executor-level failure, not fact-guard)
         assert mgr.load().circuit.force_pass_count == 0
 
     @pytest.mark.asyncio
@@ -1081,14 +1094,23 @@ class TestAsyncAutopilotRunner:
 
     @pytest.mark.asyncio
     async def test_step_emits_circuit_open_after_three_force_passes(
-        self, mgr, projects_dir, fake_project
+        self, mgr, projects_dir, fake_project, monkeypatch
     ):
+        """Circuit breaker: 3 force_passes within a session auto-pause via
+        circuit_open transition. Updated for retry-then-pause: we lower
+        CIRCUIT_THRESHOLD to 2 for this test so we only need 2 valid scenes
+        (the fake_project outline has 2 scenes; the previous w-1-3 was
+        invalid input that now hits the retry-pause branch instead of
+        accumulating force_passes)."""
         from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
         from backend.conductor.stage4_async_executor import FakeStage4Executor
+        from backend.conductor import autopilot_runner as sync_runner_mod
+        monkeypatch.setattr(sync_runner_mod, "CIRCUIT_THRESHOLD", 2)
+
         mgr.start(ManagedStartConfig())
         executor = FakeStage4Executor(mgr, projects_dir, breaker_result="force_pass")
-        # Pre-seed 3 write_scene items.
-        for n in (1, 2, 3):
+        # Pre-seed 2 write_scene items (the only 2 valid scenes in fake_project).
+        for n in (1, 2):
             mgr.add_queue(QueueItem(id=f"w-1-{n}", kind="write_scene",
                                     chapter_number=1, scheduled_at=None,
                                     priority=20 + n,
@@ -1096,9 +1118,9 @@ class TestAsyncAutopilotRunner:
         runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
         await runner.run()
         s = mgr.load()
-        assert s.circuit.force_pass_count >= 3
+        assert s.circuit.force_pass_count >= 2
         assert s.circuit.threshold_warning is True
-        # Auto-paused after the 3rd force-pass crossed the threshold.
+        # Auto-paused after the 2nd force-pass crossed the lowered threshold.
         assert s.state.value == "paused"
         events = [e.type for e in s.history]
         assert "circuit_open" in events
@@ -1169,3 +1191,243 @@ class TestAsyncAutopilotRunner:
             f"expected ≥3 heartbeats (one per loop iteration), got "
             f"{call_count['n']}"
         )
+
+
+class TestRetryThenPause:
+    """Spec for v1.9 retry-then-pause behavior. Bug 2026-07-22
+    proj_a601cee9: a transient LLM connection drop left scenes stuck at
+    status='retry' forever (drop-on-fail + no retry loop). Fix: retry the
+    same scene up to SCENE_WRITE_MAX_RETRIES more times with backoff, then
+    pause the session with a reason; resume() re-picks the same queue item."""
+
+    @pytest.fixture
+    def short_backoffs(self, monkeypatch):
+        from backend.conductor import autopilot_runner_async as runner_mod
+        monkeypatch.setattr(runner_mod, "SCENE_WRITE_RETRY_BACKOFFS", (0, 0))
+
+    @pytest.mark.asyncio
+    async def test_recovers_on_second_attempt_no_pause(
+        self, mgr, projects_dir, fake_project, short_backoffs
+    ):
+        """First attempt raises, second attempt succeeds → session stays
+        running, no pause_reason set, item dropped normally."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+
+        # Succeeds on attempt 2 (fail once, then return ok).
+        attempt_count = {"n": 0}
+        executor = FakeStage4Executor(mgr, projects_dir, breaker_result="passed")
+        original_execute = executor.execute
+        async def flaky_execute(item, project_id):
+            attempt_count["n"] += 1
+            if attempt_count["n"] == 1:
+                raise RuntimeError("transient 5xx")
+            return await original_execute(item, project_id=project_id)
+        executor.execute = flaky_execute
+
+        runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
+        s = mgr.load()
+        item = runner._pick_next(s.queue)
+        result = await runner._step_one(item, "p1")
+        assert result["completed"] is True
+        assert attempt_count["n"] == 2
+        # Session still running
+        assert mgr.load().state.value == "running"
+        # pause_reason NOT set
+        assert mgr.load().pause_reason is None
+        # Item dropped normally
+        assert all(q.id != "w-1-1" for q in mgr.load().queue)
+
+    @pytest.mark.asyncio
+    async def test_structured_fail_status_also_retries(
+        self, mgr, projects_dir, fake_project, short_backoffs
+    ):
+        """The runner must also retry when the executor returns a structured
+        {status: fail} dict (not just on raw exceptions)."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+
+        attempt_count = {"n": 0}
+        class FailTwiceThenOk:
+            async def execute(self, item, project_id):
+                attempt_count["n"] += 1
+                if attempt_count["n"] < 3:
+                    return {"status": "fail", "error": "rate limited"}
+                return {"status": "ok", "scene_status": "ok"}
+            @property
+            def _calls(self): return []
+
+        runner = AsyncAutopilotRunner(mgr, FailTwiceThenOk(), cadence="fast")
+        item = runner._pick_next(mgr.load().queue)
+        result = await runner._step_one(item, "p1")
+        assert result["completed"] is True
+        assert attempt_count["n"] == 3
+
+    @pytest.mark.asyncio
+    async def test_exhausted_retries_pause_with_reason(
+        self, mgr, projects_dir, fake_project, short_backoffs
+    ):
+        """3 attempts all fail → session paused with scene_write_failed
+        reason that names the failing queue item."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-5-2", kind="write_scene", chapter_number=5,
+                                scheduled_at=None, priority=5021,
+                                payload={"scene_number": 2}))
+
+        class AlwaysFails:
+            async def execute(self, item, project_id):
+                raise RuntimeError("peer closed connection")
+            @property
+            def _calls(self): return []
+
+        runner = AsyncAutopilotRunner(mgr, AlwaysFails(), cadence="fast")
+        item = runner._pick_next(mgr.load().queue)
+        result = await runner._step_one(item, "p1")
+        assert result["completed"] is False
+        assert result["picked"] == "w-5-2"
+        s = mgr.load()
+        # State: paused
+        assert s.state.value == "paused"
+        # Reason: scene_write_failed prefix + item coords + error
+        reason = s.pause_reason
+        assert reason is not None
+        assert reason.startswith("scene_write_failed:write-5-2:")
+        assert "peer closed connection" in reason
+        # Queue item PRESERVED for resume
+        ids = [q.id for q in s.queue]
+        assert "w-5-2" in ids
+        # History: 3 task_fail events? No — fail_current_task is called once
+        # at the end after retries. task_fail events: 1.
+        fail_events = [e for e in s.history if e.type == "task_fail"]
+        assert len(fail_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_subsequent_queue_items_not_picked_after_pause(
+        self, mgr, projects_dir, fake_project, short_backoffs
+    ):
+        """run() exits when state != running, so paused-on-failure stops the
+        runner loop. The remaining queue items stay untouched."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        mgr.start(ManagedStartConfig())
+        # First item will fail-then-pause. Second item would normally be
+        # picked next iteration.
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+        mgr.add_queue(QueueItem(id="w-1-2", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=22,
+                                payload={"scene_number": 2}))
+
+        class AlwaysFails:
+            async def execute(self, item, project_id):
+                raise RuntimeError("permanent")
+            @property
+            def _calls(self): return []
+
+        runner = AsyncAutopilotRunner(mgr, AlwaysFails(), cadence="fast")
+        await runner.run()  # exits when state flips to paused
+        s = mgr.load()
+        assert s.state.value == "paused"
+        assert s.pause_reason is not None
+        # Both items still in queue (neither was dropped on failure)
+        ids = {q.id for q in s.queue}
+        assert "w-1-1" in ids
+        assert "w-1-2" in ids
+
+    @pytest.mark.asyncio
+    async def test_resume_clears_pause_reason_and_re_picks(
+        self, mgr, projects_dir, fake_project, short_backoffs
+    ):
+        """resume() clears pause_reason; the runner's next step picks the
+        same item that failed."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import FakeStage4Executor
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+
+        # Phase 1: fail forever → pause.
+        class AlwaysFails:
+            async def execute(self, item, project_id):
+                raise RuntimeError("permanent")
+            @property
+            def _calls(self): return []
+
+        runner = AsyncAutopilotRunner(mgr, AlwaysFails(), cadence="fast")
+        await runner._step_one(mgr.load().queue[0], "p1")
+        assert mgr.load().state.value == "paused"
+        assert mgr.load().pause_reason is not None
+
+        # Phase 2: user resumes. Reason must clear.
+        mgr.resume()
+        assert mgr.load().state.value == "running"
+        assert mgr.load().pause_reason is None
+
+        # Phase 3: with a healthy executor, the runner re-picks the SAME item.
+        healthy = FakeStage4Executor(mgr, projects_dir, breaker_result="passed")
+        runner2 = AsyncAutopilotRunner(mgr, healthy, cadence="fast")
+        item = runner2._pick_next(mgr.load().queue)
+        assert item.id == "w-1-1"
+        result = await runner2._step_one(item, "p1")
+        assert result["completed"] is True
+
+    @pytest.mark.asyncio
+    async def test_pause_during_backoff_aborts_retry(
+        self, mgr, projects_dir, fake_project, monkeypatch
+    ):
+        """If the user pauses/stops during the retry backoff window, the
+        retry must abort (the run() loop will see the new state and exit)."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor import autopilot_runner_async as runner_mod
+        # Slow backoff so we can intervene.
+        monkeypatch.setattr(runner_mod, "SCENE_WRITE_RETRY_BACKOFFS", (5, 5))
+
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=21,
+                                payload={"scene_number": 1}))
+
+        attempt_count = {"n": 0}
+
+        class AlwaysFails:
+            async def execute(self, item, project_id):
+                attempt_count["n"] += 1
+                # First call returns ok instantly; we'll override below.
+                raise RuntimeError("retryable")
+            @property
+            def _calls(self): return []
+
+        runner = AsyncAutopilotRunner(mgr, AlwaysFails(), cadence="fast")
+
+        # Schedule a user-pause during the first backoff (5s window).
+        import asyncio as _asyncio
+        async def user_pause():
+            await _asyncio.sleep(0.5)
+            mgr.pause(reason="user_intervention")
+        pause_task = _asyncio.create_task(user_pause())
+
+        item = runner._pick_next(mgr.load().queue)
+        result = await runner._step_one(item, "p1")
+        await pause_task
+
+        # The retry loop saw state != RUNNING during backoff and aborted.
+        assert result["completed"] is False
+        assert "aborted during retry backoff" in result["error"]
+        # Only one attempt happened before abort
+        assert attempt_count["n"] == 1
+        # User's pause_reason took precedence (runner wrote aborted, then
+        # mgr.pause() overwrote with user reason — actually no, the retry
+        # loop's abort path doesn't call pause; user's pause() does). So
+        # pause_reason is the user's.
+        assert mgr.load().pause_reason == "user_intervention"

@@ -119,6 +119,7 @@ export default function AutopilotMiddlePanel({ projectId }: Props) {
             queue={queue}
             sseStatus={sseStatus}
             stopReason={session?.stop_reason ?? null}
+            pauseReason={session?.pause_reason ?? null}
             onStart={() => onAction("启动托管", () => start(config))}
             onPause={() => onAction("暂停托管", () => pause())}
             onResume={() => onAction("继续托管", () => resume())}
@@ -163,15 +164,36 @@ interface CockpitViewProps {
   sseStatus: "connecting" | "connected" | "reconnecting" | "error";
   /** Short tag like "outline_exhausted" set by mgr.stop(reason=...). */
   stopReason?: string | null;
+  /** Short tag set by mgr.pause(reason=...). Recognized formats:
+   *  "scene_write_failed:write-{ch}-{scene}:{error}" — banner with retry
+   *  button. Anything else falls back to the generic paused UI. */
+  pauseReason?: string | null;
   onStart: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
 }
 
+interface ParsedSceneWriteFailure {
+  chapter: number | null;
+  scene: number | null;
+  error: string;
+}
+
+function parseSceneWriteFailure(reason: string): ParsedSceneWriteFailure | null {
+  // Format: "scene_write_failed:write-{ch}-{scene}:{error}"
+  const match = /^scene_write_failed:write-(\d+)-(\d+):(.+)$/.exec(reason);
+  if (!match) return null;
+  return {
+    chapter: Number(match[1]),
+    scene: Number(match[2]),
+    error: match[3],
+  };
+}
+
 function CockpitView({
   projectId,
-  state, currentTask, queue, sseStatus, stopReason,
+  state, currentTask, queue, sseStatus, stopReason, pauseReason,
   onStart, onPause, onResume, onStop,
 }: CockpitViewProps) {
   const badge = STATE_BADGE[state];
@@ -211,6 +233,65 @@ function CockpitView({
 
   return (
     <div className="p-6 space-y-6">
+      {/* Failure banner — appears when the runner pauses the session because a
+          scene write exhausted its retry budget. Surfaces the failed chapter/
+          scene + error, and offers "重试此场景" (resume), "继续托管" (resume
+          anyway), "停止" (give up). Distinct from the stopped-state card
+          below: a paused session has resumable state. */}
+      {state === "paused" && pauseReason && (() => {
+        const parsed = parseSceneWriteFailure(pauseReason);
+        if (!parsed) return null;
+        return (
+          <div
+            data-testid="autopilot-cockpit-failure-banner"
+            role="alert"
+            className="rounded-xl border border-error/40 bg-error-container/15 p-4 space-y-3"
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-error text-lg leading-none mt-0.5" aria-hidden>⚠</span>
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="text-sm font-display text-error">
+                  场景写入失败 · 托管已自动暂停
+                </div>
+                <div
+                  data-testid="autopilot-cockpit-failure-detail"
+                  className="text-xs font-body-ui text-on-surface break-words"
+                >
+                  {parsed.chapter !== null && parsed.scene !== null ? (
+                    <>
+                      第 {parsed.chapter} 章 · 第 {parsed.scene} 场景
+                      {" · "}
+                    </>
+                  ) : null}
+                  <span className="font-label-mono">{parsed.error}</span>
+                </div>
+                <div className="text-[11px] font-body-ui text-system-log">
+                  重试 2 次后仍失败，后续章节已停止自动写入，避免在故障状态下推进。
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pl-7">
+              <button
+                type="button"
+                data-testid="autopilot-cockpit-resume-after-failure"
+                onClick={onResume}
+                className="px-3 py-1.5 text-xs rounded-lg bg-primary-container text-surface-container-low hover:opacity-90"
+              >
+                ▶ 继续托管（重试此场景）
+              </button>
+              <button
+                type="button"
+                data-testid="autopilot-cockpit-stop-after-failure"
+                onClick={onStop}
+                className="px-3 py-1.5 text-xs rounded-lg bg-error/90 text-surface-container-low hover:opacity-90"
+              >
+                ⏹ 停止托管
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* State card */}
       <div
         data-testid="autopilot-cockpit-state"

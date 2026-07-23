@@ -63,7 +63,7 @@ class AutopilotSessionManager:
             config=ManagedStartConfig(), started_at=None,
             last_heartbeat_at=None, current_task=None,
             queue=[], history=[], circuit=CircuitSnapshot(),
-            stop_reason=None,
+            stop_reason=None, pause_reason=None,
         )
 
     def load(self) -> Optional[AutopilotSession]:
@@ -179,11 +179,28 @@ class AutopilotSessionManager:
         self.save(s2)
         return s2
 
-    def pause(self) -> AutopilotSession:
+    def pause(self, reason: Optional[str] = None) -> AutopilotSession:
+        """Transition the session to PAUSED. Idempotent — calling on an
+        already-paused session updates the reason if provided, otherwise
+        returns the existing session unchanged.
+
+        `reason` is a short human-readable tag (e.g. "scene_write_failed:
+        write-5-2:peer closed connection") persisted on the session so the
+        UI can surface why autopilot paused. The runner uses this when a
+        scene write exhausts its retry budget — the session lands in PAUSED
+        with the failure context attached, and the user can decide whether
+        to retry / continue / stop.
+        """
         s = self.load() or self._empty_session()
         if s.state in (SessionState.PAUSED, SessionState.IDLE, SessionState.STOPPED):
+            if reason is not None and s.state == SessionState.PAUSED and s.pause_reason != reason:
+                s2 = replace(s, pause_reason=reason)
+                self.save(s2)
+                return s2
             return s  # nothing to do
         s2 = self._sm.pause(s)
+        if reason is not None:
+            s2 = replace(s2, pause_reason=reason)
         self.save(s2)
         return s2
 
@@ -192,6 +209,11 @@ class AutopilotSessionManager:
         if s.state != SessionState.PAUSED:
             return s
         s2 = self._sm.resume(s)
+        # Clear pause_reason on resume so the cockpit banner disappears.
+        # stop_reason is intentionally NOT touched here (it's only set on
+        # stop, and a resume from paused didn't go through stop).
+        if s.pause_reason is not None:
+            s2 = replace(s2, pause_reason=None)
         self.save(s2)
         # 熔断状态从 paused → running 等价于"熔断关闭"。force_pass_count
         # 不会自动清零（spec：保留历史，只 reset 后再次跨阈值才会再次
@@ -264,6 +286,7 @@ class AutopilotSessionManager:
             last_heartbeat_at=datetime.now(timezone.utc).isoformat(),
             current_task=s.current_task, queue=list(s.queue),
             history=list(s.history), circuit=s.circuit,
+            stop_reason=s.stop_reason, pause_reason=s.pause_reason,
         )
         self.save(s2)
         return s2
@@ -276,6 +299,7 @@ class AutopilotSessionManager:
             started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
             current_task=s.current_task, queue=list(s.queue),
             history=list(s.history), circuit=snap,
+            stop_reason=s.stop_reason, pause_reason=s.pause_reason,
         )
         self.save(s2)
         return s2
@@ -335,6 +359,7 @@ def _session_to_dict(s: AutopilotSession) -> dict:
         "history": [asdict(e) for e in s.history],
         "circuit": asdict(s.circuit),
         "stop_reason": s.stop_reason,
+        "pause_reason": s.pause_reason,
     }
 
 
@@ -350,4 +375,5 @@ def _dict_to_session(d: dict) -> AutopilotSession:
         history=[SessionEvent(**e) for e in d.get("history", [])],
         circuit=CircuitSnapshot(**d.get("circuit", {})),
         stop_reason=d.get("stop_reason"),
+        pause_reason=d.get("pause_reason"),
     )

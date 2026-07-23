@@ -103,6 +103,11 @@ export interface AutopilotSession {
   /** Short tag like "outline_exhausted" set when the runner stops the session
    * via mgr.stop(reason=...). Only meaningful when state === "stopped". */
   stop_reason?: string | null;
+  /** Short tag set when the runner pauses the session via mgr.pause(reason=...),
+   * e.g. "scene_write_failed:write-5-2:peer closed connection". Only meaningful
+   * when state === "paused"; cleared on resume(). The cockpit surfaces this as
+   * a banner with retry/continue/stop actions. */
+  pause_reason?: string | null;
   /** Set on /session/start responses when seed_queue found zero work to do
    * (every chapter already complete). Frontend uses this to surface a
    * "project all done" toast instead of leaving the user staring at a

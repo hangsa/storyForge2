@@ -104,6 +104,12 @@ class AutopilotSession:
     # None for sessions that were never explicitly stopped, or for sessions
     # saved before this field existed (back-compat).
     stop_reason: Optional[str] = None
+    # Reason set when state transitions to PAUSED via pause(reason=...).
+    # Distinct from stop_reason: a paused session can be resumed, so the UI
+    # surfaces this as a banner (e.g. "scene write failed N times — pick a
+    # retry / continue / stop action"). Cleared on resume(). None for
+    # sessions paused before this field existed.
+    pause_reason: Optional[str] = None
 
 
 # --- Helpers ---
@@ -125,7 +131,7 @@ def _append_event(s: AutopilotSession, type_: str, **fields) -> AutopilotSession
         started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
         current_task=s.current_task, queue=list(s.queue),
         history=s.history + [event], circuit=s.circuit,
-        stop_reason=s.stop_reason,
+        stop_reason=s.stop_reason, pause_reason=s.pause_reason,
     )
 
 
@@ -163,6 +169,7 @@ def transition(s: AutopilotSession, trigger: str) -> AutopilotSession:
         started_at=started_at, last_heartbeat_at=s.last_heartbeat_at,
         current_task=current_task, queue=list(s.queue),
         history=list(s.history), circuit=s.circuit,
+        stop_reason=s.stop_reason, pause_reason=s.pause_reason,
     )
     return _append_event(s2, event_type)
 
@@ -177,6 +184,7 @@ def set_current_task(s: AutopilotSession, task: CurrentTask) -> AutopilotSession
         started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
         current_task=task, queue=list(s.queue), history=list(s.history),
         circuit=s.circuit,
+        stop_reason=s.stop_reason, pause_reason=s.pause_reason,
     )
 
 
@@ -194,12 +202,14 @@ def complete_current_task(s: AutopilotSession) -> AutopilotSession:
         started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
         current_task=done, queue=list(s.queue), history=list(s.history),
         circuit=s.circuit,
+        stop_reason=s.stop_reason, pause_reason=s.pause_reason,
     )
     s3 = _append_event(s2, "task_complete")
     return AutopilotSession(
         project_id=s3.project_id, state=s3.state, config=s3.config,
         started_at=s3.started_at, last_heartbeat_at=s3.last_heartbeat_at,
         current_task=None, queue=s3.queue, history=s3.history, circuit=s3.circuit,
+        stop_reason=s3.stop_reason, pause_reason=s3.pause_reason,
     )
 
 
@@ -217,6 +227,7 @@ def fail_current_task(s: AutopilotSession, error: str) -> AutopilotSession:
         started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
         current_task=None, queue=list(s.queue), history=list(s.history),
         circuit=s.circuit,
+        stop_reason=s.stop_reason, pause_reason=s.pause_reason,
     )
     return _append_event(s2, "task_fail", task_id=s.current_task.scene_id,
                          chapter_number=s.current_task.chapter_number,
@@ -232,6 +243,7 @@ def add_queue_item(s: AutopilotSession, item: QueueItem) -> AutopilotSession:
         started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
         current_task=s.current_task, queue=queue, history=list(s.history),
         circuit=s.circuit,
+        stop_reason=s.stop_reason, pause_reason=s.pause_reason,
     )
     return _append_event(s2, "queue_add", task_id=item.id, chapter_number=item.chapter_number)
 
@@ -245,6 +257,7 @@ def drop_queue_item(s: AutopilotSession, item_id: str) -> AutopilotSession:
         started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
         current_task=s.current_task, queue=new_queue, history=list(s.history),
         circuit=s.circuit,
+        stop_reason=s.stop_reason, pause_reason=s.pause_reason,
     )
     return _append_event(s2, "queue_drop", task_id=item_id)
 
@@ -261,6 +274,7 @@ class SessionStateMachine:
                 started_at=s.started_at, last_heartbeat_at=s.last_heartbeat_at,
                 current_task=s.current_task, queue=s.queue, history=s.history,
                 circuit=s.circuit,
+                stop_reason=s.stop_reason, pause_reason=s.pause_reason,
             )
         return transition(s, "start")
 

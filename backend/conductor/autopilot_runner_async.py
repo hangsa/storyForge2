@@ -8,6 +8,7 @@ and the loop-bookkeeping in `backend/conductor/autopilot_loop.py`.
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
@@ -16,7 +17,25 @@ from backend.models.autopilot_session import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 DONE_STATUSES = frozenset({"completed", "force_passed", "skipped"})
+
+# Retry-then-pause: a transient LLM hiccup (peer-closed, 5xx, rate limit)
+# shouldn't kill the whole autopilot run. We retry the SAME scene up to
+# SCENE_WRITE_MAX_RETRIES additional times with growing backoff; only when
+# ALL attempts fail do we pause the session with `pause_reason` set so the
+# user can intervene via the cockpit banner.
+#
+# Why 2 retries (3 total attempts): aligns with the existing Fact Guard
+# CircuitBreaker.MAX_RETRIES=3 budget, gives the upstream LLM enough slack
+# to recover from a transient blip, but doesn't burn the user's token
+# budget on a permanently broken prompt. Bug 2026-07-22 proj_a601cee9:
+# drop-on-fail left scenes stuck forever after a single dropped LLM
+# connection.
+SCENE_WRITE_MAX_RETRIES = 2
+SCENE_WRITE_RETRY_BACKOFFS = (30, 60)  # seconds before retry #1, #2
 
 
 # Row-major queue priority scheme: chapters are processed in chapter_number
@@ -325,7 +344,29 @@ class AsyncAutopilotRunner:
             await asyncio.sleep(self._cadence_delay)
 
     async def _step_one(self, item: QueueItem, project_id: str) -> dict:
-        """One iteration. Mirrors sync runner.step() but async + task_fail branch."""
+        """One iteration. Mirrors sync runner.step() but async + retry-then-pause.
+
+        Retry budget (write_scene only — archival / plan_chapter / fact_guard
+        / review keep the pre-fix drop-on-fail behavior):
+          - Up to SCENE_WRITE_MAX_RETRIES additional attempts on the SAME
+            queue item with growing backoff (SCENE_WRITE_RETRY_BACKOFFS).
+          - On every retry the queue item is intentionally NOT dropped so
+            that `seed_queue()` (idempotent on item ids) cannot re-add a
+            duplicate. If the user resumes, the runner picks the same item.
+          - Between backoff sleeps we re-check session state — if the user
+            paused/stopped during the wait, we abort the retry and return.
+        Failure mode (write_scene only):
+          - When all attempts fail, the runner calls fail_current_task()
+            AND mgr.pause(reason=...). The queue item stays so resume()
+            can re-pick it; the cockpit banner explains what failed.
+          - Pre-fix behavior was drop-on-fail, which permanently skipped
+            failed scenes. Bug 2026-07-22 on proj_a601cee9 left ch5 s2/s3
+            stuck at "retry" forever after an LLM connection drop.
+        Failure mode (other kinds):
+          - drop-on-fail: drop_queue + fail_current_task + return error.
+            The runner's outer loop sees the queue shrink and either picks
+            the next item or auto-stops when empty.
+        """
         task = CurrentTask(
             kind=item.kind,
             chapter_number=item.chapter_number,
@@ -337,49 +378,89 @@ class AsyncAutopilotRunner:
         )
         self._mgr.set_current_task(task)
 
-        try:
-            # Prefer execute_stream() when the executor implements it. This
-            # is the v1.10 Direction B wiring: streaming executors publish
-            # per-chunk events that the /chapter-stream SSE endpoint relays
-            # to the cockpit UI. Executors that haven't been upgraded yet
-            # (e.g. older FakeStage4Executor instances) fall back to
-            # execute() — they just won't stream.
-            executor_call = (
-                self._executor.execute_stream
-                if hasattr(self._executor, "execute_stream")
-                else self._executor.execute
-            )
-            result = await executor_call(item, project_id=project_id)
-        except Exception as e:
-            self._mgr.fail_current_task(error=str(e))
+        # Non-scene kinds keep the pre-fix drop-on-fail path so the outer
+        # loop can auto-stop once the queue drains (e.g. archival fails on
+        # an exhausted outline — we don't want the whole session stuck in
+        # paused forever, that's a recoverable end-of-work signal handled
+        # by the runner's empty-queue auto-stop, not a user-actionable
+        # failure).
+        if item.kind != "write_scene":
+            try:
+                result = await self._executor.execute(item, project_id=project_id)
+            except Exception as e:
+                self._mgr.fail_current_task(error=str(e))
+                self._mgr.drop_queue(item.id)
+                return {"picked": item.id, "completed": False, "error": str(e)}
+            if isinstance(result, dict) and result.get("status") == "fail":
+                err = result.get("error", "scene write failed")
+                self._mgr.fail_current_task(error=err)
+                self._mgr.drop_queue(item.id)
+                return {"picked": item.id, "completed": False, "error": err}
             self._mgr.drop_queue(item.id)
-            return {"picked": item.id, "completed": False, "error": str(e)}
+            self._mgr.complete_current_task()
+            return {"picked": item.id, "completed": True, "result": result}
 
-        # The streaming executor returns a structured dict with
-        # `status: "fail"` when the LLM returned no usable text (e.g. an API
-        # auth failure surfaced as a `scene_failed` event). Without this
-        # check the runner drops the queue item and marks the task complete
-        # — which lies to the cockpit UI ("task_complete" history event)
-        # AND keeps the failed item out of progress.json, so the next
-        # seed_queue() re-enqueues it and the loop spins forever on bad
-        # credentials. Fixed 2026-07-17 after proj_cc4ca4ae burned through
-        # its 64-item queue in ~3 minutes with no drafts and no progress.
-        if isinstance(result, dict) and result.get("status") == "fail":
-            err = result.get("error", "scene write failed")
-            self._mgr.fail_current_task(error=err)
+        last_error: Optional[str] = None
+        executor_call = (
+            self._executor.execute_stream
+            if hasattr(self._executor, "execute_stream")
+            else self._executor.execute
+        )
+
+        for attempt in range(SCENE_WRITE_MAX_RETRIES + 1):
+            if attempt > 0:
+                backoff = SCENE_WRITE_RETRY_BACKOFFS[attempt - 1]
+                await asyncio.sleep(backoff)
+                # Honor user-initiated pause/stop during the backoff window.
+                s = self._mgr.load()
+                if s is None or s.state != SessionState.RUNNING:
+                    return {
+                        "picked": item.id, "completed": False,
+                        "error": f"aborted during retry backoff (state={s.state.value if s else 'none'})",
+                    }
+
+            try:
+                result = await executor_call(item, project_id=project_id)
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(
+                    "[autopilot] scene write attempt %d/%d failed for %s: %s",
+                    attempt + 1, SCENE_WRITE_MAX_RETRIES + 1, item.id, last_error,
+                )
+                continue
+
+            if isinstance(result, dict) and result.get("status") == "fail":
+                last_error = result.get("error", "scene write failed")
+                logger.warning(
+                    "[autopilot] scene write attempt %d/%d returned fail for %s: %s",
+                    attempt + 1, SCENE_WRITE_MAX_RETRIES + 1, item.id, last_error,
+                )
+                continue
+
+            # Success path: drop queue item + complete current_task.
             self._mgr.drop_queue(item.id)
-            return {"picked": item.id, "completed": False, "error": err}
+            self._mgr.complete_current_task()
 
-        # Success path: drop queue item + complete current_task.
-        self._mgr.drop_queue(item.id)
-        self._mgr.complete_current_task()
+            # Circuit breaker: only on force_passed scenes (spec §5 row 2).
+            # Delegate to mgr.record_force_pass_internal() which encapsulates
+            # the increment + threshold-check + circuit_open transition in
+            # one write-through.
+            scene_status = result.get("scene_status") if isinstance(result, dict) else None
+            if scene_status == "force_passed":
+                self._mgr.record_force_pass_internal()
 
-        # Circuit breaker: only on force_passed scenes (spec §5 row 2).
-        # Delegate to mgr.record_force_pass_internal() which encapsulates the
-        # increment + threshold-check + circuit_open transition in one
-        # write-through (matches the existing sync runner's record_force_pass).
-        scene_status = result.get("scene_status") if isinstance(result, dict) else None
-        if scene_status == "force_passed":
-            self._mgr.record_force_pass_internal()
+            return {"picked": item.id, "completed": True, "result": result}
 
-        return {"picked": item.id, "completed": True, "result": result}
+        # Exhausted retries — pause session with reason. Queue item stays so
+        # resume() can re-pick it. fail_current_task emits the task_fail
+        # history event before the pause so the cockpit shows what went wrong.
+        err = last_error or "scene write failed"
+        self._mgr.fail_current_task(error=err)
+        scene_id = item.payload.get("scene_number", "?") if isinstance(item.payload, dict) else "?"
+        reason = f"scene_write_failed:write-{item.chapter_number}-{scene_id}:{err}"
+        self._mgr.pause(reason=reason)
+        logger.warning(
+            "[autopilot] %s failed after %d attempts — pausing session (reason=%s)",
+            item.id, SCENE_WRITE_MAX_RETRIES + 1, reason,
+        )
+        return {"picked": item.id, "completed": False, "error": err}

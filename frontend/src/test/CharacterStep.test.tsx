@@ -150,6 +150,25 @@ describe("CharacterStep", () => {
     await waitFor(() => expect(api.advance).toHaveBeenCalledWith("proj_x", "STAGE3"));
   });
 
+  it("does not continue when advancing to STAGE3 fails", async () => {
+    let callIdx = 0;
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, t: string) => {
+      callIdx += 1;
+      return { characters: [makeChar(`c${callIdx}`, t)], current: null };
+    });
+    (api.updateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (api.advance as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("阶段推进失败"));
+    setup();
+    await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+
+    await act(async () => {
+      screen.getByTestId("wizard-next").click();
+    });
+
+    expect(await screen.findByText("阶段推进失败")).toBeInTheDocument();
+    expect(screen.getByTestId("character-step")).toBeInTheDocument();
+  });
+
   it("error state shows the error banner with no '重试' button; footer '重新生成' retries", async () => {
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("LLM down"));
     setup();

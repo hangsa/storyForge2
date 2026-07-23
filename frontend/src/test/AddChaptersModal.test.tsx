@@ -45,7 +45,10 @@ describe("AddChaptersModal", () => {
     expect(screen.getByTestId("add-chapters-cap-hint")).toHaveTextContent(/范围 6 - 20/);
   });
 
-  it("clamps the end input to maxEnd when user types a larger number", async () => {
+  it("accepts the raw typed value without silent clamping on change", async () => {
+    // Pre-fix, onChange silently clamped on every keystroke, so typing
+    // "99" with maxEnd=10 made the field read "10" — making it look like
+    // the input was unresponsive. Now the raw value is held until blur.
     render(
       <AddChaptersModal
         open
@@ -60,11 +63,32 @@ describe("AddChaptersModal", () => {
     await act(async () => {
       fireEvent.change(input, { target: { value: "99" } });
     });
-    // maxEnd = 10, so the input clamps to 10
+    expect(input.value).toBe("99");
+  });
+
+  it("clamps the end input to maxEnd on blur (not on change)", async () => {
+    render(
+      <AddChaptersModal
+        open
+        currentMax={5}
+        plannedTotal={10}
+        progress={null}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "99" } });
+    });
+    await act(async () => {
+      fireEvent.blur(input);
+    });
+    // maxEnd = 10, so on blur the input clamps to 10
     expect(input.value).toBe("10");
   });
 
-  it("clamps the end input to start when user types a smaller number", async () => {
+  it("clamps the end input to start on blur when user typed below start", async () => {
     render(
       <AddChaptersModal
         open
@@ -79,11 +103,17 @@ describe("AddChaptersModal", () => {
     await act(async () => {
       fireEvent.change(input, { target: { value: "2" } });
     });
+    await act(async () => {
+      fireEvent.blur(input);
+    });
     // min = start = 6
     expect(input.value).toBe("6");
   });
 
-  it("ignores non-numeric input (keeps last valid)", async () => {
+  it("allows clearing the field to retype without snap-back", async () => {
+    // Pre-fix, empty input was rejected (no setState), so the controlled
+    // value snapped back to the last value on the next render — making the
+    // field feel uneditable. Now empty is a valid transient state.
     render(
       <AddChaptersModal
         open
@@ -95,11 +125,60 @@ describe("AddChaptersModal", () => {
       />,
     );
     const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
-    // Default = 15
     expect(input.value).toBe("15");
     await act(async () => {
       fireEvent.change(input, { target: { value: "" } });
     });
+    expect(input.value).toBe("");
+    // Hint falls back to the default count while the field is empty.
+    expect(screen.getByTestId("add-chapters-cap-hint")).toHaveTextContent(/本次将新增 10 章/);
+  });
+
+  it("reverts empty input to default on blur", async () => {
+    render(
+      <AddChaptersModal
+        open
+        currentMax={5}
+        plannedTotal={20}
+        progress={null}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "" } });
+    });
+    await act(async () => {
+      fireEvent.blur(input);
+    });
+    expect(input.value).toBe("15");  // default = start + 9 = 6 + 9 = 15
+  });
+
+  it("rejects decimal input on change (browser allows but we clamp via parseEnd)", async () => {
+    // Browsers do allow `<input type="number">` to hold a decimal like "1.5".
+    // Our handler accepts anything matching /^\d+$/, so the raw "1.5" is
+    // dropped (the state stays at the previous value), which is the safest
+    // behavior since Math.floor on blur would silently pick "1" otherwise.
+    // Letters and signs are filtered by the browser before the change event
+    // fires, so we don't (and can't) test them here — the regex is purely
+    // a defense-in-depth guard for non-browser input.
+    render(
+      <AddChaptersModal
+        open
+        currentMax={5}
+        plannedTotal={20}
+        progress={null}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const input = screen.getByTestId("add-chapters-end-input") as HTMLInputElement;
+    expect(input.value).toBe("15");
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "1.5" } });
+    });
+    // Decimal rejected by the /^\d+$/ regex — value unchanged.
     expect(input.value).toBe("15");
   });
 

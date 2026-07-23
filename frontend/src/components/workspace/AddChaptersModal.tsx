@@ -68,24 +68,76 @@ export default function AddChaptersModal({
       : start + DEFAULT_CAP_WHEN_UNPLANNED - 1;
   const defaultEnd = Math.min(start + DEFAULT_END_OFFSET, maxEnd);
 
-  const [end, setEnd] = useState(defaultEnd);
+  // The end input stores a raw string (not a clamped number) so the user can
+  // freely type, backspace, and clear-to-retype without the value silently
+  // snapping to a clamp on every keystroke. Clamping happens only on blur
+  // and at confirm time — pre-fix, every onChange handler call clamped the
+  // value (typing "99" with maxEnd=20 silently became "20", backspace from
+  // "12" became "11", clearing snapped back to the previous value), which
+  // made the input feel unresponsive.
+  const [endText, setEndText] = useState<string>(String(defaultEnd));
 
   // Reset input whenever the modal (re)opens so a stale value from a
   // previous attempt doesn't leak in.
   useEffect(() => {
-    if (open) setEnd(defaultEnd);
+    if (open) setEndText(String(defaultEnd));
   }, [open, defaultEnd]);
 
   if (!open) return null;
 
   const busy = progress !== null;
   const atCap = plannedTotal > 0 && currentMax >= plannedTotal;
-  const count = Math.max(0, end - currentMax);
+
+  // Parse the raw input text into a clamped integer; returns null when the
+  // text is empty or non-numeric (the user may legitimately be mid-edit).
+  const parseEnd = (raw: string): number | null => {
+    if (raw === "" || !/^\d+$/.test(raw)) return null;
+    const v = Number(raw);
+    if (!Number.isFinite(v)) return null;
+    return Math.max(start, Math.min(Math.floor(v), maxEnd));
+  };
+
+  // What the on-screen input should display. During editing we show the raw
+  // text verbatim (so backspace / typing feel natural); after blur we show
+  // the clamped integer so the hint message ("本次将新增 N 章") stays in sync.
+  const displayText = endText;
+
+  // The integer value used by the confirm button + hint. While the field is
+  // empty or invalid, fall back to the default so the confirm button stays
+  // enabled with a sensible count, and the hint doesn't render "NaN 章".
+  const endInt = parseEnd(endText);
+  const effectiveEnd = endInt ?? defaultEnd;
+  const count = Math.max(0, effectiveEnd - currentMax);
 
   const handleConfirm = async () => {
     if (atCap || busy) return;
-    if (end < start || end > maxEnd) return;
-    await onConfirm(end);
+    const clamped = parseEnd(endText);
+    if (clamped === null) return;
+    // Sync the visible text to the clamped value so re-opening the modal
+    // doesn't show a stale string.
+    setEndText(String(clamped));
+    await onConfirm(clamped);
+  };
+
+  const handleEndBlur = () => {
+    const clamped = parseEnd(endText);
+    if (clamped === null) {
+      // Empty / invalid → revert to the default. Avoid leaving the field
+      // blank so the next on-screen read of `count` stays meaningful.
+      setEndText(String(defaultEnd));
+      return;
+    }
+    setEndText(String(clamped));
+  };
+
+  const handleEndChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    // Accept any non-negative digit string, including empty (so the user can
+    // clear the field to retype). Reject negative signs, decimals, and
+    // letters — they're not valid here.
+    if (raw === "" || /^\d+$/.test(raw)) {
+      setEndText(raw);
+    }
   };
 
   return (
@@ -112,34 +164,38 @@ export default function AddChaptersModal({
           <div className="space-y-2">
             <div className="flex items-end gap-2">
               <div className="flex-1">
-                <label className="block font-label-mono text-system-log text-xs mb-1">从第</label>
+                <label
+                  htmlFor="add-chapters-start-display"
+                  className="block font-label-mono text-system-log text-xs mb-1"
+                >
+                  从第
+                </label>
                 <div
+                  id="add-chapters-start-display"
                   data-testid="add-chapters-start-display"
                   className="w-full bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 text-sm text-system-log"
                 >
                   {start}
                 </div>
               </div>
-              <span className="font-body-ui text-system-log text-sm pb-2">章到第</span>
+              <span className="font-body-ui text-system-log text-sm pb-2">章</span>
               <div className="flex-1">
-                <label className="block font-label-mono text-system-log text-xs mb-1">章</label>
+                <label
+                  htmlFor="add-chapters-end-input"
+                  className="block font-label-mono text-system-log text-xs mb-1"
+                >
+                  到第
+                </label>
                 <input
+                  id="add-chapters-end-input"
                   type="number"
                   data-testid="add-chapters-end-input"
                   min={start}
                   max={maxEnd}
-                  value={end}
+                  value={displayText}
                   disabled={busy}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    // Empty / non-numeric input is rejected so the user can
-                    // clear the field to retype without the value snapping
-                    // to a clamp.
-                    if (raw === "" || !/^\d+$/.test(raw)) return;
-                    const v = Number(raw);
-                    if (!Number.isFinite(v)) return;
-                    setEnd(Math.max(start, Math.min(Math.floor(v), maxEnd)));
-                  }}
+                  onChange={handleEndChange}
+                  onBlur={handleEndBlur}
                   className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
                 />
               </div>
@@ -176,7 +232,7 @@ export default function AddChaptersModal({
             type="button"
             data-testid="add-chapters-confirm"
             onClick={handleConfirm}
-            disabled={atCap || busy || end < start}
+            disabled={atCap || busy || effectiveEnd < start}
             className="px-5 py-2 text-sm bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
           >
             {busy ? "生成中…" : "确认添加"}

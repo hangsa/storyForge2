@@ -79,25 +79,21 @@ def _patch_writer_stream(chunks, monkeypatch):
     )
 
 
-def _patch_fact_guard(breaker_result, monkeypatch):
-    """Replace ReviewerAgent.run_fact_guard + CircuitBreaker.check so the streaming
-    function converges to the requested breaker outcome without LLM-6-check logic."""
+def _patch_fact_guard(all_passed, monkeypatch):
+    """Replace ReviewerAgent.run_fact_guard with a FakeResult whose `all_passed`
+    flag controls the streaming path's outcome. The streaming function no longer
+    consults CircuitBreaker (single-pass, no retry loop), so a FakeBreaker
+    is unnecessary — fix landed after proj_a601cee9 regression where
+    breaker.check(attempt=1) returning "retry" leaked into progress.json."""
     class FakeResult:
-        all_passed = True
         coherence_score = 90
         checks = []
         retry_hints = ""
+    FakeResult.all_passed = all_passed
     monkeypatch.setattr(
         "backend.agents.reviewer.ReviewerAgent.run_fact_guard",
         lambda self, **kw: FakeResult(),
     )
-
-    class FakeBreaker:
-        def check(self, **kw):
-            return breaker_result
-        def generate_retry_hints(self, *a, **kw):
-            return ""
-    monkeypatch.setattr(sw, "CircuitBreaker", lambda: FakeBreaker())
 
 
 def test_streaming_yields_chunks_then_done(tmp_path, monkeypatch):
@@ -108,7 +104,7 @@ def test_streaming_yields_chunks_then_done(tmp_path, monkeypatch):
     chunks = [StreamChunk(text=t) for t in ["夜", "风", "如", "刀", "。", " 沈", "渡"]]
     chunks.append(StreamChunk(text="", finish_reason="stop"))
     _patch_writer_stream(chunks, monkeypatch)
-    _patch_fact_guard(breaker_result="passed", monkeypatch=monkeypatch)
+    _patch_fact_guard(all_passed=True, monkeypatch=monkeypatch)
 
     async def _collect():
         out = []
@@ -138,7 +134,7 @@ def test_streaming_done_writes_draft_md(tmp_path, monkeypatch):
     sw.fm.projects_dir = tmp_path
     chunks = [StreamChunk(text="全文本"), StreamChunk(text="", finish_reason="stop")]
     _patch_writer_stream(chunks, monkeypatch)
-    _patch_fact_guard(breaker_result="passed", monkeypatch=monkeypatch)
+    _patch_fact_guard(all_passed=True, monkeypatch=monkeypatch)
 
     async def _consume():
         async for _ in _write_scene_chapter_stream(
@@ -167,7 +163,7 @@ def test_streaming_yields_failed_on_writer_exception(tmp_path, monkeypatch):
         "backend.agents.writer.WriterAgent.write_scene_stream",
         fake_with_error,
     )
-    _patch_fact_guard(breaker_result="passed", monkeypatch=monkeypatch)
+    _patch_fact_guard(all_passed=True, monkeypatch=monkeypatch)
 
     async def _collect():
         out = []
@@ -186,13 +182,41 @@ def test_streaming_yields_failed_on_writer_exception(tmp_path, monkeypatch):
     assert failed[0]["partial_text"].startswith("partial-")
 
 
-def test_streaming_status_reflects_breaker_result(tmp_path, monkeypatch):
+def test_streaming_status_is_completed_when_fact_guard_passes(tmp_path, monkeypatch):
     info = _bootstrap_project(tmp_path)
     monkeypatch.setattr(sw.settings, "projects_dir", tmp_path)
     sw.fm.projects_dir = tmp_path
     chunks = [StreamChunk(text="x"), StreamChunk(text="", finish_reason="stop")]
     _patch_writer_stream(chunks, monkeypatch)
-    _patch_fact_guard(breaker_result="force_pass", monkeypatch=monkeypatch)
+    _patch_fact_guard(all_passed=True, monkeypatch=monkeypatch)
+
+    async def _collect():
+        out = []
+        async for ev in _write_scene_chapter_stream(
+            project_id=info["project_id"],
+            chapter_number=1,
+            scene_number=1,
+        ):
+            out.append(ev)
+        return out
+
+    events = asyncio.run(_collect())
+    done = [e for e in events if e["event"] == "done"][0]
+    assert done["status"] == "completed"
+
+
+def test_streaming_status_is_force_passed_when_fact_guard_fails(tmp_path, monkeypatch):
+    """Regression for proj_a601cee9: streaming path must NOT route Fact Guard
+    failure through CircuitBreaker.check (which returns "retry" since
+    attempt=1 < MAX_RETRIES) and let that string leak into progress.json.
+    Single-pass streaming has no retry loop, so Fact Guard failure
+    semantically means force-pass."""
+    info = _bootstrap_project(tmp_path)
+    monkeypatch.setattr(sw.settings, "projects_dir", tmp_path)
+    sw.fm.projects_dir = tmp_path
+    chunks = [StreamChunk(text="x"), StreamChunk(text="", finish_reason="stop")]
+    _patch_writer_stream(chunks, monkeypatch)
+    _patch_fact_guard(all_passed=False, monkeypatch=monkeypatch)
 
     async def _collect():
         out = []
@@ -207,6 +231,7 @@ def test_streaming_status_reflects_breaker_result(tmp_path, monkeypatch):
     events = asyncio.run(_collect())
     done = [e for e in events if e["event"] == "done"][0]
     assert done["status"] == "force_passed"
+    assert done["status"] != "retry"
 
 # --- _normalize_scene_text: reasoning-model artifact stripping ----------------
 # MiniMax-M3 emits a <think>...</think> chain-of-thought preamble and

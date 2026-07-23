@@ -831,7 +831,6 @@ async def _write_scene_chapter_stream(
     )
     registry_mgr = RegistryManager(project_id)
     storyos = StoryOSAgent(project_id, registry_manager=registry_mgr)
-    breaker = CircuitBreaker()
     reader_os = ReaderOS(project_id)
 
     genre = ctx["genre"]
@@ -943,15 +942,14 @@ async def _write_scene_chapter_stream(
             scene_plan=scene_plan,
             precheck_result=precheck_result,
         )
-        breaker_result = breaker.check(
-            scene_number=scene_number,
-            fact_guard_passed=fg_result.all_passed,
-            attempt=1,
-            hints=fg_result.retry_hints,
-        )
-        # Map breaker raw → canonical scene status (same table as executor).
-        from backend.conductor.stage4_async_executor import _canonical_scene_status
-        final_breaker_result = _canonical_scene_status(breaker_result)
+        # Single-pass path: there is no retry loop, so Fact Guard failure
+        # means the text is kept as-is (force-pass). Going through
+        # CircuitBreaker would return "retry" since attempt=1 < MAX_RETRIES,
+        # which `_canonical_scene_status` would pass through unchanged and
+        # the executor would write as `"status": "retry"` to progress.json —
+        # see proj_a601cee9 regression (33/38 scenes stuck at "retry" despite
+        # draft.md on disk).
+        final_breaker_result = "completed" if fg_result.all_passed else "force_passed"
         final_attempt = 1
 
         # ---- StoryOS / MemoryOS update ---------------------------------

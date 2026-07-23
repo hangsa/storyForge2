@@ -47,17 +47,18 @@ export function useChapterStream(projectId: string): ChapterStreamState {
   useEffect(() => {
     cancelledRef.current = false;
 
-    const scheduleReopen = (immediate = false) => {
-      handleRef.current?.close();
-      // On logical end-of-scene, reopen immediately so the hook can pick up
-      // the next scene_start without waiting for a hypothetical network error.
-      if (immediate) {
-        if (cancelledRef.current) return;
-        open();
-        return;
-      }
-      // Reconnect dedup — only one pending timer at a time
+    // Reconnect after a network-level error (onError). Between scenes we
+    // intentionally do NOT close the EventSource: the backend keeps the
+    // stream open across scene transitions (see chapter_stream endpoint
+    // comment in backend/api/autopilot.py) and emits scene_start on the
+    // same connection. Closing+reopening would lose Last-Event-ID and
+    // trigger a full broadcaster-history replay (incl. the just-handled
+    // scene_done) → infinite reconnect loop. See the regression test
+    // "does not reconnect when backend replays multiple stale scene_done
+    // events on same connection" in useChapterStream.test.tsx.
+    const scheduleReopen = () => {
       if (reconnectTimerRef.current !== null) return;
+      handleRef.current?.close();
       reconnectTimerRef.current = setTimeout(() => {
         reconnectTimerRef.current = null;
         if (cancelledRef.current) return;
@@ -119,7 +120,11 @@ export function useChapterStream(projectId: string): ChapterStreamState {
             }));
           } else if (ev.event === "scene_done") {
             setState((prev) => ({ ...prev, active: false }));
-            scheduleReopen(true);
+            // Intentionally no scheduleReopen: the backend keeps the SSE
+            // connection open across scene transitions and emits the next
+            // scene_start on the same stream. Closing+reopening here would
+            // race the backend's history replay. See scheduleReopen's
+            // docstring above.
           } else if (ev.event === "scene_failed") {
             // partial_text dedup: if we already have chunks, ignore partial_text
             setState((prev) => ({
@@ -129,7 +134,9 @@ export function useChapterStream(projectId: string): ChapterStreamState {
               error: ev.data.error,
               text: prev.text || (ev.data.partial_text ?? ""),
             }));
-            scheduleReopen(true);
+            // Same as scene_done: stay on the existing connection; the
+            // backend's 5s current_task poll will emit scene_transition
+            // when the runner moves to the next item (or stays idle).
           } else if (ev.event === "scene_transition") {
             // Runner is between scenes (or doing archival). The backend
             // keeps the SSE stream open so the next scene_start flows

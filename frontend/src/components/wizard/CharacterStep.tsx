@@ -220,11 +220,24 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     return m;
   }, [characters]);
 
-  // Sync local `characters` state from wizard.data when prefill lands. Only
-  // overwrite if local state is still null (no characters yet).
+  // Sync local `characters` state from wizard.data whenever wizard.data changes.
+  // This covers both the initial mount (wizard.data carries the prefill result
+  // or a sessionStorage restore) and later changes (e.g., after the user
+  // clicks "下一步" / handleNext, which writes the local list back to
+  // wizard.data via saveStep). It is safe to overwrite local state because
+  // character edits only touch local state — wizard.data.characters is the
+  // persisted source of truth and only changes via prefill or saveStep.
+  //
+  // v1.9.1: previously this guard read `!characters`, which was meant to
+  // protect in-progress edits. But it had the side effect of freezing the
+  // wizard at a stale sessionStorage value (e.g., 6 chars from a prior
+  // session) even after prefill updated wizard.data to 15 — the user then
+  // saw the regenerated 6-char batch instead of the 15 chars on disk,
+  // making 石坚 / 林凤娇 (the original 2 chars) invisible. Fix: always
+  // re-sync when wizard.data.characters changes.
   useEffect(() => {
     const persisted = wizard.data.characters;
-    if (persisted && persisted.characters.length > 0 && !characters) {
+    if (persisted && persisted.characters.length > 0) {
       setCharacters(persisted);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

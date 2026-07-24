@@ -193,4 +193,62 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
       expect(api.deleteCharacter).toHaveBeenCalledWith(PROJECT, "char_bob");
     });
   });
+
+  it("regression (proj_7cb0180f): prefill refreshes local state even when local state is non-null (don't drop early characters)", async () => {
+    // Bug: the useEffect that syncs local state from wizard.data.characters
+    // had a `!characters` guard, which was meant to protect in-progress edits
+    // but actually froze the wizard at a stale sessionStorage value. If the
+    // user re-opened the wizard after a "重新生成" / manual-add sequence,
+    // sessionStorage held a 2-char snapshot, local state initialized to 2
+    // chars, and prefill updated wizard.data to 15 chars — but the guard
+    // skipped the setCharacters call. The user then saw only the 2 stale
+    // chars (e.g., the regenerated batch) and could not find 石坚/林凤娇
+    // which had been written to disk in an earlier batch.
+    //
+    // Simulate: sessionStorage has 2 chars (the "regenerated" snapshot).
+    // api.getCharacter returns 15 chars (the file on disk). After prefill
+    // completes, the wizard must display all 15 — including the first 2
+    // from the original generation.
+    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
+      characters: [
+        { ...ALICE, id: "char_shi_jian", name: "石坚" },
+        { ...ALICE, id: "char_lin_fengjiao", name: "林凤娇" },
+        ...Array.from({ length: 13 }, (_, i) => ({ ...ALICE, id: `char_${i + 3}`, name: `配角${i + 3}` })),
+      ],
+      current: null,
+    });
+    // SessionStorage starts with a 2-char snapshot (the regenerated batch).
+    // prefillComplete is false at this point.
+    sessionStorage.setItem(
+      KEY,
+      JSON.stringify({
+        currentStep: 3,
+        completedSteps: [1, 2, 3],
+        status: "completed",
+        data: {
+          concept: null, story_dna: null, world: null,
+          characters: {
+            characters: [
+              { ...ALICE, id: "char_new_1", name: "新角色1" },
+              { ...ALICE, id: "char_new_2", name: "新角色2" },
+            ],
+            current: null,
+          },
+          novel_outline: null, chapter1_outline: null,
+        },
+        errorMessage: null,
+      }),
+    );
+    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    // After prefill completes, the wizard must show all 15 chars — including
+    // 石坚 and 林凤娇 from the original generation. The stale 2-char snapshot
+    // in sessionStorage must NOT shadow the file.
+    await waitFor(() => {
+      expect(screen.getByTestId("character-form")).toBeInTheDocument();
+    });
+    const list = screen.getByTestId("character-list");
+    expect(list.children).toHaveLength(15);
+    expect(screen.getByTestId("character-char_shi_jian-name")).toHaveValue("石坚");
+    expect(screen.getByTestId("character-char_lin_fengjiao-name")).toHaveValue("林凤娇");
+  });
 });

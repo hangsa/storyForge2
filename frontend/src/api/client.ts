@@ -231,6 +231,12 @@ export interface WorkshopDiscussResponse {
   skipped_reason?: string;
 }
 
+export interface BehaviorExample {
+  situation: string;
+  action: string;
+  speech_sample: string;
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -253,6 +259,7 @@ export interface Character {
     speech_style: string;
     thought_patterns: string;
     taboos: string[];
+    behavior_examples: BehaviorExample[];
   };
   unknown_to_character: string[];
   relations: Record<string, RelationStatus>;
@@ -796,6 +803,17 @@ export const api = {
     request<{ deleted_id: string; cascaded_relation_removals: number }>(
       "DELETE",
       `/stage2/character/${encodeURIComponent(characterId)}?project_id=${encodeURIComponent(projectId)}`,
+    ),
+
+  regenerateCharacterExamples: (
+    projectId: string,
+    characterId: string,
+    keepExisting: boolean = false,
+  ): Promise<Character> =>
+    request<Character>(
+      "POST",
+      `/stage2/character/${encodeURIComponent(characterId)}/regenerate-examples?project_id=${encodeURIComponent(projectId)}`,
+      { keep_existing: keepExisting },
     ),
 
   growthWorkshopCheck: (projectId: string, characterId: string) =>

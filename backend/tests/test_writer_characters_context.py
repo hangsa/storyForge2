@@ -161,31 +161,80 @@ def test_priority_orders_pov_before_antagonist_before_supporting():
 def test_truncation_drops_background_tier_first():
     """When total exceeds budget, background characters get compressed to
     one-line summaries."""
-    # 1 POV + 1 antagonist (key) + 8 supporting with 5 examples each.
-    # 8 supporting × ~600 tok ≈ 4800 tok > 4000 budget.
+    # 1 POV + 1 antagonist + 10 supporting with realistic Chinese examples
+    # large enough to overflow 4000 budget. Supporting chars without name
+    # mention are tier 0.2 (background), so they get compressed to
+    # (仅提及) one-liners.
+    pov_examples = [
+        {"situation": "师父失踪后独自在山洞中守夜，回想起过往师徒情谊",
+         "action": "压下悲痛，沉着冷静地分析局势，誓要查明真相",
+         "speech_sample": "师父一生光明磊落，此事必有蹊跷。我等身为弟子，当守其基业，待其归来。"},
+        {"situation": "挚友被陷害入狱，全城议论纷纷",
+         "action": "克制怒火，独自暗中收集证据，不打草惊蛇",
+         "speech_sample": "我会让你付出代价，只是此刻尚需隐忍，时机未到不可轻举妄动。"},
+        {"situation": "门派弟子人心惶惶，长老争执不下",
+         "action": "挺身而出主持大局，逐一分派任务安定人心",
+         "speech_sample": "只要我还在，门派便不会倒。诸位各司其职，切莫自乱阵脚。"},
+        {"situation": "发现敌人阴谋的关键线索",
+         "action": "独自深入险地查证，不愿旁人涉险",
+         "speech_sample": "不入虎穴，焉得虎子。这件事便由我一人前去，诸位留守山门以防有变。"},
+        {"situation": "面对师父留下的艰深谜题",
+         "action": "反复推演数日，誓要破解其中玄机",
+         "speech_sample": "真相终会大白于天下，我林峰此生定不负师父所托。"},
+    ]
+    ant_examples = [
+        {"situation": "门派比武大会上与林峰对垒",
+         "action": "暗施巧计示弱诱敌，使其放松警惕",
+         "speech_sample": "你不过是井底之蛙罢了，真以为能看透我的布局？"},
+        {"situation": "林峰追查到关键线索",
+         "action": "提前布置陷阱反制",
+         "speech_sample": "螳螂捕蝉，黄雀在后。你以为你在追查，其实早已踏入我的圈套。"},
+        {"situation": "内部会议被多名长老质疑",
+         "action": "拉拢盟友分化异己",
+         "speech_sample": "识时务者为俊杰，诸位长老何必为一己之私误了门派大局？"},
+    ]
+    sup_examples = [
+        {"situation": "门派日常巡守时察觉山脚异动",
+         "action": "立刻回报长老并部署各处警戒",
+         "speech_sample": "敌踪已现，请诸位速作准备，严守各处要道，勿使一人漏网。"},
+        {"situation": "师兄重伤被抬回山门救治",
+         "action": "立即延请医师并暗查凶手身份",
+         "speech_sample": "师兄伤势沉重，定要查清来龙去脉，以慰在天之灵，以儆效尤。"},
+        {"situation": "外出采买物资时遭遇伏击",
+         "action": "沉着应对掩护同伴撤退",
+         "speech_sample": "诸位先走，我来断后。今日之事必要回报掌门，请援军速来。"},
+        {"situation": "新弟子入门考核中表现出色",
+         "action": "悉心指点并以身作则",
+         "speech_sample": "习武先习心，为人先为德。我等正道中人，当以义立身。"},
+    ]
     chars = [_char("pov", "林峰", "protagonist",
                    voice_signature={
-                       "speech_style": "沉稳", "thought_patterns": "三思", "taboos": [],
-                       "behavior_examples": [
-                           {"situation": f"s{i}", "action": f"a{i}", "speech_sample": f"sp{i}"}
-                           for i in range(5)
-                       ],
+                       "speech_style": "沉稳、简洁", "thought_patterns": "三思后行",
+                       "taboos": ["撒谎"],
+                       "behavior_examples": pov_examples,
                    })]
     chars.append(_char("ant", "苏晓晓", "antagonist",
                        voice_signature={
-                           "speech_style": "狡黠", "thought_patterns": "算计", "taboos": [],
+                           "speech_style": "狡黠", "thought_patterns": "算计深远",
+                           "taboos": ["轻信"],
                            "behavior_examples": [
-                               {"situation": f"s{i}", "action": f"a{i}", "speech_sample": f"sp{i}"}
-                               for i in range(5)
+                               {"situation": ex["situation"],
+                                "action": ex["action"],
+                                "speech_sample": ex["speech_sample"]}
+                               for ex in ant_examples
                            ],
                        }))
-    for i in range(8):
+    for i in range(10):
         chars.append(_char(f"sup{i}", f"配角{i}", "supporting",
                            voice_signature={
-                               "speech_style": "普通", "thought_patterns": "普通", "taboos": [],
+                               "speech_style": "普通",
+                               "thought_patterns": "随波逐流",
+                               "taboos": [],
                                "behavior_examples": [
-                                   {"situation": f"s{j}", "action": f"a{j}", "speech_sample": f"sp{j}"}
-                                   for j in range(5)
+                                   {"situation": ex["situation"],
+                                    "action": ex["action"],
+                                    "speech_sample": ex["speech_sample"]}
+                                   for ex in sup_examples
                                ],
                            }))
     # Goal mentions nobody; POV is always included.
@@ -198,51 +247,106 @@ def test_truncation_drops_background_tier_first():
 
 def test_never_truncates_pov():
     """POV keeps all 5 behavior examples even when budget is exceeded."""
-    big_examples = [
-        {"situation": f"big_s{i}", "action": f"big_a{i}", "speech_sample": f"big_sp{i} " * 10}
-        for i in range(5)
+    pov_examples = [
+        {"situation": "师父失踪后独自在山洞中守夜，回想起过往师徒情谊",
+         "action": "压下悲痛，沉着冷静地分析局势",
+         "speech_sample": "师父一生光明磊落，此事必有蹊跷。我等身为弟子，当守其基业，待其归来。"},
+        {"situation": "挚友被陷害入狱，全城议论纷纷",
+         "action": "克制怒火，独自暗中收集证据",
+         "speech_sample": "我会让你付出代价，只是此刻尚需隐忍，时机未到不可轻举妄动。"},
+        {"situation": "门派弟子人心惶惶，长老争执不下",
+         "action": "挺身而出主持大局，逐一分派任务",
+         "speech_sample": "只要我还在，门派便不会倒。诸位各司其职，切莫自乱阵脚。"},
+        {"situation": "发现敌人阴谋的关键线索",
+         "action": "独自深入险地查证，不愿旁人涉险",
+         "speech_sample": "不入虎穴，焉得虎子。这件事便由我一人前去，诸位留守山门以防有变。"},
+        {"situation": "面对师父留下的艰深谜题",
+         "action": "反复推演数日，誓要破解其中玄机",
+         "speech_sample": "真相终会大白于天下，我林峰此生定不负师父所托。"},
     ]
     pov = _char("pov", "林峰", "protagonist", voice_signature={
         "speech_style": "沉稳", "thought_patterns": "三思", "taboos": [],
-        "behavior_examples": big_examples,
+        "behavior_examples": pov_examples,
     })
-    # Add 5 background chars with bloated examples to blow the budget.
+    # Add 6 supporting chars with large Chinese examples to blow the budget.
+    sup_examples = [
+        {"situation": "门派日常巡守时察觉山脚异动",
+         "action": "立刻回报长老并部署各处警戒",
+         "speech_sample": "敌踪已现，请诸位速作准备，严守各处要道，勿使一人漏网。"},
+        {"situation": "师兄重伤被抬回山门救治",
+         "action": "立即延请医师并暗查凶手身份",
+         "speech_sample": "师兄伤势沉重，定要查清来龙去脉，以慰在天之灵，以儆效尤。"},
+        {"situation": "外出采买物资时遭遇伏击",
+         "action": "沉着应对掩护同伴撤退",
+         "speech_sample": "诸位先走，我来断后。今日之事必要回报掌门，请援军速来。"},
+        {"situation": "新弟子入门考核中表现出色",
+         "action": "悉心指点并以身作则",
+         "speech_sample": "习武先习心，为人先为德。我等正道中人，当以义立身。"},
+    ]
     chars = [pov]
-    for i in range(5):
-        chars.append(_char(f"b{i}", f"路人{i}", "supporting",
+    for i in range(6):
+        chars.append(_char(f"sup{i}", f"配角{i}", "supporting",
                            voice_signature={
-                               "speech_style": "x", "thought_patterns": "x", "taboos": [],
-                               "behavior_examples": [
-                                   {"situation": f"j{k}", "action": f"a{k}", "speech_sample": f"sp{k} " * 20}
-                                   for k in range(5)
-                               ],
+                               "speech_style": "普通",
+                               "thought_patterns": "随波逐流",
+                               "taboos": [],
+                               "behavior_examples": sup_examples,
                            }))
     out = WriterAgent._build_characters_context(chars, _scene_plan("本章开篇"))
-    # POV's big examples all present
-    for ex in big_examples:
-        assert ex["speech_sample"][:20] in out
+    # POV's all 5 examples present (substrings from each speech_sample).
+    assert "师父一生光明磊落" in out
+    assert "我会让你付出代价" in out
+    assert "只要我还在" in out
+    assert "不入虎穴" in out
+    assert "真相终会大白" in out
 
 
 def test_token_budget_log_emitted_on_truncation(caplog):
     """logger.debug fires when truncated (lenient: hard guarantee is no crash)."""
     import logging
-    big_examples = [
-        {"situation": f"big_s{i}", "action": f"big_a{i}", "speech_sample": f"big_sp{i} " * 10}
-        for i in range(5)
+    pov_examples = [
+        {"situation": "师父失踪后独自在山洞中守夜，回想起过往师徒情谊",
+         "action": "压下悲痛，沉着冷静地分析局势",
+         "speech_sample": "师父一生光明磊落，此事必有蹊跷。我等身为弟子，当守其基业，待其归来。"},
+        {"situation": "挚友被陷害入狱，全城议论纷纷",
+         "action": "克制怒火，独自暗中收集证据",
+         "speech_sample": "我会让你付出代价，只是此刻尚需隐忍，时机未到不可轻举妄动。"},
+        {"situation": "门派弟子人心惶惶，长老争执不下",
+         "action": "挺身而出主持大局，逐一分派任务",
+         "speech_sample": "只要我还在，门派便不会倒。诸位各司其职，切莫自乱阵脚。"},
+        {"situation": "发现敌人阴谋的关键线索",
+         "action": "独自深入险地查证，不愿旁人涉险",
+         "speech_sample": "不入虎穴，焉得虎子。这件事便由我一人前去，诸位留守山门以防有变。"},
+        {"situation": "面对师父留下的艰深谜题",
+         "action": "反复推演数日，誓要破解其中玄机",
+         "speech_sample": "真相终会大白于天下，我林峰此生定不负师父所托。"},
     ]
     pov = _char("pov", "林峰", "protagonist", voice_signature={
         "speech_style": "沉稳", "thought_patterns": "三思", "taboos": [],
-        "behavior_examples": big_examples,
+        "behavior_examples": pov_examples,
     })
+    sup_examples = [
+        {"situation": "门派日常巡守时察觉山脚异动",
+         "action": "立刻回报长老并部署各处警戒",
+         "speech_sample": "敌踪已现，请诸位速作准备，严守各处要道，勿使一人漏网。"},
+        {"situation": "师兄重伤被抬回山门救治",
+         "action": "立即延请医师并暗查凶手身份",
+         "speech_sample": "师兄伤势沉重，定要查清来龙去脉，以慰在天之灵，以儆效尤。"},
+        {"situation": "外出采买物资时遭遇伏击",
+         "action": "沉着应对掩护同伴撤退",
+         "speech_sample": "诸位先走，我来断后。今日之事必要回报掌门，请援军速来。"},
+        {"situation": "新弟子入门考核中表现出色",
+         "action": "悉心指点并以身作则",
+         "speech_sample": "习武先习心，为人先为德。我等正道中人，当以义立身。"},
+    ]
     chars = [pov]
-    for i in range(5):
-        chars.append(_char(f"b{i}", f"路人{i}", "supporting",
+    for i in range(6):
+        chars.append(_char(f"sup{i}", f"配角{i}", "supporting",
                            voice_signature={
-                               "speech_style": "x", "thought_patterns": "x", "taboos": [],
-                               "behavior_examples": [
-                                   {"situation": f"j{k}", "action": f"a{k}", "speech_sample": f"sp{k} " * 20}
-                                   for k in range(5)
-                               ],
+                               "speech_style": "普通",
+                               "thought_patterns": "随波逐流",
+                               "taboos": [],
+                               "behavior_examples": sup_examples,
                            }))
     with caplog.at_level(logging.DEBUG, logger="backend.agents.writer"):
         WriterAgent._build_characters_context(chars, _scene_plan("本章开篇"))

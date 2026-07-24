@@ -35,7 +35,7 @@ class WriterAgent(BaseAgent):
     # Token budget: ≤4000 tok per call. Priority tiering (POV > antagonist /
     # multi-scene > single-scene supporting > background) drops low-tier
     # examples first when over budget. POV is never truncated.
-    _CHAR_CONTEXT_BUDGET_TOKENS = 1500
+    _CHAR_CONTEXT_BUDGET_TOKENS = 4000
     _TIER_POV = 1.0
     _TIER_KEY = 0.8
     _TIER_SUPPORTING = 0.5

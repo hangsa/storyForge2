@@ -382,15 +382,15 @@ def test_single_protagonist_still_labeled_pov():
     assert "林峰 (主角 (POV))" in out
 
 
-# --- CJK name boundary (review fix I2) ---
+# --- CJK name boundary (longest-match-with-project-names) ---
 
 def test_substring_name_falls_through_to_background_not_supporting():
     """A character named `林` (single CJK char) must NOT be elevated to the
     SUPPORTING tier (0.5) just because the plan text mentions `林峰` — the
-    naive substring match would falsely match `林`. With the CJK-boundary
-    helper, `林` falls through Pass 2 (no name match) to Pass 3 (BACKGROUND
-    tier 0.2), which is the correct priority for a character not actually
-    appearing in the scene."""
+    naive substring match would falsely match `林`. With the longest-match
+    helper that consults the project characters list, `林` falls through
+    Pass 2 (no name match) to Pass 3 (BACKGROUND tier 0.2), which is the
+    correct priority for a character not actually appearing in the scene."""
     characters = [
         _char("pov", "林峰", "protagonist"),
         _char("lin", "林", "supporting"),
@@ -404,40 +404,86 @@ def test_substring_name_falls_through_to_background_not_supporting():
         if c.get("id") == "lin"
     )
     _, lin_tier, _ = lin_entry
-    # `林` is NOT name-matched (Pass 2 skipped), so it falls into Pass 3
-    # background tier 0.2 — NOT the supporting tier 0.5 it would have been
-    # erroneously elevated to with the naive substring match.
+    # `林` is NOT name-matched (Pass 2 skipped because longer `林峰` appears),
+    # so it falls into Pass 3 background tier 0.2 — NOT the supporting tier
+    # 0.5 it would have been erroneously elevated to with the naive
+    # substring match.
     assert lin_tier == WriterAgent._TIER_BACKGROUND
     assert lin_tier < WriterAgent._TIER_SUPPORTING
 
 
-def test_substring_name_matches_at_word_boundary():
-    """When the character name appears at text-start, text-end, or beside
-    ASCII/punctuation, the helper should match it."""
+def test_name_in_text_unit_cases():
+    """Unit cases for _name_in_text — covers name membership, longer-name
+    conflict rejection, and empty inputs. Word-boundary semantics are
+    intentionally NOT tested because the helper now uses project names to
+    disambiguate prefix-of-other-character-name conflicts (CJK text has no
+    reliable word boundaries without consulting other names)."""
     from backend.agents.writer import _name_in_text
 
-    # Name at start of text → True (left = start-of-text, right = end-of-text).
-    assert _name_in_text("林峰", "林峰") is True
-    # Name at end of text → True (right boundary = end-of-text, prev is ASCII `,`).
-    assert _name_in_text("林峰", "主角,林峰") is True
-    # Name with ASCII punctuation boundary (ASCII `,` is not CJK) on the
-    # right side, and text ends right after — True.
-    assert _name_in_text("林峰", "苏晓晓, 林峰") is True
-    # Name preceded by ASCII char → True.
-    assert _name_in_text("Lin", "is Lin here") is True
-    # Name followed by ASCII char → True.
-    assert _name_in_text("Lin", "Lin is here") is True
-    # Single-char `林` at end of text → True (right = end-of-text, prev is ASCII `,`).
-    assert _name_in_text("林", "只见,林") is True
-    # Single-char `林` followed by ASCII → True (right boundary = ASCII `1`).
-    assert _name_in_text("林", "山1林1") is True
-    # Single-char `林` as prefix of `林峰` (followed by CJK) → False.
-    assert _name_in_text("林", "林峰苏醒") is False
-    # Single-char `林` mid-text as suffix (preceded by CJK) → False.
-    assert _name_in_text("峰", "林峰苏醒") is False
-    # `林峰` mid-text with CJK on both sides → False (acceptable false
-    # negative; we trade off recall for safety against prefix false positives).
-    assert _name_in_text("林峰", "苏晓晓林峰苏醒") is False
     # Empty inputs → False.
     assert _name_in_text("", "anything") is False
     assert _name_in_text("林", "") is False
+    # Name not in text → False.
+    assert _name_in_text("林峰", "苏晓晓走进山洞") is False
+    # Name appears, no other_names provided → True (simple substring match).
+    assert _name_in_text("林峰", "林峰苏醒") is True
+    # Name appears, other_names provided but no longer conflict → True.
+    assert _name_in_text("林峰", "林峰苏醒", other_names={"苏晓晓"}) is True
+    # Name is a prefix of a longer name that ALSO appears in text → False.
+    assert _name_in_text("林", "林峰苏醒", other_names={"林峰"}) is False
+    # Same-name conflict in other_names is ignored.
+    assert _name_in_text("林", "林苏醒", other_names={"林"}) is True
+
+
+def test_substring_name_rejected_when_longer_name_in_project():
+    """A character named '林' should NOT match when text has '林峰' and the
+    project also has a character named '林峰' (longer match wins).
+
+    The fix-level invariant: `林` falls through to BACKGROUND tier (0.2), not
+    SUPPORTING tier (0.5). With the old naive substring match, `林` would have
+    been elevated to SUPPORTING (false positive); with the new longest-match
+    helper, the longer `林峰` wins and `林` only reaches the rendering layer
+    via Pass 3 fallback at the lowest tier.
+    """
+    characters = [
+        _char("pov", "林峰", "protagonist"),
+        _char("lin", "林", "supporting"),
+    ]
+    appearing = WriterAgent._resolve_appearing_characters(
+        characters, _scene_plan("林峰苏醒")
+    )
+    lin_entry = next(
+        (c, tier, is_pov) for c, tier, is_pov in appearing
+        if c.get("id") == "lin"
+    )
+    _, lin_tier, _ = lin_entry
+    # The bug: `林` was being elevated to SUPPORTING tier 0.5 (false positive
+    # substring match). After the fix, longer `林峰` wins and `林` falls to
+    # BACKGROUND tier 0.2.
+    assert lin_tier == WriterAgent._TIER_BACKGROUND
+    assert lin_tier < WriterAgent._TIER_SUPPORTING
+
+    # 林峰 still appears as canonical POV.
+    out = WriterAgent._build_characters_context(characters, _scene_plan("林峰苏醒"))
+    assert "林峰 (主角 (POV))" in out
+
+
+def test_substring_name_accepted_when_no_longer_name_in_project():
+    """A character named '林' SHOULD match if no character named '林峰' exists."""
+    characters = [
+        _char("pov", "林峰", "protagonist"),
+        _char("lin", "林", "supporting"),
+    ]
+    # No longer-name conflict, just 林 in text alone
+    out = WriterAgent._build_characters_context(characters, _scene_plan("林走进山洞"))
+    # Both characters should be present
+    assert "林峰" in out
+    assert "林" in out
+
+
+def test_full_name_matches_at_start_of_cjk_text():
+    """Regression: full-name match at start of pure-CJK text must work."""
+    characters = [_char("pov", "林峰", "protagonist")]
+    out = WriterAgent._build_characters_context(characters, _scene_plan("林峰苏醒后发现金手指"))
+    # POV should be present (always, regardless of name match)
+    assert "林峰" in out

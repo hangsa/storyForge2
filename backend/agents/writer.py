@@ -1,43 +1,41 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse, StreamChunk
 
 
-def _name_in_text(name: str, text: str) -> bool:
-    """Match a Chinese character name in CJK text with word-boundary semantics.
+def _name_in_text(name: str, text: str, other_names: set[str] | None = None) -> bool:
+    """Match a Chinese character name in CJK text.
 
-    A naive ``name in text`` check would falsely match "林" against "林峰苏醒"
-    (since "林" is a prefix of "林峰"). This helper requires the matched name
-    to be bordered by either text-start/end or a non-CJK character on both
-    sides. Word-boundary semantics for CJK.
+    The naive ``name in text`` false-positives when one character's name is
+    a substring of another (e.g. ``林`` matches inside ``林峰``). This helper
+    uses the project characters list to detect and reject such cases: a name
+    matches only if it's not a prefix or suffix of another longer name that
+    also appears at the same position.
 
-    Note: this means within pure-CJK text (no ASCII/punctuation), a name only
-    matches at the very start or very end of the text. That is intentional —
-    we trade off some recall (a name mentioned mid-CJK-sentence) to avoid the
-    much more dangerous false positives (single-char surname matching prefix
-    of a longer name).
+    ``other_names`` is the set of all OTHER characters' names in the project
+    (excluding ``name`` itself). When a longer name that contains ``name`` as
+    a substring also appears in ``text``, the longer match wins and this
+    helper returns False.
     """
     if not name or not text:
         return False
-    for m in re.finditer(re.escape(name), text):
-        start = m.start()
-        end = m.end()
-        # Right boundary: must be end-of-text or non-CJK char.
-        if end < len(text):
-            next_char = text[end]
-            if "一" <= next_char <= "鿿":  # CJK Unified Ideographs
-                continue
-        # Left boundary: must be start-of-text or non-CJK char.
-        if start > 0:
-            prev_char = text[start - 1]
-            if "一" <= prev_char <= "鿿":
-                continue
+    if name not in text:
+        return False
+    if not other_names:
         return True
-    return False
+    # Reject if `name` is a prefix of a longer name that ALSO appears in text.
+    for other in other_names:
+        if other == name:
+            continue
+        if len(other) <= len(name):
+            continue
+        if name in other and other in text:
+            # If the longer name appears in text, prefer it over the shorter one.
+            return False
+    return True
 
 
 def _build_custom_style_desc(custom_style_config) -> str:
@@ -134,13 +132,14 @@ class WriterAgent(BaseAgent):
                 appearing.append((c, cls._TIER_POV, False))
 
         # Pass 2: name-matched non-protagonists.
+        all_names = {c.get("name", "") for c in characters if c.get("name")}
         for c in characters:
             if c.get("id") == pov_id:
                 continue
             if any(ac.get("id") == c.get("id") for ac, _, _ in appearing):
                 continue
             name = c.get("name", "")
-            if name and _name_in_text(name, plan_text):
+            if name and _name_in_text(name, plan_text, all_names - {name}):
                 ctype = c.get("character_type", "supporting")
                 if ctype == "antagonist":
                     appearing.append((c, cls._TIER_KEY, False))

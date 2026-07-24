@@ -4,7 +4,7 @@ from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
-from backend.models.character import Character as CharacterModel, CharacterPatch
+from backend.models.character import BehaviorExample, Character as CharacterModel, CharacterPatch
 from backend.services.agent_prompt_stores import (
     project_override_store,
     global_override_store,
@@ -367,4 +367,83 @@ async def delete_character(character_id: str, project_id: str = Query(...)):
         "code": "OK",
         "message": "角色已删除",
         "detail": {"deleted_id": character_id, "cascaded_relation_removals": cascaded},
+    }
+
+
+@router.post("/character/{character_id}/regenerate-examples")
+async def regenerate_character_examples(
+    character_id: str,
+    project_id: str = Query(...),
+    payload: dict = None,
+):
+    """Re-run Character Designer for ONE character and merge only the
+    `behavior_examples` field back into voice_signature. Body: `{"keep_existing": false}`.
+
+    Uses PlannerAgent.generate_character for the LLM call (same path as
+    /stage2/generate-character); only the behavior_examples from the response
+    are merged. Other voice_signature / personality fields are NOT touched.
+    """
+    from backend.agents.planner import PlannerAgent
+
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+    payload = payload or {}
+    keep_existing = bool(payload.get("keep_existing", False))
+
+    data = _file_manager().read_json(project_id, "characters.json") or {}
+    characters = data.get("characters", [])
+    target = next((c for c in characters if c.get("id") == character_id), None)
+    if target is None:
+        raise _not_found(f"角色不存在: {character_id}")
+
+    # Minimal inputs to keep the LLM focused on examples. Reuse existing context if present.
+    concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
+    world = _file_manager().read_json(project_id, "world.json") or {}
+
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+    )
+    try:
+        result, _resp = await agent.generate_character(
+            concept=concept_and_dna.get("concept", {}),
+            world=world,
+            character_type=target.get("character_type", "supporting"),
+            existing_characters=[target],
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
+        )
+
+    # Extract behavior_examples — accept either top-level or nested under voice_signature.
+    new_examples_raw = result.get("behavior_examples")
+    if not new_examples_raw:
+        new_examples_raw = result.get("voice_signature", {}).get("behavior_examples", [])
+    new_examples: list[dict] = []
+    for ex in new_examples_raw or []:
+        try:
+            new_examples.append(BehaviorExample(**ex).model_dump())
+        except Exception:
+            continue  # skip malformed entries rather than fail the whole call
+
+    vs = target.setdefault("voice_signature", {})
+    if keep_existing:
+        existing = vs.get("behavior_examples", [])
+        vs["behavior_examples"] = existing + new_examples
+    else:
+        vs["behavior_examples"] = new_examples
+
+    _file_manager().write_json(project_id, "characters.json", data)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "行为示例已重新生成",
+        "detail": target,
     }

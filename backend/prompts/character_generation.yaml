@@ -80,14 +80,14 @@ user_prompt_template: |
       "taboos": ["绝对不会做的事1", "绝对不会做的事2"],
       "behavior_examples": [
         {{
-          "situation": "具体触发场景",
-          "action": "角色的具体行为反应",
-          "speech_sample": "角色在这个场景下会说的话"
+          "situation": "挚友被陷害，凶手疑为同行师兄",
+          "action": "表面隐忍，暗中收集证据，先稳住对方再反咬",
+          "speech_sample": "我会让你付出代价——但不是现在。"
         }},
         {{
-          "situation": "另一个具体触发场景",
-          "action": "角色的具体行为反应",
-          "speech_sample": "角色在这个场景下会说的话"
+          "situation": "师父遗物中发现一封指向自身的密信",
+          "action": "独自消化，不让同伴察觉；夜里反复推演写信者的动机",
+          "speech_sample": "这封信若是真的，师父究竟想让我做什么？"
         }}
       ]
     }},

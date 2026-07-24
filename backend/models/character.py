@@ -12,10 +12,21 @@ class Personality(BaseModel):
     core_traits: list[str] = []
 
 
+class BehaviorExample(BaseModel):
+    """One concrete in-character behavior sample. Each example grounds the
+    Writer's voice modeling by showing HOW this specific character reacts
+    (action) and WHAT they actually say (speech_sample) in a defined
+    situation."""
+    situation: str
+    action: str
+    speech_sample: str
+
+
 class VoiceSignature(BaseModel):
     speech_style: str = ""
     thought_patterns: str = ""
     taboos: list[str] = []
+    behavior_examples: list["BehaviorExample"] = []  # NEW; default [] keeps backward compat
 
 
 class CharacterCurrentState(BaseModel):
@@ -98,3 +109,6 @@ class CharacterPatch(BaseModel):
     current_state: Optional[CharacterCurrentState] = None
     unknown_to_character: Optional[list[str]] = None
     relations: Optional[dict[str, RelationStatus]] = None
+
+
+VoiceSignature.model_rebuild()

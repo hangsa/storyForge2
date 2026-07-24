@@ -17,12 +17,19 @@ system_prompt: |
   1. 角色性格要有层次：核心特质、信念、欲望、恐惧、价值观五层
   2. 声音签名（voice_signature）要有独特的语言风格和思维模式
   3. 明确角色的行为禁忌（taboos），这是绝对不能违反的
-  4. 列出角色当前不知道的信息（unknown_to_character），用于后续揭秘
-  5. 角色设计要与世界观的力量体系协调
-  6. 避免与已有角色在性格、能力、定位上重叠
-  7. 用中文输出，角色要有网文主角的魅力和辨识度
-  8. 只输出JSON，不要输出任何其他内容
-  9. 为核心角色（protagonist, antagonist）设计成长曲线（growth_curve），包含3-5个阶段
+  4. voice_signature.behavior_examples: 为该角色生成 3-5 条具体的行为示例，落地该角色的声音与决策模式。
+     每条示例包含三个字段：
+       - situation: 1行触发场景描述（具体，不可泛泛）
+       - action: 1行行为反应，展示角色如何应对（动作+心理+语言）
+       - speech_sample: 1行符合该角色 speech_style 的标志性台词
+     多样性: 选取展示角色不同侧面的场景（抉择/冲突/忠诚/失去/幽默等）
+     具体性: 每条 speech_sample 必须读起来像这个特定角色真正会说的话
+  5. 列出角色当前不知道的信息（unknown_to_character），用于后续揭秘
+  6. 角色设计要与世界观的力量体系协调
+  7. 避免与已有角色在性格、能力、定位上重叠
+  8. 用中文输出，角色要有网文主角的魅力和辨识度
+  9. 只输出JSON，不要输出任何其他内容
+  10. 为核心角色（protagonist, antagonist）设计成长曲线（growth_curve），包含3-5个阶段
 
 user_prompt_template: |
   故事概念：
@@ -70,7 +77,19 @@ user_prompt_template: |
     "voice_signature": {{
       "speech_style": "语言风格描述",
       "thought_patterns": "思维模式描述",
-      "taboos": ["绝对不会做的事1", "绝对不会做的事2"]
+      "taboos": ["绝对不会做的事1", "绝对不会做的事2"],
+      "behavior_examples": [
+        {{
+          "situation": "具体触发场景",
+          "action": "角色的具体行为反应",
+          "speech_sample": "角色在这个场景下会说的话"
+        }},
+        {{
+          "situation": "另一个具体触发场景",
+          "action": "角色的具体行为反应",
+          "speech_sample": "角色在这个场景下会说的话"
+        }}
+      ]
     }},
     "unknown_to_character": [
       "角色不知道但会影响剧情的信息1",

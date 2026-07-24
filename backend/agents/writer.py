@@ -91,17 +91,21 @@ class WriterAgent(BaseAgent):
         if theme:
             lines.append(f"- 主题: {theme}")
         scene_plan = chapter.get("scene_plan") or []
-        lines.append("- 场景序列:")
-        for i, sp in enumerate(scene_plan, 1):
-            goal = sp.get("goal", "")
-            conflict = sp.get("conflict", "")
-            arc = sp.get("emotional_arc", "")
-            parts = [f"  {i}. {goal}"]
-            if conflict:
-                parts.append(f"    冲突: {conflict}")
-            if arc:
-                parts.append(f"    情感弧线: {arc}")
-            lines.extend(parts)
+        if scene_plan:
+            lines.append("- 场景序列:")
+            for i, sp in enumerate(scene_plan, 1):
+                if not isinstance(sp, dict):
+                    parts = [f"  {i}. "]
+                else:
+                    goal = sp.get("goal") or ""
+                    conflict = sp.get("conflict") or ""
+                    arc = sp.get("emotional_arc") or ""
+                    parts = [f"  {i}. {goal}"]
+                    if conflict:
+                        parts.append(f"    冲突: {conflict}")
+                    if arc:
+                        parts.append(f"    情感弧线: {arc}")
+                lines.extend(parts)
         return "\n".join(lines)
 
     def _build_base_vars(

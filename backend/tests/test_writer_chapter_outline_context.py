@@ -37,8 +37,20 @@ def test_handles_empty_scene_plan():
     out = WriterAgent._build_chapter_outline_context(_ch(scene_plan=[]))
     assert "标题:" in out
     assert "主题:" in out
-    # Should still have "场景序列:" header but no entries.
+    # Empty scene_plan suppresses the 场景序列 header (spec §290).
+    assert "场景序列:" not in out
+
+
+def test_handles_non_dict_scene_entry():
+    out = WriterAgent._build_chapter_outline_context(
+        _ch(scene_plan=[None, {"goal": "g", "conflict": "c", "emotional_arc": "a"}])
+    )
+    # Non-dict entry renders without crash; well-formed entry still shows.
     assert "场景序列:" in out
+    assert "1. " in out
+    assert "2. g" in out
+    assert "冲突: c" in out
+    assert "情感弧线: a" in out
 
 
 def test_handles_missing_theme():

@@ -65,27 +65,20 @@ beforeEach(() => {
 });
 
 describe("CharacterStep edit + delete", () => {
-  it("renders edit and delete buttons on each card", () => {
+  it("renders a delete button on each card (no edit-button — fields are inline-editable)", () => {
     setup();
     render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
-    expect(screen.getByTestId("character-edit-char_alice")).toBeInTheDocument();
     expect(screen.getByTestId("character-delete-char_alice")).toBeInTheDocument();
-  });
-
-  it("clicking edit switches the card to the edit form", async () => {
-    setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
-    fireEvent.click(screen.getByTestId("character-edit-char_alice"));
-    await waitFor(() => {
-      expect(screen.getByTestId("character-char_alice-edit-form")).toBeInTheDocument();
-    });
+    expect(screen.queryByTestId("character-edit-char_alice")).not.toBeInTheDocument();
   });
 
   it("clicking delete opens a confirmation modal showing cascade count", () => {
     setup();
     render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
     fireEvent.click(screen.getByTestId("character-delete-char_bob"));
-    expect(screen.getByText(/Alice/i)).toBeInTheDocument();
+    // Alice has a relation TO Bob, so deleting Bob cascades 1 inbound removal.
+    const modal = screen.getByTestId("delete-confirm-modal");
+    expect(modal.textContent).toMatch(/1.*反向关系/);
     expect(screen.getByTestId("delete-confirm-button")).toBeInTheDocument();
   });
 

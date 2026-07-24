@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { Character, CharacterSet } from "../../api/client";
 import { useWizard } from "./WizardContext";
-import CharacterEditForm from "./CharacterEditForm";
+import TagEditor from "../shared/TagEditor";
+import CharacterRelationsEditor from "./CharacterRelationsEditor";
 
 interface CharacterStepProps {
   projectId: string;
@@ -35,6 +36,16 @@ function pickNewlyCreated(result: CharacterSet): Character | null {
   return list.length > 0 ? list[list.length - 1] : null;
 }
 
+type PersonalityKey = "beliefs" | "desires" | "fears" | "values" | "core_traits";
+
+const PERSONALITY_FIELDS: { key: PersonalityKey; label: string }[] = [
+  { key: "core_traits", label: "核心特质" },
+  { key: "beliefs", label: "信念" },
+  { key: "desires", label: "欲望" },
+  { key: "fears", label: "恐惧" },
+  { key: "values", label: "价值观" },
+];
+
 export default function CharacterStep({ projectId }: CharacterStepProps) {
   const wizard = useWizard();
   const [characters, setCharacters] = useState<CharacterSet | null>(wizard.data.characters ?? null);
@@ -42,7 +53,6 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   // Mirror latest state for handlers registered in the modal footer (limited deps).
   const charactersRef = useRef(characters);
   charactersRef.current = characters;
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
 
@@ -137,14 +147,64 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     await handleBatchStart();
   };
 
-  const handleEditComplete = (updated: Character) => {
-    setEditingId(null);
-    const list = (characters?.characters ?? []).map((c) => (c.id === updated.id ? { ...c, ...updated } : c));
-    const next = { characters: list, current: characters?.current ?? list[0] };
-    setCharacters(next);
+  // Local-state patch for inline editing. Mirrors WorldStep's pattern: edits
+  // stay in React state until the user clicks the modal footer's
+  // "确认修改并继续", which then bulk-saves via api.updateCharacter. No
+  // per-keystroke PATCH roundtrip.
+  const updateCharacterAt = (id: string, patch: Partial<Character>) => {
+    setCharacters((prev) => {
+      const list = (prev?.characters ?? []).map((c) =>
+        c.id === id ? { ...c, ...patch } : c,
+      );
+      return { characters: list, current: prev?.current ?? list[0] };
+    });
   };
 
-  const handleEditCancel = () => setEditingId(null);
+  const updatePersonality = (id: string, key: PersonalityKey, next: string[]) => {
+    const c = characters?.characters.find((x) => x.id === id);
+    if (!c) return;
+    const nextPersonality = {
+      ...(c.personality ?? { beliefs: [], desires: [], fears: [], values: [], core_traits: [] }),
+      [key]: next,
+    };
+    updateCharacterAt(id, { personality: nextPersonality });
+  };
+
+  const updateVoiceField = (
+    id: string,
+    key: "speech_style" | "thought_patterns" | "taboos",
+    value: string | string[],
+  ) => {
+    const c = characters?.characters.find((x) => x.id === id);
+    if (!c) return;
+    const nextVoice = {
+      ...(c.voice_signature ?? { speech_style: "", thought_patterns: "", taboos: [] }),
+      [key]: value,
+    };
+    updateCharacterAt(id, { voice_signature: nextVoice });
+  };
+
+  const updateCurrentState = (
+    id: string,
+    key: "location" | "physical_condition" | "emotional" | "known_secrets",
+    value: string | string[],
+  ) => {
+    const c = characters?.characters.find((x) => x.id === id);
+    if (!c) return;
+    const nextState = {
+      ...(c.current_state ?? { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] }),
+      [key]: value,
+    };
+    updateCharacterAt(id, { current_state: nextState });
+  };
+
+  const updateUnknown = (id: string, next: string[]) => {
+    updateCharacterAt(id, { unknown_to_character: next });
+  };
+
+  const updateRelations = (id: string, next: Character["relations"]) => {
+    updateCharacterAt(id, { relations: next });
+  };
 
   const inboundRelationCount = (targetId: string): number => {
     return (characters?.characters ?? []).filter(
@@ -159,22 +219,6 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     for (const c of characters?.characters ?? []) m.set(c.id, c.name || c.id);
     return m;
   }, [characters]);
-
-  const renderTags = (items: string[] | undefined) =>
-    (items ?? []).map((t, i) => (
-      <span
-        key={i}
-        className="inline-block px-2 py-0.5 bg-surface-container-low rounded text-[11px] font-body-narrative text-primary"
-      >
-        {t}
-      </span>
-    ));
-
-  const relationStatusStyle = (status: string) => {
-    if (status === "ally") return "bg-primary-container/20 text-primary-container";
-    if (status === "enemy") return "bg-error/10 text-error";
-    return "bg-surface-container-low text-system-log";
-  };
 
   // Sync local `characters` state from wizard.data when prefill lands. Only
   // overwrite if local state is still null (no characters yet).
@@ -252,122 +296,187 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
             已生成 {characters!.characters.length} 个角色
           </div>
           <ul data-testid="character-list" className="space-y-2">
-            {characters!.characters.map((c) => (
-              <li
-                key={c.id}
-                data-testid={`character-${c.id}`}
-                className="p-3 bg-surface-container rounded-lg space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-display text-primary">{c.name || "未命名"}</div>
-                    <div className="font-label-mono text-system-log text-xs">
-                      {CHARACTER_TYPES.find((t) => t.value === c.character_type)?.label || c.character_type}
-                      {c.is_core_character ? " · 核心角色" : ""}
+            {characters!.characters.map((c) => {
+              const personality = c.personality ?? { beliefs: [], desires: [], fears: [], values: [], core_traits: [] };
+              const voice = c.voice_signature ?? { speech_style: "", thought_patterns: "", taboos: [] };
+              const state = c.current_state ?? { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] };
+              return (
+                <li
+                  key={c.id}
+                  data-testid={`character-${c.id}`}
+                  className="p-3 bg-surface-container rounded-lg space-y-3"
+                >
+                  {/* 基础信息：可编辑的姓名 + 类型 + 核心角色标记 + 删除按钮 */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-label-mono text-system-log mb-1 text-[10px]">姓名</label>
+                        <input
+                          data-testid={`character-${c.id}-name`}
+                          value={c.name ?? ""}
+                          onChange={(e) => updateCharacterAt(c.id, { name: e.target.value })}
+                          disabled={busy}
+                          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-label-mono text-system-log mb-1 text-[10px]">角色类型</label>
+                        <select
+                          data-testid={`character-${c.id}-type`}
+                          value={c.character_type}
+                          onChange={(e) => updateCharacterAt(c.id, { character_type: e.target.value as Character["character_type"] })}
+                          disabled={busy}
+                          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+                        >
+                          {CHARACTER_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 pt-1">
+                      <label className="flex items-center gap-1 font-body-ui text-[11px] text-primary whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          data-testid={`character-${c.id}-core`}
+                          checked={!!c.is_core_character}
+                          onChange={(e) => updateCharacterAt(c.id, { is_core_character: e.target.checked })}
+                          disabled={busy}
+                        />
+                        核心角色
+                      </label>
+                      <button
+                        type="button"
+                        data-testid={`character-delete-${c.id}`}
+                        onClick={() => setDeletingId(c.id)}
+                        disabled={busy}
+                        className="p-1 text-system-log/70 hover:text-error disabled:opacity-40"
+                        aria-label="删除"
+                      >🗑️</button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      data-testid={`character-edit-${c.id}`}
-                      onClick={() => setEditingId(c.id)}
-                      className="p-1 text-system-log/70 hover:text-primary-container"
-                      aria-label="编辑"
-                    >✏️</button>
-                    <button
-                      type="button"
-                      data-testid={`character-delete-${c.id}`}
-                      onClick={() => setDeletingId(c.id)}
-                      className="p-1 text-system-log/70 hover:text-error"
-                      aria-label="删除"
-                    >🗑️</button>
-                  </div>
-                </div>
 
-                {editingId === c.id ? (
-                  <CharacterEditForm
-                    projectId={projectId}
-                    character={c}
-                    allCharacters={characters?.characters ?? []}
-                    onComplete={handleEditComplete}
-                    onCancel={() => handleEditCancel()}
-                  />
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-outline-variant pt-3">
-                    {/* 人格层 */}
-                    <div data-testid={`character-${c.id}-personality`} className="space-y-2">
-                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">人格层</div>
-                      {([
-                        ["core_traits", "核心特质"],
-                        ["beliefs", "信念"],
-                        ["desires", "欲望"],
-                        ["fears", "恐惧"],
-                        ["values", "价值观"],
-                      ] as const).map(([key, label]) => (
+                  {/* 人格层 — 5 个 TagEditor（与世界观的力量体系/世界规则一致） */}
+                  <div data-testid={`character-${c.id}-personality`} className="space-y-2 border-t border-outline-variant pt-3">
+                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">人格层</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {PERSONALITY_FIELDS.map(({ key, label }) => (
                         <div key={key}>
-                          <div className="font-label-mono text-system-log/80 text-[10px]">{label}</div>
-                          <div className="flex flex-wrap gap-1 mt-0.5">
-                            {renderTags(c.personality?.[key])}
-                          </div>
+                          <div className="font-label-mono text-system-log/80 text-[10px] mb-1">{label}</div>
+                          <TagEditor
+                            items={personality[key] ?? []}
+                            onItemsChange={(next) => updatePersonality(c.id, key, next)}
+                            saving={busy}
+                          />
                         </div>
                       ))}
                     </div>
+                  </div>
 
-                    {/* 声音签名 */}
-                    <div data-testid={`character-${c.id}-voice`} className="space-y-2">
-                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音签名</div>
-                      <div>
-                        <div className="font-label-mono text-system-log/80 text-[10px]">语言风格</div>
-                        <p className="font-body-narrative text-primary text-xs mt-0.5">
-                          {c.voice_signature?.speech_style || <span className="text-system-log/40">—</span>}
-                        </p>
-                      </div>
-                      <div>
-                        <div className="font-label-mono text-system-log/80 text-[10px]">思维模式</div>
-                        <p className="font-body-narrative text-primary text-xs mt-0.5">
-                          {c.voice_signature?.thought_patterns || <span className="text-system-log/40">—</span>}
-                        </p>
-                      </div>
-                      <div>
-                        <div className="font-label-mono text-system-log/80 text-[10px]">行为禁忌</div>
-                        <div className="flex flex-wrap gap-1 mt-0.5">
-                          {renderTags(c.voice_signature?.taboos)}
-                        </div>
-                      </div>
+                  {/* 声音签名 */}
+                  <div data-testid={`character-${c.id}-voice`} className="space-y-2 border-t border-outline-variant pt-3">
+                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音签名</div>
+                    <div>
+                      <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">说话风格</label>
+                      <textarea
+                        data-testid={`character-${c.id}-speech-style`}
+                        value={voice.speech_style}
+                        onChange={(e) => updateVoiceField(c.id, "speech_style", e.target.value)}
+                        disabled={busy}
+                        rows={2}
+                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40 resize-y"
+                      />
                     </div>
-
-                    {/* 角色关系 */}
-                    <div data-testid={`character-${c.id}-relations`} className="space-y-2">
-                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色关系</div>
-                      {Object.keys(c.relations ?? {}).length === 0 ? (
-                        <p className="font-body-ui text-system-log/40 text-xs">暂无</p>
-                      ) : (
-                        <ul className="space-y-1.5">
-                          {Object.entries(c.relations ?? {}).map(([targetId, rel]) => (
-                            <li
-                              key={targetId}
-                              className="flex items-center justify-between gap-2 p-1.5 bg-surface-container-low rounded"
-                            >
-                              <div className="min-w-0">
-                                <div className="font-label-mono text-primary text-xs truncate">
-                                  {nameById.get(targetId) || targetId}
-                                </div>
-                                <div className="font-body-ui text-system-log/70 text-[10px]">
-                                  第{rel.last_update_chapter}章更新
-                                </div>
-                              </div>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-body-ui shrink-0 ${relationStatusStyle(rel.status)}`}>
-                                {rel.status}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                    <div>
+                      <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">思维模式</label>
+                      <textarea
+                        data-testid={`character-${c.id}-thought-patterns`}
+                        value={voice.thought_patterns}
+                        onChange={(e) => updateVoiceField(c.id, "thought_patterns", e.target.value)}
+                        disabled={busy}
+                        rows={2}
+                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40 resize-y"
+                      />
+                    </div>
+                    <div>
+                      <div className="font-label-mono text-system-log/80 mb-1 text-[10px]">行为禁忌</div>
+                      <TagEditor
+                        items={voice.taboos ?? []}
+                        onItemsChange={(next) => updateVoiceField(c.id, "taboos", next)}
+                        saving={busy}
+                      />
                     </div>
                   </div>
-                )}
-              </li>
-            ))}
+
+                  {/* 当前状态 */}
+                  <div className="space-y-2 border-t border-outline-variant pt-3">
+                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">当前状态</div>
+                    <div>
+                      <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">位置</label>
+                      <input
+                        data-testid={`character-${c.id}-location`}
+                        value={state.location}
+                        onChange={(e) => updateCurrentState(c.id, "location", e.target.value)}
+                        disabled={busy}
+                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">身体状况</label>
+                        <input
+                          data-testid={`character-${c.id}-physical-condition`}
+                          value={state.physical_condition}
+                          onChange={(e) => updateCurrentState(c.id, "physical_condition", e.target.value)}
+                          disabled={busy}
+                          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">情绪</label>
+                        <input
+                          data-testid={`character-${c.id}-emotional`}
+                          value={state.emotional}
+                          onChange={(e) => updateCurrentState(c.id, "emotional", e.target.value)}
+                          disabled={busy}
+                          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-label-mono text-system-log/80 mb-1 text-[10px]">已知秘密</div>
+                      <TagEditor
+                        items={state.known_secrets ?? []}
+                        onItemsChange={(next) => updateCurrentState(c.id, "known_secrets", next)}
+                        saving={busy}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 角色不知道的事 */}
+                  <div className="space-y-2 border-t border-outline-variant pt-3">
+                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色不知道的事</div>
+                    <div className="font-label-mono text-system-log/80 mb-1 text-[10px]">未知 (unknown_to_character)</div>
+                    <TagEditor
+                      items={c.unknown_to_character ?? []}
+                      onItemsChange={(next) => updateUnknown(c.id, next)}
+                      saving={busy}
+                    />
+                  </div>
+
+                  {/* 角色关系 — 始终可见，添加/删除关系直接操作本地状态 */}
+                  <div data-testid={`character-${c.id}-relations`} className="space-y-2 border-t border-outline-variant pt-3">
+                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色关系</div>
+                    <CharacterRelationsEditor
+                      relations={c.relations ?? {}}
+                      allCharacters={characters?.characters ?? []}
+                      selfId={c.id}
+                      onChange={(next) => updateRelations(c.id, next)}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
 
           <div className="border-t border-outline-variant pt-3 space-y-2">

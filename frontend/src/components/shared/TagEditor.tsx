@@ -72,7 +72,9 @@ export default function TagEditor({ items, onItemsChange, saving }: TagEditorPro
             <input
               value={editTagValue}
               onChange={(e) => setEditTagValue(e.target.value)}
-              className="w-24 input-underline text-xs"
+              size={Math.max(editTagValue.length + 1, 8)}
+              style={{ width: "auto", minWidth: "max-content" }}
+              className="input-underline text-xs"
               autoFocus
               disabled={disabled}
               onKeyDown={(e) => {
@@ -104,7 +106,9 @@ export default function TagEditor({ items, onItemsChange, saving }: TagEditorPro
           <input
             value={newTagValue}
             onChange={(e) => setNewTagValue(e.target.value)}
-            className="w-24 input-underline text-xs"
+            size={Math.max(newTagValue.length + 1, 8)}
+            style={{ width: "auto", minWidth: "max-content" }}
+            className="input-underline text-xs"
             autoFocus
             disabled={disabled}
             onKeyDown={(e) => {

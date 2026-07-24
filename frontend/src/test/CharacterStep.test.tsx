@@ -252,14 +252,16 @@ describe("CharacterStep", () => {
       screen.getByTestId("character-add-supporting").click();
     });
     await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(7));
+    // c1's relations now resolve c2 → 苏晓晓, and the status select shows "ally".
     const c1Relations = screen.getByTestId("character-c1-relations");
     expect(c1Relations.textContent).toContain("苏晓晓");
-    expect(c1Relations.textContent).toContain("第5章更新");
+    expect(c1Relations.textContent).toContain("ally");
+    // c2's relations resolve c1 → 林峰.
     const c2Relations = screen.getByTestId("character-c2-relations");
     expect(c2Relations.textContent).toContain("林峰");
   });
 
-  it("'角色关系' section shows '暂无' when the character has no relations", async () => {
+  it("'角色关系' editor is always rendered (no display-mode toggle required)", async () => {
     let callIdx = 0;
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, _t: string) => {
       callIdx += 1;
@@ -267,11 +269,14 @@ describe("CharacterStep", () => {
     });
     setup();
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+    // The relations editor is rendered directly inside the card — no edit
+    // toggle required to add a relation. The add button is present even when
+    // the character currently has no relations.
     const relations = screen.getByTestId("character-c1-relations");
-    expect(relations.textContent).toContain("暂无");
+    expect(relations.querySelector("[data-testid='relations-add-button']")).toBeInTheDocument();
   });
 
-  it("empty voice_signature fields render an em-dash placeholder, not the literal empty string", async () => {
+  it("empty voice_signature fields render as empty inputs (inline-edit mode, no em-dash placeholder)", async () => {
     let callIdx = 0;
     (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(async (_id: string, _t: string) => {
       callIdx += 1;
@@ -279,8 +284,12 @@ describe("CharacterStep", () => {
     });
     setup();
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+    // Inline-edit mode: empty speech_style is an empty <textarea>, not a "—".
     const voice = screen.getByTestId("character-c1-voice");
-    expect(voice.textContent).toContain("—");
+    const speechInput = voice.querySelector("textarea");
+    expect(speechInput).toBeInTheDocument();
+    expect(speechInput?.value).toBe("");
+    expect(voice.textContent).not.toContain("—");
   });
 
   it("ignores prior characters in cumulative response (regression: 6×李玄阳)", async () => {
@@ -326,7 +335,9 @@ describe("CharacterStep", () => {
     });
     await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(7));
     // c1 (the existing 林峰) is preserved; c7 is the new 苏晓晓 appended via manual add.
-    expect(screen.getByTestId("character-c1").textContent).toContain("林峰");
-    expect(screen.getByTestId("character-c7").textContent).toContain("苏晓晓");
+    // Names live inside <input> values in inline-edit mode, so check the input
+    // directly rather than the card's textContent.
+    expect(screen.getByTestId("character-c1-name")).toHaveValue("林峰");
+    expect(screen.getByTestId("character-c7-name")).toHaveValue("苏晓晓");
   });
 });

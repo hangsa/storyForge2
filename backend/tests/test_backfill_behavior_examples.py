@@ -22,6 +22,12 @@ async def _fake_generate(*args, **kwargs):
     ]}}, None)
 
 
+async def _fake_generate_empty(*args, **kwargs):
+    """Stub simulating an LLM 'failure': returns no behavior_examples, so the
+    script counts the character as failed. Used to verify exit code 1."""
+    return ({}, None)
+
+
 def _write_characters(projects_dir: Path, project_id: str, characters: list[dict]) -> None:
     (projects_dir / project_id).mkdir(parents=True, exist_ok=True)
     (projects_dir / project_id / "characters.json").write_text(
@@ -136,3 +142,21 @@ def test_walks_all_projects_when_no_project_id(tmp_path):
     assert result.returncode == 0
     assert len(_read_characters(tmp_path, "proj_a")[0]["voice_signature"]["behavior_examples"]) == 1
     assert len(_read_characters(tmp_path, "proj_b")[0]["voice_signature"]["behavior_examples"]) == 1
+
+
+def test_exit_code_nonzero_when_llm_returns_empty(tmp_path):
+    """If the LLM stub returns nothing for all chars, exit code must be 1."""
+    _write_characters(tmp_path, "proj_a", [
+        {"id": "c1", "name": "Alice", "character_type": "protagonist",
+         "voice_signature": {"speech_style": "s", "thought_patterns": "t", "taboos": []}},
+    ])
+    # Point --llm-stub at the failing stub defined at module scope. Can't reuse
+    # _run_cli here because it hardcodes the succeeding stub.
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT),
+         "--projects-dir", str(tmp_path),
+         "--project-id", "proj_a",
+         "--llm-stub", "backend.tests.test_backfill_behavior_examples:_fake_generate_empty"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 1

@@ -29,7 +29,9 @@ Usage:
 import argparse
 import asyncio
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
@@ -51,6 +53,19 @@ from backend.services.agent_prompt_stores import (  # noqa: E402
 PROGRESS_FILENAME = ".backfill_progress.json"
 
 
+def _atomic_write_json(path: Path, data) -> None:
+    """Atomic write: tmp file + rename."""
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_name, path)
+    except Exception:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+        raise
+
+
 def _is_project_dir(p: Path) -> bool:
     """Heuristic: a directory containing characters.json is a project."""
     return p.is_dir() and (p / "characters.json").is_file()
@@ -69,10 +84,7 @@ def _load_progress(project_dir: Path) -> dict:
 
 def _save_progress(project_dir: Path, completed_ids: list[str]) -> None:
     progress_path = project_dir / PROGRESS_FILENAME
-    progress_path.write_text(
-        json.dumps({"completed_ids": completed_ids}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    _atomic_write_json(progress_path, {"completed_ids": completed_ids})
 
 
 def _has_behavior_examples(char: dict) -> bool:
@@ -253,14 +265,14 @@ async def _process_project(
         stats["filled"] += 1
         dirty = True
         completed_ids.add(cid)
+        # Per-character progress save so a kill mid-project doesn't lose
+        # completed characters (cheap: one tiny JSON file, atomic).
+        _save_progress(project_dir, sorted(completed_ids))
         print(f"  [OK] {cid} ({char.get('name', '')}): +{len(new_examples)} example(s)")
 
     if not dry_run and dirty:
         # Sort for stable file diffs.
-        characters_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        _atomic_write_json(characters_path, data)
         _save_progress(project_dir, sorted(completed_ids))
         print(f"  [WRITE] {characters_path.relative_to(project_dir.parent)}")
     elif not dirty and not dry_run:
@@ -309,7 +321,7 @@ async def amain(args: argparse.Namespace) -> int:
         total_failed += stats["failed"]
 
     print(f"[DONE] total filled={total_filled} failed={total_failed}")
-    return 0
+    return 1 if total_failed > 0 else 0
 
 
 def main() -> int:

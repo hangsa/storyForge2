@@ -383,6 +383,8 @@ async def regenerate_character_examples(
     /stage2/generate-character); only the behavior_examples from the response
     are merged. Other voice_signature / personality fields are NOT touched.
     """
+    # Re-resolve PlannerAgent at call time so the test mock
+    # patch("backend.agents.planner.PlannerAgent") intercepts correctly.
     from backend.agents.planner import PlannerAgent
 
     if not project_id:

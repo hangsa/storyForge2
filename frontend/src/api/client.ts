@@ -259,7 +259,7 @@ export interface Character {
     speech_style: string;
     thought_patterns: string;
     taboos: string[];
-    behavior_examples: BehaviorExample[];
+    behavior_examples?: BehaviorExample[];
   };
   unknown_to_character: string[];
   relations: Record<string, RelationStatus>;

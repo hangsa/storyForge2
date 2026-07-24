@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import AsyncIterator, Optional
 
@@ -73,6 +75,33 @@ class WriterAgent(BaseAgent):
             for c in others:
                 lines.append(_char_basic(c))
 
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_chapter_outline_context(chapter: dict | None) -> str:
+        """Render a chapter's title + theme + scene sequence as a ~150-200 tok
+        block for the Writer prompt. Empty string on missing/empty input."""
+        if not chapter:
+            return ""
+        lines = ["## 本章大纲"]
+        title = chapter.get("title") or ""
+        if title:
+            lines.append(f"- 标题: {title}")
+        theme = chapter.get("theme")
+        if theme:
+            lines.append(f"- 主题: {theme}")
+        scene_plan = chapter.get("scene_plan") or []
+        lines.append("- 场景序列:")
+        for i, sp in enumerate(scene_plan, 1):
+            goal = sp.get("goal", "")
+            conflict = sp.get("conflict", "")
+            arc = sp.get("emotional_arc", "")
+            parts = [f"  {i}. {goal}"]
+            if conflict:
+                parts.append(f"    冲突: {conflict}")
+            if arc:
+                parts.append(f"    情感弧线: {arc}")
+            lines.extend(parts)
         return "\n".join(lines)
 
     def _build_base_vars(

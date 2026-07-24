@@ -36,7 +36,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="behavior-examples-section">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-700">行为示例</h3>
         <div className="flex items-center gap-2">
@@ -77,7 +77,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
         {examples.map((ex, idx) => (
           <div
             key={idx}
-            data-testid="behavior-example-item"
+            data-testid={`behavior-example-${idx}`}
             className="rounded border border-gray-200 bg-gray-50 p-3"
           >
             <div className="mb-2 flex items-center justify-between">
@@ -100,6 +100,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
                   value={ex.situation}
                   onChange={(e) => update(idx, "situation", e.target.value)}
                   rows={2}
+                  data-testid={`behavior-example-${idx}-situation`}
                   className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm"
                 />
               </label>
@@ -109,6 +110,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
                   value={ex.action}
                   onChange={(e) => update(idx, "action", e.target.value)}
                   rows={2}
+                  data-testid={`behavior-example-${idx}-action`}
                   className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm"
                 />
               </label>
@@ -118,6 +120,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
                   value={ex.speech_sample}
                   onChange={(e) => update(idx, "speech_sample", e.target.value)}
                   rows={2}
+                  data-testid={`behavior-example-${idx}-speech_sample`}
                   className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm"
                 />
               </label>

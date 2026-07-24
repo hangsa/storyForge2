@@ -346,6 +346,7 @@ class WriterAgent(BaseAgent):
         growth_stage_hint: str = "",
         character_growth_context: str = "",
         custom_style_config_desc: str = "",
+        outline_chapter: dict | None = None,
     ) -> dict:
         core_contradiction = concept.get("story_dna", {}).get(
             "core_contradiction", {}
@@ -390,6 +391,7 @@ class WriterAgent(BaseAgent):
             "core_rules": core_rules_str,
             "ceilings": ceilings_str,
             "characters_context": self._build_characters_context(characters, scene_plan),
+            "chapter_outline_context": self._build_chapter_outline_context(outline_chapter),
             "scene_goal": scene_plan.get("goal", ""),
             "scene_conflict": scene_plan.get("conflict", ""),
             "scene_emotional_arc": scene_plan.get("emotional_arc", ""),
@@ -424,6 +426,7 @@ class WriterAgent(BaseAgent):
         storyos_state: Optional[dict] = None,
         reader_os_warnings: str = "",
         custom_style_config=None,
+        outline_chapter: Optional[dict] = None,
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
@@ -432,6 +435,7 @@ class WriterAgent(BaseAgent):
             l2_context, l3_context, l4_context, growth_stage_hint,
             character_growth_context,
             custom_style_config_desc=_build_custom_style_desc(custom_style_config),
+            outline_chapter=outline_chapter,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         return await self.generate_from_template(
@@ -457,6 +461,7 @@ class WriterAgent(BaseAgent):
         storyos_state: Optional[dict] = None,
         reader_os_warnings: str = "",
         custom_style_config=None,
+        outline_chapter: Optional[dict] = None,
         **kwargs,
     ) -> AsyncIterator[StreamChunk]:
         """Stream version of write_scene().
@@ -471,6 +476,7 @@ class WriterAgent(BaseAgent):
             l2_context, l3_context, l4_context, growth_stage_hint,
             character_growth_context,
             custom_style_config_desc=_build_custom_style_desc(custom_style_config),
+            outline_chapter=outline_chapter,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         async for chunk in self.generate_from_template_stream(
@@ -497,6 +503,7 @@ class WriterAgent(BaseAgent):
         character_growth_context: str = "",
         reader_os_warnings: str = "",
         custom_style_config=None,
+        outline_chapter: Optional[dict] = None,
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
@@ -505,6 +512,7 @@ class WriterAgent(BaseAgent):
             l2_context, l3_context, l4_context, growth_stage_hint,
             character_growth_context,
             custom_style_config_desc=_build_custom_style_desc(custom_style_config),
+            outline_chapter=outline_chapter,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["retry_hints"] = retry_hints

@@ -352,3 +352,92 @@ def test_token_budget_log_emitted_on_truncation(caplog):
         WriterAgent._build_characters_context(chars, _scene_plan("本章开篇"))
     # No assertion on log content (logger name might differ). Hard guarantee
     # is no crash, which test_never_truncates_pov already enforces.
+
+
+# --- Multi-POV labeling (review fix I1) ---
+
+def test_multi_protagonist_first_labeled_pov_others_plain():
+    """When multiple protagonists exist, only the first (canonical POV) gets
+    the `(主角 (POV))` label; other protagonists get plain `(主角)`."""
+    characters = [
+        _char("pov", "林峰", "protagonist"),
+        _char("p2", "苏晓晓", "protagonist"),
+        _char("p3", "陈墨", "protagonist"),
+    ]
+    out = WriterAgent._build_characters_context(characters, _scene_plan(""))
+    # Canonical POV gets the (POV) suffix.
+    assert "林峰 (主角 (POV))" in out
+    # Other protagonists get plain (主角) — without the (POV) suffix.
+    assert "苏晓晓 (主角)" in out
+    assert "陈墨 (主角)" in out
+    # And they should NOT be mislabeled with the POV suffix.
+    assert "苏晓晓 (主角 (POV))" not in out
+    assert "陈墨 (主角 (POV))" not in out
+
+
+def test_single_protagonist_still_labeled_pov():
+    """Backward compat: a project with one protagonist still gets (POV)."""
+    characters = [_char("pov", "林峰", "protagonist")]
+    out = WriterAgent._build_characters_context(characters, _scene_plan(""))
+    assert "林峰 (主角 (POV))" in out
+
+
+# --- CJK name boundary (review fix I2) ---
+
+def test_substring_name_falls_through_to_background_not_supporting():
+    """A character named `林` (single CJK char) must NOT be elevated to the
+    SUPPORTING tier (0.5) just because the plan text mentions `林峰` — the
+    naive substring match would falsely match `林`. With the CJK-boundary
+    helper, `林` falls through Pass 2 (no name match) to Pass 3 (BACKGROUND
+    tier 0.2), which is the correct priority for a character not actually
+    appearing in the scene."""
+    characters = [
+        _char("pov", "林峰", "protagonist"),
+        _char("lin", "林", "supporting"),
+    ]
+    appearing = WriterAgent._resolve_appearing_characters(
+        characters, _scene_plan("林峰在山洞中苏醒")
+    )
+    # Find the `林` character's tier. Returning tuples are (c, tier, is_pov).
+    lin_entry = next(
+        (c, tier, is_pov) for c, tier, is_pov in appearing
+        if c.get("id") == "lin"
+    )
+    _, lin_tier, _ = lin_entry
+    # `林` is NOT name-matched (Pass 2 skipped), so it falls into Pass 3
+    # background tier 0.2 — NOT the supporting tier 0.5 it would have been
+    # erroneously elevated to with the naive substring match.
+    assert lin_tier == WriterAgent._TIER_BACKGROUND
+    assert lin_tier < WriterAgent._TIER_SUPPORTING
+
+
+def test_substring_name_matches_at_word_boundary():
+    """When the character name appears at text-start, text-end, or beside
+    ASCII/punctuation, the helper should match it."""
+    from backend.agents.writer import _name_in_text
+
+    # Name at start of text → True (left = start-of-text, right = end-of-text).
+    assert _name_in_text("林峰", "林峰") is True
+    # Name at end of text → True (right boundary = end-of-text, prev is ASCII `,`).
+    assert _name_in_text("林峰", "主角,林峰") is True
+    # Name with ASCII punctuation boundary (ASCII `,` is not CJK) on the
+    # right side, and text ends right after — True.
+    assert _name_in_text("林峰", "苏晓晓, 林峰") is True
+    # Name preceded by ASCII char → True.
+    assert _name_in_text("Lin", "is Lin here") is True
+    # Name followed by ASCII char → True.
+    assert _name_in_text("Lin", "Lin is here") is True
+    # Single-char `林` at end of text → True (right = end-of-text, prev is ASCII `,`).
+    assert _name_in_text("林", "只见,林") is True
+    # Single-char `林` followed by ASCII → True (right boundary = ASCII `1`).
+    assert _name_in_text("林", "山1林1") is True
+    # Single-char `林` as prefix of `林峰` (followed by CJK) → False.
+    assert _name_in_text("林", "林峰苏醒") is False
+    # Single-char `林` mid-text as suffix (preceded by CJK) → False.
+    assert _name_in_text("峰", "林峰苏醒") is False
+    # `林峰` mid-text with CJK on both sides → False (acceptable false
+    # negative; we trade off recall for safety against prefix false positives).
+    assert _name_in_text("林峰", "苏晓晓林峰苏醒") is False
+    # Empty inputs → False.
+    assert _name_in_text("", "anything") is False
+    assert _name_in_text("林", "") is False

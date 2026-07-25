@@ -88,7 +88,12 @@ def validate(data: dict) -> None:
             m.get("id") for m in models if isinstance(m, dict) and m.get("id")
         ]
         if len(model_ids) != len(set(model_ids)):
-            invalid.append(f"tiers.{tier_name}.models")
+            counts: dict[str, int] = {}
+            for mid in model_ids:
+                counts[mid] = counts.get(mid, 0) + 1
+            for mid, n in counts.items():
+                if n > 1:
+                    invalid.append(f"tiers.{tier_name}.models[duplicate_id={mid}]")
 
         for i, m in enumerate(models):
             if not isinstance(m, dict):
@@ -100,7 +105,7 @@ def validate(data: dict) -> None:
                 continue
             if m.get("provider") not in ALLOWED_PROVIDERS:
                 invalid.append(f"tiers.{tier_name}.models.{i}.provider")
-            if not isinstance(m.get("max_tokens"), int):
+            if not isinstance(m.get("max_tokens"), int) or isinstance(m.get("max_tokens"), bool):
                 invalid.append(f"tiers.{tier_name}.models.{i}.max_tokens")
 
         default = tier.get("default")

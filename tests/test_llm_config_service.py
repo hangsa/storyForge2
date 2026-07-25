@@ -65,7 +65,7 @@ def test_validate_rejects_empty_agent_mapping_entry(isolated_config):
     bad["agent_mapping"]["planner"][""] = {"tier": "tier_1"}
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
-    assert any("planner" in p for p in exc.value.invalid_paths)
+    assert any(p == "agent_mapping.planner.<empty>" for p in exc.value.invalid_paths)
 
 
 def test_validate_rejects_missing_tier0(isolated_config):
@@ -84,3 +84,26 @@ def test_validate_rejects_agent_mapping_to_unknown_tier(isolated_config):
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
     assert any("novelty_evaluation.tier" in p for p in exc.value.invalid_paths)
+
+
+def test_validate_rejects_max_tokens_bool(isolated_config):
+    from backend.services.llm_config import LLMConfigError, read_yaml, validate
+    bad = read_yaml()
+    # set the first model's max_tokens to True (passes naive isinstance(int))
+    bad["tiers"]["tier_1"]["models"][0]["max_tokens"] = True
+    with pytest.raises(LLMConfigError) as exc:
+        validate(bad)
+    assert any("max_tokens" in p for p in exc.value.invalid_paths)
+
+
+def test_validate_reports_duplicate_model_ids_with_id(isolated_config):
+    from backend.services.llm_config import LLMConfigError, read_yaml, validate
+    bad = read_yaml()
+    # add a duplicate of an existing model id in tier_1
+    dup = dict(bad["tiers"]["tier_1"]["models"][0])
+    dup["provider"] = "deepseek"
+    bad["tiers"]["tier_1"]["models"].append(dup)
+    with pytest.raises(LLMConfigError) as exc:
+        validate(bad)
+    paths = exc.value.invalid_paths
+    assert any("duplicate_id=" in p for p in paths)

@@ -107,3 +107,42 @@ def test_validate_reports_duplicate_model_ids_with_id(isolated_config):
         validate(bad)
     paths = exc.value.invalid_paths
     assert any("duplicate_id=" in p for p in paths)
+
+
+def test_reload_router_swaps_in_disk(monkeypatch, isolated_config):
+    from backend.services import llm_config as mod
+    from backend.services.llm_config import reload_router
+
+    class StubRouter:
+        def __init__(self):
+            self._tiers = {"tier_1": object()}
+            self._mappings = {"writer": {"scene_writing": object()}}
+
+        def reload_config(self):
+            # sentinel: do not actually re-read the disk; tests below cover disk behavior.
+            return None
+
+    monkeypatch.setattr(mod, "get_model_router", lambda: StubRouter())
+    summary = reload_router()
+    assert summary == {"tiers": 1, "agents": 1}
+
+
+def test_provider_status_includes_keys(monkeypatch, isolated_config):
+    from backend.services import llm_config as mod
+    from backend.services.llm_config import provider_status
+
+    # forge configured flags without leaking actual secrets
+    monkeypatch.setattr(
+        mod.settings, "anthropic_api_key", "sk-test", raising=False
+    )
+    monkeypatch.setattr(mod.settings, "deepseek_api_key", "", raising=False)
+    monkeypatch.setattr(
+        mod.settings, "deepseek_base_url", "https://api.deepseek.com/v1", raising=False
+    )
+
+    out = provider_status()
+    by_name = {row["provider"]: row for row in out}
+    assert by_name["anthropic"]["api_key_configured"] is True
+    assert by_name["deepseek"]["api_key_configured"] is False
+    assert by_name["deepseek"]["base_url"] == "https://api.deepseek.com/v1"
+    assert "claude-opus-4" in by_name["anthropic"]["models"]

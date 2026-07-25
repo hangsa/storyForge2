@@ -154,3 +154,48 @@ def validate(data: dict) -> None:
         raise LLMConfigError(
             f"配置校验失败：{len(invalid)} 项错误", invalid
         )
+
+
+def reload_router() -> dict:
+    """Validate disk config, then swap the live router's tiers / mappings in."""
+    validate(read_yaml())
+    router = get_model_router()
+    router.reload_config()
+    return {"tiers": len(router._tiers), "agents": len(router._mappings)}
+
+
+def provider_status() -> list[dict]:
+    cfg = read_yaml()
+    tiers = cfg.get("tiers") or {}
+    by_provider: dict[str, set[str]] = {p: set() for p in ALLOWED_PROVIDERS}
+    for tier in tiers.values():
+        if not isinstance(tier, dict):
+            continue
+        for m in tier.get("models") or []:
+            if not isinstance(m, dict):
+                continue
+            provider = m.get("provider")
+            mid = m.get("id")
+            if provider in by_provider and mid:
+                by_provider[provider].add(mid)
+    out: list[dict] = []
+    for provider, models in by_provider.items():
+        api_key_attr = PROVIDER_KEY_MAP.get(provider, "")
+        configured = (
+            bool(getattr(settings, api_key_attr, ""))
+            if api_key_attr
+            else False
+        )
+        base_url_attr = (
+            f"{provider}_base_url" if provider in {"deepseek", "minimax"} else ""
+        )
+        base_url = (
+            getattr(settings, base_url_attr, "") if base_url_attr else ""
+        )
+        out.append({
+            "provider": provider,
+            "base_url": base_url,
+            "api_key_configured": configured,
+            "models": sorted(models),
+        })
+    return out

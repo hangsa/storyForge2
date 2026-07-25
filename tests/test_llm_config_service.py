@@ -43,3 +43,44 @@ def test_write_yaml_atomic_cleans_tmp_on_failure(isolated_config, monkeypatch):
         write_yaml_atomic(data)
     leftover = [p.name for p in isolated_config.parent.glob(".model_tiers.*.tmp")]
     assert leftover == []
+
+
+def test_validate_happy_path_against_real_config(isolated_config):
+    from backend.services.llm_config import validate
+    validate(read_yaml())  # must not raise
+
+
+def test_validate_rejects_unknown_default(isolated_config):
+    from backend.services.llm_config import LLMConfigError, read_yaml, validate
+    bad = read_yaml()
+    bad["tiers"]["tier_1"]["default"] = "ghost-model"
+    with pytest.raises(LLMConfigError) as exc:
+        validate(bad)
+    assert any(p.endswith("tier_1.default") for p in exc.value.invalid_paths)
+
+
+def test_validate_rejects_empty_agent_mapping_entry(isolated_config):
+    from backend.services.llm_config import LLMConfigError, read_yaml, validate
+    bad = read_yaml()
+    bad["agent_mapping"]["planner"][""] = {"tier": "tier_1"}
+    with pytest.raises(LLMConfigError) as exc:
+        validate(bad)
+    assert any("planner" in p for p in exc.value.invalid_paths)
+
+
+def test_validate_rejects_missing_tier0(isolated_config):
+    from backend.services.llm_config import LLMConfigError, read_yaml, validate
+    bad = read_yaml()
+    bad["tiers"].pop("tier_0")
+    with pytest.raises(LLMConfigError) as exc:
+        validate(bad)
+    assert "tier_0" in exc.value.invalid_paths
+
+
+def test_validate_rejects_agent_mapping_to_unknown_tier(isolated_config):
+    from backend.services.llm_config import LLMConfigError, read_yaml, validate
+    bad = read_yaml()
+    bad["agent_mapping"]["planner"]["novelty_evaluation"]["tier"] = "tier_9"
+    with pytest.raises(LLMConfigError) as exc:
+        validate(bad)
+    assert any("novelty_evaluation.tier" in p for p in exc.value.invalid_paths)

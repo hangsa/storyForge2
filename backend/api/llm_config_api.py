@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -12,7 +13,6 @@ from backend.services.llm_config import (
     provider_status,
     read_yaml,
     reload_router,
-    update_provider_api_key,
     validate,
     validate_removal,
     write_env_atomic,
@@ -37,6 +37,14 @@ def _err(code: str, message: str, status: int, extra: Optional[dict] = None):
             "detail": extra or {},
         },
     )
+
+
+_ID_RE = re.compile(r"^[a-z0-9_-]+$")
+
+
+def _validate_id(value: str, label: str) -> None:
+    if not isinstance(value, str) or not _ID_RE.match(value):
+        _err("VALIDATION_ERROR", f"{label} 格式无效：仅允许 a-z、0-9、_、-", 422, {"invalid_paths": [label]})
 
 
 @router.get("/llm-config")
@@ -111,6 +119,7 @@ async def upsert_provider(payload: dict):
     body = payload.get("provider")
     if not pid or not isinstance(body, dict):
         _err("VALIDATION_ERROR", "缺少 id 或 provider", 422, {"invalid_paths": ["$"]})
+    _validate_id(pid, "id")
     data = read_yaml()
     providers = data.setdefault("providers", {})
     providers[pid] = body
@@ -128,6 +137,7 @@ async def upsert_provider(payload: dict):
 
 @router.delete("/llm-config/providers/{provider_id}")
 async def delete_provider(provider_id: str):
+    _validate_id(provider_id, "provider_id")
     data = read_yaml()
     if "providers" not in data or provider_id not in data["providers"]:
         _err("NOT_FOUND", f"provider '{provider_id}' 不存在", 404)
@@ -143,10 +153,12 @@ async def delete_provider(provider_id: str):
 
 @router.post("/llm-config/providers/{provider_id}/models")
 async def upsert_model(provider_id: str, payload: dict):
+    _validate_id(provider_id, "provider_id")
     mid = payload.get("id")
     body = payload.get("model")
     if not mid or not isinstance(body, dict):
         _err("VALIDATION_ERROR", "缺少 id 或 model", 422, {"invalid_paths": ["$"]})
+    _validate_id(mid, "id")
     data = read_yaml()
     provider = (data.get("providers") or {}).get(provider_id)
     if not isinstance(provider, dict):
@@ -163,6 +175,8 @@ async def upsert_model(provider_id: str, payload: dict):
 
 @router.delete("/llm-config/providers/{provider_id}/models/{model_id}")
 async def delete_model(provider_id: str, model_id: str):
+    _validate_id(provider_id, "provider_id")
+    _validate_id(model_id, "model_id")
     data = read_yaml()
     provider = (data.get("providers") or {}).get(provider_id)
     if not isinstance(provider, dict):
@@ -179,6 +193,7 @@ async def delete_model(provider_id: str, model_id: str):
 
 @router.put("/llm-config/providers/{provider_id}/api-key")
 async def put_provider_api_key(provider_id: str, payload: dict):
+    _validate_id(provider_id, "provider_id")
     value = payload.get("value")
     if not isinstance(value, str):
         _err("VALIDATION_ERROR", "value 必须是字符串", 422, {"invalid_paths": ["value"]})

@@ -27,10 +27,6 @@ class LLMConfigError(ValueError):
         self.invalid_paths = invalid_paths
 
 
-def update_provider_api_key(provider_id: str, value: str) -> None:
-    write_env_atomic(ENV_PATH, {f"STORYFORGE_PROVIDER_API_KEY_{provider_id.upper()}": value})
-
-
 def read_yaml() -> dict:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}

@@ -266,3 +266,14 @@ def test_set_provider_api_key_writes_env(client, monkeypatch, tmp_path):
 def test_migrate_endpoint_409_when_already_v2(client):
     res = client.post("/api/settings/llm-config/migrate")
     assert res.status_code == 409
+
+
+def test_invalid_provider_id_rejected(client):
+    res = client.delete("/api/settings/llm-config/providers/has.dot")
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "VALIDATION_ERROR"
+
+
+def test_invalid_model_id_rejected(client):
+    res = client.delete("/api/settings/llm-config/providers/anthropic/models/has.dot")
+    assert res.status_code == 422

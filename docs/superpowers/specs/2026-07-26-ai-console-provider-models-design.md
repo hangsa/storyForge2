@@ -127,16 +127,15 @@ agent_mapping:
 1. 备份原文件：`config/model_tiers.yaml.bak-<UTC-timestamp>`。
 2. 按 `tiers.*.models[*].provider` 聚合 provider：
    - `anthropic` → `type: anthropic`、`base_url: https://api.anthropic.com`、`api_key_env: ANTHROPIC_API_KEY`。
-   - 其它 → `type: openai_compatible`、`base_url` 使用现有 `deepseek_base_url` / `minimax_base_url` 默认值；`api_key_env: <UPPER>_API_KEY`。
+   - 其它 → `type: openai_compatible`、`base_url` 使用现有 `deepseek_base_url` / `minimax_base_url` 默认值；`api_key_env: <PROVIDER_ID_UPPER>_API_KEY`（即 provider id 全部大写后加 `_API_KEY`，例如 `deepseek` → `DEEPSEEK_API_KEY`）。
 3. 检查全局 model id 唯一性；若冲突，加 provider 前缀并同步更新所有 `tiers.*.models[*].id`、`tiers.<name>.default`、`tiers.<name>.fallback`、`agent_mapping.*.model`、`agent_mapping.*.fallback`。
-4. 按现有 `provider_*_api_key` 字段写入 `backend/.env`，新增 `STORYFORGE_PROVIDER_API_KEY_<UPPER_ID>` 键（保留老键以兼容）。
+4. 按现有 `provider_<id>_api_key` 字段写入 `backend/.env`，新增 `STORYFORGE_PROVIDER_API_KEY_<PROVIDER_ID_UPPER>` 键（保留老键以兼容）。
 5. 写入新 `config/model_tiers.yaml`（按 key 字典序）。
 6. `ModelRouter.reload_config()`。
 
 失败处理：
 
-- 迁移失败抛出 `LLMConfigError`；启动不中断但 `reload_router` 走原 YAML 备份文件，错误写到日志与控制台 toast。
-- 备份保留：用户可手动恢复。
+- 迁移失败抛出 `LLMConfigError`；启动不中断，但 ModelRouter 不会加载新结构，错误写到日志。备份保留为 `config/model_tiers.yaml.bak-<UTC-timestamp>`，用户可手动恢复。
 
 ---
 
@@ -158,7 +157,7 @@ agent_mapping:
 - `write_env_atomic(env_path, updates: dict[str, str])`：
   - 按行解析现有 env；匹配键名替换值；保留其它键与顺序；写 `.tmp` → `os.replace`。
   - 写入失败时清理 `.tmp`。
-- `update_provider_api_key(provider_id: str, value: str)`：写 `STORYFORGE_PROVIDER_API_KEY_<UPPER_ID>`。
+- `update_provider_api_key(provider_id: str, value: str)`：写 `STORYFORGE_PROVIDER_API_KEY_<PROVIDER_ID_UPPER>`（即 `<PROVIDER_ID_UPPER>` = provider id 转大写）。
 - `migrate_legacy_yaml()`：执行 §3 流程，返回 `{backup_path, summary}`。
 
 ### 4.2 `backend/llm/model_router.py`
@@ -176,10 +175,10 @@ agent_mapping:
 
 新增端点（保留原有 GET / PUT / reload / usage）：
 
-- `POST /api/settings/llm-config/providers`：新增 / 修改 provider（body = `{provider: {...}}`）。先读取 YAML → 修改 `providers.<id>` → `validate()` → `write_yaml_atomic` → `reload_router`。
+- `POST /api/settings/llm-config/providers`：body = `{id, provider: {...}}`，其中 `id` 是目标 provider key。处理流程：读取 YAML → 若 `providers.<id>` 不存在则新增，否则覆盖 → `validate()`（校验失败返回 422 + `invalid_paths`，不写文件） → `write_yaml_atomic` → `reload_router`。
 - `DELETE /api/settings/llm-config/providers/{provider_id}`：`validate_removal(data, "provider:<id>")` 通过后再删除；422 时返回 `invalid_paths`。
-- `POST /api/settings/llm-config/providers/{provider_id}/models`：新增 / 修改 model。
-- `DELETE /api/settings/llm-config/providers/{provider_id}/models/{model_id}`：`validate_removal(data, "model:<id>")`。
+- `POST /api/settings/llm-config/providers/{provider_id}/models`：body = `{id, model: {...}}`，处理流程同 provider；新增 / 修改后 `reload_router`。
+- `DELETE /api/settings/llm-config/providers/{provider_id}/models/{model_id}`：`validate_removal(data, "model:<id>")` 通过后删除。
 - `PUT /api/settings/llm-config/providers/{provider_id}/api-key`：body = `{value}`，调 `update_provider_api_key` → `write_env_atomic` → `reload_router`。
 - `POST /api/settings/llm-config/migrate`：仅在 YAML 不含 `providers` 顶层时返回 200+摘要；否则 409。
 
@@ -246,8 +245,8 @@ agent_mapping:
 - 删除冲突：返回引用路径列表，前端展示位置详情。
 - API Key 写入失败：回滚 `.env`，提示「请检查文件权限」；reload 失败但 env 写成功时提示「配置已落盘，请手动刷新」。
 - 自动迁移失败：保留 `.bak-<timestamp>` 备份；启动不中断，但日志 + 控制台 toast 提示。
-- 运行时找不到模型：`ModelRouter._find_model_info` 抛 `ModelNotFoundError`；usage 表中标记 `provider=unknown`、`error=model_not_found`。
-- 并发：单字段替换采用「读取 → 合并 → 写入」循环 3 次；最后一次校验失败则提示「请重试」。
+- 运行时找不到模型：`ModelRouter._find_model_info` 抛 `ModelNotFoundError`（新增异常类型，路径 `backend/llm/errors.py`）；usage 表中标记 `provider=unknown`、`error=model_not_found`。
+- 并发：单字段替换采用「读取 → 合并 → 写入」循环，最多重试 3 次；最后一次校验失败则返回 409 + `invalid_paths`，提示用户重试。
 
 ---
 

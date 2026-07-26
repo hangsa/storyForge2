@@ -516,7 +516,10 @@ import pytest
 from backend.services.llm_config import LLMConfigError, validate
 
 
-def _base_v2():
+def base_v2():
+    """Canonical v2 fixture. Exported as a module-level helper so other test
+    files in this package can `from .test_llm_config_providers import base_v2`
+    by importing the symbol explicitly (see note in test_llm_config_find_references)."""
     return {
         "providers": {
             "anthropic": {
@@ -591,11 +594,11 @@ def _base_v2():
 
 
 def test_validate_accepts_v2_schema():
-    validate(_base_v2())
+    validate(base_v2())
 
 
 def test_validate_rejects_unknown_model_in_tier_default():
-    bad = deepcopy(_base_v2())
+    bad = deepcopy(base_v2())
     bad["tiers"]["tier_1"]["default"] = "ghost-model"
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
@@ -603,7 +606,7 @@ def test_validate_rejects_unknown_model_in_tier_default():
 
 
 def test_validate_rejects_unknown_model_in_tier_whitelist():
-    bad = deepcopy(_base_v2())
+    bad = deepcopy(base_v2())
     bad["tiers"]["tier_1"]["models"].append("ghost-model")
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
@@ -611,7 +614,7 @@ def test_validate_rejects_unknown_model_in_tier_whitelist():
 
 
 def test_validate_rejects_agent_mapping_unknown_model():
-    bad = deepcopy(_base_v2())
+    bad = deepcopy(base_v2())
     bad["agent_mapping"]["writer"]["scene_writing"]["model"] = "ghost-model"
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
@@ -619,7 +622,7 @@ def test_validate_rejects_agent_mapping_unknown_model():
 
 
 def test_validate_rejects_duplicate_global_model_ids():
-    bad = deepcopy(_base_v2())
+    bad = deepcopy(base_v2())
     bad["providers"]["anthropic"]["models"]["deepseek-v4-pro"] = {
         "display_name": "dup",
         "cost_per_1k_input": 0,
@@ -635,14 +638,14 @@ def test_validate_rejects_duplicate_global_model_ids():
 
 
 def test_validate_rejects_unknown_provider_type():
-    bad = deepcopy(_base_v2())
+    bad = deepcopy(base_v2())
     bad["providers"]["anthropic"]["type"] = "made-up"
     with pytest.raises(LLMConfigError):
         validate(bad)
 
 
 def test_validate_rejects_missing_api_key_env():
-    bad = deepcopy(_base_v2())
+    bad = deepcopy(base_v2())
     del bad["providers"]["anthropic"]["api_key_env"]
     with pytest.raises(LLMConfigError):
         validate(bad)
@@ -861,43 +864,99 @@ from backend.services.llm_config import (
     find_references,
     validate_removal,
 )
-from tests.test_llm_config_providers import _base_v2
+
+
+def _base():
+    return {
+        "providers": {
+            "anthropic": {
+                "type": "anthropic",
+                "display_name": "Anthropic",
+                "base_url": "https://api.anthropic.com",
+                "api_key_env": "ANTHROPIC_API_KEY",
+                "enabled": True,
+                "models": {
+                    "claude-opus-4": {
+                        "display_name": "Claude Opus 4",
+                        "cost_per_1k_input": 0.015,
+                        "cost_per_1k_output": 0.075,
+                        "max_tokens": 8192,
+                        "temperature": 0.7,
+                        "json_mode": False,
+                        "stream": True,
+                    }
+                },
+            },
+            "deepseek": {
+                "type": "openai_compatible",
+                "display_name": "DeepSeek",
+                "base_url": "https://api.deepseek.com/v1",
+                "api_key_env": "DEEPSEEK_API_KEY",
+                "enabled": True,
+                "models": {
+                    "deepseek-v4-pro": {
+                        "display_name": "DeepSeek V4 Pro",
+                        "cost_per_1k_input": 0.002,
+                        "cost_per_1k_output": 0.008,
+                        "max_tokens": 8192,
+                        "temperature": 0.7,
+                        "json_mode": True,
+                        "stream": True,
+                    }
+                },
+            },
+        },
+        "tiers": {
+            "tier_1": {
+                "description": "",
+                "default": "deepseek-v4-pro",
+                "fallback": "claude-opus-4",
+                "models": ["deepseek-v4-pro", "claude-opus-4"],
+                "retry_on_failure": True,
+                "max_retries": 1,
+            },
+            "tier_0": {"description": "", "default": "none", "fallback": None, "models": []},
+        },
+        "agent_mapping": {
+            "writer": {"scene_writing": {"tier": "tier_1", "model": "deepseek-v4-pro"}}
+        },
+    }
 
 
 def test_find_references_model_used_by_tier_default():
-    cfg = _base_v2()
+    cfg = _base()
     refs = find_references(cfg, "model:deepseek-v4-pro")
     assert "tiers.tier_1.default" in refs
     assert "tiers.tier_1.fallback" not in refs
 
 
 def test_find_references_model_used_by_tier_whitelist():
-    cfg = _base_v2()
+    cfg = _base()
     refs = find_references(cfg, "model:claude-opus-4")
     assert "tiers.tier_1.fallback" in refs
 
 
 def test_find_references_provider_with_models_used():
-    cfg = _base_v2()
+    cfg = _base()
     refs = find_references(cfg, "provider:anthropic")
     assert any(r == "tiers.tier_1.fallback" for r in refs)
 
 
 def test_find_references_unused_returns_empty():
-    cfg = _base_v2()
+    cfg = _base()
     refs = find_references(cfg, "model:does-not-exist")
     assert refs == []
 
 
 def test_validate_removal_blocks_model_in_use():
-    cfg = _base_v2()
+    cfg = _base()
     with pytest.raises(LLMConfigError) as exc:
         validate_removal(cfg, "model:deepseek-v4-pro")
     assert any("tier_1" in p for p in exc.value.invalid_paths)
 
 
 def test_validate_removal_allows_unused_model():
-    cfg = deepcopy(_base_v2())
+    cfg = deepcopy(_base())
     cfg["providers"]["anthropic"]["models"]["unused-model"] = {
         "display_name": "x",
         "cost_per_1k_input": 0,
@@ -1141,6 +1200,7 @@ from backend.services.llm_config import (
     migrate_legacy_yaml,
     validate,
 )
+from backend.services import llm_config as cfg_mod
 
 
 LEGACY = {
@@ -1209,8 +1269,12 @@ def test_migrate_writes_env_keys(tmp_path, monkeypatch):
     legacy.write_text(yaml.safe_dump(LEGACY), encoding="utf-8")
     env = tmp_path / ".env"
     result = migrate_legacy_yaml(legacy, env_path=env)
-    assert "STORYFORGE_PROVIDER_API_KEY_ANTHROPIC" in env.read_text(encoding="utf-8")
-    assert "STORYFORGE_PROVIDER_API_KEY_DEEPSEEK" in env.read_text(encoding="utf-8")
+    text = env.read_text(encoding="utf-8")
+    assert "STORYFORGE_PROVIDER_API_KEY_ANTHROPIC" in text
+    assert "STORYFORGE_PROVIDER_API_KEY_DEEPSEEK" in text
+    # Legacy alias keys are also written so pydantic-settings picks them up.
+    assert "ANTHROPIC_API_KEY=" in text
+    assert "DEEPSEEK_API_KEY=" in text
 
 
 def test_migrate_resolves_model_id_collisions(tmp_path):
@@ -1401,11 +1465,16 @@ def migrate_legacy_yaml(
     # Sync .env (best-effort).
     if env_path is None:
         env_path = Path("backend/.env")
-    env_updates = {
-        f"STORYFORGE_PROVIDER_API_KEY_{pid.upper()}": getattr(settings, f"{pid}_api_key", "")
-        for pid in providers
-        if getattr(settings, f"{pid}_api_key", "")
-    }
+    env_updates: dict[str, str] = {}
+    for pid in providers:
+        key = getattr(settings, f"{pid}_api_key", "")
+        if not key:
+            continue
+        # Write BOTH the new prefixed name and the legacy alias so
+        # pydantic-settings picks the value up on the next reload without
+        # requiring a process restart.
+        env_updates[f"STORYFORGE_PROVIDER_API_KEY_{pid.upper()}"] = key
+        env_updates[f"{pid.upper()}_API_KEY"] = key
     if env_updates:
         write_env_atomic(env_path, env_updates)
 
@@ -2063,8 +2132,12 @@ async def put_provider_api_key(provider_id: str, payload: dict):
     value = payload.get("value")
     if not isinstance(value, str):
         _err("VALIDATION_ERROR", "value 必须是字符串", 422, {"invalid_paths": ["value"]})
+    updates = {
+        f"STORYFORGE_PROVIDER_API_KEY_{provider_id.upper()}": value,
+        f"{provider_id.upper()}_API_KEY": value,  # legacy alias for pydantic-settings
+    }
     try:
-        write_env_atomic(ENV_PATH, {f"STORYFORGE_PROVIDER_API_KEY_{provider_id.upper()}": value})
+        write_env_atomic(ENV_PATH, updates)
     except OSError as e:
         _err("WRITE_FAILED", f".env 写入失败: {e}", 500)
     summary = reload_router()
@@ -2857,10 +2930,12 @@ Expected: FAIL (no migrate banner).
 
 In `AIConsoleModal.tsx`:
 
-- Replace `setProviders` with `setProviders(prov)` is unchanged. Add `const [showMigrate, setShowMigrate] = useState(false)` and after fetching, set `setShowMigrate(!cfg.providers)`.
+- Replace `setProviders` with `setProviders(prov)` is unchanged. Add `const [showMigrate, setShowMigrate] = useState(false)` and `const [providerDirty, setProviderDirty] = useState(false)`. After fetching, set `setShowMigrate(!cfg.providers)` and `setProviderDirty(false)`.
+- Update `dirty` computation: `const dirty = (!!config && !!draft && !deepEqual(config, draft)) || providerDirty`.
 - Add a button `data-testid="modal-migrate"` next to the reload button (visible when `showMigrate`). On click: `await llmConsole.migrateConfig(); await refresh(); setShowMigrate(false); setToast('迁移完成');`.
 - Derive a flat catalog `const catalog = (draft?.providers ? Object.values(draft.providers).flatMap(p => Object.values(p.models)) : providers.flatMap(p => p.models))` and pass it to `<TierPanel catalog={catalog} ...>`.
-- Replace `<ProviderPanel providers={providers} />` with `<ProviderPanel providers={providers} dirty={dirty} onChange={...} onReload={refresh} />`. The new `onChange` should bump a local "version" counter to mark the modal dirty.
+- Replace `<ProviderPanel providers={providers} />` with `<ProviderPanel providers={providers} dirty={dirty} onChange={() => setProviderDirty(true)} onReload={refresh} />`. Provider CRUD persists to server immediately, so we mark a separate dirty flag instead of merging into the YAML diff.
+- After successful save (existing `handleSave`) and after reload, call `setProviderDirty(false)`.
 
 Update imports to add `ProviderEntry`/`ModelEntry` from `../../api/llmConsole`.
 

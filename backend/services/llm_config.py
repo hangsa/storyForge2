@@ -477,7 +477,6 @@ def migrate_legacy_yaml(
 
     tiers = raw.get("tiers") or {}
     providers: dict[str, dict] = {}
-    global_ids: dict[str, str] = {}
     for tier in tiers.values():
         if not isinstance(tier, dict):
             continue
@@ -586,7 +585,17 @@ def migrate_legacy_yaml(
         env_updates[f"STORYFORGE_PROVIDER_API_KEY_{pid.upper()}"] = key
         env_updates[f"{pid.upper()}_API_KEY"] = key
     if env_updates:
-        write_env_atomic(env_path, env_updates)
+        try:
+            write_env_atomic(env_path, env_updates)
+        except Exception as e:
+            # Env sync is best-effort; a malformed .env or permissions issue
+            # must not abort the YAML migration.
+            print(f"[llm_config] warning: failed to sync env keys to {env_path}: {e}")
+
+    # Build the full new dict first so we can validate before touching disk.
+    new_raw = dict(raw)
+    new_raw["providers"] = providers
+    validate(new_raw)
 
     # Atomic write YAML to the supplied config_path.
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -598,7 +607,7 @@ def migrate_legacy_yaml(
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             yaml.safe_dump(
-                raw,
+                new_raw,
                 f,
                 allow_unicode=True,
                 sort_keys=False,
@@ -609,7 +618,6 @@ def migrate_legacy_yaml(
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
         raise
-    validate(raw)
     return {
         "backup_path": str(backup_path),
         "summary": {

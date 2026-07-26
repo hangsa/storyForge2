@@ -26,35 +26,83 @@ describe('TierPanel', () => {
     expect(onChange).toHaveBeenCalledWith({ ...SAMPLE, description: '新描述' });
   });
 
-  it('default dropdown shows catalog entries plus whitelist items', () => {
+  it('default dropdown shows catalog entries', () => {
     render(<TierPanel tierName="tier_1" value={SAMPLE} onChange={() => {}} catalog={CATALOG} />);
     const sel = screen.getByTestId('tier-1-default') as HTMLSelectElement;
     const values = Array.from(sel.options).map((o) => o.value);
     expect(values).toEqual(expect.arrayContaining(['deepseek-v4-pro', 'claude-opus-4']));
   });
 
-  it('adding a model picks from catalog', () => {
+  it('picking default model auto-adds to whitelist', () => {
     const onChange = vi.fn();
-    render(<TierPanel tierName="tier_1" value={{ ...SAMPLE, models: [] }} onChange={onChange} catalog={CATALOG} />);
-    const sel = screen.getByTestId('tier-1-new-model-select') as HTMLSelectElement;
+    render(
+      <TierPanel
+        tierName="tier_1"
+        value={{ ...SAMPLE, models: [] }}
+        onChange={onChange}
+        catalog={CATALOG}
+      />
+    );
+    const sel = screen.getByTestId('tier-1-default') as HTMLSelectElement;
     fireEvent.change(sel, { target: { value: 'deepseek-v4-pro' } });
-    fireEvent.click(screen.getByTestId('tier-1-new-model-add'));
-    const last = onChange.mock.calls.at(-1)![0];
+    const calls = onChange.mock.calls;
+    const last = calls[calls.length - 1][0];
+    expect(last.default).toBe('deepseek-v4-pro');
     expect(last.models).toContain('deepseek-v4-pro');
+  });
+
+  it('picking default model already in whitelist does not duplicate', () => {
+    const onChange = vi.fn();
+    render(<TierPanel tierName="tier_1" value={SAMPLE} onChange={onChange} catalog={CATALOG} />);
+    const sel = screen.getByTestId('tier-1-default') as HTMLSelectElement;
+    fireEvent.change(sel, { target: { value: 'deepseek-v4-pro' } });
+    const calls = onChange.mock.calls;
+    const last = calls[calls.length - 1][0];
+    expect(last.default).toBe('deepseek-v4-pro');
+    expect(last.models).toEqual(['claude-opus-4', 'deepseek-v4-pro']);
+  });
+
+  it('default dropdown disabled when no catalog and no whitelist', () => {
+    const onChange = vi.fn();
+    render(
+      <TierPanel
+        tierName="tier_1"
+        value={{ description: '', models: [], default: '' }}
+        onChange={onChange}
+        catalog={[]}
+      />
+    );
+    const sel = screen.getByTestId('tier-1-default') as HTMLSelectElement;
+    expect(sel.disabled).toBe(true);
+  });
+
+  it('fallback dropdown has empty option for no fallback', () => {
+    const onChange = vi.fn();
+    render(
+      <TierPanel
+        tierName="tier_1"
+        value={{ ...SAMPLE, fallback: null }}
+        onChange={onChange}
+        catalog={CATALOG}
+      />
+    );
+    const sel = screen.getByTestId('tier-1-fallback') as HTMLSelectElement;
+    expect(Array.from(sel.options).map((o) => o.value)).toContain('');
   });
 
   it('removing a model emits updated whitelist', () => {
     const onChange = vi.fn();
     render(<TierPanel tierName="tier_1" value={SAMPLE} onChange={onChange} catalog={CATALOG} />);
     fireEvent.click(screen.getByTestId('tier-1-model-0-remove'));
-    const last = onChange.mock.calls.at(-1)![0];
+    const calls = onChange.mock.calls;
+    const last = calls[calls.length - 1][0];
     expect(last.models).toEqual([]);
   });
 
-  it('tier_0 hides add-model', () => {
+  it('tier_0 hides remove-model buttons', () => {
     const onChange = vi.fn();
     render(<TierPanel tierName="tier_0" value={TIER_0} onChange={onChange} catalog={CATALOG} readOnly />);
-    expect(screen.queryByTestId('tier-0-add-model')).toBeNull();
+    expect(screen.queryByTestId('tier-0-model-0-remove')).toBeNull();
     expect(screen.getByTestId('tier-0-readonly-note')).toBeTruthy();
   });
 });

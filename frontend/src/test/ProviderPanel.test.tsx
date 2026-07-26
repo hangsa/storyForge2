@@ -94,4 +94,33 @@ describe('ProviderPanel', () => {
     expect(await screen.findByTestId('provider-error-toast')).toBeTruthy();
     expect(screen.getByText(/tier_1\.fallback/)).toBeTruthy();
   });
+
+  it('opens model form modal on add-model click and submits POST', async () => {
+    const onReload = vi.fn();
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={onReload} />);
+    fireEvent.click(screen.getByTestId('provider-anthropic-add-model'));
+    const idInput = await screen.findByTestId('model-form-id');
+    fireEvent.change(idInput, { target: { value: 'claude-new-3' } });
+    const displayName = screen.getByTestId('model-form-displayname');
+    fireEvent.change(displayName, { target: { value: 'Claude New 3' } });
+    fireEvent.click(screen.getByTestId('model-form-save'));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/settings/llm-config/providers/anthropic/models'),
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+    expect(onReload).toHaveBeenCalled();
+  });
+
+  it('opens model form modal on edit-model click with prefilled fields', async () => {
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={() => {}} />);
+    fireEvent.click(screen.getByTestId('provider-anthropic-model-claude-opus-4-edit'));
+    const idInput = await screen.findByTestId('model-form-id');
+    expect((idInput as HTMLInputElement).disabled).toBe(true);
+    expect((idInput as HTMLInputElement).value).toBe('claude-opus-4');
+    const displayName = screen.getByTestId('model-form-displayname');
+    // Initial value empty since provider models don't carry display_name; user can edit
+    expect((displayName as HTMLInputElement).value).toBe('');
+  });
 });

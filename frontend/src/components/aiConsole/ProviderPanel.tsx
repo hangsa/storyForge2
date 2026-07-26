@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { llmConsole, type ProviderEntry, type ProviderStatus } from '../../api/llmConsole';
+import type { ModelEntry } from '../../api/client';
 
 interface Props {
   providers: ProviderStatus[];
@@ -86,9 +87,74 @@ function ProviderFormModal({ initial, onClose, onSaved }: ProviderFormModalProps
   );
 }
 
+interface ModelFormModalProps {
+  providerId: string;
+  modelId?: string;
+  initial?: Partial<ModelEntry>;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: ModelFormModalProps) {
+  const isEdit = !!modelId;
+  const [id, setId] = useState(modelId ?? '');
+  const [displayName, setDisplayName] = useState(initial?.display_name ?? '');
+  const [costIn, setCostIn] = useState(initial?.cost_per_1k_input ?? 0);
+  const [costOut, setCostOut] = useState(initial?.cost_per_1k_output ?? 0);
+  const [maxTokens, setMaxTokens] = useState(initial?.max_tokens ?? 8192);
+  const [temperature, setTemperature] = useState(initial?.temperature ?? 0.7);
+  const [jsonMode, setJsonMode] = useState(initial?.json_mode ?? false);
+  const [stream, setStream] = useState(initial?.stream ?? true);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <div data-testid="model-form-modal" className="fixed inset-0 z-30 flex items-center justify-center bg-black/40">
+      <div className="w-[480px] rounded bg-canvas-bg p-6 shadow-xl">
+        <h4 className="mb-3 text-sm font-semibold">{isEdit ? `编辑 model '${modelId}'` : `新增 model (provider: ${providerId})`}</h4>
+        <div className="space-y-3 text-sm">
+          <label className="block"><span className="text-canvas-text-muted">ID（仅新建可设）</span><input data-testid="model-form-id" disabled={isEdit} value={id} onChange={(e) => setId(e.target.value)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1 disabled:opacity-50" /></label>
+          <label className="block"><span className="text-canvas-text-muted">显示名</span><input data-testid="model-form-displayname" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
+          <label className="block"><span className="text-canvas-text-muted">cost_per_1k_input</span><input data-testid="model-form-cost-in" type="number" step="0.0001" value={costIn} onChange={(e) => setCostIn(parseFloat(e.target.value) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
+          <label className="block"><span className="text-canvas-text-muted">cost_per_1k_output</span><input data-testid="model-form-cost-out" type="number" step="0.0001" value={costOut} onChange={(e) => setCostOut(parseFloat(e.target.value) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
+          <label className="block"><span className="text-canvas-text-muted">max_tokens</span><input data-testid="model-form-max-tokens" type="number" value={maxTokens} onChange={(e) => setMaxTokens(parseInt(e.target.value, 10) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
+          <label className="block"><span className="text-canvas-text-muted">temperature</span><input data-testid="model-form-temperature" type="number" step="0.05" min="0" max="2" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
+          <label className="flex items-center gap-2"><input data-testid="model-form-json-mode" type="checkbox" checked={jsonMode} onChange={(e) => setJsonMode(e.target.checked)} /><span>json_mode</span></label>
+          <label className="flex items-center gap-2"><input data-testid="model-form-stream" type="checkbox" checked={stream} onChange={(e) => setStream(e.target.checked)} /><span>stream</span></label>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded border border-canvas-text-muted/40 px-3 py-1 text-sm">取消</button>
+          <button type="button" data-testid="model-form-save" disabled={!id || !displayName || saving} className="rounded bg-canvas-accent px-3 py-1 text-sm text-white disabled:opacity-50" onClick={async () => {
+            setSaving(true);
+            try {
+              const model: ModelEntry = {
+                id,
+                provider: providerId,
+                display_name: displayName,
+                cost_per_1k_input: costIn,
+                cost_per_1k_output: costOut,
+                max_tokens: maxTokens,
+                temperature,
+                json_mode: jsonMode,
+                stream,
+              };
+              await llmConsole.upsertModel(providerId, id, model);
+              onSaved();
+              onClose();
+            } finally {
+              setSaving(false);
+            }
+          }}>保存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProviderPanel({ providers, dirty, onChange, onReload }: Props) {
   const [editingProvider, setEditingProvider] = useState<ProviderFormModalProps['initial'] | Record<string, never> | null>(null);
   const [apikeyFor, setApikeyFor] = useState<string | null>(null);
+  const [addingModelFor, setAddingModelFor] = useState<string | null>(null);
+  const [editingModelFor, setEditingModelFor] = useState<{ providerId: string; modelId: string } | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
 
   const handleProviderSaved = async () => {
@@ -97,6 +163,11 @@ export default function ProviderPanel({ providers, dirty, onChange, onReload }: 
   };
 
   const handleApiKeySaved = async () => {
+    await onReload();
+    onChange();
+  };
+
+  const handleModelSaved = async () => {
     await onReload();
     onChange();
   };
@@ -143,11 +214,18 @@ export default function ProviderPanel({ providers, dirty, onChange, onReload }: 
               <button type="button" data-testid={`provider-${p.provider}-delete`} className="rounded border border-rose-500/40 px-2 py-0.5 text-xs text-rose-600" onClick={() => handleDelete(p.provider)}>删除</button>
             </div>
             <div className="mt-3 space-y-1">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-xs text-canvas-text-muted">模型 ({p.models.length})</span>
+                <button type="button" data-testid={`provider-${p.provider}-add-model`} className="rounded border border-canvas-accent/40 px-2 py-0.5 text-xs text-canvas-accent" onClick={() => setAddingModelFor(p.provider)}>+ 新增模型</button>
+              </div>
               {p.models.length === 0 && <span className="text-xs text-canvas-text-muted">（无模型）</span>}
               {p.models.map((m) => (
                 <div key={m.id} className="flex items-center justify-between rounded bg-canvas-bg px-2 py-1 text-xs">
                   <span className="font-mono">{m.id}</span>
-                  <button type="button" data-testid={`provider-${p.provider}-model-${m.id}-delete`} className="text-rose-600" onClick={() => handleDeleteModel(p.provider, m.id)}>删除</button>
+                  <div className="flex gap-1">
+                    <button type="button" data-testid={`provider-${p.provider}-model-${m.id}-edit`} className="text-canvas-accent" onClick={() => setEditingModelFor({ providerId: p.provider, modelId: m.id })}>编辑</button>
+                    <button type="button" data-testid={`provider-${p.provider}-model-${m.id}-delete`} className="text-rose-600" onClick={() => handleDeleteModel(p.provider, m.id)}>删除</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -157,6 +235,12 @@ export default function ProviderPanel({ providers, dirty, onChange, onReload }: 
       {error && <div data-testid="provider-error-toast" className="rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-700">{error.message}{error.paths && <ul className="mt-1 list-disc pl-5 text-xs">{error.paths.map((p) => <li key={p}>{p}</li>)}</ul>}</div>}
       {apikeyFor && <ApiKeyModal providerId={apikeyFor} onClose={() => setApikeyFor(null)} onSaved={handleApiKeySaved} />}
       {editingProvider !== null && <ProviderFormModal initial={Object.keys(editingProvider).length ? editingProvider as NonNullable<ProviderFormModalProps['initial']> : null} onClose={() => setEditingProvider(null)} onSaved={handleProviderSaved} />}
+      {addingModelFor && <ModelFormModal providerId={addingModelFor} onClose={() => setAddingModelFor(null)} onSaved={handleModelSaved} />}
+      {editingModelFor && (() => {
+        const provider = providers.find((pp) => pp.provider === editingModelFor.providerId);
+        const model = provider?.models.find((mm) => mm.id === editingModelFor.modelId);
+        return <ModelFormModal providerId={editingModelFor.providerId} modelId={editingModelFor.modelId} initial={model} onClose={() => setEditingModelFor(null)} onSaved={handleModelSaved} />;
+      })()}
     </div>
   );
 }

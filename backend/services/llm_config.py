@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -48,6 +49,90 @@ def write_yaml_atomic(data: dict) -> None:
                 default_flow_style=False,
             )
         os.replace(tmp_name, CONFIG_PATH)
+    except Exception:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+        raise
+
+
+_ENV_LINE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
+
+
+def _env_replace(src: str, dst: Path) -> None:
+    """Wrapper around os.replace to allow monkeypatching in tests."""
+    os.replace(src, dst)
+
+
+def _parse_env(text: str) -> tuple[list[str], dict[str, str]]:
+    """Return (raw_lines, key->value). Lines that are not assignments are kept
+    verbatim in raw_lines so comments and blanks survive untouched."""
+    raw = text.splitlines(keepends=False) if text else []
+    values: dict[str, str] = {}
+    for line in raw:
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = _ENV_LINE_RE.match(line)
+        if match:
+            values[match.group(1)] = match.group(2)
+    return raw, values
+
+
+def _format_env_value(value: str) -> str:
+    if any(ch.isspace() for ch in value) or any(ch in value for ch in ['"', "'", "#"]):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return value
+
+
+def write_env_atomic(env_path: Path, updates: dict[str, str]) -> None:
+    """Atomic update of a `.env` file. Preserves key order, comments, and
+    blank lines. Adds new keys at the end (after a blank line if missing).
+    """
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+    raw, existing = _parse_env(text)
+
+    new_raw: list[str] = []
+    seen_keys: set[str] = set()
+    for line in raw:
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#"):
+            new_raw.append(line)
+            continue
+        match = _ENV_LINE_RE.match(line)
+        if not match:
+            new_raw.append(line)
+            continue
+        key = match.group(1)
+        if key in updates:
+            new_raw.append(f"{key}={_format_env_value(updates[key])}")
+            seen_keys.add(key)
+        else:
+            new_raw.append(line)
+
+    appended = False
+    for key, value in updates.items():
+        if key in seen_keys:
+            continue
+        if not appended and new_raw and new_raw[-1].strip() != "":
+            new_raw.append("")
+            appended = True
+        elif not new_raw:
+            appended = True
+        new_raw.append(f"{key}={_format_env_value(value)}")
+
+    payload = "\n".join(new_raw) + "\n"
+
+    fd, tmp_name = tempfile.mkstemp(
+        dir=env_path.parent,
+        prefix=".env.",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        _env_replace(tmp_name, env_path)
     except Exception:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)

@@ -139,19 +139,92 @@ def write_env_atomic(env_path: Path, updates: dict[str, str]) -> None:
         raise
 
 
+ALLOWED_PROVIDER_TYPES = {"anthropic", "openai_compatible", "mock"}
+
+
+def _collect_global_models(data: dict) -> dict[str, str]:
+    """Map model id -> provider key for every provider's models dict."""
+    out: dict[str, str] = {}
+    providers = data.get("providers") or {}
+    if not isinstance(providers, dict):
+        return out
+    for pid, provider in providers.items():
+        if not isinstance(provider, dict):
+            continue
+        models = provider.get("models") or {}
+        if not isinstance(models, dict):
+            continue
+        for mid in models:
+            out[mid] = pid
+    return out
+
+
 def validate(data: dict) -> None:
     """Validate a config dict. Raises LLMConfigError with `invalid_paths`
-    on failure. Path format matches JSON-pointer-ish dotted syntax:
-    e.g. `tiers.tier_1.models.0.id`, `agent_mapping.writer.scene_writing.tier`.
+    on failure. Path format: dotted, e.g.
+    `tiers.tier_1.models.0.id`, `providers.anthropic.models.claude-opus-4`.
     """
     if not isinstance(data, dict):
         raise LLMConfigError("配置根节点必须是对象", ["$"])
+
+    invalid: list[str] = []
+
+    providers = data.get("providers") or {}
+    if not isinstance(providers, dict):
+        raise LLMConfigError("providers 必须是对象", ["providers"])
+
+    global_models = _collect_global_models(data)
+    seen_ids: set[str] = set()
+    first_seen_path: dict[str, str] = {}
+    for pid, provider in providers.items():
+        path = f"providers.{pid}"
+        if not isinstance(provider, dict):
+            invalid.append(path)
+            continue
+        ptype = provider.get("type")
+        if ptype not in ALLOWED_PROVIDER_TYPES:
+            invalid.append(f"{path}.type")
+        if not provider.get("api_key_env"):
+            invalid.append(f"{path}.api_key_env")
+        base_url = provider.get("base_url")
+        if ptype == "openai_compatible" and not base_url:
+            invalid.append(f"{path}.base_url")
+        models = provider.get("models") or {}
+        if not isinstance(models, dict):
+            invalid.append(f"{path}.models")
+            continue
+        for mid, model in models.items():
+            mpath = f"{path}.models.{mid}"
+            if not isinstance(model, dict):
+                invalid.append(mpath)
+                continue
+            if mid in seen_ids:
+                # Report both occurrences so callers can locate each one.
+                invalid.append(first_seen_path[mid])
+                invalid.append(f"providers.{pid}.models[duplicate_id={mid}]")
+            else:
+                first_seen_path[mid] = mpath
+            seen_ids.add(mid)
+            max_tokens = model.get("max_tokens")
+            if (
+                not isinstance(max_tokens, int)
+                or isinstance(max_tokens, bool)
+            ):
+                invalid.append(f"{mpath}.max_tokens")
+            cost_in = model.get("cost_per_1k_input")
+            cost_out = model.get("cost_per_1k_output")
+            if not isinstance(cost_in, (int, float)) or isinstance(cost_in, bool):
+                invalid.append(f"{mpath}.cost_per_1k_input")
+            if not isinstance(cost_out, (int, float)) or isinstance(cost_out, bool):
+                invalid.append(f"{mpath}.cost_per_1k_output")
+            temperature = model.get("temperature")
+            if not isinstance(temperature, (int, float)) or isinstance(temperature, bool):
+                invalid.append(f"{mpath}.temperature")
 
     tiers = data.get("tiers") or {}
     if not isinstance(tiers, dict):
         raise LLMConfigError("tiers 必须是对象", ["tiers"])
 
-    invalid: list[str] = []
     known_tier_names = set(tiers.keys())
     if "tier_0" not in known_tier_names:
         invalid.append("tier_0")
@@ -165,39 +238,23 @@ def validate(data: dict) -> None:
                 invalid.append("tiers.tier_0")
             continue
 
-        models = tier.get("models") or []
-        if not models:
+        whitelisted = tier.get("models") or []
+        if not isinstance(whitelisted, list) or not whitelisted:
             invalid.append(f"tiers.{tier_name}.models")
-
-        model_ids = [
-            m.get("id") for m in models if isinstance(m, dict) and m.get("id")
-        ]
-        if len(model_ids) != len(set(model_ids)):
-            counts: dict[str, int] = {}
-            for mid in model_ids:
-                counts[mid] = counts.get(mid, 0) + 1
-            for mid, n in counts.items():
-                if n > 1:
-                    invalid.append(f"tiers.{tier_name}.models[duplicate_id={mid}]")
-
-        for i, m in enumerate(models):
-            if not isinstance(m, dict):
+            whitelisted = []
+        for i, mid in enumerate(whitelisted):
+            if not isinstance(mid, str) or mid not in global_models:
                 invalid.append(f"tiers.{tier_name}.models.{i}")
-                continue
-            mid = m.get("id")
-            if not mid:
-                invalid.append(f"tiers.{tier_name}.models.{i}.id")
-                continue
-            if m.get("provider") not in ALLOWED_PROVIDERS:
-                invalid.append(f"tiers.{tier_name}.models.{i}.provider")
-            if not isinstance(m.get("max_tokens"), int) or isinstance(m.get("max_tokens"), bool):
-                invalid.append(f"tiers.{tier_name}.models.{i}.max_tokens")
 
         default = tier.get("default")
-        if default and default != "none" and not any(m.get("id") == default for m in models):
+        if default and default != "none" and default not in global_models:
+            invalid.append(f"tiers.{tier_name}.default")
+        elif default and default != "none" and default not in whitelisted:
             invalid.append(f"tiers.{tier_name}.default")
         fallback = tier.get("fallback")
-        if fallback and not any(m.get("id") == fallback for m in models):
+        if fallback and fallback not in global_models:
+            invalid.append(f"tiers.{tier_name}.fallback")
+        elif fallback and fallback not in whitelisted:
             invalid.append(f"tiers.{tier_name}.fallback")
 
     mappings = data.get("agent_mapping") or {}
@@ -223,16 +280,14 @@ def validate(data: dict) -> None:
                 else []
             )
             model_id = mapping.get("model")
-            if model_id and model_id != "default" and not any(
-                m.get("id") == model_id for m in tier_models
-            ):
+            if model_id and model_id != "default" and model_id not in global_models:
+                invalid.append(f"agent_mapping.{agent_name}.{task_name}.model")
+            elif model_id and model_id != "default" and model_id not in tier_models:
                 invalid.append(f"agent_mapping.{agent_name}.{task_name}.model")
             fallback = mapping.get("fallback")
-            if (
-                fallback
-                and fallback != "default"
-                and not any(m.get("id") == fallback for m in tier_models)
-            ):
+            if fallback and fallback != "default" and fallback not in global_models:
+                invalid.append(f"agent_mapping.{agent_name}.{task_name}.fallback")
+            elif fallback and fallback != "default" and fallback not in tier_models:
                 invalid.append(f"agent_mapping.{agent_name}.{task_name}.fallback")
 
     if invalid:

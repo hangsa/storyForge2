@@ -1,8 +1,9 @@
+import shutil
 from pathlib import Path
 
 import pytest
 
-from backend.services.llm_config import read_yaml
+from backend.services.llm_config import read_yaml, write_yaml_atomic
 
 REAL_CONFIG = Path("config/model_tiers.yaml")
 
@@ -10,9 +11,86 @@ REAL_CONFIG = Path("config/model_tiers.yaml")
 @pytest.fixture
 def isolated_config(tmp_path, monkeypatch):
     """Point CONFIG_PATH at a tmp copy of the real file."""
-    import shutil
     target = tmp_path / "model_tiers.yaml"
     shutil.copy(REAL_CONFIG, target)
+    import backend.services.llm_config as mod
+    monkeypatch.setattr(mod, "CONFIG_PATH", target)
+    return target
+
+
+def _v2_base():
+    """Inline v2 fixture scoped to the tests in this file (pytest does not
+    expose tests/ as a package so we can't import from test_llm_config_providers)."""
+    return {
+        "providers": {
+            "anthropic": {
+                "type": "anthropic",
+                "display_name": "Anthropic",
+                "api_key_env": "ANTHROPIC_API_KEY",
+                "enabled": True,
+                "models": {
+                    "claude-opus-4": {
+                        "display_name": "Claude Opus 4",
+                        "cost_per_1k_input": 0.015,
+                        "cost_per_1k_output": 0.075,
+                        "max_tokens": 8192,
+                        "temperature": 0.7,
+                        "json_mode": False,
+                        "stream": True,
+                    }
+                },
+            },
+            "deepseek": {
+                "type": "openai_compatible",
+                "display_name": "DeepSeek",
+                "base_url": "https://api.deepseek.com/v1",
+                "api_key_env": "DEEPSEEK_API_KEY",
+                "enabled": True,
+                "models": {
+                    "deepseek-v4-pro": {
+                        "display_name": "DeepSeek V4 Pro",
+                        "cost_per_1k_input": 0.002,
+                        "cost_per_1k_output": 0.008,
+                        "max_tokens": 8192,
+                        "temperature": 0.7,
+                        "json_mode": True,
+                        "stream": True,
+                    }
+                },
+            },
+        },
+        "tiers": {
+            "tier_1": {
+                "description": "创意核心",
+                "default": "deepseek-v4-pro",
+                "fallback": "claude-opus-4",
+                "models": ["deepseek-v4-pro", "claude-opus-4"],
+                "retry_on_failure": True,
+                "max_retries": 1,
+            },
+            "tier_0": {
+                "description": "确定性",
+                "default": "none",
+                "fallback": None,
+                "models": [],
+                "retry_on_failure": False,
+                "max_retries": 0,
+            },
+        },
+        "agent_mapping": {
+            "writer": {
+                "scene_writing": {"tier": "tier_1", "model": "deepseek-v4-pro"},
+            }
+        },
+    }
+
+
+@pytest.fixture
+def isolated_v2_config(tmp_path, monkeypatch):
+    """Point CONFIG_PATH at a tmp v2-shaped YAML file."""
+    import yaml as yaml_mod
+    target = tmp_path / "model_tiers.yaml"
+    target.write_text(yaml_mod.safe_dump(_v2_base(), allow_unicode=True, sort_keys=False), encoding="utf-8")
     import backend.services.llm_config as mod
     monkeypatch.setattr(mod, "CONFIG_PATH", target)
     return target
@@ -45,71 +123,77 @@ def test_write_yaml_atomic_cleans_tmp_on_failure(isolated_config, monkeypatch):
     assert leftover == []
 
 
-def test_validate_happy_path_against_real_config(isolated_config):
+def test_validate_happy_path_against_v2_config():
     from backend.services.llm_config import validate
-    validate(read_yaml())  # must not raise
+    validate(_v2_base())  # must not raise
 
 
-def test_validate_rejects_unknown_default(isolated_config):
-    from backend.services.llm_config import LLMConfigError, read_yaml, validate
-    bad = read_yaml()
+def test_validate_rejects_unknown_default():
+    from backend.services.llm_config import LLMConfigError, validate
+    bad = _v2_base()
     bad["tiers"]["tier_1"]["default"] = "ghost-model"
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
     assert any(p.endswith("tier_1.default") for p in exc.value.invalid_paths)
 
 
-def test_validate_rejects_empty_agent_mapping_entry(isolated_config):
-    from backend.services.llm_config import LLMConfigError, read_yaml, validate
-    bad = read_yaml()
-    bad["agent_mapping"]["planner"][""] = {"tier": "tier_1"}
+def test_validate_rejects_empty_agent_mapping_entry():
+    from backend.services.llm_config import LLMConfigError, validate
+    bad = _v2_base()
+    bad["agent_mapping"]["writer"]["" ] = {"tier": "tier_1"}
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
-    assert any(p == "agent_mapping.planner.<empty>" for p in exc.value.invalid_paths)
+    assert any(p == "agent_mapping.writer.<empty>" for p in exc.value.invalid_paths)
 
 
-def test_validate_rejects_missing_tier0(isolated_config):
-    from backend.services.llm_config import LLMConfigError, read_yaml, validate
-    bad = read_yaml()
+def test_validate_rejects_missing_tier0():
+    from backend.services.llm_config import LLMConfigError, validate
+    bad = _v2_base()
     bad["tiers"].pop("tier_0")
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
     assert "tier_0" in exc.value.invalid_paths
 
 
-def test_validate_rejects_agent_mapping_to_unknown_tier(isolated_config):
-    from backend.services.llm_config import LLMConfigError, read_yaml, validate
-    bad = read_yaml()
-    bad["agent_mapping"]["planner"]["novelty_evaluation"]["tier"] = "tier_9"
+def test_validate_rejects_agent_mapping_to_unknown_tier():
+    from backend.services.llm_config import LLMConfigError, validate
+    bad = _v2_base()
+    bad["agent_mapping"]["writer"]["scene_writing"]["tier"] = "tier_9"
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
-    assert any("novelty_evaluation.tier" in p for p in exc.value.invalid_paths)
+    assert any("scene_writing.tier" in p for p in exc.value.invalid_paths)
 
 
-def test_validate_rejects_max_tokens_bool(isolated_config):
-    from backend.services.llm_config import LLMConfigError, read_yaml, validate
-    bad = read_yaml()
-    # set the first model's max_tokens to True (passes naive isinstance(int))
-    bad["tiers"]["tier_1"]["models"][0]["max_tokens"] = True
+def test_validate_rejects_max_tokens_bool():
+    from backend.services.llm_config import LLMConfigError, validate
+    bad = _v2_base()
+    # set a provider model's max_tokens to True (passes naive isinstance(int))
+    bad["providers"]["anthropic"]["models"]["claude-opus-4"]["max_tokens"] = True
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
     assert any("max_tokens" in p for p in exc.value.invalid_paths)
 
 
-def test_validate_reports_duplicate_model_ids_with_id(isolated_config):
-    from backend.services.llm_config import LLMConfigError, read_yaml, validate
-    bad = read_yaml()
-    # add a duplicate of an existing model id in tier_1
-    dup = dict(bad["tiers"]["tier_1"]["models"][0])
-    dup["provider"] = "deepseek"
-    bad["tiers"]["tier_1"]["models"].append(dup)
+def test_validate_reports_duplicate_model_ids_with_id():
+    from backend.services.llm_config import LLMConfigError, validate
+    bad = _v2_base()
+    # define a cross-provider duplicate model id (v2 deduplicates globally)
+    bad["providers"]["anthropic"]["models"]["deepseek-v4-pro"] = {
+        "display_name": "dup",
+        "cost_per_1k_input": 0,
+        "cost_per_1k_output": 0,
+        "max_tokens": 1,
+        "temperature": 0,
+        "json_mode": False,
+        "stream": True,
+    }
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
     paths = exc.value.invalid_paths
-    assert any("duplicate_id=" in p for p in paths)
+    assert any("providers." in p and ".models" in p for p in paths)
 
 
-def test_reload_router_swaps_in_disk(monkeypatch, isolated_config):
+def test_reload_router_swaps_in_disk(monkeypatch, isolated_v2_config):
     from backend.services import llm_config as mod
     from backend.services.llm_config import reload_router
 

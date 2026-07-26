@@ -365,8 +365,9 @@ def find_references(data: dict, target: str) -> list[str]:
 def validate_removal(data: dict, target: str) -> None:
     paths = find_references(data, target)
     if paths:
+        sample = "，".join(paths[:3]) + ("…" if len(paths) > 3 else "")
         raise LLMConfigError(
-            f"无法删除 {target}，仍有 {len(paths)} 处引用",
+            f"无法删除 {target}，仍有 {len(paths)} 处引用：{sample}",
             paths,
         )
 

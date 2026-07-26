@@ -110,3 +110,40 @@ def test_validate_removal_allows_unused_model():
         "stream": True,
     }
     validate_removal(cfg, "model:unused-model")  # should not raise
+
+
+def test_find_references_provider_no_models_returns_empty():
+    cfg = deepcopy(_base())
+    cfg["tiers"]["tier_1"]["models"] = ["claude-opus-4"]
+    cfg["tiers"]["tier_1"]["default"] = "claude-opus-4"
+    cfg["tiers"]["tier_1"]["fallback"] = "claude-opus-4"
+    cfg["agent_mapping"]["writer"]["scene_writing"]["model"] = "claude-opus-4"
+    assert find_references(cfg, "provider:deepseek") == []
+
+
+def test_find_references_agent_mapping_fallback():
+    cfg = deepcopy(_base())
+    cfg["agent_mapping"]["writer"]["scene_writing"]["fallback"] = "claude-opus-4"
+    refs = find_references(cfg, "model:claude-opus-4")
+    assert "agent_mapping.writer.scene_writing.fallback" in refs
+
+
+def test_find_references_tier_whitelist_index():
+    assert "tiers.tier_1.models.0" in find_references(_base(), "model:deepseek-v4-pro")
+    assert "tiers.tier_1.models.1" in find_references(_base(), "model:claude-opus-4")
+
+
+def test_find_references_provider_via_tier_default():
+    cfg = deepcopy(_base())
+    cfg["tiers"]["tier_1"]["models"] = ["deepseek-v4-pro"]
+    cfg["tiers"]["tier_1"]["default"] = "claude-opus-4"
+    cfg["tiers"]["tier_1"]["fallback"] = None
+    refs = find_references(cfg, "provider:anthropic")
+    assert "tiers.tier_1.default" in refs
+
+
+def test_find_references_invalid_target_raises():
+    with pytest.raises(ValueError):
+        find_references(_base(), "nocolon")
+    with pytest.raises(ValueError):
+        find_references(_base(), "weird:x:y")

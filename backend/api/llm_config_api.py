@@ -17,7 +17,7 @@ from backend.services.llm_usage_log import read_recent
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
-def _ok(detail) -> dict:
+def _ok(detail: object) -> dict:
     return {"error": False, "code": "OK", "message": "", "detail": detail}
 
 
@@ -48,7 +48,7 @@ async def put_llm_config(data: dict):
     try:
         validate(data)
     except LLMConfigError as e:
-        return _err(
+        _err(
             "VALIDATION_ERROR",
             str(e),
             422,
@@ -57,7 +57,7 @@ async def put_llm_config(data: dict):
     try:
         write_yaml_atomic(data)
     except OSError as e:
-        return _err("WRITE_FAILED", f"写入失败: {e}", 500)
+        _err("WRITE_FAILED", f"写入失败: {e}", 500)
     summary = reload_router()
     return {
         "error": False,
@@ -72,14 +72,14 @@ async def post_reload_llm_config():
     try:
         summary = reload_router()
     except LLMConfigError as e:
-        return _err(
+        _err(
             "VALIDATION_ERROR",
             str(e),
             422,
             {"invalid_paths": e.invalid_paths},
         )
     except Exception as e:
-        return _err("RELOAD_FAILED", f"重载失败: {e}", 500)
+        _err("RELOAD_FAILED", f"重载失败: {e}", 500)
     return {
         "error": False,
         "code": "OK",
@@ -91,7 +91,7 @@ async def post_reload_llm_config():
 @router.get("/llm-usage")
 async def get_llm_usage(limit: int = 50):
     if limit < 1 or limit > 500:
-        return _err(
+        _err(
             "VALIDATION_ERROR",
             "limit 必须介于 1-500",
             400,

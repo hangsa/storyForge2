@@ -2,7 +2,9 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
@@ -436,3 +438,182 @@ def provider_status() -> list[dict]:
             "models": models_out,
         })
     return out
+
+
+def _legacy_default_base_url(provider_id: str) -> str:
+    if provider_id == "deepseek":
+        return "https://api.deepseek.com/v1"
+    if provider_id == "minimax":
+        return "https://api.minimax.chat/v1"
+    if provider_id == "anthropic":
+        return "https://api.anthropic.com"
+    return ""
+
+
+def _legacy_provider_type(provider_id: str) -> str:
+    return "anthropic" if provider_id == "anthropic" else "openai_compatible"
+
+
+def migrate_legacy_yaml(
+    config_path: Path = CONFIG_PATH,
+    env_path: Optional[Path] = None,
+) -> dict:
+    """Convert the legacy `tiers.*.models[*].{provider,cost_*,max_tokens}`
+    layout into the v2 schema with a top-level `providers` block.
+
+    Returns a summary dict: `{backup_path, summary}`.
+
+    Raises LLMConfigError when the YAML already uses v2 (i.e. has a
+    `providers` key) or the structure cannot be interpreted.
+    """
+    if not config_path.exists():
+        raise LLMConfigError("配置文件不存在", ["$"])
+    raw_text = config_path.read_text(encoding="utf-8")
+    raw = yaml.safe_load(raw_text) or {}
+    if not isinstance(raw, dict):
+        raise LLMConfigError("配置文件根节点必须是对象", ["$"])
+    if "providers" in raw:
+        raise LLMConfigError("已是新结构，无需迁移", ["providers"])
+
+    tiers = raw.get("tiers") or {}
+    providers: dict[str, dict] = {}
+    global_ids: dict[str, str] = {}
+    for tier in tiers.values():
+        if not isinstance(tier, dict):
+            continue
+        for m in tier.get("models") or []:
+            if not isinstance(m, dict):
+                continue
+            pid = m.get("provider")
+            mid = m.get("id")
+            if not pid or not mid:
+                continue
+            providers.setdefault(
+                pid,
+                {
+                    "type": _legacy_provider_type(pid),
+                    "display_name": pid,
+                    "base_url": _legacy_default_base_url(pid),
+                    "api_key_env": f"{pid.upper()}_API_KEY",
+                    "enabled": True,
+                    "models": {},
+                },
+            )
+            models = providers[pid]["models"]
+            if mid in models:
+                continue
+            models[mid] = {
+                "display_name": mid,
+                "cost_per_1k_input": m.get("cost_per_1k_input", 0),
+                "cost_per_1k_output": m.get("cost_per_1k_output", 0),
+                "max_tokens": m.get("max_tokens", 8192),
+                "temperature": 0.7,
+                "json_mode": pid in {"deepseek", "minimax"},
+                "stream": True,
+            }
+
+    # Detect global id collisions; rename by prefixing provider id.
+    collisions: dict[str, list[str]] = {}
+    for pid, provider in providers.items():
+        for mid in list(provider["models"].keys()):
+            collisions.setdefault(mid, []).append(pid)
+    renamed = False
+    for mid, providers_sharing in collisions.items():
+        if len(providers_sharing) <= 1:
+            continue
+        renamed = True
+        for pid in providers_sharing:
+            old = providers[pid]["models"].pop(mid)
+            new_mid = f"{pid}/{mid}"
+            providers[pid]["models"][new_mid] = old
+
+    # Rewrite tier `models` whitelist from legacy dict entries (with
+    # provider/id/cost/max_tokens) to v2 string entries (model id).
+    for tier in tiers.values():
+        if not isinstance(tier, dict):
+            continue
+        new_models: list = []
+        for m in tier.get("models") or []:
+            if not isinstance(m, dict):
+                # Already a string or other — keep as-is.
+                new_models.append(m)
+                continue
+            mid = m.get("id")
+            pid = m.get("provider")
+            if renamed and mid in collisions and pid in collisions.get(mid, []):
+                new_models.append(f"{pid}/{mid}")
+            else:
+                new_models.append(mid or "")
+        tier["models"] = new_models
+        for key in ("default", "fallback"):
+            val = tier.get(key)
+            if isinstance(val, str) and renamed and val in collisions:
+                owner = collisions[val][0]
+                tier[key] = f"{owner}/{val}"
+
+    # Rewrite agent_mapping references for renamed ids.
+    if renamed:
+        mappings = raw.get("agent_mapping") or {}
+        for agent, tasks in mappings.items():
+            if not isinstance(tasks, dict):
+                continue
+            for task, mapping in tasks.items():
+                if not isinstance(mapping, dict):
+                    continue
+                for key in ("model", "fallback"):
+                    val = mapping.get(key)
+                    if isinstance(val, str) and val in collisions:
+                        mapping[key] = f"{collisions[val][0]}/{val}"
+
+    # Persist backup.
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_path = config_path.with_suffix(config_path.suffix + f".bak-{ts}")
+    backup_path.write_text(raw_text, encoding="utf-8")
+
+    raw["providers"] = providers
+
+    # Sync .env (best-effort).
+    if env_path is None:
+        env_path = Path("backend/.env")
+    env_updates: dict[str, str] = {}
+    for pid in providers:
+        key = getattr(settings, f"{pid}_api_key", "")
+        if not key:
+            continue
+        # Write BOTH the new prefixed name and the legacy alias so
+        # pydantic-settings picks the value up on the next reload without
+        # requiring a process restart.
+        env_updates[f"STORYFORGE_PROVIDER_API_KEY_{pid.upper()}"] = key
+        env_updates[f"{pid.upper()}_API_KEY"] = key
+    if env_updates:
+        write_env_atomic(env_path, env_updates)
+
+    # Atomic write YAML to the supplied config_path.
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=config_path.parent,
+        prefix=".model_tiers.",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            yaml.safe_dump(
+                raw,
+                f,
+                allow_unicode=True,
+                sort_keys=False,
+                default_flow_style=False,
+            )
+        os.replace(tmp_name, config_path)
+    except Exception:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+        raise
+    validate(raw)
+    return {
+        "backup_path": str(backup_path),
+        "summary": {
+            "providers": list(providers.keys()),
+            "renamed_ids": renamed,
+        },
+    }

@@ -18,6 +18,7 @@ from backend.api import (
     stage5_diagnosis, stage6_export, style_extractor, conductor, storyos,
     settings_api, creative_canvas, growth_workshop, style_sandbox, autopilot,
     stage4_fact_guard, prompt_plaza, prompt_defaults,
+    llm_config_api,
 )
 from backend.api.autopilot import broadcaster as autopilot_broadcaster
 from backend.config import settings
@@ -90,6 +91,7 @@ app.include_router(stage3_outline.branch_router)
 app.include_router(autopilot.router)
 app.include_router(prompt_plaza.router)
 app.include_router(prompt_defaults.router)
+app.include_router(llm_config_api.router)
 
 
 @app.exception_handler(Exception)

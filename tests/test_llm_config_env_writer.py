@@ -22,10 +22,12 @@ def test_write_env_atomic_updates_existing_key(env_path):
     assert lines[3] == "C=3"
 
 
-def test_write_env_atomic_appends_new_key(env_path):
-    write_env_atomic(env_path, {"D": "four"})
-    text = env_path.read_text(encoding="utf-8")
-    assert text.endswith("D=four\n")
+def test_write_env_atomic_handles_missing_trailing_newline(env_path):
+    env_path.write_text("A=1\nB=two", encoding="utf-8")
+
+    write_env_atomic(env_path, {"B": "two-new"})
+
+    assert env_path.read_text(encoding="utf-8") == "A=1\nB=two-new\n"
 
 
 def test_write_env_atomic_cleans_tmp_on_failure(env_path, monkeypatch):

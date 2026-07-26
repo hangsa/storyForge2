@@ -1126,7 +1126,73 @@ export const api = {
       "GET",
       `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`
     ),
+
+  getLLMConfig: () =>
+    request<ModelTiersConfig>("GET", "/settings/llm-config"),
+
+  putLLMConfig: (cfg: ModelTiersConfig) =>
+    request<LLMRouterSummary>("PUT", "/settings/llm-config", cfg),
+
+  reloadLLMConfig: () =>
+    request<LLMRouterSummary>("POST", "/settings/llm-config/reload"),
+
+  getProviders: () =>
+    request<ProviderStatus[]>("GET", "/settings/llm-providers"),
+
+  getLLMUsage: (limit = 50) =>
+    request<UsageRecord[]>("GET", `/settings/llm-usage?limit=${limit}`),
 };
+
+export interface ModelEntry {
+  id: string;
+  provider: "anthropic" | "deepseek" | "minimax";
+  cost_per_1k_input: number;
+  cost_per_1k_output: number;
+  max_tokens: number;
+}
+
+export interface TierConfig {
+  description: string;
+  models: ModelEntry[];
+  default: string;
+  retry_on_failure?: boolean;
+  max_retries?: number;
+  fallback?: string | null;
+}
+
+export interface AgentTaskMapping {
+  tier: string;
+  model?: string;
+  fallback?: string | null;
+}
+
+export interface ModelTiersConfig {
+  tiers: Record<string, TierConfig>;
+  agent_mapping: Record<string, Record<string, AgentTaskMapping | Record<string, unknown>>>;
+}
+
+export interface LLMRouterSummary {
+  tiers: number;
+  agents: number;
+}
+
+export interface ProviderStatus {
+  provider: string;
+  base_url: string;
+  api_key_configured: boolean;
+  models: string[];
+}
+
+export interface UsageRecord {
+  timestamp: string;
+  agent: string;
+  task: string;
+  tier: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost: number;
+}
 
 export { ApiError };
 export default api;

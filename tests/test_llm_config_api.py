@@ -11,6 +11,11 @@ from backend.main import app
 REAL_CONFIG = Path("config/model_tiers.yaml")
 
 
+@pytest.fixture(autouse=True)
+def _patch_env_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg_mod, "ENV_PATH", tmp_path / ".env")
+
+
 def _v2_base():
     """Minimal v2-shaped fixture so the reload endpoint can call
     validate() against a config that matches the new schema (the real
@@ -187,3 +192,77 @@ def test_reload_endpoint_returns_summary(client):
     summary = res.json()["detail"]
     assert summary["tiers"] >= 4
     assert summary["agents"] >= 7
+
+
+def test_upsert_provider(client):
+    payload = {"id": "newprov", "provider": {
+        "type": "openai_compatible",
+        "display_name": "NewProv",
+        "base_url": "https://api.newprov.com/v1",
+        "api_key_env": "NEWPROV_API_KEY",
+        "enabled": True,
+        "models": {},
+    }}
+    res = client.post("/api/settings/llm-config/providers", json=payload)
+    assert res.status_code == 200, res.text
+
+    cfg = client.get("/api/settings/llm-config").json()["detail"]
+    assert "newprov" in cfg["providers"]
+    assert cfg["providers"]["newprov"]["display_name"] == "NewProv"
+
+
+def test_delete_provider_with_references_blocked(client):
+    res = client.delete("/api/settings/llm-config/providers/deepseek")
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    # find_references emits model-id paths (provider references walk through
+    # model ownership); we just check invalid_paths is non-empty and the
+    # error code matches.
+    invalid_paths = detail["detail"]["invalid_paths"]
+    assert invalid_paths, "expected at least one reference path"
+    assert detail["code"] == "VALIDATION_ERROR"
+
+
+def test_upsert_model_in_provider(client):
+    payload = {"id": "newmodel", "model": {
+        "display_name": "New Model",
+        "cost_per_1k_input": 0.01,
+        "cost_per_1k_output": 0.02,
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "json_mode": False,
+        "stream": True,
+    }}
+    res = client.post(
+        "/api/settings/llm-config/providers/anthropic/models", json=payload
+    )
+    assert res.status_code == 200, res.text
+
+    cfg = client.get("/api/settings/llm-config").json()["detail"]
+    assert "newmodel" in cfg["providers"]["anthropic"]["models"]
+
+
+def test_delete_model_in_use_blocked(client):
+    res = client.delete(
+        "/api/settings/llm-config/providers/deepseek/models/deepseek-v4-pro"
+    )
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert detail["code"] == "VALIDATION_ERROR"
+
+
+def test_set_provider_api_key_writes_env(client, monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("ANTHROPIC_API_KEY=old\n", encoding="utf-8")
+    monkeypatch.setattr(cfg_mod, "ENV_PATH", env_path)
+    res = client.put(
+        "/api/settings/llm-config/providers/anthropic/api-key",
+        json={"value": "sk-new"},
+    )
+    assert res.status_code == 200, res.text
+    assert "ANTHROPIC_API_KEY=sk-new" in env_path.read_text(encoding="utf-8")
+
+
+def test_migrate_endpoint_409_when_already_v2(client):
+    res = client.post("/api/settings/llm-config/migrate")
+    assert res.status_code == 409

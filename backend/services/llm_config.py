@@ -12,6 +12,7 @@ from backend.config import settings
 from backend.llm.model_router import get_model_router
 
 CONFIG_PATH = Path("config/model_tiers.yaml")
+ENV_PATH = Path("backend/.env")
 PROVIDER_KEY_MAP = {
     "anthropic": "anthropic_api_key",
     "deepseek": "deepseek_api_key",
@@ -24,6 +25,10 @@ class LLMConfigError(ValueError):
     def __init__(self, message: str, invalid_paths: list[str]):
         super().__init__(message)
         self.invalid_paths = invalid_paths
+
+
+def update_provider_api_key(provider_id: str, value: str) -> None:
+    write_env_atomic(ENV_PATH, {f"STORYFORGE_PROVIDER_API_KEY_{provider_id.upper()}": value})
 
 
 def read_yaml() -> dict:

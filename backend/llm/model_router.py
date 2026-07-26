@@ -7,6 +7,7 @@ StoryForge v1.6 — ModelRouter: 配置驱动的 LLM 模型路由器。
 
 import json
 import logging
+import os
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -27,11 +28,22 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TierConfig:
     description: str
-    models: list[dict]
+    models: list[str]
     default: str
     retry_on_failure: bool = True
     max_retries: int = 1
     fallback: Optional[str] = None
+
+
+@dataclass
+class ProviderEntry:
+    provider_id: str
+    type: str
+    display_name: str
+    base_url: str
+    api_key_env: str
+    enabled: bool
+    models: dict[str, dict]  # model id -> raw dict from YAML
 
 
 @dataclass
@@ -64,6 +76,44 @@ class ModelUnavailableError(Exception):
         )
 
 
+# --- Builtin Defaults ---
+
+BUILTIN_PROVIDERS: dict[str, dict] = {
+    "anthropic": {
+        "type": "anthropic",
+        "display_name": "Anthropic",
+        "base_url": "https://api.anthropic.com",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "enabled": True,
+        "models": {
+            "claude-opus-4": {"display_name": "Claude Opus 4", "cost_per_1k_input": 0.015, "cost_per_1k_output": 0.075, "max_tokens": 8192, "temperature": 0.7, "json_mode": False, "stream": True},
+            "claude-sonnet-4": {"display_name": "Claude Sonnet 4", "cost_per_1k_input": 0.003, "cost_per_1k_output": 0.015, "max_tokens": 4096, "temperature": 0.7, "json_mode": False, "stream": True},
+            "claude-haiku": {"display_name": "Claude Haiku", "cost_per_1k_input": 0.00025, "cost_per_1k_output": 0.00125, "max_tokens": 2048, "temperature": 0.7, "json_mode": False, "stream": True},
+        },
+    },
+    "deepseek": {
+        "type": "openai_compatible",
+        "display_name": "DeepSeek",
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "enabled": True,
+        "models": {
+            "deepseek-v4-pro": {"display_name": "DeepSeek V4 Pro", "cost_per_1k_input": 0.002, "cost_per_1k_output": 0.008, "max_tokens": 8192, "temperature": 0.7, "json_mode": True, "stream": True},
+        },
+    },
+    "minimax": {
+        "type": "openai_compatible",
+        "display_name": "MiniMax",
+        "base_url": "https://api.minimax.chat/v1",
+        "api_key_env": "MINIMAX_API_KEY",
+        "enabled": True,
+        "models": {
+            "MiniMax-M3": {"display_name": "MiniMax M3", "cost_per_1k_input": 0.001, "cost_per_1k_output": 0.001, "max_tokens": 4096, "temperature": 0.7, "json_mode": True, "stream": True},
+        },
+    },
+}
+
+
 # --- ModelRouter ---
 
 
@@ -74,14 +124,7 @@ class ModelRouter:
     BUILTIN_TIERS: dict[str, dict] = {
         "tier_1": {
             "description": "Scene 写作、STAGE 1-3 内容生成",
-            "models": [
-                {"id": "deepseek-v4-pro", "provider": "deepseek",
-                 "cost_per_1k_input": 0.002, "cost_per_1k_output": 0.008,
-                 "max_tokens": 8192},
-                {"id": "claude-opus-4", "provider": "anthropic",
-                 "cost_per_1k_input": 0.015, "cost_per_1k_output": 0.075,
-                 "max_tokens": 8192},
-            ],
+            "models": ["deepseek-v4-pro", "claude-opus-4"],
             "default": "deepseek-v4-pro",
             "retry_on_failure": True,
             "max_retries": 2,
@@ -89,11 +132,7 @@ class ModelRouter:
         },
         "tier_2": {
             "description": "Narrative Guard 状态漂移检测",
-            "models": [
-                {"id": "claude-sonnet-4", "provider": "anthropic",
-                 "cost_per_1k_input": 0.003, "cost_per_1k_output": 0.015,
-                 "max_tokens": 4096},
-            ],
+            "models": ["claude-sonnet-4"],
             "default": "claude-sonnet-4",
             "retry_on_failure": True,
             "max_retries": 1,
@@ -101,11 +140,7 @@ class ModelRouter:
         },
         "tier_3": {
             "description": "L1 细节重提取、章摘要生成、风格分类",
-            "models": [
-                {"id": "claude-haiku", "provider": "anthropic",
-                 "cost_per_1k_input": 0.00025, "cost_per_1k_output": 0.00125,
-                 "max_tokens": 2048},
-            ],
+            "models": ["claude-haiku", "MiniMax-M3"],
             "default": "claude-haiku",
             "retry_on_failure": True,
             "max_retries": 1,
@@ -118,32 +153,32 @@ class ModelRouter:
         },
     }
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path=None):
         if config_path is None:
             config_path = Path("config/model_tiers.yaml")
         self._config_path = Path(config_path)
         self._tiers: dict[str, TierConfig] = {}
         self._mappings: dict[str, dict[str, AgentTaskMapping]] = {}
+        self._providers: dict[str, ProviderEntry] = {}
         self._provider_status: dict[str, bool] = {}
         self._load_config()
 
     # --- Config Loading ---
 
     def _load_config(self) -> None:
-        """加载配置文件，不存在时使用内置默认值并自动生成。"""
-        if self._config_path.exists():
-            with open(self._config_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-        else:
+        if not self._config_path.exists():
             logger.warning(
                 "model_tiers.yaml not found at %s, using builtin defaults",
                 self._config_path,
             )
-            data = {"tiers": self.BUILTIN_TIERS, "agent_mapping": {}}
+            data = {"providers": BUILTIN_PROVIDERS, "tiers": self.BUILTIN_TIERS, "agent_mapping": {}}
             self._write_config(data)
-
-        self._parse_tiers(data.get("tiers", {}))
-        self._parse_mappings(data.get("agent_mapping", {}))
+        else:
+            with open(self._config_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        self._parse_providers(data.get("providers") or {})
+        self._parse_tiers(data.get("tiers") or {})
+        self._parse_mappings(data.get("agent_mapping") or {})
 
     def _write_config(self, data: dict) -> None:
         """将配置写入 YAML 文件。"""
@@ -151,11 +186,41 @@ class ModelRouter:
         with open(self._config_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(data, f, allow_unicode=True, default_flow_style=False)
 
+    def _parse_providers(self, providers_data: dict) -> None:
+        self._providers.clear()
+        for pid, raw in providers_data.items():
+            if not isinstance(raw, dict):
+                continue
+            models_raw = raw.get("models") or {}
+            models_dict: dict[str, dict] = {}
+            if isinstance(models_raw, dict):
+                for mid, mbody in models_raw.items():
+                    if isinstance(mbody, dict):
+                        models_dict[mid] = {**mbody, "provider": pid, "id": mid}
+            self._providers[pid] = ProviderEntry(
+                provider_id=pid,
+                type=raw.get("type", "openai_compatible"),
+                display_name=raw.get("display_name", pid),
+                base_url=raw.get("base_url", ""),
+                api_key_env=raw.get("api_key_env", ""),
+                enabled=bool(raw.get("enabled", True)),
+                models=models_dict,
+            )
+
     def _parse_tiers(self, tiers_data: dict) -> None:
+        self._tiers.clear()
         for name, cfg in tiers_data.items():
+            raw_models = cfg.get("models") or []
+            # Accept both new (list[str]) and legacy (list[dict]) shapes.
+            model_ids: list[str] = []
+            for m in raw_models:
+                if isinstance(m, str):
+                    model_ids.append(m)
+                elif isinstance(m, dict) and "id" in m:
+                    model_ids.append(m["id"])
             self._tiers[name] = TierConfig(
                 description=cfg.get("description", ""),
-                models=cfg.get("models", []),
+                models=model_ids,
                 default=cfg.get("default", ""),
                 retry_on_failure=cfg.get("retry_on_failure", True),
                 max_retries=cfg.get("max_retries", 1),
@@ -197,7 +262,7 @@ class ModelRouter:
         model_id = self._pick_model_id(force_model, mapping, tier)
 
         # 3. 查找模型详情
-        model_info = self._find_model_info(tier, model_id)
+        model_info = self._find_model_info(model_id)
         if model_info is None:
             raise ModelUnavailableError(
                 provider_name="unknown",
@@ -261,13 +326,18 @@ class ModelRouter:
             tier_name=tier.description,
         )
 
-    def _find_model_info(
-        self, tier: TierConfig, model_id: str
-    ) -> Optional[dict]:
-        for m in tier.models:
-            if m["id"] == model_id:
-                return m
+    def _find_model_info(self, model_id: str) -> Optional[dict]:
+        for provider in self._providers.values():
+            if model_id in provider.models:
+                return provider.models[model_id]
         return None
+
+    def _find_model_info_or_raise(self, model_id: str) -> dict:
+        info = self._find_model_info(model_id)
+        if info is None:
+            from backend.llm.errors import ModelNotFoundError
+            raise ModelNotFoundError(model_id)
+        return info
 
     # --- Execution ---
 
@@ -333,7 +403,7 @@ class ModelRouter:
         last_error: Optional[Exception] = None
 
         for attempt_model_id in [current_model_id] + fallback_chain:
-            model_info = self._find_model_info(tier, attempt_model_id)
+            model_info = self._find_model_info(attempt_model_id)
             if model_info is None:
                 continue
 
@@ -446,47 +516,58 @@ class ModelRouter:
         return chain
 
     def _create_provider_for_model(self, model_info: dict) -> BaseLLMProvider:
-        """Create a provider instance for a specific model entry."""
-        from backend.llm import AnthropicProvider, DeepSeekProvider, MiniMaxProvider
+        from backend.llm.anthropic_provider import AnthropicProvider
+        from backend.llm.deepseek_provider import DeepSeekProvider
+        from backend.llm.minimax_provider import MiniMaxProvider
+        from backend.llm.openai_compatible_provider import OpenAICompatibleProvider
+        from backend.llm.mock_provider import MockProvider
 
-        provider_name = model_info["provider"]
-        model_id = model_info["id"]
-
-        api_keys = {
-            "anthropic": settings.anthropic_api_key,
-            "deepseek": settings.deepseek_api_key,
-            "minimax": settings.minimax_api_key,
-        }
-        base_urls = {
-            "deepseek": settings.deepseek_base_url,
-            "minimax": settings.minimax_base_url,
-        }
-        providers = {
-            "anthropic": AnthropicProvider,
-            "deepseek": DeepSeekProvider,
-            "minimax": MiniMaxProvider,
-        }
-
-        api_key = api_keys.get(provider_name, "")
+        provider_id = model_info["provider"]
+        provider = self._providers.get(provider_id)
+        if provider is None:
+            raise ValueError(f"Unknown provider '{provider_id}'")
+        api_key = ""
+        if provider.api_key_env:
+            env_to_attr = {
+                "ANTHROPIC_API_KEY": "anthropic_api_key",
+                "DEEPSEEK_API_KEY": "deepseek_api_key",
+                "MINIMAX_API_KEY": "minimax_api_key",
+            }
+            attr = env_to_attr.get(provider.api_key_env)
+            if attr:
+                api_key = getattr(settings, attr, "")
+            if not api_key:
+                api_key = os.environ.get(provider.api_key_env, "")
+        base_url = provider.base_url
+        if provider.type == "anthropic":
+            adapter_cls = AnthropicProvider
+        elif provider.type == "mock":
+            adapter_cls = MockProvider
+        elif provider_id == "deepseek":
+            adapter_cls = DeepSeekProvider
+            if not base_url:
+                base_url = settings.deepseek_base_url
+        elif provider_id == "minimax":
+            adapter_cls = MiniMaxProvider
+            if not base_url:
+                base_url = settings.minimax_base_url
+        else:
+            adapter_cls = OpenAICompatibleProvider
+        config = LLMConfig(
+            provider=provider_id,
+            model=model_info["id"],
+            api_key=api_key,
+            base_url=base_url,
+            max_tokens=model_info.get("max_tokens", 8192),
+            temperature=model_info.get("temperature", settings.llm_temperature),
+        )
+        if provider.type == "mock":
+            return adapter_cls(config)
         if not api_key:
             raise ValueError(
-                f"API key for provider '{provider_name}' is not configured."
+                f"API key for provider '{provider_id}' is not configured."
             )
-
-        config = LLMConfig(
-            provider=provider_name,
-            model=model_id,
-            api_key=api_key,
-            base_url=base_urls.get(provider_name),
-            max_tokens=model_info.get("max_tokens", 8192),
-            temperature=settings.llm_temperature,
-        )
-
-        provider_class = providers.get(provider_name)
-        if provider_class is None:
-            raise ValueError(f"Unsupported LLM provider: '{provider_name}'")
-
-        return provider_class(config)
+        return adapter_cls(config)
 
     @staticmethod
     def _extract_prompts(messages: list[dict]) -> tuple[str, str]:
@@ -555,6 +636,7 @@ class ModelRouter:
         logger.info("Reloading model_tiers.yaml...")
         self._tiers.clear()
         self._mappings.clear()
+        self._providers.clear()
         self._load_config()
         logger.info(
             "Config reloaded: %d tiers, %d agents",

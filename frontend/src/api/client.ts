@@ -1141,19 +1141,50 @@ export const api = {
 
   getLLMUsage: (limit = 50) =>
     request<UsageRecord[]>("GET", `/settings/llm-usage?limit=${limit}`),
+
+  upsertProvider: (id: string, provider: ProviderEntry) =>
+    request<LLMRouterSummary>("POST", "/settings/llm-config/providers", { id, provider }),
+  deleteProvider: (id: string) =>
+    request<LLMRouterSummary>("DELETE", `/settings/llm-config/providers/${id}`),
+  upsertModel: (providerId: string, modelId: string, model: ModelEntry) =>
+    request<LLMRouterSummary>(
+      "POST",
+      `/settings/llm-config/providers/${providerId}/models`,
+      { id: modelId, model },
+    ),
+  deleteModel: (providerId: string, modelId: string) =>
+    request<LLMRouterSummary>(
+      "DELETE",
+      `/settings/llm-config/providers/${providerId}/models/${modelId}`,
+    ),
+  setProviderApiKey: (providerId: string, value: string) =>
+    request<LLMRouterSummary>(
+      "PUT",
+      `/settings/llm-config/providers/${providerId}/api-key`,
+      { value },
+    ),
+  migrateConfig: () =>
+    request<{ backup_path: string; summary: object }>(
+      "POST",
+      "/settings/llm-config/migrate",
+    ),
 };
 
 export interface ModelEntry {
   id: string;
-  provider: "anthropic" | "deepseek" | "minimax";
+  display_name?: string;
+  provider: string;
   cost_per_1k_input: number;
   cost_per_1k_output: number;
   max_tokens: number;
+  temperature?: number;
+  json_mode?: boolean;
+  stream?: boolean;
 }
 
 export interface TierConfig {
   description: string;
-  models: ModelEntry[];
+  models: string[];           // whitelist of model ids from providers catalog
   default: string;
   retry_on_failure?: boolean;
   max_retries?: number;
@@ -1166,12 +1197,21 @@ export interface AgentTaskMapping {
   fallback?: string | null;
 }
 
-// Note: `ModelTiersConfig` / `TierConfig` / `ModelEntry` mirror the backend
-// `model_tiers.yaml` schema served via `llm-console` endpoints. They are a
-// deliberate parallel to `ModelTierConfig` / `ModelConfig` (used by the
-// settings-prompt-plaza endpoints) and intentionally kept separate to avoid
-// coupling unrelated surfaces.
+export interface ProvidersConfig {
+  [providerId: string]: ProviderEntry;
+}
+
+export interface ProviderEntry {
+  type: "anthropic" | "openai_compatible" | "mock";
+  display_name: string;
+  base_url: string;
+  api_key_env: string;
+  enabled: boolean;
+  models: Record<string, ModelEntry>;
+}
+
 export interface ModelTiersConfig {
+  providers?: ProvidersConfig;
   tiers: Record<string, TierConfig>;
   agent_mapping: Record<string, Record<string, AgentTaskMapping>>;
 }
@@ -1183,9 +1223,13 @@ export interface LLMRouterSummary {
 
 export interface ProviderStatus {
   provider: string;
+  type: ProviderEntry["type"];
+  display_name: string;
   base_url: string;
+  api_key_env: string;
   api_key_configured: boolean;
-  models: string[];
+  enabled: boolean;
+  models: ModelEntry[];
 }
 
 export interface UsageRecord {

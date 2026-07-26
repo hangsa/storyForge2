@@ -61,9 +61,12 @@ describe('AgentMappingPanel', () => {
         tiers={TIERS}
       />,
     );
+    const input = screen.getByTestId('agent-writer-new-task-name') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'scene_review' } });
     fireEvent.click(screen.getByTestId('agent-writer-add-task'));
     const next = onChange.mock.calls[0][0];
     expect(Object.keys(next.writer)).toHaveLength(2);
+    expect(next.writer).toHaveProperty('scene_review');
   });
 
   it('removes a task', () => {

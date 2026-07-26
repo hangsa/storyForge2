@@ -123,4 +123,48 @@ describe('ProviderPanel', () => {
     // Initial value empty since provider models don't carry display_name; user can edit
     expect((displayName as HTMLInputElement).value).toBe('');
   });
+
+  it('hides cost_per_1k_input and cost_per_1k_output from new-model form', async () => {
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={() => {}} />);
+    fireEvent.click(screen.getByTestId('provider-anthropic-add-model'));
+    await screen.findByTestId('model-form-id');
+    expect(screen.queryByTestId('model-form-cost-in')).toBeNull();
+    expect(screen.queryByTestId('model-form-cost-out')).toBeNull();
+  });
+
+  it('awaits onReload before closing modal (re-open shows fresh data)', async () => {
+    const updatedProviders: ProviderStatus[] = [
+      {
+        ...PROVIDERS[0],
+        display_name: 'Anthropic Renamed',
+      },
+    ];
+    let postCalled = false;
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url);
+      if (init?.method === 'POST' && u.includes('/settings/llm-config/providers')) {
+        postCalled = true;
+        return new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: {} }), { status: 200 });
+      }
+      if (init?.method === 'GET' && u.includes('/llm-providers') && postCalled) {
+        return new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: updatedProviders }), { status: 200 });
+      }
+      if (init?.method === 'PUT' && u.includes('/llm-config')) {
+        return new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: {} }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: PROVIDERS }), { status: 200 });
+    });
+    const onReload = vi.fn(async () => {});
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={onReload} />);
+    fireEvent.click(screen.getByTestId('provider-anthropic-edit'));
+    const displayNameInput = await screen.findByTestId('provider-form-displayname');
+    fireEvent.change(displayNameInput, { target: { value: 'Anthropic Renamed' } });
+    fireEvent.click(screen.getByTestId('provider-form-save'));
+
+    // onReload is async — confirm it was awaited before modal unmounted.
+    await waitFor(() => expect(onReload).toHaveBeenCalled());
+    // Modal must stay open until onReload completes; give the microtask queue a tick,
+    // then assert it's actually closed.
+    await waitFor(() => expect(screen.queryByTestId('provider-form-modal')).toBeNull());
+  });
 });

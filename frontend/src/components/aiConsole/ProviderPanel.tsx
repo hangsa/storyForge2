@@ -28,7 +28,7 @@ function ApiKeyModal({ providerId, onClose, onSaved }: { providerId: string; onC
             setSaving(true);
             try {
               await llmConsole.setProviderApiKey(providerId, value);
-              onSaved();
+              await onSaved();
               onClose();
             } finally {
               setSaving(false);
@@ -75,7 +75,7 @@ function ProviderFormModal({ initial, onClose, onSaved }: ProviderFormModalProps
             try {
               const provider = { type, display_name: displayName, base_url: baseUrl, api_key_env: apiKeyEnv, enabled };
               await llmConsole.upsertProvider(id, isEdit ? provider : { ...provider, models: {} });
-              onSaved();
+              await onSaved();
               onClose();
             } finally {
               setSaving(false);
@@ -99,8 +99,6 @@ function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: Mode
   const isEdit = !!modelId;
   const [id, setId] = useState(modelId ?? '');
   const [displayName, setDisplayName] = useState(initial?.display_name ?? '');
-  const [costIn, setCostIn] = useState(initial?.cost_per_1k_input ?? 0);
-  const [costOut, setCostOut] = useState(initial?.cost_per_1k_output ?? 0);
   const [maxTokens, setMaxTokens] = useState(initial?.max_tokens ?? 8192);
   const [temperature, setTemperature] = useState(initial?.temperature ?? 0.7);
   const [jsonMode, setJsonMode] = useState(initial?.json_mode ?? false);
@@ -114,8 +112,6 @@ function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: Mode
         <div className="space-y-3 text-sm">
           <label className="block"><span className="text-canvas-text-muted">ID（仅新建可设）</span><input data-testid="model-form-id" disabled={isEdit} value={id} onChange={(e) => setId(e.target.value)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1 disabled:opacity-50" /></label>
           <label className="block"><span className="text-canvas-text-muted">显示名</span><input data-testid="model-form-displayname" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
-          <label className="block"><span className="text-canvas-text-muted">cost_per_1k_input</span><input data-testid="model-form-cost-in" type="number" step="0.0001" value={costIn} onChange={(e) => setCostIn(parseFloat(e.target.value) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
-          <label className="block"><span className="text-canvas-text-muted">cost_per_1k_output</span><input data-testid="model-form-cost-out" type="number" step="0.0001" value={costOut} onChange={(e) => setCostOut(parseFloat(e.target.value) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
           <label className="block"><span className="text-canvas-text-muted">max_tokens</span><input data-testid="model-form-max-tokens" type="number" value={maxTokens} onChange={(e) => setMaxTokens(parseInt(e.target.value, 10) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
           <label className="block"><span className="text-canvas-text-muted">temperature</span><input data-testid="model-form-temperature" type="number" step="0.05" min="0" max="2" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
           <label className="flex items-center gap-2"><input data-testid="model-form-json-mode" type="checkbox" checked={jsonMode} onChange={(e) => setJsonMode(e.target.checked)} /><span>json_mode</span></label>
@@ -130,15 +126,15 @@ function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: Mode
                 id,
                 provider: providerId,
                 display_name: displayName,
-                cost_per_1k_input: costIn,
-                cost_per_1k_output: costOut,
+                cost_per_1k_input: 0,
+                cost_per_1k_output: 0,
                 max_tokens: maxTokens,
                 temperature,
                 json_mode: jsonMode,
                 stream,
               };
               await llmConsole.upsertModel(providerId, id, model);
-              onSaved();
+              await onSaved();
               onClose();
             } finally {
               setSaving(false);

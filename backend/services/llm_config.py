@@ -380,38 +380,59 @@ def reload_router() -> dict:
     return {"tiers": len(router._tiers), "agents": len(router._mappings)}
 
 
+def _setting_for_env(env_name: str) -> str:
+    """Map an API key env name (e.g. ANTHROPIC_API_KEY) to the matching
+    Settings attribute (`anthropic_api_key`). Falls back to the env name
+    so unknown keys just return empty (no API key configured)."""
+    mapping = {
+        "ANTHROPIC_API_KEY": "anthropic_api_key",
+        "DEEPSEEK_API_KEY": "deepseek_api_key",
+        "MINIMAX_API_KEY": "minimax_api_key",
+    }
+    return mapping.get(env_name, env_name.lower())
+
+
 def provider_status() -> list[dict]:
+    """Return one record per entry in `providers`.
+
+    Each record carries: `provider`, `type`, `base_url`, `api_key_env`,
+    `api_key_configured`, `enabled`, and `models` (list of {id, display_name}).
+    Secrets are NEVER serialized.
+    """
     cfg = read_yaml()
-    tiers = cfg.get("tiers") or {}
-    by_provider: dict[str, set[str]] = {p: set() for p in ALLOWED_PROVIDERS}
-    for tier in tiers.values():
-        if not isinstance(tier, dict):
-            continue
-        for m in tier.get("models") or []:
-            if not isinstance(m, dict):
-                continue
-            provider = m.get("provider")
-            mid = m.get("id")
-            if provider in by_provider and mid:
-                by_provider[provider].add(mid)
+    providers = cfg.get("providers") or {}
     out: list[dict] = []
-    for provider, models in by_provider.items():
-        api_key_attr = PROVIDER_KEY_MAP.get(provider, "")
+    for pid, provider in providers.items():
+        if not isinstance(provider, dict):
+            continue
+        api_key_env = provider.get("api_key_env", "")
         configured = (
-            bool(getattr(settings, api_key_attr, ""))
-            if api_key_attr
+            bool(getattr(settings, _setting_for_env(api_key_env), ""))
+            if api_key_env
             else False
         )
-        base_url_attr = (
-            f"{provider}_base_url" if provider in {"deepseek", "minimax"} else ""
-        )
-        base_url = (
-            getattr(settings, base_url_attr, "") if base_url_attr else ""
-        )
+        models_out = []
+        for mid, model in (provider.get("models") or {}).items():
+            if not isinstance(model, dict):
+                continue
+            models_out.append({
+                "id": mid,
+                "display_name": model.get("display_name", mid),
+                "cost_per_1k_input": model.get("cost_per_1k_input", 0),
+                "cost_per_1k_output": model.get("cost_per_1k_output", 0),
+                "max_tokens": model.get("max_tokens", 8192),
+                "temperature": model.get("temperature", 0.7),
+                "json_mode": bool(model.get("json_mode", False)),
+                "stream": bool(model.get("stream", True)),
+            })
         out.append({
-            "provider": provider,
-            "base_url": base_url,
+            "provider": pid,
+            "type": provider.get("type", "openai_compatible"),
+            "display_name": provider.get("display_name", pid),
+            "base_url": provider.get("base_url", ""),
+            "api_key_env": api_key_env,
             "api_key_configured": configured,
-            "models": sorted(models),
+            "enabled": bool(provider.get("enabled", True)),
+            "models": models_out,
         })
     return out

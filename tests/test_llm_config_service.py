@@ -211,14 +211,53 @@ def test_reload_router_swaps_in_disk(monkeypatch, isolated_v2_config):
     assert summary == {"tiers": 1, "agents": 1}
 
 
-def test_provider_status_includes_keys(monkeypatch, isolated_config):
+V2_FIXTURE_FOR_STATUS = {
+    "providers": {
+        "anthropic": {
+            "type": "anthropic",
+            "display_name": "Anthropic",
+            "base_url": "https://api.anthropic.com",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "enabled": True,
+            "models": {
+                "claude-opus-4": {
+                    "display_name": "Claude Opus 4",
+                    "cost_per_1k_input": 0.015,
+                    "cost_per_1k_output": 0.075,
+                    "max_tokens": 8192,
+                    "temperature": 0.7,
+                    "json_mode": False,
+                    "stream": True,
+                }
+            },
+        },
+        "deepseek": {
+            "type": "openai_compatible",
+            "display_name": "DeepSeek",
+            "base_url": "https://api.deepseek.com/v1",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "enabled": True,
+            "models": {},
+        },
+    },
+    "tiers": {"tier_0": {"description": "", "default": "none", "fallback": None, "models": []}},
+    "agent_mapping": {},
+}
+
+
+def test_provider_status_reads_providers_block(monkeypatch, tmp_path):
+    import yaml as yaml_mod
     from backend.services import llm_config as mod
     from backend.services.llm_config import provider_status
 
-    # forge configured flags without leaking actual secrets
-    monkeypatch.setattr(
-        mod.settings, "anthropic_api_key", "sk-test", raising=False
+    target = tmp_path / "model_tiers.yaml"
+    target.write_text(
+        yaml_mod.safe_dump(V2_FIXTURE_FOR_STATUS, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
     )
+    monkeypatch.setattr(mod, "CONFIG_PATH", target)
+
+    monkeypatch.setattr(mod.settings, "anthropic_api_key", "sk-test", raising=False)
     monkeypatch.setattr(mod.settings, "deepseek_api_key", "", raising=False)
     monkeypatch.setattr(
         mod.settings, "deepseek_base_url", "https://api.deepseek.com/v1", raising=False
@@ -227,6 +266,8 @@ def test_provider_status_includes_keys(monkeypatch, isolated_config):
     out = provider_status()
     by_name = {row["provider"]: row for row in out}
     assert by_name["anthropic"]["api_key_configured"] is True
+    assert by_name["anthropic"]["type"] == "anthropic"
     assert by_name["deepseek"]["api_key_configured"] is False
     assert by_name["deepseek"]["base_url"] == "https://api.deepseek.com/v1"
-    assert "claude-opus-4" in by_name["anthropic"]["models"]
+    assert by_name["deepseek"]["type"] == "openai_compatible"
+    assert "claude-opus-4" in {m["id"] for m in by_name["anthropic"]["models"]}

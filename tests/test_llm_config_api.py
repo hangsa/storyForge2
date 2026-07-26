@@ -53,6 +53,14 @@ def _v2_base():
                     }
                 },
             },
+            "minimax": {
+                "type": "openai_compatible",
+                "display_name": "MiniMax",
+                "base_url": "https://api.minimax.chat/v1",
+                "api_key_env": "MINIMAX_API_KEY",
+                "enabled": True,
+                "models": {},
+            },
         },
         "tiers": {
             "tier_1": {

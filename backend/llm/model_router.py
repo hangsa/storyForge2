@@ -545,7 +545,17 @@ class ModelRouter:
         if provider is None:
             raise ValueError(f"Unknown provider '{provider_id}'")
         api_key = ""
-        if provider.api_key_env:
+        # Resolution order for API key:
+        # 1. STORYFORGE_PROVIDER_API_KEY_<ID> — new prefix written by
+        #    llm_config_api / migrate_legacy_yaml. Hot-reloadable from
+        #    os.environ, works for any provider id (including custom
+        #    openai_compatible providers).
+        prefixed = f"STORYFORGE_PROVIDER_API_KEY_{provider_id.upper()}"
+        api_key = os.environ.get(prefixed, "")
+        # 2. Builtin settings attribute (anthropic / deepseek / minimax
+        #    back-compat — these are loaded into Settings at import time
+        #    from .env).
+        if not api_key and provider.api_key_env:
             env_to_attr = {
                 "ANTHROPIC_API_KEY": "anthropic_api_key",
                 "DEEPSEEK_API_KEY": "deepseek_api_key",
@@ -554,8 +564,10 @@ class ModelRouter:
             attr = env_to_attr.get(provider.api_key_env)
             if attr:
                 api_key = getattr(settings, attr, "")
-            if not api_key:
-                api_key = os.environ.get(provider.api_key_env, "")
+        # 3. Provider's declared api_key_env — the legacy alias written
+        #    alongside the prefixed key in case some external code reads it.
+        if not api_key and provider.api_key_env:
+            api_key = os.environ.get(provider.api_key_env, "")
         base_url = provider.base_url
         if provider.type == "anthropic":
             adapter_cls = AnthropicProvider

@@ -409,10 +409,19 @@ def provider_status() -> list[dict]:
         if not isinstance(provider, dict):
             continue
         api_key_env = provider.get("api_key_env", "")
+        # API key is "configured" if any of:
+        # 1. STORYFORGE_PROVIDER_API_KEY_<PID> (new prefix, hot-reloadable,
+        #    works for any provider id including custom).
+        # 2. Builtin settings attr (anthropic_api_key / deepseek_api_key /
+        #    minimax_api_key) when api_key_env matches the legacy builtin
+        #    env name.
+        # 3. The provider-declared api_key_env in os.environ.
+        prefixed_key = f"STORYFORGE_PROVIDER_API_KEY_{pid.upper()}"
+        settings_attr = _setting_for_env(api_key_env) if api_key_env else ""
         configured = (
-            bool(getattr(settings, _setting_for_env(api_key_env), ""))
-            if api_key_env
-            else False
+            bool(os.environ.get(prefixed_key, ""))
+            or bool(getattr(settings, settings_attr, "") if settings_attr else "")
+            or bool(os.environ.get(api_key_env, "") if api_key_env else False)
         )
         models_out = []
         for mid, model in (provider.get("models") or {}).items():

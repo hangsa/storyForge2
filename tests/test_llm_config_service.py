@@ -271,3 +271,39 @@ def test_provider_status_reads_providers_block(monkeypatch, tmp_path):
     assert by_name["deepseek"]["base_url"] == "https://api.deepseek.com/v1"
     assert by_name["deepseek"]["type"] == "openai_compatible"
     assert "claude-opus-4" in {m["id"] for m in by_name["anthropic"]["models"]}
+
+
+def test_provider_status_recognizes_prefix_env_var(monkeypatch, tmp_path):
+    """Custom (non-builtin) provider whose key is only set via the new
+    `STORYFORGE_PROVIDER_API_KEY_<ID>` prefix env var — provider_status must
+    report api_key_configured=True without relying on Settings or the legacy
+    declared api_key_env.
+    """
+    import yaml as yaml_mod
+    from backend.services import llm_config as mod
+    from backend.services.llm_config import provider_status
+
+    data = {
+        "providers": {
+            "testopenai": {
+                "type": "openai_compatible",
+                "display_name": "TestOpenAI",
+                "base_url": "https://api.testopenai.com/v1",
+                "api_key_env": "TESTOPENAI_API_KEY",
+                "enabled": True,
+                "models": {},
+            },
+        },
+        "tiers": {"tier_0": {"description": "", "default": "none", "fallback": None, "models": []}},
+        "agent_mapping": {},
+    }
+    target = tmp_path / "model_tiers.yaml"
+    target.write_text(yaml_mod.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(mod, "CONFIG_PATH", target)
+
+    monkeypatch.setenv("STORYFORGE_PROVIDER_API_KEY_TESTOPENAI", "sk-prefix-key")
+    monkeypatch.delenv("TESTOPENAI_API_KEY", raising=False)
+
+    out = provider_status()
+    by_name = {row["provider"]: row for row in out}
+    assert by_name["testopenai"]["api_key_configured"] is True

@@ -372,3 +372,59 @@ class TestReloadConfig:
         router.reload_config()
         assert len(router._tiers) > 0
         assert len(router._mappings) > 0
+
+
+def test_router_picks_up_custom_provider_key_via_prefix(monkeypatch, tmp_path):
+    """Custom (non-builtin) provider whose API key is set ONLY via the new
+    `STORYFORGE_PROVIDER_API_KEY_<ID>` prefix. The router must read it from
+    os.environ — neither the builtin settings attr lookup nor the provider's
+    declared `api_key_env` would otherwise see it.
+    """
+    monkeypatch.setenv("STORYFORGE_PROVIDER_API_KEY_TESTOPENAI", "sk-prefix-key")
+    # Make sure the legacy alias env var is empty so we know the prefix is
+    # what actually resolves the key.
+    monkeypatch.delenv("TESTOPENAI_API_KEY", raising=False)
+
+    data = {
+        "providers": {
+            "testopenai": {
+                "type": "openai_compatible",
+                "display_name": "TestOpenAI",
+                "base_url": "https://api.testopenai.com/v1",
+                "api_key_env": "TESTOPENAI_API_KEY",
+                "enabled": True,
+                "models": {
+                    "test-m": {
+                        "display_name": "Test M",
+                        "cost_per_1k_input": 0,
+                        "cost_per_1k_output": 0,
+                        "max_tokens": 1024,
+                        "temperature": 0.7,
+                        "json_mode": False,
+                        "stream": True,
+                    }
+                },
+            }
+        },
+        "tiers": {
+            "tier_1": {
+                "description": "",
+                "default": "test-m",
+                "fallback": None,
+                "models": ["test-m"],
+                "retry_on_failure": True,
+                "max_retries": 0,
+            },
+            "tier_0": {"description": "", "default": "none", "fallback": None, "models": []},
+        },
+        "agent_mapping": {},
+    }
+    p = tmp_path / "model_tiers.yaml"
+    p.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    reset_model_router()
+    router = ModelRouter(p)
+    info = router._find_model_info_or_raise("test-m")
+    from backend.llm.openai_compatible_provider import OpenAICompatibleProvider
+    provider = router._create_provider_for_model(info)
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert provider.config.api_key == "sk-prefix-key"

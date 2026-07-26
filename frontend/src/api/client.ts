@@ -1166,9 +1166,14 @@ export interface AgentTaskMapping {
   fallback?: string | null;
 }
 
+// Note: `ModelTiersConfig` / `TierConfig` / `ModelEntry` mirror the backend
+// `model_tiers.yaml` schema served via `llm-console` endpoints. They are a
+// deliberate parallel to `ModelTierConfig` / `ModelConfig` (used by the
+// settings-prompt-plaza endpoints) and intentionally kept separate to avoid
+// coupling unrelated surfaces.
 export interface ModelTiersConfig {
   tiers: Record<string, TierConfig>;
-  agent_mapping: Record<string, Record<string, AgentTaskMapping | Record<string, unknown>>>;
+  agent_mapping: Record<string, Record<string, AgentTaskMapping>>;
 }
 
 export interface LLMRouterSummary {

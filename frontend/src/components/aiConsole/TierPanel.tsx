@@ -1,4 +1,6 @@
-import type { TierConfig, ModelEntry } from '../../api/client';
+import { type TierConfig, type ModelEntry } from '../../api/client';
+
+export type { TierConfig };
 
 interface Props {
   tierName: string;

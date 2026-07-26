@@ -296,6 +296,81 @@ def validate(data: dict) -> None:
         )
 
 
+def find_references(data: dict, target: str) -> list[str]:
+    """Return dotted paths referencing the given target.
+
+    `target` forms:
+      `provider:<id>` — finds any tier/agent_mapping entry that references a
+        model owned by that provider.
+      `model:<id>` — finds any tier/agent_mapping entry that references that
+        model id directly.
+    """
+    if ":" not in target:
+        raise ValueError(f"target must be 'provider:<id>' or 'model:<id>', got {target!r}")
+    kind, value = target.split(":", 1)
+    paths: list[str] = []
+    tiers = data.get("tiers") or {}
+    provider_map = _collect_global_models(data)
+
+    if kind == "model":
+        target_id = value
+        target_provider = provider_map.get(target_id)
+    elif kind == "provider":
+        target_id = None
+        target_provider = value
+    else:
+        raise ValueError(f"unknown target kind {kind!r}")
+
+    for tier_name, tier in tiers.items():
+        if not isinstance(tier, dict):
+            continue
+        whitelist = tier.get("models") or []
+        if isinstance(whitelist, list):
+            for i, mid in enumerate(whitelist):
+                if kind == "model" and mid == target_id:
+                    paths.append(f"tiers.{tier_name}.models.{i}")
+                elif kind == "provider" and provider_map.get(mid) == target_provider:
+                    paths.append(f"tiers.{tier_name}.models.{i}")
+        default = tier.get("default")
+        if isinstance(default, str):
+            if kind == "model" and default == target_id:
+                paths.append(f"tiers.{tier_name}.default")
+            elif kind == "provider" and provider_map.get(default) == target_provider:
+                paths.append(f"tiers.{tier_name}.default")
+        fallback = tier.get("fallback")
+        if isinstance(fallback, str):
+            if kind == "model" and fallback == target_id:
+                paths.append(f"tiers.{tier_name}.fallback")
+            elif kind == "provider" and provider_map.get(fallback) == target_provider:
+                paths.append(f"tiers.{tier_name}.fallback")
+
+    mappings = data.get("agent_mapping") or {}
+    for agent_name, tasks in mappings.items():
+        if not isinstance(tasks, dict):
+            continue
+        for task_name, mapping in tasks.items():
+            if not isinstance(mapping, dict):
+                continue
+            for field in ("model", "fallback"):
+                value = mapping.get(field)
+                if not isinstance(value, str):
+                    continue
+                if kind == "model" and value == target_id:
+                    paths.append(f"agent_mapping.{agent_name}.{task_name}.{field}")
+                elif kind == "provider" and provider_map.get(value) == target_provider:
+                    paths.append(f"agent_mapping.{agent_name}.{task_name}.{field}")
+    return paths
+
+
+def validate_removal(data: dict, target: str) -> None:
+    paths = find_references(data, target)
+    if paths:
+        raise LLMConfigError(
+            f"无法删除 {target}，仍有 {len(paths)} 处引用",
+            paths,
+        )
+
+
 def reload_router() -> dict:
     """Validate disk config, then swap the live router's tiers / mappings in."""
     validate(read_yaml())

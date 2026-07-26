@@ -6,9 +6,7 @@ const CFG = {
   tiers: {
     tier_1: {
       description: 'd',
-      models: [
-        { id: 'm', provider: 'anthropic', cost_per_1k_input: 0, cost_per_1k_output: 0, max_tokens: 1024 },
-      ],
+      models: ['m'],
       default: 'm',
       retry_on_failure: true,
       max_retries: 1,
@@ -20,7 +18,7 @@ const CFG = {
 };
 
 const PROVIDERS = [
-  { provider: 'anthropic', base_url: '', api_key_configured: true, models: ['m'] },
+  { provider: 'anthropic', base_url: '', api_key_configured: true, models: [{ id: 'm', provider: 'anthropic', cost_per_1k_input: 0, cost_per_1k_output: 0, max_tokens: 1024 }] },
   { provider: 'deepseek', base_url: 'https://api.deepseek.com/v1', api_key_configured: false, models: [] },
   { provider: 'minimax', base_url: '', api_key_configured: false, models: [] },
 ];

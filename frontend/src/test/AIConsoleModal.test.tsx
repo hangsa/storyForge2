@@ -96,4 +96,31 @@ describe('AIConsoleModal', () => {
       ),
     );
   });
+
+  it('shows migrate banner when YAML lacks providers', async () => {
+    const LEGACY_CFG = {
+      tiers: {
+        tier_0: { description: '', models: [], default: 'none' },
+      },
+      agent_mapping: {},
+    };
+    global.fetch = vi.fn((url) => {
+      if (url.includes('/llm-config') && (!url.includes('reload') && !url.includes('migrate'))) {
+        return Promise.resolve(new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: LEGACY_CFG }), { status: 200 }));
+      }
+      if (url.includes('/llm-config/migrate')) {
+        return Promise.resolve(new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: { backup_path: '/tmp/x' } }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: [] }), { status: 200 }));
+    });
+    render(<AIConsoleModal isOpen onClose={() => {}} />);
+    const btn = await screen.findByTestId('modal-migrate');
+    fireEvent.click(btn);
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/llm-config/migrate'),
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+  });
 });

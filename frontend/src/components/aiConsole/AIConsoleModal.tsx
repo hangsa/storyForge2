@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { llmConsole } from '../../api/llmConsole';
 import type {
   LLMRouterSummary,
+  ModelEntry,
   ModelTiersConfig,
   ProviderStatus,
   UsageRecord,
@@ -29,8 +30,10 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [confirmDirty, setConfirmDirty] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [showMigrate, setShowMigrate] = useState(false);
+  const [providerDirty, setProviderDirty] = useState(false);
 
-  const dirty = !!config && !!draft && !deepEqual(config, draft);
+  const dirty = (!!config && !!draft && !deepEqual(config, draft)) || providerDirty;
 
   const refresh = useCallback(async () => {
     const [cfg, prov, usg] = await Promise.all([
@@ -42,6 +45,8 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
     setDraft(cfg);
     setProviders(prov);
     setUsage(usg);
+    setShowMigrate(!cfg.providers);
+    setProviderDirty(false);
   }, []);
 
   useEffect(() => {
@@ -74,6 +79,7 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
       const summary: LLMRouterSummary = await llmConsole.saveConfig(draft);
       setToast(`配置已热重载，${summary.tiers} 个 tier、${summary.agents} 个 agent 已加载`);
       setConfig(draft);
+      setProviderDirty(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存失败');
     } finally {
@@ -108,6 +114,26 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
         <header className="flex items-center justify-between border-b border-canvas-text-muted/20 bg-canvas-surface px-6 py-3">
           <h2 className="text-lg font-semibold">AI 控制台</h2>
           <div className="flex items-center gap-2">
+            {showMigrate && (
+              <button
+                type="button"
+                data-testid="modal-migrate"
+                onClick={async () => {
+                  try {
+                    await llmConsole.migrateConfig();
+                    await refresh();
+                    setShowMigrate(false);
+                    setToast('迁移完成');
+                    setTimeout(() => setToast(null), 3000);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : '迁移失败');
+                  }
+                }}
+                className="rounded border border-amber-500/40 px-3 py-1 text-sm text-amber-700"
+              >
+                ⚠ 迁移 providers 到新结构
+              </button>
+            )}
             <button
               type="button"
               data-testid="modal-reload"
@@ -135,7 +161,7 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
 
           <section className="mb-6">
             <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-canvas-text-muted">Provider 状态</h3>
-            <ProviderPanel providers={providers} />
+            <ProviderPanel providers={providers} dirty={dirty} onChange={() => setProviderDirty(true)} onReload={refresh} />
           </section>
 
           {draft && (
@@ -143,7 +169,9 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-canvas-text-muted">Tier 配置</h3>
               <div className="space-y-3">
                 {(() => {
-                  const catalog = providers.flatMap((p) => p.models);
+                  const catalog: ModelEntry[] = draft.providers
+                    ? Object.values(draft.providers).flatMap((p) => Object.values(p.models))
+                    : providers.flatMap((p) => p.models);
                   return Object.entries(draft.tiers).map(([name, tier]) => (
                     <TierPanel
                       key={name}

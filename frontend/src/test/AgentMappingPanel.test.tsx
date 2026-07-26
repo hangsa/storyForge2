@@ -6,10 +6,7 @@ import type { ModelTiersConfig, AgentTaskMapping } from '../api/client';
 const TIERS: ModelTiersConfig['tiers'] = {
   tier_1: {
     description: '',
-    models: [
-      { id: 'deepseek-v4-pro', provider: 'deepseek', cost_per_1k_input: 0, cost_per_1k_output: 0, max_tokens: 8192 },
-      { id: 'claude-opus-4', provider: 'anthropic', cost_per_1k_input: 0, cost_per_1k_output: 0, max_tokens: 8192 },
-    ],
+    models: ['deepseek-v4-pro', 'claude-opus-4'],
     default: 'deepseek-v4-pro',
   },
   tier_0: { description: '', models: [], default: 'none' },

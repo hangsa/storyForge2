@@ -59,7 +59,7 @@ export default function AgentMappingPanel({ value, onChange, tiers }: Props) {
     if (!tier) return [{ id: 'default', label: '默认' }];
     return [
       { id: 'default', label: `默认（${tier.default}）` },
-      ...tier.models.map((m) => ({ id: m.id, label: m.id })),
+      ...tier.models.map((mid) => ({ id: mid, label: mid })),
     ];
   };
 

@@ -42,6 +42,10 @@ export default {
         },
         canvas: {
           bg: "var(--color-canvas-bg)",
+          surface: "var(--color-canvas-surface)",
+          "text-muted": "var(--color-canvas-text-muted)",
+          "text-secondary": "var(--color-canvas-text-secondary)",
+          accent: "var(--color-canvas-accent)",
         },
         background: {
           DEFAULT: "var(--color-background)",

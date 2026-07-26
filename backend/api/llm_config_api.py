@@ -122,7 +122,12 @@ async def upsert_provider(payload: dict):
     _validate_id(pid, "id")
     data = read_yaml()
     providers = data.setdefault("providers", {})
-    providers[pid] = body
+    existing = providers.get(pid)
+    if isinstance(existing, dict) and "models" not in body:
+        merged = {**existing, **body, "models": existing.get("models", {})}
+    else:
+        merged = {**(existing if isinstance(existing, dict) else {}), **body}
+    providers[pid] = merged
     try:
         validate(data)
     except LLMConfigError as e:

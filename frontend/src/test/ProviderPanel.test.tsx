@@ -30,6 +30,29 @@ describe('ProviderPanel', () => {
     expect(screen.getByText('claude-opus-4')).toBeTruthy();
   });
 
+  it('opens provider form modal on edit click and submits POST', async () => {
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={() => {}} />);
+    fireEvent.click(screen.getByTestId('provider-anthropic-edit'));
+    const displayNameInput = await screen.findByTestId('provider-form-displayname');
+    expect((displayNameInput as HTMLInputElement).value).toBe('Anthropic');
+    fireEvent.change(displayNameInput, { target: { value: 'New Name' } });
+    fireEvent.click(screen.getByTestId('provider-form-save'));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/settings/llm-config/providers'),
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+  });
+
+  it('opens provider form modal on add click with empty fields', async () => {
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={() => {}} />);
+    fireEvent.click(screen.getByTestId('provider-add'));
+    const idInput = await screen.findByTestId('provider-form-id');
+    expect((idInput as HTMLInputElement).disabled).toBe(false);
+    expect((idInput as HTMLInputElement).value).toBe('');
+  });
+
   it('opens API Key modal and submits to PUT endpoint', async () => {
     const onReload = vi.fn();
     render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={onReload} />);

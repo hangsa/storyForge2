@@ -211,6 +211,24 @@ def test_upsert_provider(client):
     assert cfg["providers"]["newprov"]["display_name"] == "NewProv"
 
 
+def test_upsert_provider_preserves_models_when_not_in_body(client):
+    payload = {
+        "id": "anthropic",
+        "provider": {
+            "type": "anthropic",
+            "display_name": "Anthropic Renamed",
+            "base_url": "https://api.anthropic.com",
+            "api_key_env": "ANTHROPIC_API_KEY",
+            "enabled": True,
+        },
+    }
+    res = client.post("/api/settings/llm-config/providers", json=payload)
+    assert res.status_code == 200, res.text
+    cfg = client.get("/api/settings/llm-config").json()["detail"]
+    assert cfg["providers"]["anthropic"]["display_name"] == "Anthropic Renamed"
+    assert "claude-opus-4" in cfg["providers"]["anthropic"]["models"]
+
+
 def test_delete_provider_with_references_blocked(client):
     res = client.delete("/api/settings/llm-config/providers/deepseek")
     assert res.status_code == 422

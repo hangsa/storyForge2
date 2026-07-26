@@ -142,16 +142,20 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
             <section className="mb-6">
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-canvas-text-muted">Tier 配置</h3>
               <div className="space-y-3">
-                {Object.entries(draft.tiers).map(([name, tier]) => (
-                  <TierPanel
-                    key={name}
-                    tierName={name}
-                    value={tier}
-                    onChange={(next) =>
-                      setDraft({ ...draft, tiers: { ...draft.tiers, [name]: next } })
-                    }
-                  />
-                ))}
+                {(() => {
+                  const catalog = providers.flatMap((p) => p.models);
+                  return Object.entries(draft.tiers).map(([name, tier]) => (
+                    <TierPanel
+                      key={name}
+                      tierName={name}
+                      value={tier}
+                      catalog={catalog}
+                      onChange={(next) =>
+                        setDraft({ ...draft, tiers: { ...draft.tiers, [name]: next } })
+                      }
+                    />
+                  ));
+                })()}
               </div>
             </section>
           )}

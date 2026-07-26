@@ -175,7 +175,25 @@ class ModelRouter:
             self._write_config(data)
         else:
             with open(self._config_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+                raw = yaml.safe_load(f) or {}
+            if isinstance(raw, dict) and not raw.get("providers"):
+                legacy = raw.get("tiers") or {}
+                has_legacy_models = any(
+                    isinstance(t, dict) and any(
+                        isinstance(m, dict) and m.get("provider")
+                        for m in (t.get("models") or [])
+                    )
+                    for t in legacy.values()
+                )
+                if has_legacy_models:
+                    try:
+                        from backend.services.llm_config import migrate_legacy_yaml
+                        migrate_legacy_yaml(config_path=self._config_path)
+                        with open(self._config_path, "r", encoding="utf-8") as f2:
+                            raw = yaml.safe_load(f2) or {}
+                    except Exception as e:
+                        logger.warning("legacy migration failed: %s", e)
+            data = raw
         self._parse_providers(data.get("providers") or {})
         self._parse_tiers(data.get("tiers") or {})
         self._parse_mappings(data.get("agent_mapping") or {})

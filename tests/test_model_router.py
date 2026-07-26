@@ -236,6 +236,33 @@ class TestConfigLoading:
             assert len(router._tiers) == 4
 
 
+def test_router_load_triggers_legacy_migrate(tmp_path, monkeypatch):
+    legacy_data = {
+        "tiers": {
+            "tier_1": {
+                "description": "",
+                "models": [
+                    {"id": "claude-opus-4", "provider": "anthropic", "cost_per_1k_input": 0.015, "cost_per_1k_output": 0.075, "max_tokens": 8192}
+                ],
+                "default": "claude-opus-4",
+                "fallback": None,
+                "retry_on_failure": True,
+                "max_retries": 1,
+            },
+            "tier_0": {"description": "", "models": [], "default": "none"},
+        },
+        "agent_mapping": {},
+    }
+    p = tmp_path / "model_tiers.yaml"
+    p.write_text(yaml.safe_dump(legacy_data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    reset_model_router()
+    router = ModelRouter(p)
+    # After migration, providers block should exist on disk
+    reloaded = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert "providers" in reloaded
+    assert "anthropic" in reloaded["providers"]
+
+
 class TestResolve:
     def test_resolves_tier_1_model(self, temp_config):
         router = ModelRouter(temp_config)

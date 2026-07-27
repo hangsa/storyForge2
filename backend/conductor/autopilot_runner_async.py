@@ -429,6 +429,26 @@ class AsyncAutopilotRunner:
                 )
                 continue
 
+            if isinstance(result, dict) and result.get("status") == "scene_missing":
+                # Outline drift: the chapter's scene_plan no longer contains
+                # this scene number. Drop the queue item and emit task_fail,
+                # but DO NOT pause the session and DO NOT retry — other queue
+                # items may still be valid. Pre-fix behavior was to retry 3x
+                # then pause the whole session, burning 90+ seconds on a
+                # deterministic failure (bug 2026-07-27 proj_bb0375eb:
+                # /api/stage3/generate regenerated chapter 10 with fewer
+                # scenes, stranding write-10-4 in the queue).
+                err = result.get("error", "scene missing in outline")
+                self._mgr.fail_current_task(error=err)
+                self._mgr.drop_queue(item.id)
+                logger.info(
+                    "[autopilot] %s dropped (outline drift): %s", item.id, err,
+                )
+                return {
+                    "picked": item.id, "completed": False,
+                    "error": err, "skipped": "scene_missing",
+                }
+
             if isinstance(result, dict) and result.get("status") == "fail":
                 last_error = result.get("error", "scene write failed")
                 logger.warning(

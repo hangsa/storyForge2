@@ -55,6 +55,30 @@ def _next_outline_chapter(outline: dict, chapter_number: int) -> Optional[dict]:
     )
 
 
+def _scene_in_outline(
+    projects_dir: Path, project_id: str, chapter_number: int, scene_number: int
+) -> bool:
+    """True iff outline.json has a `scene_plan` entry with `scene_number`
+    for the given chapter. The outline can be modified by the user (or by
+    the wizard's regenerate button) while an autopilot session is in
+    flight — the session's queue may then reference scenes the outline
+    no longer contains. Without this precheck, _write_scene_chapter raises
+    HTTPException(SCENE_NOT_FOUND) and the runner's retry-then-pause loop
+    burns 3 attempts on a deterministic failure. Found and fixed
+    2026-07-27 on proj_bb0375eb where outline.json was overwritten at
+    16:00:33 (LLM non-determinism regenerated chapter 10 with 3 scenes
+    instead of 4), leaving write-10-4 stranded in the queue.
+    """
+    outline = _read_outline(projects_dir, project_id)
+    chapter = _next_outline_chapter(outline, chapter_number)
+    if not chapter:
+        return False
+    return any(
+        s.get("scene_number") == scene_number
+        for s in chapter.get("scene_plan", [])
+    )
+
+
 # Map raw breaker_result → canonical scene status used by DONE_STATUSES
 # ("completed" / "force_passed" / "skipped") and the runner's
 # `scene_status == "force_passed"` check. This is the executor's
@@ -214,10 +238,25 @@ class AsyncStage4Executor:
         return await self.execute(item, project_id)
 
     async def _write_scene(self, item: QueueItem, project_id: str) -> dict:
+        scene = item.payload["scene_number"]
+        if not _scene_in_outline(
+            self._projects_dir, project_id, item.chapter_number, scene
+        ):
+            # Outline drift: the chapter's scene_plan no longer contains this
+            # scene number (user edited the outline or ran regenerate). Don't
+            # burn an LLM call; signal the runner so it can drop the queue
+            # item without entering the retry loop.
+            return {
+                "status": "scene_missing",
+                "error": (
+                    f"Scene {scene} 不存在（大纲已被修改，chapter {item.chapter_number} "
+                    "的 scene_plan 中已无此 scene）"
+                ),
+            }
         result = await _write_scene_chapter(
             project_id=project_id,
             chapter_number=item.chapter_number,
-            scene_number=item.payload["scene_number"],
+            scene_number=scene,
         )
         mgr = self._mgr_for(project_id)
         _maybe_enqueue_archival(mgr, self._projects_dir, project_id,
@@ -250,6 +289,28 @@ class AsyncStage4Executor:
 
         chapter = item.chapter_number
         scene = item.payload["scene_number"]
+        if not _scene_in_outline(
+            self._projects_dir, project_id, chapter, scene
+        ):
+            # Outline drift. Publish scene_failed so the cockpit clears any
+            # stale UI for this scene, then return scene_missing so the
+            # runner drops the queue item without retrying or pausing.
+            self._broadcaster.publish("scene_failed", {
+                "chapter_number": chapter,
+                "scene_number": scene,
+                "error": (
+                    f"Scene {scene} 不存在（大纲已被修改，chapter {chapter} "
+                    "的 scene_plan 中已无此 scene）"
+                ),
+                "partial_text": "",
+            })
+            return {
+                "status": "scene_missing",
+                "error": (
+                    f"Scene {scene} 不存在（大纲已被修改，chapter {chapter} "
+                    "的 scene_plan 中已无此 scene）"
+                ),
+            }
         chunk_store = SceneChunkStore(
             self._projects_dir, project_id, chapter, scene,
         )
@@ -397,12 +458,23 @@ class FakeStage4Executor:
 
     async def execute(self, item: QueueItem, project_id: str) -> dict:
         if item.kind == "write_scene":
+            scene = item.payload["scene_number"]
+            if not _scene_in_outline(
+                self._projects_dir, project_id, item.chapter_number, scene
+            ):
+                return {
+                    "status": "scene_missing",
+                    "error": (
+                        f"Scene {scene} 不存在（大纲已被修改，chapter {item.chapter_number} "
+                        "的 scene_plan 中已无此 scene）"
+                    ),
+                }
             self._calls.append({"kind": "write_scene", "chapter": item.chapter_number,
-                                "scene": item.payload["scene_number"]})
+                                "scene": scene})
             result = await _write_scene_chapter(
                 project_id=project_id,
                 chapter_number=item.chapter_number,
-                scene_number=item.payload["scene_number"],
+                scene_number=scene,
                 draft_factory=self._draft_factory,
                 breaker_result_override=self._breaker_result,
             )

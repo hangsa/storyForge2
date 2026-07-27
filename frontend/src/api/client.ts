@@ -1139,9 +1139,6 @@ export const api = {
   getProviders: () =>
     request<ProviderStatus[]>("GET", "/settings/llm-providers"),
 
-  getLLMUsage: (limit = 50) =>
-    request<UsageRecord[]>("GET", `/settings/llm-usage?limit=${limit}`),
-
   upsertProvider: (id: string, provider: ProviderEntry) =>
     request<LLMRouterSummary>("POST", "/settings/llm-config/providers", { id, provider }),
   deleteProvider: (id: string) =>
@@ -1164,7 +1161,7 @@ export const api = {
       { value },
     ),
   migrateConfig: () =>
-    request<{ backup_path: string; summary: object }>(
+    request<{ backup_path?: string | null; added?: string[]; summary: object }>(
       "POST",
       "/settings/llm-config/migrate",
     ),
@@ -1230,17 +1227,6 @@ export interface ProviderStatus {
   api_key_configured: boolean;
   enabled: boolean;
   models: ModelEntry[];
-}
-
-export interface UsageRecord {
-  timestamp: string;
-  agent: string;
-  task: string;
-  tier: string;
-  model: string;
-  tokens_in: number;
-  tokens_out: number;
-  cost: number;
 }
 
 export { ApiError };

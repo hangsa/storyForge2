@@ -6,7 +6,9 @@ import yaml
 
 from backend.services.llm_config import (
     LLMConfigError,
+    _ensure_builtin_providers,
     migrate_legacy_yaml,
+    seed_builtin_providers,
     validate,
 )
 from backend.services import llm_config as cfg_mod
@@ -139,3 +141,142 @@ def test_migrate_raises_when_already_v2(tmp_path):
     p.write_text("providers: {}\n", encoding="utf-8")
     with pytest.raises(LLMConfigError):
         migrate_legacy_yaml(p)
+
+
+def test_migrate_seeds_unreferenced_builtins(tmp_path, monkeypatch):
+    # Legacy YAML references only anthropic models but the user's .env has
+    # minimax/deepseek keys configured — migration must seed those builtins
+    # anyway so .env-side configuration isn't silently dropped.
+    from backend.config import Settings
+
+    monkeypatch.setattr(
+        cfg_mod,
+        "settings",
+        Settings(
+            anthropic_api_key="sk-ant-stub",
+            deepseek_api_key="sk-deepseek-stub",
+            minimax_api_key="sk-minimax-stub",
+        ),
+    )
+    monkeypatch.setattr(
+        "backend.services.llm_config.write_env_atomic",
+        lambda path, updates: None,
+    )
+    legacy = {
+        "tiers": {
+            "tier_1": {
+                "description": "x",
+                "models": [
+                    {
+                        "id": "claude-opus-4",
+                        "provider": "anthropic",
+                        "cost_per_1k_input": 0.015,
+                        "cost_per_1k_output": 0.075,
+                        "max_tokens": 8192,
+                    },
+                ],
+                "default": "claude-opus-4",
+                "fallback": None,
+                "retry_on_failure": True,
+                "max_retries": 1,
+            },
+            "tier_0": {"description": "", "models": [], "default": "none"},
+        },
+        "agent_mapping": {
+            "writer": {"scene_writing": {"tier": "tier_1", "model": "claude-opus-4"}}
+        },
+    }
+    p = tmp_path / "model_tiers.yaml"
+    p.write_text(yaml.safe_dump(legacy, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    migrate_legacy_yaml(p)
+    new_data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    pids = set(new_data["providers"].keys())
+    assert {"anthropic", "deepseek", "minimax"} <= pids
+    # Unreferenced builtins have empty models — user fills them via AI Console.
+    assert new_data["providers"]["deepseek"]["models"] == {}
+    assert new_data["providers"]["minimax"]["models"] == {}
+    validate(new_data)
+
+
+def test_ensure_builtin_providers_is_idempotent():
+    providers = {
+        "anthropic": {"type": "anthropic", "display_name": "Anthropic", "models": {"x": {}}},
+        "deepseek": {"type": "openai_compatible", "display_name": "DeepSeek", "models": {}},
+    }
+    before = yaml.safe_dump(providers, sort_keys=True)
+    added = _ensure_builtin_providers(providers)
+    assert added == ["minimax"]
+    # idempotent: running again does nothing
+    added_again = _ensure_builtin_providers(providers)
+    assert added_again == []
+    # anthropic entry was NOT mutated
+    assert providers["anthropic"]["models"] == {"x": {}}
+
+
+def test_seed_builtin_providers_adds_missing(tmp_path, monkeypatch):
+    from backend.config import Settings
+
+    monkeypatch.setattr(cfg_mod, "settings", Settings(minimax_api_key="sk-minimax-stub"))
+    monkeypatch.setattr(
+        "backend.services.llm_config.write_env_atomic",
+        lambda path, updates: None,
+    )
+    p = tmp_path / "model_tiers.yaml"
+    p.write_text(
+        yaml.safe_dump(
+            {
+                "providers": {
+                    "anthropic": {
+                        "type": "anthropic",
+                        "display_name": "Anthropic",
+                        "base_url": "",
+                        "api_key_env": "ANTHROPIC_API_KEY",
+                        "enabled": True,
+                        "models": {},
+                    },
+                },
+                "tiers": {"tier_0": {"description": "", "models": [], "default": "none"}},
+                "agent_mapping": {},
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    result = seed_builtin_providers(p)
+    assert sorted(result["added"]) == ["deepseek", "minimax"]
+    new_data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert {"anthropic", "deepseek", "minimax"} <= set(new_data["providers"].keys())
+    validate(new_data)
+
+
+def test_seed_builtin_providers_idempotent(tmp_path, monkeypatch):
+    from backend.config import Settings
+
+    monkeypatch.setattr(cfg_mod, "settings", Settings(anthropic_api_key="x"))
+    monkeypatch.setattr(
+        "backend.services.llm_config.write_env_atomic",
+        lambda path, updates: None,
+    )
+    # Already-full builtin set.
+    full = {
+        pid: {
+            "type": "anthropic" if pid == "anthropic" else "openai_compatible",
+            "display_name": pid,
+            "base_url": f"https://{pid}.example/v1",
+            "api_key_env": f"{pid.upper()}_API_KEY",
+            "enabled": True,
+            "models": {},
+        }
+        for pid in ("anthropic", "deepseek", "minimax")
+    }
+    p = tmp_path / "model_tiers.yaml"
+    p.write_text(
+        yaml.safe_dump({"providers": full, "tiers": {"tier_0": {"description": "", "models": [], "default": "none"}}, "agent_mapping": {}}, sort_keys=False),
+        encoding="utf-8",
+    )
+    before = p.read_text(encoding="utf-8")
+    result = seed_builtin_providers(p)
+    assert result["added"] == []
+    # No-write idempotent
+    assert p.read_text(encoding="utf-8") == before

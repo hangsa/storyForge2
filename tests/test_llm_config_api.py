@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 import backend.services.llm_config as cfg_mod
 import backend.services.llm_usage_log as log_mod
 from backend.main import app
+from backend.services.llm_config import LLMConfigError
 
 REAL_CONFIG = Path("config/model_tiers.yaml")
 
@@ -281,7 +282,33 @@ def test_set_provider_api_key_writes_env(client, monkeypatch, tmp_path):
     assert "ANTHROPIC_API_KEY=sk-new" in env_path.read_text(encoding="utf-8")
 
 
-def test_migrate_endpoint_409_when_already_v2(client):
+def test_migrate_endpoint_idempotent_when_already_v2(client):
+    # POST /migrate is idempotent: legacy YAML → migrate_legacy_yaml();
+    # already-v2 YAML that lost a builtin → seed_builtin_providers().
+    # Both paths return 200 with a reload summary in detail. The _v2_base
+    # fixture already contains all three builtins (anthropic/deepseek/
+    # minimax), so seed reports an empty `added` list — that's correct.
+    res = client.post("/api/settings/llm-config/migrate")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["error"] is False
+    assert "added" in body["detail"]
+    assert "summary" in body["detail"]
+    assert body["detail"]["added"] == []
+
+
+def test_migrate_endpoint_409_on_unrelated_already_v2_error(client, monkeypatch):
+    # Verify the endpoint still surfaces 409 for genuine migration errors
+    # (anything other than "已是新结构"). Force a validate failure to
+    # trigger the unrelated-error branch. Patch via the api module's
+    # direct import binding, not via cfg_mod (api does
+    # `from backend.services.llm_config import migrate_legacy_yaml`).
+    import backend.api.llm_config_api as api_mod
+
+    def boom():
+        raise LLMConfigError("模拟其它错误", ["$"])
+
+    monkeypatch.setattr(api_mod, "migrate_legacy_yaml", boom)
     res = client.post("/api/settings/llm-config/migrate")
     assert res.status_code == 409
 

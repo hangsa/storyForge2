@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+
+log = logging.getLogger(__name__)
 
 from backend.services import llm_config as llm_config_mod
 from backend.services.llm_config import (
@@ -13,6 +16,7 @@ from backend.services.llm_config import (
     provider_status,
     read_yaml,
     reload_router,
+    seed_builtin_providers,
     validate,
     validate_removal,
     write_env_atomic,
@@ -218,6 +222,19 @@ async def put_provider_api_key(provider_id: str, payload: dict):
 async def post_migrate():
     try:
         result = migrate_legacy_yaml()
+        message = "已迁移"
     except LLMConfigError as e:
-        _err("VALIDATION_ERROR", str(e), 409, {"invalid_paths": e.invalid_paths})
-    return {"error": False, "code": "OK", "message": "已迁移", "detail": result}
+        # Already v2 but a builtin (anthropic/deepseek/minimax) may have
+        # been silently dropped at first migration — recover it instead.
+        if "providers" in (e.invalid_paths or []) and "新结构" in str(e):
+            added_result = seed_builtin_providers()
+            added = added_result.get("added") or []
+            result = {"backup_path": None, **added_result}
+            message = (
+                f"已补种 {len(added)} 个内置 provider：{', '.join(added)}"
+                if added
+                else "无需补种（已全部存在）"
+            )
+        else:
+            _err("VALIDATION_ERROR", str(e), 409, {"invalid_paths": e.invalid_paths})
+    return {"error": False, "code": "OK", "message": message, "detail": result}

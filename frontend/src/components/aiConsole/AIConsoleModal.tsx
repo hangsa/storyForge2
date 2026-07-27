@@ -5,9 +5,7 @@ import type {
   ModelEntry,
   ModelTiersConfig,
   ProviderStatus,
-  UsageRecord,
 } from '../../api/client';
-import UsageRecentTable from './UsageRecentTable';
 import ProviderPanel from './ProviderPanel';
 import TierPanel from './TierPanel';
 import AgentMappingPanel from './AgentMappingPanel';
@@ -21,31 +19,48 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+type TabKey = 'provider' | 'tier' | 'agent';
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'provider', label: 'Provider / 模型' },
+  { key: 'tier', label: 'Tier 配置' },
+  { key: 'agent', label: 'Agent 映射' },
+];
+
+// Backend builtin provider ids (mirror backend/services/llm_config.py
+// _BUILTIN_PROVIDERS). Used to detect a silently-dropped builtin so the
+// 补种 banner can appear even when the YAML is already in v2 layout.
+const BUILTIN_PROVIDERS = ['anthropic', 'deepseek', 'minimax'] as const;
+
+function isBuiltinMissing(cfg: ModelTiersConfig | null): boolean {
+  if (!cfg?.providers) return true;
+  const ids = Object.keys(cfg.providers);
+  return BUILTIN_PROVIDERS.some((pid) => !ids.includes(pid));
+}
+
 export default function AIConsoleModal({ isOpen, onClose }: Props) {
   const [config, setConfig] = useState<ModelTiersConfig | null>(null);
   const [draft, setDraft] = useState<ModelTiersConfig | null>(null);
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
-  const [usage, setUsage] = useState<UsageRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDirty, setConfirmDirty] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showMigrate, setShowMigrate] = useState(false);
   const [providerDirty, setProviderDirty] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>('provider');
 
   const dirty = (!!config && !!draft && !deepEqual(config, draft)) || providerDirty;
 
   const refresh = useCallback(async () => {
-    const [cfg, prov, usg] = await Promise.all([
+    const [cfg, prov] = await Promise.all([
       llmConsole.getConfig(),
       llmConsole.getProviders(),
-      llmConsole.getUsage(50),
     ]);
     setConfig(cfg);
     setDraft(cfg);
     setProviders(prov);
-    setUsage(usg);
-    setShowMigrate(!cfg.providers);
+    setShowMigrate(isBuiltinMissing(cfg));
     setProviderDirty(false);
   }, []);
 
@@ -120,10 +135,15 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
                 data-testid="modal-migrate"
                 onClick={async () => {
                   try {
-                    await llmConsole.migrateConfig();
+                    const result = await llmConsole.migrateConfig();
                     await refresh();
+                    const added = result.added ?? [];
+                    setToast(
+                      added.length > 0
+                        ? `已补种 ${added.length} 个内置 provider：${added.join(', ')}`
+                        : '迁移完成',
+                    );
                     setShowMigrate(false);
-                    setToast('迁移完成');
                     setTimeout(() => setToast(null), 3000);
                   } catch (e) {
                     setError(e instanceof Error ? e.message : '迁移失败');
@@ -131,7 +151,7 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
                 }}
                 className="rounded border border-amber-500/40 px-3 py-1 text-sm text-amber-700"
               >
-                ⚠ 迁移 providers 到新结构
+                {config?.providers ? '⚠ 补种内置 provider' : '⚠ 迁移 providers 到新结构'}
               </button>
             )}
             <button
@@ -154,19 +174,34 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          <section className="mb-6">
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-canvas-text-muted">最近调用 (LLM Usage · 最近 50 条)</h3>
-            <UsageRecentTable records={usage} />
-          </section>
+          <div role="tablist" aria-label="AI 控制台分区" className="mb-4 flex gap-1 border-b border-canvas-text-muted/20">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === t.key}
+                data-testid={`tab-${t.key}`}
+                onClick={() => setActiveTab(t.key)}
+                className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === t.key
+                    ? 'border-canvas-accent text-canvas-accent'
+                    : 'border-transparent text-canvas-text-muted hover:text-canvas-text'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-          <section className="mb-6">
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-canvas-text-muted">Provider 状态</h3>
-            <ProviderPanel providers={providers} dirty={dirty} onChange={() => setProviderDirty(true)} onReload={refresh} />
-          </section>
+          {activeTab === 'provider' && (
+            <section data-testid="tab-panel-provider" className="mb-6">
+              <ProviderPanel providers={providers} dirty={dirty} onChange={() => setProviderDirty(true)} onReload={refresh} />
+            </section>
+          )}
 
-          {draft && (
-            <section className="mb-6">
-              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-canvas-text-muted">Tier 配置</h3>
+          {activeTab === 'tier' && draft && (
+            <section data-testid="tab-panel-tier" className="mb-6">
               <div className="space-y-3">
                 {(() => {
                   const catalog: ModelEntry[] = draft.providers
@@ -188,9 +223,8 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
             </section>
           )}
 
-          {draft && (
-            <section className="mb-6">
-              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-canvas-text-muted">Agent 映射</h3>
+          {activeTab === 'agent' && draft && (
+            <section data-testid="tab-panel-agent" className="mb-6">
               <AgentMappingPanel
                 value={draft.agent_mapping}
                 tiers={draft.tiers}

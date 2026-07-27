@@ -13,12 +13,14 @@ from backend.llm.model_router import get_model_router
 
 CONFIG_PATH = Path("config/model_tiers.yaml")
 ENV_PATH = Path("backend/.env")
-PROVIDER_KEY_MAP = {
-    "anthropic": "anthropic_api_key",
-    "deepseek": "deepseek_api_key",
-    "minimax": "minimax_api_key",
-}
-ALLOWED_PROVIDERS = {"anthropic", "deepseek", "minimax"}
+
+# Three providers that ship with StoryForge and have legacy Settings attrs
+# (`anthropic_api_key`, `deepseek_api_key`, `minimax_api_key`) so pydantic
+# -settings picks up .env values without a restart. The migration step seeds
+# any of these that aren't already in the YAML, so a legacy config that
+# only references anthropic still produces a minimax entry — avoids a
+# silent drop when the user only configured an env var.
+_BUILTIN_PROVIDERS = frozenset({"anthropic", "deepseek", "minimax"})
 
 
 class LLMConfigError(ValueError):
@@ -32,13 +34,17 @@ def read_yaml() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def write_yaml_atomic(data: dict) -> None:
-    """Atomic write to CONFIG_PATH. Same mkstemp + os.replace pattern as
+def write_yaml_atomic(data: dict, config_path: Optional[Path] = None) -> None:
+    """Atomic write. Same mkstemp + os.replace pattern as
     backfill_behavior_examples._atomic_write_json — survives kill mid-write
-    and never leaves a stray .tmp file."""
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    and never leaves a stray .tmp file.
+
+    `config_path` defaults to the production CONFIG_PATH. Tests pass a
+    per-test tmp path."""
+    target = Path(config_path) if config_path is not None else CONFIG_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
-        dir=CONFIG_PATH.parent,
+        dir=target.parent,
         prefix=".model_tiers.",
         suffix=".tmp",
     )
@@ -51,7 +57,7 @@ def write_yaml_atomic(data: dict) -> None:
                 sort_keys=False,
                 default_flow_style=False,
             )
-        os.replace(tmp_name, CONFIG_PATH)
+        os.replace(tmp_name, target)
     except Exception:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
@@ -464,8 +470,93 @@ def _legacy_provider_type(provider_id: str) -> str:
     return "anthropic" if provider_id == "anthropic" else "openai_compatible"
 
 
+def _builtin_provider_seed(pid: str) -> dict:
+    """Default entry for a builtin provider that was never explicitly
+    configured. Empty models — the AI Console or a follow-up YAML edit
+    fills them in. Idempotency is the caller's responsibility."""
+    return {
+        "type": _legacy_provider_type(pid),
+        "display_name": pid,
+        "base_url": _legacy_default_base_url(pid),
+        "api_key_env": f"{pid.upper()}_API_KEY",
+        "enabled": True,
+        "models": {},
+    }
+
+
+def _ensure_builtin_providers(providers: dict[str, dict]) -> list[str]:
+    """Idempotent: add any builtin (anthropic/deepseek/minimax) missing
+    from `providers`. Mutates in place and returns the list of added
+    provider ids."""
+    added: list[str] = []
+    for pid in _BUILTIN_PROVIDERS:
+        if pid in providers and isinstance(providers[pid], dict):
+            continue
+        providers[pid] = _builtin_provider_seed(pid)
+        added.append(pid)
+    return added
+
+
+def seed_builtin_providers(
+    config_path: Optional[Path] = None,
+    env_path: Optional[Path] = None,
+) -> dict:
+    """Recovery path for already-migrated YAMLs that silently lost a
+    builtin because no tier ever referenced it. Reads the YAML, re-adds
+    missing anthropic/deepseek/minimax entries with empty models, syncs
+    their env keys when configured, validates, then writes atomically.
+
+    Returns `{"added": list[str], "summary": LLMRouterSummary}`.
+    """
+    # Resolve lazily so tests that monkey-patch `cfg_mod.CONFIG_PATH` take
+    # effect. Catching `None` here also works for default-argument callers
+    # without one — `Path` is NOT yet frozen to the original at def-time.
+    if config_path is None:
+        config_path = CONFIG_PATH
+    if not config_path.exists():
+        raise LLMConfigError("配置文件不存在", ["$"])
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise LLMConfigError("配置文件根节点必须是对象", ["$"])
+
+    providers = raw.get("providers")
+    if not isinstance(providers, dict):
+        providers = {}
+        raw["providers"] = providers
+    added = _ensure_builtin_providers(providers)
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        raise LLMConfigError("配置文件根节点必须是对象", ["$"])
+
+    providers = raw.get("providers")
+    if not isinstance(providers, dict):
+        providers = {}
+        raw["providers"] = providers
+    added = _ensure_builtin_providers(providers)
+
+    if env_path is None:
+        env_path = Path("backend/.env")
+    env_updates: dict[str, str] = {}
+    for pid in _BUILTIN_PROVIDERS:
+        key = getattr(settings, f"{pid}_api_key", "")
+        if not key:
+            continue
+        env_updates[f"STORYFORGE_PROVIDER_API_KEY_{pid.upper()}"] = key
+        env_updates[f"{pid.upper()}_API_KEY"] = key
+    if env_updates:
+        try:
+            write_env_atomic(env_path, env_updates)
+        except Exception as e:
+            print(f"[llm_config] warning: failed to sync env keys to {env_path}: {e}")
+
+    validate(raw)
+    write_yaml_atomic(raw, config_path)
+    summary = reload_router()
+    return {"added": added, "summary": summary}
+
+
 def migrate_legacy_yaml(
-    config_path: Path = CONFIG_PATH,
+    config_path: Optional[Path] = None,
     env_path: Optional[Path] = None,
 ) -> dict:
     """Convert the legacy `tiers.*.models[*].{provider,cost_*,max_tokens}`
@@ -476,6 +567,10 @@ def migrate_legacy_yaml(
     Raises LLMConfigError when the YAML already uses v2 (i.e. has a
     `providers` key) or the structure cannot be interpreted.
     """
+    # Resolve lazily so tests that monkey-patch `cfg_mod.CONFIG_PATH`
+    # actually take effect (default-argument values freeze at def time).
+    if config_path is None:
+        config_path = CONFIG_PATH
     if not config_path.exists():
         raise LLMConfigError("配置文件不存在", ["$"])
     raw_text = config_path.read_text(encoding="utf-8")
@@ -520,6 +615,11 @@ def migrate_legacy_yaml(
                 "json_mode": pid in {"deepseek", "minimax"},
                 "stream": True,
             }
+
+    # Seed any builtin (anthropic/deepseek/minimax) that no tier referenced
+    # so configured `.env` keys for those providers aren't silently dropped.
+    # After this, the env_sync loop below also covers builtin entries.
+    _ensure_builtin_providers(providers)
 
     # Detect global id collisions; rename by prefixing provider id.
     collisions: dict[str, list[str]] = {}
@@ -607,27 +707,7 @@ def migrate_legacy_yaml(
     new_raw["providers"] = providers
     validate(new_raw)
 
-    # Atomic write YAML to the supplied config_path.
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        dir=config_path.parent,
-        prefix=".model_tiers.",
-        suffix=".tmp",
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            yaml.safe_dump(
-                new_raw,
-                f,
-                allow_unicode=True,
-                sort_keys=False,
-                default_flow_style=False,
-            )
-        os.replace(tmp_name, config_path)
-    except Exception:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+    write_yaml_atomic(new_raw, config_path)
     return {
         "backup_path": str(backup_path),
         "summary": {

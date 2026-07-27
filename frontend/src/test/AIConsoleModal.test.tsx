@@ -32,9 +32,6 @@ beforeEach(() => {
     if (url.includes('/settings/llm-providers')) {
       return Promise.resolve(new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: PROVIDERS }), { status: 200 }));
     }
-    if (url.includes('/settings/llm-usage')) {
-      return Promise.resolve(new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: [] }), { status: 200 }));
-    }
     if (init?.method === 'PUT' || init?.method === 'POST') {
       return Promise.resolve(new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: { tiers: 2, agents: 1 } }), { status: 200 }));
     }
@@ -43,9 +40,8 @@ beforeEach(() => {
 });
 
 describe('AIConsoleModal', () => {
-  it('fetches 3 endpoints on open', async () => {
+  it('fetches config and providers on open', async () => {
     render(<AIConsoleModal isOpen onClose={() => {}} />);
-    expect(await screen.findByTestId('usage-empty')).toBeTruthy();
     expect(await screen.findByTestId('provider-anthropic')).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/llm-config'),
@@ -53,10 +49,6 @@ describe('AIConsoleModal', () => {
     );
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/llm-providers'),
-      expect.anything(),
-    );
-    expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/llm-usage'),
       expect.anything(),
     );
   });
@@ -73,6 +65,7 @@ describe('AIConsoleModal', () => {
   it('closing with dirty state shows confirm and respects cancel', async () => {
     const onClose = vi.fn();
     render(<AIConsoleModal isOpen onClose={onClose} />);
+    fireEvent.click(await screen.findByTestId('tab-tier'));
     const input = await screen.findByTestId('tier-1-description');
     fireEvent.change(input, { target: { value: '已编辑' } });
     fireEvent.click(screen.getByTestId('modal-close'));
@@ -84,6 +77,24 @@ describe('AIConsoleModal', () => {
     expect(await screen.findByTestId('dirty-confirm')).toBeTruthy();
     fireEvent.click(screen.getByTestId('dirty-confirm-discard'));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('tabs switch between provider, tier, agent panels; provider is default', async () => {
+    render(<AIConsoleModal isOpen onClose={() => {}} />);
+    // Default tab is provider — its panel renders, others do not.
+    await screen.findByTestId('tab-panel-provider');
+    await screen.findByTestId('provider-anthropic');
+    expect(screen.queryByTestId('tab-panel-tier')).toBeNull();
+    expect(screen.queryByTestId('tab-panel-agent')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('tab-tier'));
+    expect(await screen.findByTestId('tab-panel-tier')).toBeTruthy();
+    expect(screen.queryByTestId('tab-panel-provider')).toBeNull();
+    expect(screen.queryByTestId('tab-panel-agent')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('tab-agent'));
+    expect(await screen.findByTestId('tab-panel-agent')).toBeTruthy();
+    expect(screen.queryByTestId('tab-panel-tier')).toBeNull();
   });
 
   it('reload button calls POST /llm-config/reload', async () => {

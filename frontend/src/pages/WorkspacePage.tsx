@@ -20,6 +20,7 @@ import AutopilotMiddlePanel from "../components/workspace/AutopilotMiddlePanel";
 import AddChaptersModal, { type AddChaptersProgress } from "../components/workspace/AddChaptersModal";
 import ConfirmDialog from "../components/shared/ConfirmDialog";
 import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
+import AIConsoleModal from "../components/aiConsole/AIConsoleModal";
 
 // Internal record for progress.json-derived chapter status. Kept local to
 // this page (not exported) — the canonical `ChapterStatus` union lives in
@@ -149,6 +150,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   // v1.9: AI 工具 dropdown opens the Prompt Plaza modal for THIS project
   // (not the most-recent project like the home page entry).
   const [plazaOpen, setPlazaOpen] = useState(false);
+  const [consoleOpen, setConsoleOpen] = useState(false);
 
   // Bug 1 fix: + 新章节 wiring. Modal state + progress; currentMaxChapter
   // drives the "starting from chapter N" hint inside the modal.
@@ -511,6 +513,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         mode={mode}
         onModeChange={handleModeChange}
         onOpenPlaza={() => setPlazaOpen(true)}
+        onOpenConsole={() => setConsoleOpen(true)}
       />
 
       <WorkspaceLayout
@@ -707,6 +710,10 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         projectId={projectId}
         projectTitle={projectName === "加载中…" ? null : projectName}
         onClose={() => setPlazaOpen(false)}
+      />
+      <AIConsoleModal
+        isOpen={consoleOpen}
+        onClose={() => setConsoleOpen(false)}
       />
     </div>
   );

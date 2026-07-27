@@ -26,6 +26,7 @@ interface Props {
   mode: WorkspaceMode;
   onModeChange: (m: WorkspaceMode) => void;
   onOpenPlaza?: () => void;
+  onOpenConsole?: () => void;
 }
 
 export default function WorkspaceTopBar({
@@ -34,6 +35,7 @@ export default function WorkspaceTopBar({
   mode,
   onModeChange,
   onOpenPlaza,
+  onOpenConsole,
 }: Props) {
   const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const { session } = useAutopilotSession(projectId);
@@ -156,6 +158,19 @@ export default function WorkspaceTopBar({
               role="menu"
               className="absolute right-0 top-full mt-1 min-w-[180px] bg-surface-container-lowest border border-outline-variant rounded-lg shadow-lg z-40 py-1"
             >
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="topbar-ai-tools-console"
+                onClick={() => {
+                  setToolsOpen(false);
+                  onOpenConsole?.();
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-primary hover:bg-surface-container flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-base">smart_toy</span>
+                AI 控制台
+              </button>
               <button
                 type="button"
                 role="menuitem"

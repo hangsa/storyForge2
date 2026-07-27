@@ -36,7 +36,9 @@ export default function ToastContainer() {
       style={{
         position: "fixed",
         right: 16,
-        bottom: 16,
+        // Raised to clear the WritingArea footer (which sits at the bottom
+        // of the center column and contains the 保存草稿 button).
+        bottom: 64,
         display: "flex",
         flexDirection: "column",
         gap: 8,

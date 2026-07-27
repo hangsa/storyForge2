@@ -12,7 +12,7 @@ const PROVIDERS: ProviderStatus[] = [
     api_key_env: 'ANTHROPIC_API_KEY',
     api_key_configured: true,
     enabled: true,
-    models: [{ id: 'claude-opus-4', provider: 'anthropic', cost_per_1k_input: 0.015, cost_per_1k_output: 0.075, max_tokens: 8192 }],
+    models: [{ id: 'claude-opus-4', provider: 'anthropic', cost_per_1k_input: 0.015, cost_per_1k_output: 0.075, max_tokens: 200000 }],
   },
 ];
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -9,6 +10,7 @@ from typing import Optional
 import yaml
 
 from backend.config import settings
+from backend.llm.base_provider import LLMConfig
 from backend.llm.model_router import get_model_router
 
 CONFIG_PATH = Path("config/model_tiers.yaml")
@@ -21,6 +23,16 @@ ENV_PATH = Path("backend/.env")
 # only references anthropic still produces a minimax entry — avoids a
 # silent drop when the user only configured an env var.
 _BUILTIN_PROVIDERS = frozenset({"anthropic", "deepseek", "minimax"})
+
+# Builtin provider → the env var that "activates" it. A builtin is only
+# seeded into the providers block when the matching .env key is present
+# (non-empty), so an operator who never configures ANTHROPIC_API_KEY won't
+# see an unused anthropic card in the AI Console.
+_BUILTIN_API_KEY_ENV: dict[str, str] = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "minimax": "MINIMAX_API_KEY",
+}
 
 
 class LLMConfigError(ValueError):
@@ -42,6 +54,9 @@ def write_yaml_atomic(data: dict, config_path: Optional[Path] = None) -> None:
     `config_path` defaults to the production CONFIG_PATH. Tests pass a
     per-test tmp path."""
     target = Path(config_path) if config_path is not None else CONFIG_PATH
+    for tier in (data.get("tiers") or {}).values():
+        if isinstance(tier, dict):
+            tier.pop("models", None)
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
         dir=target.parent,
@@ -150,6 +165,11 @@ def write_env_atomic(env_path: Path, updates: dict[str, str]) -> None:
 
 ALLOWED_PROVIDER_TYPES = {"anthropic", "openai_compatible", "mock"}
 
+# Model ids round-trip the provider's own naming — uppercase letters and dots
+# are accepted, but characters that would break YAML structure or shell
+# escaping (spaces, quotes, colons, brackets) are still forbidden.
+_MODEL_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
+
 
 def _collect_global_models(data: dict) -> dict[str, str]:
     """Map model id -> provider key for every provider's models dict."""
@@ -203,6 +223,9 @@ def validate(data: dict) -> None:
             invalid.append(f"{path}.models")
             continue
         for mid, model in models.items():
+            if not isinstance(mid, str) or not _MODEL_ID_RE.match(mid):
+                invalid.append(f"{path}.models.<id>")
+                continue
             mpath = f"{path}.models.{mid}"
             if not isinstance(model, dict):
                 invalid.append(mpath)
@@ -242,28 +265,12 @@ def validate(data: dict) -> None:
         if not tier_name.strip() or not isinstance(tier, dict):
             invalid.append(f"tiers.{tier_name or '<empty>'}")
             continue
-        if tier_name == "tier_0":
-            if tier.get("models") or tier.get("default") != "none":
-                invalid.append("tiers.tier_0")
-            continue
-
-        whitelisted = tier.get("models") or []
-        if not isinstance(whitelisted, list) or not whitelisted:
-            invalid.append(f"tiers.{tier_name}.models")
-            whitelisted = []
-        for i, mid in enumerate(whitelisted):
-            if not isinstance(mid, str) or mid not in global_models:
-                invalid.append(f"tiers.{tier_name}.models.{i}")
 
         default = tier.get("default")
         if default and default != "none" and default not in global_models:
             invalid.append(f"tiers.{tier_name}.default")
-        elif default and default != "none" and default not in whitelisted:
-            invalid.append(f"tiers.{tier_name}.default")
         fallback = tier.get("fallback")
         if fallback and fallback not in global_models:
-            invalid.append(f"tiers.{tier_name}.fallback")
-        elif fallback and fallback not in whitelisted:
             invalid.append(f"tiers.{tier_name}.fallback")
 
     mappings = data.get("agent_mapping") or {}
@@ -283,20 +290,11 @@ def validate(data: dict) -> None:
             if tier_name and tier_name not in known_tier_names:
                 invalid.append(f"agent_mapping.{agent_name}.{task_name}.tier")
                 continue
-            tier_models = (
-                (tiers.get(tier_name) or {}).get("models") or []
-                if tier_name in known_tier_names
-                else []
-            )
             model_id = mapping.get("model")
             if model_id and model_id != "default" and model_id not in global_models:
                 invalid.append(f"agent_mapping.{agent_name}.{task_name}.model")
-            elif model_id and model_id != "default" and model_id not in tier_models:
-                invalid.append(f"agent_mapping.{agent_name}.{task_name}.model")
             fallback = mapping.get("fallback")
             if fallback and fallback != "default" and fallback not in global_models:
-                invalid.append(f"agent_mapping.{agent_name}.{task_name}.fallback")
-            elif fallback and fallback != "default" and fallback not in tier_models:
                 invalid.append(f"agent_mapping.{agent_name}.{task_name}.fallback")
 
     if invalid:
@@ -333,13 +331,6 @@ def find_references(data: dict, target: str) -> list[str]:
     for tier_name, tier in tiers.items():
         if not isinstance(tier, dict):
             continue
-        whitelist = tier.get("models") or []
-        if isinstance(whitelist, list):
-            for i, mid in enumerate(whitelist):
-                if kind == "model" and mid == target_id:
-                    paths.append(f"tiers.{tier_name}.models.{i}")
-                elif kind == "provider" and provider_map.get(mid) == target_provider:
-                    paths.append(f"tiers.{tier_name}.models.{i}")
         default = tier.get("default")
         if isinstance(default, str):
             if kind == "model" and default == target_id:
@@ -401,6 +392,33 @@ def _setting_for_env(env_name: str) -> str:
     return mapping.get(env_name, env_name.lower())
 
 
+def _resolve_api_key_for(provider_id: str, api_key_env: str) -> str:
+    """Resolve the actual API key string for a provider, in priority order:
+    1. STORYFORGE_PROVIDER_API_KEY_<PID> (new prefix, hot-reloadable,
+       works for any provider id including custom).
+    2. Builtin settings attr (anthropic_api_key / deepseek_api_key /
+       minimax_api_key) when api_key_env matches the legacy builtin env name.
+    3. The provider-declared api_key_env in os.environ.
+
+    Returns "" when no key is configured. Mirrors the `configured` check in
+    provider_status() so a probe with the same provider sees the same key.
+    """
+    prefixed_key = f"STORYFORGE_PROVIDER_API_KEY_{provider_id.upper()}"
+    value = os.environ.get(prefixed_key, "")
+    if value:
+        return value
+    settings_attr = _setting_for_env(api_key_env) if api_key_env else ""
+    if settings_attr:
+        value = getattr(settings, settings_attr, "") or ""
+        if value:
+            return value
+    if api_key_env:
+        value = os.environ.get(api_key_env, "")
+        if value:
+            return value
+    return ""
+
+
 def provider_status() -> list[dict]:
     """Return one record per entry in `providers`.
 
@@ -415,20 +433,7 @@ def provider_status() -> list[dict]:
         if not isinstance(provider, dict):
             continue
         api_key_env = provider.get("api_key_env", "")
-        # API key is "configured" if any of:
-        # 1. STORYFORGE_PROVIDER_API_KEY_<PID> (new prefix, hot-reloadable,
-        #    works for any provider id including custom).
-        # 2. Builtin settings attr (anthropic_api_key / deepseek_api_key /
-        #    minimax_api_key) when api_key_env matches the legacy builtin
-        #    env name.
-        # 3. The provider-declared api_key_env in os.environ.
-        prefixed_key = f"STORYFORGE_PROVIDER_API_KEY_{pid.upper()}"
-        settings_attr = _setting_for_env(api_key_env) if api_key_env else ""
-        configured = (
-            bool(os.environ.get(prefixed_key, ""))
-            or bool(getattr(settings, settings_attr, "") if settings_attr else "")
-            or bool(os.environ.get(api_key_env, "") if api_key_env else False)
-        )
+        configured = bool(_resolve_api_key_for(pid, api_key_env))
         models_out = []
         for mid, model in (provider.get("models") or {}).items():
             if not isinstance(model, dict):
@@ -438,7 +443,7 @@ def provider_status() -> list[dict]:
                 "display_name": model.get("display_name", mid),
                 "cost_per_1k_input": model.get("cost_per_1k_input", 0),
                 "cost_per_1k_output": model.get("cost_per_1k_output", 0),
-                "max_tokens": model.get("max_tokens", 8192),
+                "max_tokens": model.get("max_tokens", 200000),
                 "temperature": model.get("temperature", 0.7),
                 "json_mode": bool(model.get("json_mode", False)),
                 "stream": bool(model.get("stream", True)),
@@ -454,6 +459,85 @@ def provider_status() -> list[dict]:
             "models": models_out,
         })
     return out
+
+
+def _provider_class_for_type(provider_type: str):
+    """Map the YAML `type` field to a concrete LLM provider class.
+
+    Returns None when the type is unknown — callers must raise.
+    """
+    if provider_type == "anthropic":
+        from backend.llm.anthropic_provider import AnthropicProvider
+        return AnthropicProvider
+    if provider_type == "minimax":
+        from backend.llm.minimax_provider import MiniMaxProvider
+        return MiniMaxProvider
+    if provider_type == "mock":
+        from backend.llm.mock_provider import MockProvider
+        return MockProvider
+    # Default + explicit "openai_compatible"
+    from backend.llm.openai_compatible_provider import OpenAICompatibleProvider
+    return OpenAICompatibleProvider
+
+
+async def probe_provider(provider_id: str) -> dict:
+    """Probe a saved provider — connection check + model listing.
+
+    Reads the provider's YAML entry, resolves the API key via the same
+    priority order as provider_status(), instantiates the right provider
+    class, and calls its async probe().
+
+    Returns a dict suitable for direct JSON serialization:
+      {success, latency_ms, models: [{id, display_name}], error?, error_code?}
+
+    Raises LLMConfigError only when the provider id is missing from the
+    config (404 path in the endpoint). Auth/connection failures are
+    surfaced via the `success=False` payload, NOT as exceptions, so the
+    AI Console can render the error inline.
+    """
+    cfg = read_yaml()
+    providers = cfg.get("providers") or {}
+    provider = providers.get(provider_id)
+    if not isinstance(provider, dict):
+        raise LLMConfigError(f"provider '{provider_id}' 不存在", ["provider_id"])
+
+    api_key_env = provider.get("api_key_env", "") or ""
+    api_key = _resolve_api_key_for(provider_id, api_key_env)
+    if not api_key:
+        return {
+            "success": False,
+            "latency_ms": 0,
+            "models": None,
+            "error": f"API Key 未配置（{api_key_env or '未设置 api_key_env'}）",
+            "error_code": "auth_error",
+        }
+
+    base_url = provider.get("base_url") or ""
+    provider_type = provider.get("type", "openai_compatible")
+    cls = _provider_class_for_type(provider_type)
+    # Anthropic probe needs a real model id; use the first configured model
+    # or fall back to claude-haiku-4-5 (the cheapest available).
+    model = "probe"
+    if provider_type == "anthropic":
+        models_dict = provider.get("models") or {}
+        model = next(iter(models_dict.keys()), None) or "claude-haiku-4-5"
+    try:
+        instance = cls(LLMConfig(
+            provider=provider_id,
+            model=model,
+            api_key=api_key,
+            base_url=base_url or None,
+        ))
+    except Exception as e:
+        return {
+            "success": False,
+            "latency_ms": 0,
+            "models": None,
+            "error": f"无法构造 provider: {type(e).__name__}: {e}",
+            "error_code": "provider_error",
+        }
+    result = await instance.probe()
+    return asdict(result)
 
 
 def _legacy_default_base_url(provider_id: str) -> str:
@@ -484,13 +568,42 @@ def _builtin_provider_seed(pid: str) -> dict:
     }
 
 
-def _ensure_builtin_providers(providers: dict[str, dict]) -> list[str]:
+def _env_has_api_key(env_path: Path, key_name: str) -> bool:
+    """Return True iff `env_path` contains a non-empty assignment for `key_name`.
+
+    Used by the builtin-provider seeder to avoid surfacing a provider card
+    in the AI Console for which the operator never configured an API key.
+    """
+    if not env_path.exists():
+        return False
+    try:
+        text = env_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    _, values = _parse_env(text)
+    return bool(values.get(key_name))
+
+
+def _ensure_builtin_providers(
+    providers: dict[str, dict],
+    env_path: Optional[Path] = None,
+) -> list[str]:
     """Idempotent: add any builtin (anthropic/deepseek/minimax) missing
-    from `providers`. Mutates in place and returns the list of added
-    provider ids."""
+    from `providers` AND activated by a non-empty API key in `env_path`.
+
+    The env check prevents a no-op anthropic card from appearing in the
+    AI Console for operators who never configured ANTHROPIC_API_KEY. When
+    `env_path` is None, fallback to the default ENV_PATH (still gated).
+
+    Mutates `providers` in place; returns the list of added provider ids.
+    """
+    target_env = env_path if env_path is not None else ENV_PATH
     added: list[str] = []
     for pid in _BUILTIN_PROVIDERS:
         if pid in providers and isinstance(providers[pid], dict):
+            continue
+        key_env = _BUILTIN_API_KEY_ENV.get(pid, "")
+        if key_env and not _env_has_api_key(target_env, key_env):
             continue
         providers[pid] = _builtin_provider_seed(pid)
         added.append(pid)
@@ -523,7 +636,7 @@ def seed_builtin_providers(
     if not isinstance(providers, dict):
         providers = {}
         raw["providers"] = providers
-    added = _ensure_builtin_providers(providers)
+    added = _ensure_builtin_providers(providers, env_path=env_path)
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
         raise LLMConfigError("配置文件根节点必须是对象", ["$"])
@@ -532,7 +645,7 @@ def seed_builtin_providers(
     if not isinstance(providers, dict):
         providers = {}
         raw["providers"] = providers
-    added = _ensure_builtin_providers(providers)
+    added = _ensure_builtin_providers(providers, env_path=env_path)
 
     if env_path is None:
         env_path = Path("backend/.env")
@@ -610,16 +723,18 @@ def migrate_legacy_yaml(
                 "display_name": mid,
                 "cost_per_1k_input": m.get("cost_per_1k_input", 0),
                 "cost_per_1k_output": m.get("cost_per_1k_output", 0),
-                "max_tokens": m.get("max_tokens", 8192),
+                "max_tokens": m.get("max_tokens", 200000),
                 "temperature": 0.7,
                 "json_mode": pid in {"deepseek", "minimax"},
                 "stream": True,
             }
 
     # Seed any builtin (anthropic/deepseek/minimax) that no tier referenced
-    # so configured `.env` keys for those providers aren't silently dropped.
+    # AND has a matching non-empty API key in `.env`, so configured keys for
+    # those providers aren't silently dropped. Builtins without a configured
+    # key are skipped (no orphan provider card in the AI Console).
     # After this, the env_sync loop below also covers builtin entries.
-    _ensure_builtin_providers(providers)
+    _ensure_builtin_providers(providers, env_path=env_path)
 
     # Detect global id collisions; rename by prefixing provider id.
     collisions: dict[str, list[str]] = {}
@@ -627,38 +742,18 @@ def migrate_legacy_yaml(
         for mid in list(provider["models"].keys()):
             collisions.setdefault(mid, []).append(pid)
     renamed = False
+    # Disambiguate colliding model ids by prefixing the owning provider id.
+    # Use `__` (double underscore) instead of `/` so the resulting id still
+    # matches _MODEL_ID_RE — `/` would break YAML keys and downstream routers
+    # that pass the id verbatim to provider APIs.
     for mid, providers_sharing in collisions.items():
         if len(providers_sharing) <= 1:
             continue
         renamed = True
         for pid in providers_sharing:
             old = providers[pid]["models"].pop(mid)
-            new_mid = f"{pid}/{mid}"
+            new_mid = f"{pid}__{mid}"
             providers[pid]["models"][new_mid] = old
-
-    # Rewrite tier `models` whitelist from legacy dict entries (with
-    # provider/id/cost/max_tokens) to v2 string entries (model id).
-    for tier in tiers.values():
-        if not isinstance(tier, dict):
-            continue
-        new_models: list = []
-        for m in tier.get("models") or []:
-            if not isinstance(m, dict):
-                # Already a string or other — keep as-is.
-                new_models.append(m)
-                continue
-            mid = m.get("id")
-            pid = m.get("provider")
-            if renamed and mid in collisions and pid in collisions.get(mid, []):
-                new_models.append(f"{pid}/{mid}")
-            else:
-                new_models.append(mid or "")
-        tier["models"] = new_models
-        for key in ("default", "fallback"):
-            val = tier.get(key)
-            if isinstance(val, str) and renamed and val in collisions:
-                owner = collisions[val][0]
-                tier[key] = f"{owner}/{val}"
 
     # Rewrite agent_mapping references for renamed ids.
     if renamed:
@@ -672,7 +767,19 @@ def migrate_legacy_yaml(
                 for key in ("model", "fallback"):
                     val = mapping.get(key)
                     if isinstance(val, str) and val in collisions:
-                        mapping[key] = f"{collisions[val][0]}/{val}"
+                        mapping[key] = f"{collisions[val][0]}__{val}"
+
+        # Rewrite tier default/fallback references for renamed ids so the
+        # post-migration config still passes `validate()` (default/fallback
+        # must be in providers.*.models, not the un-prefixed collision name).
+        tiers = raw.get("tiers") or {}
+        for tier in tiers.values():
+            if not isinstance(tier, dict):
+                continue
+            for key in ("default", "fallback"):
+                val = tier.get(key)
+                if isinstance(val, str) and val in collisions:
+                    tier[key] = f"{collisions[val][0]}__{val}"
 
     # Persist backup.
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

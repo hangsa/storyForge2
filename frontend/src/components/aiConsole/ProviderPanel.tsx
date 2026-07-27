@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { llmConsole, type ProviderEntry, type ProviderStatus } from '../../api/llmConsole';
-import type { ModelEntry } from '../../api/client';
+import type { ModelEntry, ProbeResult } from '../../api/client';
 
 interface Props {
   providers: ProviderStatus[];
@@ -51,6 +51,8 @@ interface ProviderFormModalProps {
   onSaved: () => void;
 }
 
+type EditingProvider = NonNullable<ProviderFormModalProps['initial']> | Record<string, never>;
+
 function ProviderFormModal({ initial, onClose, onSaved }: ProviderFormModalProps) {
   const isEdit = !!initial;
   const [id, setId] = useState(initial?.id ?? '');
@@ -82,7 +84,7 @@ function ProviderFormModal({ initial, onClose, onSaved }: ProviderFormModalProps
             setError(null);
             try {
               const provider = { type, display_name: displayName, base_url: baseUrl, api_key_env: apiKeyEnv, enabled };
-              await llmConsole.upsertProvider(id, isEdit ? provider : { ...provider, models: {} });
+              await llmConsole.upsertProvider(id, isEdit ? provider as ProviderEntry : { ...provider, models: {} });
               await onSaved();
               onClose();
             } catch (e) {
@@ -109,8 +111,8 @@ function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: Mode
   const isEdit = !!modelId;
   const [id, setId] = useState(modelId ?? '');
   const [displayName, setDisplayName] = useState(initial?.display_name ?? '');
-  const [maxTokens, setMaxTokens] = useState(initial?.max_tokens ?? 8192);
-  const [temperature, setTemperature] = useState(initial?.temperature ?? 0.7);
+  const [maxTokens, setMaxTokens] = useState(String(initial?.max_tokens ?? 200000));
+  const [temperature, setTemperature] = useState(String(initial?.temperature ?? 0.7));
   const [jsonMode, setJsonMode] = useState(initial?.json_mode ?? false);
   const [stream, setStream] = useState(initial?.stream ?? true);
   const [saving, setSaving] = useState(false);
@@ -123,8 +125,8 @@ function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: Mode
         <div className="space-y-3 text-sm">
           <label className="block"><span className="text-canvas-text-muted">ID（仅新建可设）</span><input data-testid="model-form-id" disabled={isEdit} value={id} onChange={(e) => { setId(e.target.value); setError(null); }} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1 disabled:opacity-50" /></label>
           <label className="block"><span className="text-canvas-text-muted">显示名</span><input data-testid="model-form-displayname" value={displayName} onChange={(e) => { setDisplayName(e.target.value); setError(null); }} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
-          <label className="block"><span className="text-canvas-text-muted">max_tokens</span><input data-testid="model-form-max-tokens" type="number" value={maxTokens} onChange={(e) => setMaxTokens(parseInt(e.target.value, 10) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
-          <label className="block"><span className="text-canvas-text-muted">temperature</span><input data-testid="model-form-temperature" type="number" step="0.05" min="0" max="2" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value) || 0)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
+          <label className="block"><span className="text-canvas-text-muted">max_tokens</span><input data-testid="model-form-max-tokens" type="number" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
+          <label className="block"><span className="text-canvas-text-muted">temperature</span><input data-testid="model-form-temperature" type="number" step="0.05" min="0" max="2" value={temperature} onChange={(e) => setTemperature(e.target.value)} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
           <label className="flex items-center gap-2"><input data-testid="model-form-json-mode" type="checkbox" checked={jsonMode} onChange={(e) => setJsonMode(e.target.checked)} /><span>json_mode</span></label>
           <label className="flex items-center gap-2"><input data-testid="model-form-stream" type="checkbox" checked={stream} onChange={(e) => setStream(e.target.checked)} /><span>stream</span></label>
         </div>
@@ -141,8 +143,8 @@ function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: Mode
                 display_name: displayName,
                 cost_per_1k_input: 0,
                 cost_per_1k_output: 0,
-                max_tokens: maxTokens,
-                temperature,
+                max_tokens: parseInt(maxTokens, 10) || 0,
+                temperature: parseFloat(temperature) || 0,
                 json_mode: jsonMode,
                 stream,
               };
@@ -162,11 +164,72 @@ function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: Mode
 }
 
 export default function ProviderPanel({ providers, dirty, onChange, onReload }: Props) {
-  const [editingProvider, setEditingProvider] = useState<ProviderFormModalProps['initial'] | Record<string, never> | null>(null);
+  const [editingProvider, setEditingProvider] = useState<EditingProvider | null>(null);
   const [apikeyFor, setApikeyFor] = useState<string | null>(null);
   const [addingModelFor, setAddingModelFor] = useState<string | null>(null);
   const [editingModelFor, setEditingModelFor] = useState<{ providerId: string; modelId: string } | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
+  const [probeState, setProbeState] = useState<Record<string, { result: ProbeResult | null; loading: boolean; importing: boolean; selected: Record<string, boolean> } | null>>({});
+  const [toast, setToast] = useState<string | null>(null);
+
+  function defaultModel(m: { id: string; display_name: string }): ModelEntry {
+    return {
+      id: m.id,
+      provider: '',
+      display_name: m.display_name || m.id,
+      cost_per_1k_input: 0,
+      cost_per_1k_output: 0,
+      max_tokens: 200000,
+      temperature: 0.7,
+      json_mode: false,
+      stream: true,
+    };
+  }
+
+  async function handleProbe(providerId: string) {
+    setProbeState((s) => ({ ...s, [providerId]: { result: null, loading: true, importing: false, selected: {} } }));
+    try {
+      const result = await llmConsole.probeProvider(providerId);
+      const existing = new Set(providers.find((p) => p.provider === providerId)?.models.map((m) => m.id) ?? []);
+      const selected: Record<string, boolean> = {};
+      for (const m of result.models ?? []) {
+        if (!existing.has(m.id)) selected[m.id] = true;
+      }
+      setProbeState((s) => ({ ...s, [providerId]: { result, loading: false, importing: false, selected } }));
+    } catch (e) {
+      const fallback: ProbeResult = {
+        success: false,
+        latency_ms: 0,
+        models: null,
+        error: e instanceof Error ? e.message : '探测失败',
+        error_code: 'provider_error',
+      };
+      setProbeState((s) => ({ ...s, [providerId]: { result: fallback, loading: false, importing: false, selected: {} } }));
+    }
+  }
+
+  async function handleImport(providerId: string) {
+    const state = probeState[providerId];
+    if (!state?.result?.success) return;
+    const ids = Object.keys(state.selected).filter((id) => state.selected[id]);
+    if (ids.length === 0) return;
+    setProbeState((s) => ({ ...s, [providerId]: s[providerId] ? { ...s[providerId]!, importing: true } : s[providerId] }));
+    let imported = 0;
+    for (const id of ids) {
+      const m = state.result.models!.find((mm) => mm.id === id);
+      if (!m) continue;
+      try {
+        await llmConsole.upsertModel(providerId, id, defaultModel(m));
+        imported++;
+      } catch (e) {
+        setToast(`导入 ${id} 失败：${e instanceof Error ? e.message : '未知错误'}`);
+      }
+    }
+    await onReload();
+    onChange();
+    setProbeState((s) => ({ ...s, [providerId]: null }));
+    setToast(`已导入 ${imported} 个模型`);
+  }
 
   const handleProviderSaved = async () => {
     await onReload();
@@ -222,8 +285,57 @@ export default function ProviderPanel({ providers, dirty, onChange, onReload }: 
             <div className="mt-3 flex flex-wrap gap-1">
               <button type="button" data-testid={`provider-${p.provider}-edit`} className="rounded border px-2 py-0.5 text-xs" onClick={() => setEditingProvider({ id: p.provider, display_name: p.display_name, type: p.type, base_url: p.base_url, api_key_env: p.api_key_env, enabled: p.enabled })}>编辑</button>
               <button type="button" data-testid={`provider-${p.provider}-apikey`} className="rounded border px-2 py-0.5 text-xs" onClick={() => setApikeyFor(p.provider)}>API Key</button>
+              <button type="button" data-testid={`provider-${p.provider}-probe`} disabled={probeState[p.provider]?.loading} className="rounded border px-2 py-0.5 text-xs disabled:opacity-50" onClick={() => handleProbe(p.provider)}>{probeState[p.provider]?.loading ? '探测中…' : '🔌 探测'}</button>
               <button type="button" data-testid={`provider-${p.provider}-delete`} className="rounded border border-rose-500/40 px-2 py-0.5 text-xs text-rose-600" onClick={() => handleDelete(p.provider)}>删除</button>
             </div>
+            {probeState[p.provider] && (
+              <div data-testid={`provider-${p.provider}-probe-result`} className="mt-3 rounded border border-canvas-text-muted/30 bg-canvas-bg p-2 text-xs">
+                {!probeState[p.provider]!.result ? (
+                  <span className="text-canvas-text-muted">正在探测 {p.display_name}…</span>
+                ) : probeState[p.provider]!.result!.success ? (
+                  <div>
+                    <div data-testid="probe-success-header" className="text-emerald-600">✓ 已连通 ({probeState[p.provider]!.result!.latency_ms}ms) — {(probeState[p.provider]!.result!.models ?? []).length} 个可用模型</div>
+                    {(probeState[p.provider]!.result!.models ?? []).length > 0 && (
+                      <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                        {(probeState[p.provider]!.result!.models ?? []).map((m) => {
+                          const exists = p.models.some((pm) => pm.id === m.id);
+                          return (
+                            <li key={m.id} className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                data-testid={`probe-model-${m.id}`}
+                                disabled={exists}
+                                checked={!exists && !!probeState[p.provider]!.selected[m.id]}
+                                onChange={(e) => setProbeState((s) => {
+                                  const cur = s[p.provider];
+                                  if (!cur) return s;
+                                  return { ...s, [p.provider]: { ...cur, selected: { ...cur.selected, [m.id]: e.target.checked } } };
+                                })}
+                              />
+                              <span className="font-mono">{m.id}</span>
+                              {m.display_name && m.display_name !== m.id && <span className="text-canvas-text-muted">({m.display_name})</span>}
+                              {exists && <span className="text-canvas-text-muted">已存在</span>}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    {Object.values(probeState[p.provider]!.selected).some(Boolean) && (
+                      <div className="mt-2 flex gap-2">
+                        <button type="button" data-testid="probe-import-btn" disabled={probeState[p.provider]!.importing} className="rounded bg-canvas-accent px-2 py-0.5 text-xs text-white disabled:opacity-50" onClick={() => handleImport(p.provider)}>{probeState[p.provider]!.importing ? '导入中…' : `导入 ${Object.values(probeState[p.provider]!.selected).filter(Boolean).length} 个新模型`}</button>
+                        <button type="button" data-testid="probe-cancel-btn" className="rounded border px-2 py-0.5 text-xs" onClick={() => setProbeState((s) => ({ ...s, [p.provider]: null }))}>关闭</button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div data-testid="probe-error-header" className="text-rose-600">✗ 探测失败 ({probeState[p.provider]!.result!.error_code})</div>
+                    <div className="mt-1 break-all text-canvas-text-muted">{probeState[p.provider]!.result!.error}</div>
+                    <button type="button" data-testid="probe-dismiss-btn" className="mt-2 rounded border px-2 py-0.5 text-xs" onClick={() => setProbeState((s) => ({ ...s, [p.provider]: null }))}>关闭</button>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="mt-3 space-y-1">
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-xs text-canvas-text-muted">模型 ({p.models.length})</span>
@@ -252,6 +364,7 @@ export default function ProviderPanel({ providers, dirty, onChange, onReload }: 
         const model = provider?.models.find((mm) => mm.id === editingModelFor.modelId);
         return <ModelFormModal providerId={editingModelFor.providerId} modelId={editingModelFor.modelId} initial={model} onClose={() => setEditingModelFor(null)} onSaved={handleModelSaved} />;
       })()}
+      {toast && <div data-testid="provider-toast" className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">{toast}</div>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 from typing import AsyncIterator
 
-from backend.llm.base_provider import BaseLLMProvider, LLMConfig, LLMResponse, StreamChunk
+from backend.llm.base_provider import BaseLLMProvider, LLMConfig, LLMResponse, ProbeResult, StreamChunk
 
 
 class MockProvider(BaseLLMProvider):
@@ -13,6 +13,19 @@ class MockProvider(BaseLLMProvider):
     def __init__(self, config: LLMConfig, text: str = "(mock response)"):
         super().__init__(config)
         self._text = text
+
+    async def probe(self) -> ProbeResult:
+        """Always succeeds; returns a small hardcoded model catalog so the
+        AI Console 一键导入 flow has something to show for `type=mock`.
+        """
+        return ProbeResult(
+            success=True,
+            latency_ms=0,
+            models=[
+                {"id": "mock-fast", "display_name": "Mock Fast"},
+                {"id": "mock-smart", "display_name": "Mock Smart"},
+            ],
+        )
 
     async def generate(
         self, system_prompt: str, user_prompt: str, **kwargs

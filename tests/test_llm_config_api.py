@@ -73,7 +73,6 @@ def _v2_base():
                 "description": "创意核心",
                 "default": "deepseek-v4-pro",
                 "fallback": "claude-opus-4",
-                "models": ["deepseek-v4-pro", "claude-opus-4"],
                 "retry_on_failure": True,
                 "max_retries": 1,
             },
@@ -81,7 +80,6 @@ def _v2_base():
                 "description": "AI 控制台 updated me",
                 "default": "claude-opus-4",
                 "fallback": "deepseek-v4-pro",
-                "models": ["claude-opus-4", "deepseek-v4-pro"],
                 "retry_on_failure": True,
                 "max_retries": 1,
             },
@@ -89,7 +87,6 @@ def _v2_base():
                 "description": "auxiliary",
                 "default": "deepseek-v4-pro",
                 "fallback": None,
-                "models": ["deepseek-v4-pro"],
                 "retry_on_failure": False,
                 "max_retries": 0,
             },
@@ -97,7 +94,6 @@ def _v2_base():
                 "description": "确定性",
                 "default": "none",
                 "fallback": None,
-                "models": [],
                 "retry_on_failure": False,
                 "max_retries": 0,
             },
@@ -185,6 +181,29 @@ def test_put_llm_config_rejects_invalid_with_422(client):
     detail = res.json()["detail"]
     assert detail["code"] == "VALIDATION_ERROR"
     assert "tier_0" in detail["detail"]["invalid_paths"]
+
+
+def test_round_trip_strips_models_field_from_all_tiers(client, tmp_path, monkeypatch):
+    """Any save through PUT /llm-config must auto-pop the legacy `models` key
+    so subsequent loads see a clean schema. write_yaml_atomic handles this
+    centrally; this test guards against the per-tier pop ever being removed.
+    """
+    import yaml as yaml_mod
+    import backend.services.llm_config as cfg_mod_local
+
+    target = tmp_path / "model_tiers.yaml"
+    data = _v2_base()
+    # Add a `models` key to every tier, simulating a stale or imported YAML.
+    for t in data["tiers"].values():
+        t["models"] = ["claude-opus-4", "deepseek-v4-pro"]
+    target.write_text(yaml_mod.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(cfg_mod_local, "CONFIG_PATH", target)
+
+    res = client.put("/api/settings/llm-config", json=data)
+    assert res.status_code == 200, res.text
+    after = yaml_mod.safe_load(target.read_text(encoding="utf-8"))
+    for tier_name, tier in after["tiers"].items():
+        assert "models" not in tier, f"tier {tier_name!r} still has models key: {tier}"
 
 
 def test_reload_endpoint_returns_summary(client):
@@ -314,11 +333,202 @@ def test_migrate_endpoint_409_on_unrelated_already_v2_error(client, monkeypatch)
 
 
 def test_invalid_provider_id_rejected(client):
+    # Provider ids still keep the strict a-z0-9_- rule so YAML/env names
+    # (`STORYFORGE_PROVIDER_API_KEY_<X>`) and legacy URLs resolve predictably.
     res = client.delete("/api/settings/llm-config/providers/has.dot")
     assert res.status_code == 422
     assert res.json()["detail"]["code"] == "VALIDATION_ERROR"
 
 
 def test_invalid_model_id_rejected(client):
-    res = client.delete("/api/settings/llm-config/providers/anthropic/models/has.dot")
+    # Spaces are not allowed in model ids (would break YAML keys / shell escaping),
+    # but uppercase letters and dots ARE allowed since model ids round-trip the
+    # provider's own naming (e.g. "MiniMax-M3", "gpt-4.1-mini").
+    res = client.delete("/api/settings/llm-config/providers/anthropic/models/has%20space")
     assert res.status_code == 422
+
+
+def test_model_id_with_uppercase_and_dot_round_trips(client):
+    # Provider-returned model ids often contain uppercase letters and version
+    # dots (e.g. "MiniMax-M3", "gpt-4.1-mini"). Make sure the upsert/delete
+    # pipeline accepts them and the YAML round-trip preserves the original id.
+    payload = {"id": "MiniMax-M3", "model": {
+        "display_name": "MiniMax-M3",
+        "cost_per_1k_input": 0.001,
+        "cost_per_1k_output": 0.002,
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "json_mode": False,
+        "stream": True,
+    }}
+    res = client.post(
+        "/api/settings/llm-config/providers/minimax/models", json=payload
+    )
+    assert res.status_code == 200, res.text
+
+    cfg = client.get("/api/settings/llm-config").json()["detail"]
+    assert "MiniMax-M3" in cfg["providers"]["minimax"]["models"]
+    assert cfg["providers"]["minimax"]["models"]["MiniMax-M3"]["display_name"] == "MiniMax-M3"
+
+    # And it can be deleted by the exact same id (URL-encoded dot).
+    res = client.delete(
+        "/api/settings/llm-config/providers/minimax/models/MiniMax-M3"
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_probe_endpoint_success_returns_models(client, monkeypatch):
+    from backend.services import llm_config as cfg_mod_local
+    from backend.llm.base_provider import ProbeResult
+
+    async def fake_probe(self):
+        return ProbeResult(
+            success=True,
+            latency_ms=234,
+            models=[
+                {"id": "claude-opus-4-20250514", "display_name": "Claude Opus 4"},
+                {"id": "claude-haiku-4-5", "display_name": "Claude Haiku 4.5"},
+            ],
+        )
+
+    monkeypatch.setattr(cfg_mod_local._provider_class_for_type("anthropic"), "probe", fake_probe)
+    res = client.post("/api/settings/llm-config/providers/anthropic/probe")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["error"] is False
+    detail = body["detail"]
+    assert detail["success"] is True
+    assert detail["latency_ms"] == 234
+    assert len(detail["models"]) == 2
+    assert detail["models"][0]["id"] == "claude-opus-4-20250514"
+
+
+def test_probe_endpoint_passes_through_failed_probe(client, monkeypatch):
+    # The endpoint just passes through whatever probe() returns. Verify that
+    # a failure-shape ProbeResult from a provider surfaces with success=False
+    # and the right error_code. (The auth/unreachable/provider_error mapping
+    # is unit-tested separately in test_probe_error_normalization.)
+    from backend.services import llm_config as cfg_mod_local
+    from backend.llm.base_provider import ProbeResult
+
+    async def fake_probe(self):
+        return ProbeResult(
+            success=False,
+            latency_ms=120,
+            models=None,
+            error="invalid api key",
+            error_code="auth_error",
+        )
+
+    monkeypatch.setattr(
+        cfg_mod_local._provider_class_for_type("anthropic"), "probe", fake_probe
+    )
+    res = client.post("/api/settings/llm-config/providers/anthropic/probe")
+    assert res.status_code == 200, res.text
+    detail = res.json()["detail"]
+    assert detail["success"] is False
+    assert detail["error_code"] == "auth_error"
+    assert detail["error"] == "invalid api key"
+
+
+def test_probe_error_normalization_buckets():
+    """Unit-test the shared error normalizer — auth_error / unreachable /
+    provider_error buckets. Each branch is one SDK exception class with a
+    minimal httpx.Response stub."""
+    import time
+    import httpx
+    from backend.llm.base_provider import _normalize_openai_probe_error
+
+    def _stub(code: int = 401) -> httpx.Response:
+        return httpx.Response(
+            code,
+            request=httpx.Request("POST", "https://api.example.com/v1/models"),
+            headers={},
+            content=b"",
+        )
+
+    from openai import (
+        APIConnectionError,
+        APITimeoutError,
+        AuthenticationError,
+        NotFoundError,
+        PermissionDeniedError,
+    )
+
+    start = time.monotonic()
+
+    # auth_error bucket
+    err = AuthenticationError("bad key", response=_stub(401), body=None)
+    r = _normalize_openai_probe_error(start, err)
+    assert r.success is False and r.error_code == "auth_error"
+
+    err = PermissionDeniedError("nope", response=_stub(403), body=None)
+    r = _normalize_openai_probe_error(start, err)
+    assert r.success is False and r.error_code == "auth_error"
+
+    # unreachable bucket
+    err = APIConnectionError(request=_stub().request)
+    r = _normalize_openai_probe_error(start, err)
+    assert r.success is False and r.error_code == "unreachable"
+
+    err = NotFoundError("404", response=_stub(404), body=None)
+    r = _normalize_openai_probe_error(start, err)
+    assert r.success is False and r.error_code == "unreachable"
+
+    err = APITimeoutError(request=_stub().request)
+    r = _normalize_openai_probe_error(start, err)
+    assert r.success is False and r.error_code == "unreachable"
+
+    # unknown → provider_error
+    err = ValueError("something weird")
+    r = _normalize_openai_probe_error(start, err)
+    assert r.success is False and r.error_code == "provider_error"
+
+
+def test_probe_endpoint_404_when_provider_missing(client):
+    res = client.post("/api/settings/llm-config/providers/nonexistent/probe")
+    assert res.status_code == 404
+    body = res.json()
+    assert body["detail"]["code"] == "NOT_FOUND"
+
+
+def test_probe_endpoint_reports_missing_api_key(client, monkeypatch, tmp_path):
+    # Clear both .env contents AND the cached pydantic-settings value
+    # (loaded at import time from the real .env). Settings caches values on
+    # the BaseSettings instance, so monkeypatch.setattr is required to
+    # force the resolution to return "".
+    empty_env = tmp_path / ".env"
+    empty_env.write_text("", encoding="utf-8")
+    monkeypatch.setattr(cfg_mod, "ENV_PATH", empty_env)
+    from backend.config import settings as real_settings
+    monkeypatch.setattr(real_settings, "anthropic_api_key", "", raising=False)
+    for var in ("ANTHROPIC_API_KEY", "STORYFORGE_PROVIDER_API_KEY_ANTHROPIC"):
+        monkeypatch.delenv(var, raising=False)
+    res = client.post("/api/settings/llm-config/providers/anthropic/probe")
+    assert res.status_code == 200, res.text
+    detail = res.json()["detail"]
+    assert detail["success"] is False
+    assert detail["error_code"] == "auth_error"
+    assert "未配置" in (detail.get("error") or "")
+
+
+def _make_fake_response(status_code: int = 401):
+    """Build a minimal stub response object compatible with openai SDK errors.
+
+    The SDK reads `.request` (httpx.Request) and `.status_code` / `.headers`;
+    all three must be present on the stub or AuthenticationError.__init__
+    raises AttributeError.
+    """
+    import httpx
+
+    class _Resp:
+        def __init__(self, code):
+            self.status_code = code
+            self.headers = {}
+            self.request = httpx.Request("POST", "https://api.example.com/v1/models")
+
+        @property
+        def text(self):
+            return ""
+
+    return _Resp(status_code)

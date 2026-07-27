@@ -68,9 +68,16 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   // also undefined, so we fall through to the return below.
   const detailObj = (json?.detail as Record<string, unknown> | undefined) ?? undefined;
   const topError = json?.error;
-  const nestedError = detailObj && typeof detailObj === "object" ? detailObj.error : undefined;
+  // Only treat nested detail as an error envelope when `error === true` and
+  // a `code` string is present — otherwise payloads like the probe result
+  // (`detail: {success, error: "<message>", error_code: "..."}`) would be
+  // mis-parsed as error responses because `error` is a string there.
+  const nestedError =
+    detailObj && typeof detailObj === "object" && detailObj.error === true && typeof detailObj.code === "string"
+      ? detailObj
+      : undefined;
   if (topError || nestedError) {
-    const payload = (nestedError ? detailObj : json) as Record<string, unknown>;
+    const payload = (nestedError ? nestedError : json) as Record<string, unknown>;
     throw new ApiError(
       (payload.code as string) || "UNKNOWN",
       (payload.message as string) || "未知错误",
@@ -431,7 +438,6 @@ export interface GenreThresholds {
 
 export interface ModelTierConfig {
   description: string;
-  models: Array<{ id: string; provider: string; cost_per_1k_input: number; cost_per_1k_output: number; max_tokens: number }>;
   default: string | null;
   retry_on_failure: boolean;
   max_retries: number;
@@ -1160,12 +1166,31 @@ export const api = {
       `/settings/llm-config/providers/${providerId}/api-key`,
       { value },
     ),
+  probeProvider: (providerId: string) =>
+    request<ProbeResult>(
+      "POST",
+      `/settings/llm-config/providers/${providerId}/probe`,
+    ),
   migrateConfig: () =>
     request<{ backup_path?: string | null; added?: string[]; summary: object }>(
       "POST",
       "/settings/llm-config/migrate",
     ),
+
+  getLLMUsage: (limit: number = 100) =>
+    request<LLMUsageEntry[]>("GET", `/settings/llm-usage?limit=${limit}`),
 };
+
+export interface LLMUsageEntry {
+  timestamp: string;
+  agent: string;
+  task: string;
+  tier: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost: number;
+}
 
 export interface ModelEntry {
   id: string;
@@ -1181,7 +1206,6 @@ export interface ModelEntry {
 
 export interface TierConfig {
   description: string;
-  models: string[];           // whitelist of model ids from providers catalog
   default: string;
   retry_on_failure?: boolean;
   max_retries?: number;
@@ -1227,6 +1251,21 @@ export interface ProviderStatus {
   api_key_configured: boolean;
   enabled: boolean;
   models: ModelEntry[];
+}
+
+export type ProbeErrorCode = "auth_error" | "unreachable" | "provider_error";
+
+export interface ProbeModel {
+  id: string;
+  display_name: string;
+}
+
+export interface ProbeResult {
+  success: boolean;
+  latency_ms: number;
+  models: ProbeModel[] | null;
+  error?: string;
+  error_code?: ProbeErrorCode;
 }
 
 export { ApiError };

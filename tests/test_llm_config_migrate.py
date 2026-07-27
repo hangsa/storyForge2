@@ -132,8 +132,8 @@ def test_migrate_resolves_model_id_collisions(tmp_path):
         for prov in new_data["providers"].values()
         for mid in prov.get("models", {})
     }
-    assert model_ids == {"anthropic/shared", "deepseek/shared"}
-    assert new_data["tiers"]["tier_1"]["default"] in {"anthropic/shared", "deepseek/shared"}
+    assert model_ids == {"anthropic__shared", "deepseek__shared"}
+    assert new_data["tiers"]["tier_1"]["default"] in {"anthropic__shared", "deepseek__shared"}
 
 
 def test_migrate_raises_when_already_v2(tmp_path):
@@ -213,6 +213,30 @@ def test_ensure_builtin_providers_is_idempotent():
     assert providers["anthropic"]["models"] == {"x": {}}
 
 
+def test_ensure_builtin_providers_skips_when_env_key_missing(tmp_path):
+    """Builtins without a non-empty API key in `.env` must NOT be seeded."""
+    from backend.services.llm_config import _ensure_builtin_providers
+
+    providers: dict = {}
+    env_path = tmp_path / ".env"
+    # Only deepseek has a real key; anthropic + minimax have empty/missing.
+    env_path.write_text(
+        "DEEPSEEK_API_KEY=sk-ds-test\n"
+        "ANTHROPIC_API_KEY=\n",
+        encoding="utf-8",
+    )
+    added = _ensure_builtin_providers(providers, env_path=env_path)
+    assert added == ["deepseek"]
+    assert set(providers.keys()) == {"deepseek"}
+
+
+def test_env_has_api_key_returns_false_for_missing_file(tmp_path):
+    from backend.services.llm_config import _env_has_api_key
+
+    missing = tmp_path / "does-not-exist.env"
+    assert _env_has_api_key(missing, "DEEPSEEK_API_KEY") is False
+
+
 def test_seed_builtin_providers_adds_missing(tmp_path, monkeypatch):
     from backend.config import Settings
 
@@ -243,7 +267,18 @@ def test_seed_builtin_providers_adds_missing(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
-    result = seed_builtin_providers(p)
+    # Provide an env file with non-empty keys for deepseek + minimax so the
+    # builtin-seeder considers them activated. Anthropic intentionally has
+    # only an empty key — it should NOT be re-seeded (it's already present
+    # in the YAML, but the env check still gates *new* seedings).
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "DEEPSEEK_API_KEY=sk-ds-test\n"
+        "MINIMAX_API_KEY=sk-mm-test\n"
+        "ANTHROPIC_API_KEY=\n",
+        encoding="utf-8",
+    )
+    result = seed_builtin_providers(p, env_path=env_path)
     assert sorted(result["added"]) == ["deepseek", "minimax"]
     new_data = yaml.safe_load(p.read_text(encoding="utf-8"))
     assert {"anthropic", "deepseek", "minimax"} <= set(new_data["providers"].keys())
@@ -272,11 +307,25 @@ def test_seed_builtin_providers_idempotent(tmp_path, monkeypatch):
     }
     p = tmp_path / "model_tiers.yaml"
     p.write_text(
-        yaml.safe_dump({"providers": full, "tiers": {"tier_0": {"description": "", "models": [], "default": "none"}}, "agent_mapping": {}}, sort_keys=False),
+        yaml.safe_dump(
+            {
+                "providers": full,
+                "tiers": {"tier_0": {"description": "", "default": "none", "fallback": None}},
+                "agent_mapping": {},
+            },
+            sort_keys=False,
+        ),
         encoding="utf-8",
     )
     before = p.read_text(encoding="utf-8")
-    result = seed_builtin_providers(p)
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "ANTHROPIC_API_KEY=sk-ant-test\n"
+        "DEEPSEEK_API_KEY=sk-ds-test\n"
+        "MINIMAX_API_KEY=sk-mm-test\n",
+        encoding="utf-8",
+    )
+    result = seed_builtin_providers(p, env_path=env_path)
     assert result["added"] == []
     # No-write idempotent
     assert p.read_text(encoding="utf-8") == before

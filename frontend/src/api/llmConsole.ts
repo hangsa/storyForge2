@@ -1,8 +1,10 @@
 import api, {
   type AgentTaskMapping,
   type LLMRouterSummary,
+  type LLMUsageEntry,
   type ModelEntry,
   type ModelTiersConfig,
+  type ProbeResult,
   type ProviderEntry,
   type ProviderStatus,
   type TierConfig,
@@ -22,8 +24,10 @@ export const llmConsole = {
     api.deleteModel(providerId, modelId),
   setProviderApiKey: (providerId: string, value: string): Promise<LLMRouterSummary> =>
     api.setProviderApiKey(providerId, value),
+  probeProvider: (providerId: string): Promise<ProbeResult> => api.probeProvider(providerId),
   migrateConfig: (): Promise<{ backup_path?: string | null; added?: string[]; summary: object }> =>
     api.migrateConfig(),
+  getLLMUsage: (limit?: number): Promise<LLMUsageEntry[]> => api.getLLMUsage(limit),
 };
 
 export type {
@@ -34,4 +38,6 @@ export type {
   ProviderEntry,
   ProviderStatus,
   LLMRouterSummary,
+  ProbeResult,
+  LLMUsageEntry,
 };

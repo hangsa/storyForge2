@@ -1,7 +1,15 @@
+import time
 from typing import AsyncIterator
 
 from openai import AsyncOpenAI
-from backend.llm.base_provider import BaseLLMProvider, LLMConfig, LLMResponse, StreamChunk
+from backend.llm.base_provider import (
+    BaseLLMProvider,
+    LLMConfig,
+    LLMResponse,
+    ProbeResult,
+    StreamChunk,
+    _normalize_openai_probe_error,
+)
 
 
 class OpenAICompatibleProvider(BaseLLMProvider):
@@ -18,6 +26,28 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             )
         super().__init__(config)
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=config.base_url)
+
+    async def probe(self) -> ProbeResult:
+        """Probe via client.models.list() — doubles as connection check and
+        model listing for any OpenAI-compatible endpoint that exposes /models.
+        """
+        start = time.monotonic()
+        try:
+            page = await self.client.models.list()
+            models_raw = list(getattr(page, "data", []) or [])
+            latency_ms = int((time.monotonic() - start) * 1000)
+            models = []
+            for m in models_raw:
+                mid = getattr(m, "id", None) or (m.get("id") if isinstance(m, dict) else None)
+                if not mid:
+                    continue
+                display = getattr(m, "display_name", None) or mid
+                if not isinstance(display, str):
+                    display = mid
+                models.append({"id": mid, "display_name": display})
+            return ProbeResult(success=True, latency_ms=latency_ms, models=models)
+        except Exception as e:
+            return _normalize_openai_probe_error(start, e)
 
     async def generate(
         self, system_prompt: str, user_prompt: str, **kwargs

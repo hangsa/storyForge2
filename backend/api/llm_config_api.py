@@ -13,6 +13,7 @@ from backend.services.llm_config import (
     LLMConfigError,
     find_references,
     migrate_legacy_yaml,
+    probe_provider,
     provider_status,
     read_yaml,
     reload_router,
@@ -44,11 +45,26 @@ def _err(code: str, message: str, status: int, extra: Optional[dict] = None):
 
 
 _ID_RE = re.compile(r"^[a-z0-9_-]+$")
+# Model ids round-trip the provider's own naming (e.g. "MiniMax-M3",
+# "claude-opus-4-20250514", "deepseek-v4-pro") — uppercase letters and
+# dots are accepted, but we still forbid characters that would break the
+# YAML structure or shell escaping (spaces, quotes, colons, brackets).
+_MODEL_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
 
 
 def _validate_id(value: str, label: str) -> None:
     if not isinstance(value, str) or not _ID_RE.match(value):
         _err("VALIDATION_ERROR", f"{label} 格式无效：仅允许 a-z、0-9、_、-", 422, {"invalid_paths": [label]})
+
+
+def _validate_model_id(value: str, label: str) -> None:
+    if not isinstance(value, str) or not _MODEL_ID_RE.match(value):
+        _err(
+            "VALIDATION_ERROR",
+            f"{label} 格式无效：仅允许字母、数字、_、-、.",
+            422,
+            {"invalid_paths": [label]},
+        )
 
 
 @router.get("/llm-config")
@@ -167,7 +183,7 @@ async def upsert_model(provider_id: str, payload: dict):
     body = payload.get("model")
     if not mid or not isinstance(body, dict):
         _err("VALIDATION_ERROR", "缺少 id 或 model", 422, {"invalid_paths": ["$"]})
-    _validate_id(mid, "id")
+    _validate_model_id(mid, "id")
     data = read_yaml()
     provider = (data.get("providers") or {}).get(provider_id)
     if not isinstance(provider, dict):
@@ -185,7 +201,7 @@ async def upsert_model(provider_id: str, payload: dict):
 @router.delete("/llm-config/providers/{provider_id}/models/{model_id}")
 async def delete_model(provider_id: str, model_id: str):
     _validate_id(provider_id, "provider_id")
-    _validate_id(model_id, "model_id")
+    _validate_model_id(model_id, "model_id")
     data = read_yaml()
     provider = (data.get("providers") or {}).get(provider_id)
     if not isinstance(provider, dict):
@@ -216,6 +232,22 @@ async def put_provider_api_key(provider_id: str, payload: dict):
         _err("WRITE_FAILED", f".env 写入失败: {e}", 500)
     summary = reload_router()
     return {"error": False, "code": "OK", "message": "API Key 已写入并热重载", "detail": summary}
+
+
+@router.post("/llm-config/providers/{provider_id}/probe")
+async def post_probe_provider(provider_id: str):
+    """Probe the saved provider — connection check + model listing.
+
+    Returns 200 always for known providers; the success/failure of the probe
+    itself is in the payload (`success`, `error_code`). 404 only when the
+    provider id doesn't exist in the config.
+    """
+    _validate_id(provider_id, "provider_id")
+    try:
+        result = await probe_provider(provider_id)
+    except LLMConfigError as e:
+        _err("NOT_FOUND", str(e), 404, {"invalid_paths": e.invalid_paths})
+    return _ok(result)
 
 
 @router.post("/llm-config/migrate")

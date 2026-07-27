@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TierConfig:
     description: str
-    models: list[str]
     default: str
     retry_on_failure: bool = True
     max_retries: int = 1
@@ -86,7 +85,7 @@ BUILTIN_PROVIDERS: dict[str, dict] = {
         "api_key_env": "ANTHROPIC_API_KEY",
         "enabled": True,
         "models": {
-            "claude-opus-4": {"display_name": "Claude Opus 4", "cost_per_1k_input": 0.015, "cost_per_1k_output": 0.075, "max_tokens": 8192, "temperature": 0.7, "json_mode": False, "stream": True},
+            "claude-opus-4": {"display_name": "Claude Opus 4", "cost_per_1k_input": 0.015, "cost_per_1k_output": 0.075, "max_tokens": 200000, "temperature": 0.7, "json_mode": False, "stream": True},
             "claude-sonnet-4": {"display_name": "Claude Sonnet 4", "cost_per_1k_input": 0.003, "cost_per_1k_output": 0.015, "max_tokens": 4096, "temperature": 0.7, "json_mode": False, "stream": True},
             "claude-haiku": {"display_name": "Claude Haiku", "cost_per_1k_input": 0.00025, "cost_per_1k_output": 0.00125, "max_tokens": 2048, "temperature": 0.7, "json_mode": False, "stream": True},
         },
@@ -98,7 +97,7 @@ BUILTIN_PROVIDERS: dict[str, dict] = {
         "api_key_env": "DEEPSEEK_API_KEY",
         "enabled": True,
         "models": {
-            "deepseek-v4-pro": {"display_name": "DeepSeek V4 Pro", "cost_per_1k_input": 0.002, "cost_per_1k_output": 0.008, "max_tokens": 8192, "temperature": 0.7, "json_mode": True, "stream": True},
+            "deepseek-v4-pro": {"display_name": "DeepSeek V4 Pro", "cost_per_1k_input": 0.002, "cost_per_1k_output": 0.008, "max_tokens": 200000, "temperature": 0.7, "json_mode": True, "stream": True},
         },
     },
     "minimax": {
@@ -124,7 +123,6 @@ class ModelRouter:
     BUILTIN_TIERS: dict[str, dict] = {
         "tier_1": {
             "description": "Scene 写作、STAGE 1-3 内容生成",
-            "models": ["deepseek-v4-pro", "claude-opus-4"],
             "default": "deepseek-v4-pro",
             "retry_on_failure": True,
             "max_retries": 2,
@@ -132,7 +130,6 @@ class ModelRouter:
         },
         "tier_2": {
             "description": "Narrative Guard 状态漂移检测",
-            "models": ["claude-sonnet-4"],
             "default": "claude-sonnet-4",
             "retry_on_failure": True,
             "max_retries": 1,
@@ -140,7 +137,6 @@ class ModelRouter:
         },
         "tier_3": {
             "description": "L1 细节重提取、章摘要生成、风格分类",
-            "models": ["claude-haiku", "MiniMax-M3"],
             "default": "claude-haiku",
             "retry_on_failure": True,
             "max_retries": 1,
@@ -148,7 +144,6 @@ class ModelRouter:
         },
         "tier_0": {
             "description": "Fact Guard、StoryOS SF_LOG 解析、ReaderOS 计算",
-            "models": [],
             "default": "none",
         },
     }
@@ -228,17 +223,8 @@ class ModelRouter:
     def _parse_tiers(self, tiers_data: dict) -> None:
         self._tiers.clear()
         for name, cfg in tiers_data.items():
-            raw_models = cfg.get("models") or []
-            # Accept both new (list[str]) and legacy (list[dict]) shapes.
-            model_ids: list[str] = []
-            for m in raw_models:
-                if isinstance(m, str):
-                    model_ids.append(m)
-                elif isinstance(m, dict) and "id" in m:
-                    model_ids.append(m["id"])
             self._tiers[name] = TierConfig(
                 description=cfg.get("description", ""),
-                models=model_ids,
                 default=cfg.get("default", ""),
                 retry_on_failure=cfg.get("retry_on_failure", True),
                 max_retries=cfg.get("max_retries", 1),
@@ -292,7 +278,7 @@ class ModelRouter:
             provider_name=model_info["provider"],
             model_id=model_id,
             tier_name=mapping.tier_name,
-            max_tokens=model_info.get("max_tokens", 8192),
+            max_tokens=model_info.get("max_tokens", 200000),
             cost_per_1k_input=model_info.get("cost_per_1k_input", 0.0),
             cost_per_1k_output=model_info.get("cost_per_1k_output", 0.0),
         )
@@ -438,7 +424,7 @@ class ModelRouter:
                         system_prompt=system_prompt,
                         user_prompt=user_prompt,
                         json_mode=json_mode,
-                        max_tokens=model_info.get("max_tokens", 8192),
+                        max_tokens=model_info.get("max_tokens", 200000),
                         **generate_kwargs,
                     )
 
@@ -588,7 +574,7 @@ class ModelRouter:
             model=model_info["id"],
             api_key=api_key,
             base_url=base_url,
-            max_tokens=model_info.get("max_tokens", 8192),
+            max_tokens=model_info.get("max_tokens", 200000),
             temperature=model_info.get("temperature", settings.llm_temperature),
         )
         if provider.type == "mock":

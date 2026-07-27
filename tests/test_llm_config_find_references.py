@@ -54,11 +54,10 @@ def _base():
                 "description": "",
                 "default": "deepseek-v4-pro",
                 "fallback": "claude-opus-4",
-                "models": ["deepseek-v4-pro", "claude-opus-4"],
                 "retry_on_failure": True,
                 "max_retries": 1,
             },
-            "tier_0": {"description": "", "default": "none", "fallback": None, "models": []},
+            "tier_0": {"description": "", "default": "none", "fallback": None},
         },
         "agent_mapping": {
             "writer": {"scene_writing": {"tier": "tier_1", "model": "deepseek-v4-pro"}}
@@ -114,7 +113,6 @@ def test_validate_removal_allows_unused_model():
 
 def test_find_references_provider_no_models_returns_empty():
     cfg = deepcopy(_base())
-    cfg["tiers"]["tier_1"]["models"] = ["claude-opus-4"]
     cfg["tiers"]["tier_1"]["default"] = "claude-opus-4"
     cfg["tiers"]["tier_1"]["fallback"] = "claude-opus-4"
     cfg["agent_mapping"]["writer"]["scene_writing"]["model"] = "claude-opus-4"
@@ -128,14 +126,18 @@ def test_find_references_agent_mapping_fallback():
     assert "agent_mapping.writer.scene_writing.fallback" in refs
 
 
-def test_find_references_tier_whitelist_index():
-    assert "tiers.tier_1.models.0" in find_references(_base(), "model:deepseek-v4-pro")
-    assert "tiers.tier_1.models.1" in find_references(_base(), "model:claude-opus-4")
+def test_find_references_does_not_emit_tier_whitelist_paths():
+    refs = find_references(_base(), "model:deepseek-v4-pro")
+    # The whitelist is gone — only default/fallback/agent_mapping paths.
+    assert all(not p.startswith("tiers.") or ".models." not in p for p in refs), (
+        f"unexpected whitelist path: {refs}"
+    )
+    assert "tiers.tier_1.default" in refs
+    assert "agent_mapping.writer.scene_writing.model" in refs
 
 
 def test_find_references_provider_via_tier_default():
     cfg = deepcopy(_base())
-    cfg["tiers"]["tier_1"]["models"] = ["deepseek-v4-pro"]
     cfg["tiers"]["tier_1"]["default"] = "claude-opus-4"
     cfg["tiers"]["tier_1"]["fallback"] = None
     refs = find_references(cfg, "provider:anthropic")

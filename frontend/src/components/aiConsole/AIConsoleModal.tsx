@@ -205,7 +205,13 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
               <div className="space-y-3">
                 {(() => {
                   const catalog: ModelEntry[] = draft.providers
-                    ? Object.values(draft.providers).flatMap((p) => Object.values(p.models))
+                    ? Object.entries(draft.providers).flatMap(([pid, p]) =>
+                        Object.entries(p.models).map(([mid, m]) => ({
+                          ...m,
+                          id: mid,
+                          provider: pid,
+                        }))
+                      )
                     : providers.flatMap((p) => p.models);
                   return Object.entries(draft.tiers).map(([name, tier]) => (
                     <TierPanel
@@ -225,14 +231,32 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
 
           {activeTab === 'agent' && draft && (
             <section data-testid="tab-panel-agent" className="mb-6">
-              <AgentMappingPanel
-                value={draft.agent_mapping}
-                tiers={draft.tiers}
-                onChange={(next) =>
-                  setDraft({ ...draft, agent_mapping: next as ModelTiersConfig['agent_mapping'] })
-                }
-              />
+              {(() => {
+                const catalog: ModelEntry[] = draft.providers
+                  ? Object.entries(draft.providers).flatMap(([pid, p]) =>
+                      Object.entries(p.models).map(([mid, m]) => ({
+                        ...m,
+                        id: mid,
+                        provider: pid,
+                      }))
+                    )
+                  : providers.flatMap((p) => p.models);
+                return (
+                  <AgentMappingPanel
+                    value={draft.agent_mapping}
+                    tiers={draft.tiers}
+                    catalog={catalog}
+                    onChange={(next) =>
+                      setDraft({ ...draft, agent_mapping: next as ModelTiersConfig['agent_mapping'] })
+                    }
+                  />
+                );
+              })()}
             </section>
+          )}
+
+          {activeTab === 'usage' && (
+            <UsagePanel refreshSignal={usageRefreshSignal} />
           )}
 
           {error && (

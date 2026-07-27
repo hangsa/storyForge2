@@ -33,7 +33,7 @@ def cfg_path(tmp_path):
                         "display_name": "Claude Opus 4",
                         "cost_per_1k_input": 0.015,
                         "cost_per_1k_output": 0.075,
-                        "max_tokens": 8192,
+                        "max_tokens": 200000,
                         "temperature": 0.7,
                         "json_mode": False,
                         "stream": True,
@@ -64,11 +64,10 @@ def cfg_path(tmp_path):
                 "description": "",
                 "default": "claude-opus-4",
                 "fallback": None,
-                "models": ["claude-opus-4"],
                 "retry_on_failure": True,
                 "max_retries": 0,
             },
-            "tier_0": {"description": "", "default": "none", "fallback": None, "models": []},
+            "tier_0": {"description": "", "default": "none", "fallback": None},
         },
         "agent_mapping": {
             "writer": {"scene_writing": {"tier": "tier_1", "model": "claude-opus-4"}}
@@ -91,7 +90,7 @@ def test_router_resolves_anthropic_provider(cfg_path, monkeypatch):
     router = ModelRouter(cfg_path)
     info = router._find_model_info("claude-opus-4")
     assert info["provider"] == "anthropic"
-    assert info["max_tokens"] == 8192
+    assert info["max_tokens"] == 200000
 
 
 def test_router_dispatches_to_mock_provider(cfg_path):
@@ -273,7 +272,7 @@ class TestResolve:
 
     def test_respects_force_model(self, temp_config):
         router = ModelRouter(temp_config)
-        # Force model must exist in the tier's models
+        # Force model is looked up in the providers catalog
         decision = router.resolve("planner", "chapter_outline", force_model="claude-haiku")
         assert decision.model_id == "claude-haiku"
         assert decision.provider_name == "anthropic"
@@ -411,11 +410,10 @@ def test_router_picks_up_custom_provider_key_via_prefix(monkeypatch, tmp_path):
                 "description": "",
                 "default": "test-m",
                 "fallback": None,
-                "models": ["test-m"],
                 "retry_on_failure": True,
                 "max_retries": 0,
             },
-            "tier_0": {"description": "", "default": "none", "fallback": None, "models": []},
+            "tier_0": {"description": "", "default": "none", "fallback": None},
         },
         "agent_mapping": {},
     }

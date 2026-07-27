@@ -3,20 +3,19 @@ import { describe, it, expect, vi } from 'vitest';
 import TierPanel, { type TierConfig } from '../components/aiConsole/TierPanel';
 
 const CATALOG = [
-  { id: 'deepseek-v4-pro', display_name: 'DeepSeek V4 Pro', provider: 'deepseek', cost_per_1k_input: 0.002, cost_per_1k_output: 0.008, max_tokens: 8192 },
-  { id: 'claude-opus-4', display_name: 'Claude Opus 4', provider: 'anthropic', cost_per_1k_input: 0.015, cost_per_1k_output: 0.075, max_tokens: 8192 },
+  { id: 'deepseek-v4-pro', display_name: 'DeepSeek V4 Pro', provider: 'deepseek', cost_per_1k_input: 0.002, cost_per_1k_output: 0.008, max_tokens: 200000 },
+  { id: 'claude-opus-4', display_name: 'Claude Opus 4', provider: 'anthropic', cost_per_1k_input: 0.015, cost_per_1k_output: 0.075, max_tokens: 200000 },
 ];
 
 const SAMPLE: TierConfig = {
   description: 'Tier 1 description',
-  models: ['claude-opus-4'],
   default: 'claude-opus-4',
   retry_on_failure: true,
   max_retries: 2,
   fallback: 'claude-opus-4',
 };
 
-const TIER_0: TierConfig = { description: 'Deterministic', models: [], default: 'none' };
+const TIER_0: TierConfig = { description: 'Deterministic', default: 'none' };
 
 describe('TierPanel', () => {
   it('lets user edit description', () => {
@@ -33,41 +32,12 @@ describe('TierPanel', () => {
     expect(values).toEqual(expect.arrayContaining(['deepseek-v4-pro', 'claude-opus-4']));
   });
 
-  it('picking default model auto-adds to whitelist', () => {
+  it('default dropdown disabled when no catalog', () => {
     const onChange = vi.fn();
     render(
       <TierPanel
         tierName="tier_1"
-        value={{ ...SAMPLE, models: [] }}
-        onChange={onChange}
-        catalog={CATALOG}
-      />
-    );
-    const sel = screen.getByTestId('tier-1-default') as HTMLSelectElement;
-    fireEvent.change(sel, { target: { value: 'deepseek-v4-pro' } });
-    const calls = onChange.mock.calls;
-    const last = calls[calls.length - 1][0];
-    expect(last.default).toBe('deepseek-v4-pro');
-    expect(last.models).toContain('deepseek-v4-pro');
-  });
-
-  it('picking default model already in whitelist does not duplicate', () => {
-    const onChange = vi.fn();
-    render(<TierPanel tierName="tier_1" value={SAMPLE} onChange={onChange} catalog={CATALOG} />);
-    const sel = screen.getByTestId('tier-1-default') as HTMLSelectElement;
-    fireEvent.change(sel, { target: { value: 'deepseek-v4-pro' } });
-    const calls = onChange.mock.calls;
-    const last = calls[calls.length - 1][0];
-    expect(last.default).toBe('deepseek-v4-pro');
-    expect(last.models).toEqual(['claude-opus-4', 'deepseek-v4-pro']);
-  });
-
-  it('default dropdown disabled when no catalog and no whitelist', () => {
-    const onChange = vi.fn();
-    render(
-      <TierPanel
-        tierName="tier_1"
-        value={{ description: '', models: [], default: '' }}
+        value={{ description: '', default: '' }}
         onChange={onChange}
         catalog={[]}
       />
@@ -90,19 +60,11 @@ describe('TierPanel', () => {
     expect(Array.from(sel.options).map((o) => o.value)).toContain('');
   });
 
-  it('removing a model emits updated whitelist', () => {
-    const onChange = vi.fn();
-    render(<TierPanel tierName="tier_1" value={SAMPLE} onChange={onChange} catalog={CATALOG} />);
-    fireEvent.click(screen.getByTestId('tier-1-model-0-remove'));
-    const calls = onChange.mock.calls;
-    const last = calls[calls.length - 1][0];
-    expect(last.models).toEqual([]);
-  });
-
-  it('tier_0 hides remove-model buttons', () => {
+  it('tier_0 disables inputs and shows readonly note', () => {
     const onChange = vi.fn();
     render(<TierPanel tierName="tier_0" value={TIER_0} onChange={onChange} catalog={CATALOG} readOnly />);
-    expect(screen.queryByTestId('tier-0-model-0-remove')).toBeNull();
+    const desc = screen.getByTestId('tier-0-description') as HTMLInputElement;
+    expect(desc.disabled).toBe(true);
     expect(screen.getByTestId('tier-0-readonly-note')).toBeTruthy();
   });
 });

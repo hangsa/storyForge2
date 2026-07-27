@@ -59,7 +59,6 @@ def base_v2():
                 "description": "创意核心",
                 "default": "deepseek-v4-pro",
                 "fallback": "claude-opus-4",
-                "models": ["deepseek-v4-pro", "claude-opus-4"],
                 "retry_on_failure": True,
                 "max_retries": 1,
             },
@@ -67,7 +66,6 @@ def base_v2():
                 "description": "确定性",
                 "default": "none",
                 "fallback": None,
-                "models": [],
                 "retry_on_failure": False,
                 "max_retries": 0,
             },
@@ -84,20 +82,27 @@ def test_validate_accepts_v2_schema():
     validate(base_v2())
 
 
+def test_validate_tier_without_models_key_passes():
+    cfg = base_v2()
+    # The whitelist is gone; tier_1 should validate without a `models` key.
+    cfg["tiers"]["tier_1"].pop("models", None)
+    cfg["tiers"]["tier_0"].pop("models", None)
+    validate(cfg)  # must not raise
+
+
+def test_validate_tier_with_stale_models_key_still_loads():
+    cfg = base_v2()
+    cfg["tiers"]["tier_1"]["models"] = ["ghost-model-not-in-providers"]
+    # The whitelist is gone, so a leftover `models` list is silently ignored.
+    validate(cfg)  # must not raise
+
+
 def test_validate_rejects_unknown_model_in_tier_default():
     bad = deepcopy(base_v2())
     bad["tiers"]["tier_1"]["default"] = "ghost-model"
     with pytest.raises(LLMConfigError) as exc:
         validate(bad)
     assert any(p.endswith("tier_1.default") for p in exc.value.invalid_paths)
-
-
-def test_validate_rejects_unknown_model_in_tier_whitelist():
-    bad = deepcopy(base_v2())
-    bad["tiers"]["tier_1"]["models"].append("ghost-model")
-    with pytest.raises(LLMConfigError) as exc:
-        validate(bad)
-    assert any(p.startswith("tiers.tier_1.models") for p in exc.value.invalid_paths)
 
 
 def test_validate_rejects_agent_mapping_unknown_model():

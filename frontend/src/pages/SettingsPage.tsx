@@ -428,28 +428,6 @@ function ModelConfigTab({ onError }: { onError: (e: string) => void }) {
                   <span className="text-system-log/60">{tier.max_retries} 次</span>
                 </div>
               </div>
-              {tier.models.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-outline-variant">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-system-log/40">
-                        <th className="text-left pb-1 font-medium">模型</th>
-                        <th className="text-left pb-1 font-medium">Provider</th>
-                        <th className="text-right pb-1 font-medium">Tokens</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tier.models.map((m) => (
-                        <tr key={m.id} className="text-system-log/60">
-                          <td className="py-0.5 font-mono">{m.id}</td>
-                          <td className="py-0.5">{m.provider}</td>
-                          <td className="py-0.5 text-right">{m.max_tokens}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </GlassPanel>
           );
         })}

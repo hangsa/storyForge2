@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import type { AgentTaskMapping, ModelTiersConfig } from '../../api/client';
+import type { AgentTaskMapping, ModelEntry, ModelTiersConfig } from '../../api/client';
 
 interface Props {
   value: ModelTiersConfig['agent_mapping'];
   onChange: (next: ModelTiersConfig['agent_mapping']) => void;
   tiers: ModelTiersConfig['tiers'];
+  catalog: ModelEntry[];
 }
 
-export default function AgentMappingPanel({ value, onChange, tiers }: Props) {
+export default function AgentMappingPanel({ value, onChange, tiers, catalog }: Props) {
   const tierNames = Object.keys(tiers);
   const [newAgent, setNewAgent] = useState('');
   const [pendingTaskByAgent, setPendingTaskByAgent] = useState<Record<string, string>>({});
@@ -59,7 +60,7 @@ export default function AgentMappingPanel({ value, onChange, tiers }: Props) {
     if (!tier) return [{ id: 'default', label: '默认' }];
     return [
       { id: 'default', label: `默认（${tier.default}）` },
-      ...tier.models.map((mid) => ({ id: mid, label: mid })),
+      ...catalog.map((m) => ({ id: m.id, label: m.id })),
     ];
   };
 

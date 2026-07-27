@@ -64,7 +64,6 @@ def _v2_base():
                 "description": "创意核心",
                 "default": "deepseek-v4-pro",
                 "fallback": "claude-opus-4",
-                "models": ["deepseek-v4-pro", "claude-opus-4"],
                 "retry_on_failure": True,
                 "max_retries": 1,
             },
@@ -72,7 +71,6 @@ def _v2_base():
                 "description": "确定性",
                 "default": "none",
                 "fallback": None,
-                "models": [],
                 "retry_on_failure": False,
                 "max_retries": 0,
             },
@@ -240,7 +238,7 @@ V2_FIXTURE_FOR_STATUS = {
             "models": {},
         },
     },
-    "tiers": {"tier_0": {"description": "", "default": "none", "fallback": None, "models": []}},
+    "tiers": {"tier_0": {"description": "", "default": "none", "fallback": None}},
     "agent_mapping": {},
 }
 

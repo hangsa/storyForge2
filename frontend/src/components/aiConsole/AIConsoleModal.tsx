@@ -9,6 +9,7 @@ import type {
 import ProviderPanel from './ProviderPanel';
 import TierPanel from './TierPanel';
 import AgentMappingPanel from './AgentMappingPanel';
+import UsagePanel from './UsagePanel';
 
 interface Props {
   isOpen: boolean;
@@ -19,12 +20,13 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-type TabKey = 'provider' | 'tier' | 'agent';
+type TabKey = 'provider' | 'tier' | 'agent' | 'usage';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'provider', label: 'Provider / 模型' },
   { key: 'tier', label: 'Tier 配置' },
   { key: 'agent', label: 'Agent 映射' },
+  { key: 'usage', label: '最近调用统计' },
 ];
 
 // Backend builtin provider ids (mirror backend/services/llm_config.py
@@ -49,6 +51,7 @@ export default function AIConsoleModal({ isOpen, onClose }: Props) {
   const [showMigrate, setShowMigrate] = useState(false);
   const [providerDirty, setProviderDirty] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('provider');
+  const [usageRefreshSignal, setUsageRefreshSignal] = useState(0);
 
   const dirty = (!!config && !!draft && !deepEqual(config, draft)) || providerDirty;
 

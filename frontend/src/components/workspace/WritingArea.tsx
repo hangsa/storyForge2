@@ -89,11 +89,11 @@ export default function WritingArea({
   return (
     <div data-testid="writing-area" className="h-full flex flex-col">
       <header className="px-6 py-3 border-b border-outline-variant">
-        <div className="flex items-center gap-2 font-label-mono text-[10px] uppercase tracking-wider text-system-log">
+        <div className="flex items-center gap-2 font-display text-primary text-base">
           第 {current.chapter_number} 章 ·{" "}
           <span data-testid="writing-chapter-title">{current.chapter_title}</span>
         </div>
-        <div data-testid="writing-scene-title" className="font-display text-primary text-base mt-1">
+        <div data-testid="writing-scene-title" className="font-label-mono text-[10px] uppercase tracking-wider text-system-log mt-1">
           {current.scene_id} · {current.scene_title}
         </div>
         {/* v1.8 Bug 2 fix: surface real outline content above the editor.

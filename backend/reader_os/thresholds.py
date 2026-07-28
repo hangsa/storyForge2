@@ -92,7 +92,52 @@ def _map_threshold_keys(genres: dict) -> dict[str, dict]:
 
 
 def load_genre_thresholds() -> dict[str, dict]:
-    """Load genre thresholds from config/genre_thresholds.yaml.
+    """Load genre thresholds. GenreCatalog first, legacy YAML fallback.
+
+    One-release dual-read window: if GenreCatalog is unavailable or fails to
+    load, fall back to config/genre_thresholds.yaml. Remove the fallback in the
+    next release.
+
+    Return shape is unchanged: keys are genre ids (pinyin) and Chinese labels,
+    values are normalized threshold dicts, plus a "generic" fallback key.
+    """
+    try:
+        from backend.genres.catalog import get_catalog
+
+        catalog = get_catalog()
+        entries = catalog.list()
+        if not entries:
+            raise ValueError("GenreCatalog returned an empty genre list")
+
+        result: dict[str, dict] = {}
+        for entry in entries:
+            genre_id = entry["id"]
+            normalized = _normalize_thresholds(catalog.get_thresholds(genre_id))
+            result[genre_id] = normalized
+            label_zh = entry.get("label_zh")
+            if label_zh:
+                result[label_zh] = normalized
+
+        # Preserve legacy Chinese aliases (e.g. 悬疑推理 → xuanyi) so existing
+        # project.json genre values keep resolving.
+        for alias, genre_id in GENRE_NAME_MAPPING.items():
+            if alias not in result and genre_id in result:
+                result[alias] = result[genre_id]
+
+        if "generic" not in result:
+            result["generic"] = dict(GENRE_THRESHOLDS["generic"])
+        return result
+    except Exception as e:
+        logger.warning(
+            "GenreCatalog unavailable, falling back to genre_thresholds.yaml: %s", e
+        )
+        return _legacy_load_genre_thresholds()
+
+
+def _legacy_load_genre_thresholds() -> dict[str, dict]:
+    """Original implementation, kept as fallback for one release.
+
+    Load genre thresholds from config/genre_thresholds.yaml.
 
     Falls back to hardcoded GENRE_THRESHOLDS if file is missing or invalid.
     Keys are emitted in both Chinese and pinyin forms via GENRE_NAME_MAPPING.

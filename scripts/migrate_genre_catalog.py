@@ -27,7 +27,23 @@ from backend.genres.migrations import (
 
 REPO_ROOT = Path(__file__).parent.parent
 
-# Hand-curated labels + families for the 10 fusion-only genres that have no
+# Live genre-catalog location (hand-authored; --apply --force here clobbers it).
+LIVE_CATALOG = REPO_ROOT / "config" / "genres"
+
+# Hand-curated labels + families for the 7 base genres that DO have a
+# data/style/*.yaml entry but lack label_zh/label_en/family fields. data/style YAML
+# only carries pacing/tone/style_rules/writing_formula data; metadata is here.
+BASE_GENRE_META: dict[str, dict[str, str]] = {
+    "cool_novel": {"label_zh": "爽文", "label_en": "Power Fantasy", "family": "power_fantasy"},
+    "xianxia":    {"label_zh": "仙侠", "label_en": "Xianxia",        "family": "cultivation"},
+    "xuanhuan":   {"label_zh": "玄幻", "label_en": "Xuanhuan",       "family": "cultivation"},
+    "dushi":      {"label_zh": "都市", "label_en": "Contemporary",   "family": "contemporary"},
+    "kehuan":     {"label_zh": "科幻", "label_en": "Sci-Fi",         "family": "sci_fi"},
+    "xuanyi":     {"label_zh": "悬疑", "label_en": "Mystery",        "family": "mystery"},
+    "yanqing":    {"label_zh": "言情", "label_en": "Romance",        "family": "romance"},
+}
+
+# Hand-curated labels + families for the 11 fusion-only genres that have no
 # data/style/*.yaml entry. These are surfaced in the catalog as `ui_visible: false`
 # until full pacing/tone/writing_formula/thresholds are authored.
 FUSION_ONLY_META: dict[str, dict[str, str]] = {
@@ -41,6 +57,7 @@ FUSION_ONLY_META: dict[str, dict[str, str]] = {
     "yijie":     {"label_zh": "异界", "label_en": "Isekai",           "family": "cultivation"},
     "zhanzheng": {"label_zh": "战争", "label_en": "War",              "family": "contemporary"},
     "qihuan":    {"label_zh": "奇幻", "label_en": "Western Fantasy",  "family": "cultivation"},
+    "xiuxian":   {"label_zh": "修仙", "label_en": "Cultivation",      "family": "cultivation"},  # 修仙 (separate from xianxia 仙侠 in legacy graph)
 }
 
 
@@ -55,6 +72,20 @@ def main():
         parser.error("Specify --dry-run or --apply")
 
     target = Path(args.target)
+
+    # Safety: --apply --force on the live hand-authored catalog would clobber
+    # human-curated entries with regenerated output. Require explicit confirmation.
+    if args.apply and args.force and target.resolve() == LIVE_CATALOG.resolve():
+        print(
+            f"WARNING: --force on live catalog ({LIVE_CATALOG}). Use only if you intend to "
+            "regenerate from legacy sources. Existing hand-authored data will be overwritten.",
+            file=sys.stderr,
+        )
+        response = input("Continue? [y/N] ").strip().lower()
+        if response != "y":
+            print("Aborted.")
+            return 1
+
     style_data = load_from_data_style(REPO_ROOT / "data" / "style")
     thresholds = load_from_thresholds(REPO_ROOT / "config" / "genre_thresholds.yaml")
     _families, compat = load_from_fusion_engine()
@@ -63,12 +94,13 @@ def main():
     merged: dict[str, dict] = {}
     all_ids = sorted(set(list(style_data.keys()) + list(compat.keys())))
     for gid, raw in style_data.items():
+        meta = BASE_GENRE_META.get(gid, {})
         merged[gid] = {
             **raw,
             "id": gid,
-            "label_zh": raw.get("label_zh") or raw.get("name", gid),
-            "label_en": raw.get("label_en", gid),
-            "family": raw.get("family", "default"),
+            "label_zh": raw.get("label_zh") or meta.get("label_zh") or raw.get("name", gid),
+            "label_en": raw.get("label_en") or meta.get("label_en", gid),
+            "family":   raw.get("family")   or meta.get("family", "default"),
             "thresholds": thresholds.get(gid, {}),
             "fusion_meta": {"distances": {
                 other: round(1.0 - compat.get(gid, {}).get(other, 0.5), 2)
@@ -76,7 +108,7 @@ def main():
             }},
         }
 
-    # 10 fusion-only genres that have no data/style entry
+    # 11 fusion-only genres that have no data/style entry
     fusion_only = set(compat.keys()) - set(merged.keys())
     for gid in fusion_only:
         meta = FUSION_ONLY_META.get(gid, {"label_zh": gid, "label_en": gid, "family": "default"})

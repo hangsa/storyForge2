@@ -13,13 +13,10 @@ pacing:
   scene_words:
     min: 500
     max: 2200
-tone: '理性克制,格局宏大。科学设定要有内部自洽性,技术描写要有
-
-  可信度。对人性和社会的探讨要深刻,不回避伦理困境。
-
+tone: |
+  理性克制，格局宏大。科学设定要有内部自洽性，技术描写要有
+  可信度。对人性和社会的探讨要深刻，不回避伦理困境。
   描写的冷静与想象的宏大形成张力。
-
-  '
 style_rules:
 - 科学设定必须前后一致，不能出现逻辑矛盾
 - 技术描写要有层次——先现象，再原理，后影响
@@ -123,6 +120,9 @@ model_preferences:
   creative_core: deepseek-chat
   temperature: 0.8
 fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[kehuan][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
   distances:
     cool_novel: 0.5
     xianxia: 0.8

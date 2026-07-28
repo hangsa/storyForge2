@@ -13,13 +13,10 @@ pacing:
   scene_words:
     min: 400
     max: 1800
-tone: '细腻温柔,情感真挚。注重人物的内心世界和情感变化。
-
+tone: |
+  细腻温柔，情感真挚。注重人物的内心世界和情感变化。
   关系的每一步发展都需要充分的铺垫和心理描写。
-
-  语言要有温度,场景要有氛围。甜度与虐度要有节奏交替。
-
-  '
+  语言要有温度，场景要有氛围。甜度与虐度要有节奏交替。
 style_rules:
 - 每章至少有一个情感互动场景（对话/独处/心理活动）
 - 关系转折必须有充分的铺垫（至少3章的伏笔）
@@ -126,6 +123,9 @@ model_preferences:
   creative_core: deepseek-chat
   temperature: 0.85
 fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[yanqing][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
   distances:
     cool_novel: 0.8
     xianxia: 0.8

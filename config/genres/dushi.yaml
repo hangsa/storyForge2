@@ -13,13 +13,10 @@ pacing:
   scene_words:
     min: 400
     max: 1800
-tone: '真实亲切,贴近生活。时代感强,能反映当下社会的热点和痛点。
-
-  角色要真实立体,动机要能引发共鸣。幽默和温情作为调节剂,
-
+tone: |
+  真实亲切，贴近生活。时代感强，能反映当下社会的热点和痛点。
+  角色要真实立体，动机要能引发共鸣。幽默和温情作为调节剂，
   避免过度说教和理想化。
-
-  '
 style_rules:
 - 时代背景要有真实细节（手机/APP/热搜/社交方式）
 - 职场/商战描写要有行业真实感，不能过于儿戏
@@ -118,6 +115,9 @@ model_preferences:
   creative_core: deepseek-chat
   temperature: 0.85
 fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[dushi][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
   distances:
     cool_novel: 0.5
     xianxia: 0.8

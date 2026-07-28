@@ -13,11 +13,9 @@ pacing:
   scene_words:
     min: 500
     max: 2000
-tone: '轻松自信,节奏明快。主角遇强则强,逆势崛起。在困境中保持乐观,
-
+tone: |
+  轻松自信，节奏明快。主角遇强则强，逆势崛起。在困境中保持乐观，
   在逆境中展现智慧。避免过度悲情和无力感。
-
-  '
 style_rules:
 - 每500字内至少有一个爽点（能力展示/打脸/逆袭/收获）
 - 战斗场景每300字插入一次能力使用描写
@@ -79,10 +77,10 @@ taboos:
   severity: error
 trope_patterns:
 - name: 逆袭打脸
-  description: 被轻视后展现实力,打脸反派
+  description: 被轻视后展现实力，打脸反派
   min_interval: 3
 - name: 越级挑战
-  description: 主角以弱胜强,跨境界/层次战斗
+  description: 主角以弱胜强，跨境界/层次战斗
   intensity_boost: 0.3
 - name: 奇遇突破
   description: 意外收获导致实力大幅提升
@@ -112,6 +110,9 @@ model_preferences:
   creative_core: deepseek-chat
   temperature: 0.9
 fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[cool_novel][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
   distances:
     xianxia: 0.25
     xuanhuan: 0.25

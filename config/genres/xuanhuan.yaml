@@ -13,11 +13,9 @@ pacing:
   scene_words:
     min: 500
     max: 2200
-tone: '宏大气魄,热血激昂。世界辽阔,种族林立,主角在波澜壮阔的
-
-  时代洪流中崛起。战斗描写要有毁灭感和史诗感,情感要真挚浓烈。
-
-  '
+tone: |
+  宏大气魄，热血激昂。世界辽阔，种族林立，主角在波澜壮阔的
+  时代洪流中崛起。战斗描写要有毁灭感和史诗感，情感要真挚浓烈。
 style_rules:
 - 战斗场景要有地形改变和环境破坏描写，体现力量层次
 - 血脉或传承觉醒时要有完整的异象和内心变化描写
@@ -84,7 +82,7 @@ taboos:
   severity: error
 trope_patterns:
 - name: 血脉觉醒
-  description: 主角血脉力量苏醒,实力大幅提升
+  description: 主角血脉力量苏醒，实力大幅提升
   min_interval: 5
 - name: 魔兽契约
   description: 与强大魔兽/神兽签订契约
@@ -98,6 +96,8 @@ trope_patterns:
 - name: 位面战争
   description: 不同位面/大陆之间的全面战争
   max_per_volume: 1
+# TODO: tune for xuanhuan — copied from config/genre_thresholds.yaml "奇幻" block
+# (closest cultivation-family mate). Replace with hand-authored xuanhuan values.
 thresholds:
   addiction_critical: 40
   addiction_moderate: 28
@@ -120,6 +120,9 @@ model_preferences:
   creative_core: deepseek-chat
   temperature: 0.9
 fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[xuanhuan][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
   distances:
     cool_novel: 0.25
     xianxia: 0.5

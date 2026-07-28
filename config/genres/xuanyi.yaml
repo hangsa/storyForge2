@@ -13,13 +13,10 @@ pacing:
   scene_words:
     min: 400
     max: 1800
-tone: '紧张压抑,疑云密布。每个场景都应埋藏线索或引导读者产生疑问。
-
-  信息释放要有层次——先呈现现象,再揭示部分真相,最后反转。
-
-  描写要冷静克制,让读者自己拼图。气氛渲染重于人物抒情。
-
-  '
+tone: |
+  紧张压抑，疑云密布。每个场景都应埋藏线索或引导读者产生疑问。
+  信息释放要有层次——先呈现现象，再揭示部分真相，最后反转。
+  描写要冷静克制，让读者自己拼图。气氛渲染重于人物抒情。
 style_rules:
 - 每章至少埋设一个新线索或加深一个已有谜团
 - 线索分为真假两类，假线索要有合理的误导逻辑
@@ -122,6 +119,9 @@ model_preferences:
   creative_core: deepseek-chat
   temperature: 0.75
 fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[xuanyi][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
   distances:
     cool_novel: 0.8
     xianxia: 0.8

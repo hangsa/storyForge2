@@ -13,13 +13,10 @@ pacing:
   scene_words:
     min: 600
     max: 2500
-tone: '飘逸出尘,意境深远。修炼不仅是力量的增长,更是心境的提升。
-
-  道法自然,因果循环。主角在求道之路上经历劫难,领悟天道。
-
-  语言要求有古韵和仙气,避免过于口语化。
-
-  '
+tone: |
+  飘逸出尘，意境深远。修炼不仅是力量的增长，更是心境的提升。
+  道法自然，因果循环。主角在求道之路上经历劫难，领悟天道。
+  语言要求有古韵和仙气，避免过于口语化。
 style_rules:
 - 境界突破必须描写天地异象，层次越高异象越壮观
 - 法宝和功法要有意境化的名称和来历
@@ -88,7 +85,7 @@ taboos:
   severity: warning
 trope_patterns:
 - name: 境界突破
-  description: 主角突破修炼瓶颈,引发天地异象
+  description: 主角突破修炼瓶颈，引发天地异象
   min_interval: 3
 - name: 秘境机缘
   description: 探索上古秘境或遗迹获得传承
@@ -102,6 +99,8 @@ trope_patterns:
 - name: 因果了结
   description: 前世的因果或恩怨在今生清算
   min_interval: 10
+# TODO: tune for xianxia — copied from config/genre_thresholds.yaml "奇幻" block
+# (closest cultivation-family mate). Replace with hand-authored xianxia values.
 thresholds:
   addiction_critical: 40
   addiction_moderate: 28
@@ -124,6 +123,9 @@ model_preferences:
   creative_core: deepseek-chat
   temperature: 0.85
 fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[xianxia][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
   distances:
     cool_novel: 0.25
     xuanhuan: 0.5

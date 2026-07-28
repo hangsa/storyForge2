@@ -5,6 +5,20 @@
 # (Chinese-named matrix) via mapping 高→0.75, 中→0.50, 低→0.20.
 # cool_novel has no direct entry in the legacy matrix; values below are sensible
 # defaults consistent with its "power fantasy" positioning.
+#
+# --- Conversion policy (one-time translation, preserved for reference) ---
+# The legacy COMPATIBILITY_MATRIX uses Chinese qualitative values 高/中/低.
+# To migrate to a numeric matrix without losing the original ordering, we chose:
+#   高 (high)   → 0.75
+#   中 (medium) → 0.50
+#   低 (low)    → 0.20
+# These specific numbers are a one-time translation chosen to preserve relative
+# ordering (high > medium > low) and to leave room for future tuning. They are
+# NOT derived from a calibration study or a published reference.
+#
+# Future tuning: hand-author specific values per pair rather than re-deriving
+# from the legacy matrix. The numeric values below are good enough as starting
+# defaults but should be revisited once we have empirical fusion-engine feedback.
 matrix:
   cool_novel:
     xianxia:    0.75

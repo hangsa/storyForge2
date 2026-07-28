@@ -20,6 +20,7 @@ from backend.api import (
     stage4_fact_guard, prompt_plaza, prompt_defaults,
     llm_config_api,
 )
+from backend.api import genres as genres_api
 from backend.api.autopilot import broadcaster as autopilot_broadcaster
 from backend.config import settings
 from backend.conductor.autopilot_loop import AutopilotLoopService
@@ -92,6 +93,7 @@ app.include_router(autopilot.router)
 app.include_router(prompt_plaza.router)
 app.include_router(prompt_defaults.router)
 app.include_router(llm_config_api.router)
+app.include_router(genres_api.router)
 
 
 @app.exception_handler(Exception)

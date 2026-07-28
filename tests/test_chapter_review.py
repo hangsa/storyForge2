@@ -179,3 +179,50 @@ class TestChapterReviewBuilder:
         assert isinstance(review["writing_formula_compliance"], list)
         assert all(isinstance(t, str) for t in review["discussion_topics"])
         assert 2 <= len(review["discussion_topics"]) <= 3
+
+
+class TestChapterReviewBuilderGenreAffectsFormula:
+    """Regression: writing formula check must use the project's genre, not the cool_novel default."""
+
+    @pytest.fixture
+    def builder_xuanyi(self, tmp_path):
+        projects_dir = tmp_path / "projects"
+        proj_dir = projects_dir / "xuanyi_proj"
+        (proj_dir / "storyos").mkdir(parents=True)
+        (proj_dir / "chapters").mkdir(parents=True)
+
+        (proj_dir / "story_dna.json").write_text(
+            json.dumps({"title": "测试悬疑", "genre": "xuanyi"}),
+            encoding="utf-8",
+        )
+        (proj_dir / "progress.json").write_text(
+            json.dumps({"project_id": "xuanyi_proj", "current_chapter": 3, "chapters": []}),
+            encoding="utf-8",
+        )
+        scene_text = (
+            "门在夜色中无声地关上。\n\n"
+            "他盯着桌上的那封信，手指微微发颤。"
+            "信封上没有寄件人，只有收件人的名字。"
+            "墨迹已经干涸，纸张泛黄。"
+        )
+        (proj_dir / "chapters" / "ch03_scene_001_draft.md").write_text(
+            scene_text, encoding="utf-8"
+        )
+        return ChapterReviewBuilder("xuanyi_proj", projects_dir=projects_dir)
+
+    def test_xuanyi_project_uses_xuanyi_style_formula(self, builder_xuanyi):
+        """Bug: chapter_review ignored project genre — always loaded cool_novel style_formula."""
+        results = builder_xuanyi._check_writing_formula(3)
+        assert len(results) > 0, "Expected compliance results, got empty list"
+        sentence_check = next(
+            (r for r in results if r.get("metric") == "avg_sentence_length"), None
+        )
+        assert sentence_check is not None, (
+            f"No avg_sentence_length check; metrics: {[r.get('metric') for r in results]}"
+        )
+        # xuanyi.style_formula.sentence.avg_length_max = 28
+        # cool_novel.style_formula.sentence.avg_length_max = 30
+        assert sentence_check["expected"] == "≤28", (
+            f"Expected xuanyi formula (≤28), got: {sentence_check['expected']}. "
+            "This means chapter_review fell back to the cool_novel default."
+        )

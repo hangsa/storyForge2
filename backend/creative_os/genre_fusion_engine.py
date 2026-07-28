@@ -134,6 +134,9 @@ class GenreFusionEngine:
 
             # Build 2-level _compatibility (catalog floats) and _graph from
             # catalog entries. Threshold 0.3 matches the legacy "中" boundary.
+            # _graph stores bare genre ids (matching the legacy set[str] shape)
+            # so compute_distance() can traverse it as a BFS; the float weight
+            # is preserved separately in _compatibility for callers that need it.
             self._compatibility = {}
             self._graph = {}
             for genre in catalog_genre_ids:
@@ -145,7 +148,7 @@ class GenreFusionEngine:
                     compat = catalog.get_compatibility(genre, other)
                     self._compatibility[genre][other] = compat
                     if compat >= 0.3:
-                        self._graph[genre].append((other, compat))
+                        self._graph[genre].append(other)
             return
         except Exception as e:
             logger.warning(

@@ -1,3 +1,7 @@
+import type { Genre } from "../hooks/useGenres";
+
+export type { Genre };
+
 const API_BASE = "/api";
 const TIMEOUT_MS = 600_000;
 
@@ -732,6 +736,11 @@ export const DEFAULT_SANDBOX_PARAMS: SandboxParams = {
 export const api = {
   listProjects: () =>
     request<ProjectSummary[]>("GET", "/project/list"),
+
+  listGenres: (uiVisibleOnly = true): Promise<Genre[]> => {
+    const qs = uiVisibleOnly ? "?ui_visible_only=true" : "";
+    return request<Genre[]>("GET", `/v1/genres${qs}`);
+  },
 
   deleteProject: (projectId: string) =>
     request<{ project_id: string }>("DELETE", `/project/${encodeURIComponent(projectId)}`),

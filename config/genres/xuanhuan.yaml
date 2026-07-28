@@ -1,0 +1,129 @@
+id: xuanhuan
+label_zh: 玄幻
+label_en: Xuanhuan
+family: cultivation
+pacing:
+  min_beats_per_1k: 1.4
+  escalation_interval: 4
+  action_ratio: 0.4
+  max_consecutive_non_action: 2
+  chapter_words:
+    min: 3000
+    max: 6000
+  scene_words:
+    min: 500
+    max: 2200
+tone: '宏大气魄,热血激昂。世界辽阔,种族林立,主角在波澜壮阔的
+
+  时代洪流中崛起。战斗描写要有毁灭感和史诗感,情感要真挚浓烈。
+
+  '
+style_rules:
+- 战斗场景要有地形改变和环境破坏描写，体现力量层次
+- 血脉或传承觉醒时要有完整的异象和内心变化描写
+- 每10章至少引入一个新的势力或种族拓展世界观
+- 主角成长要有明确的阶段标志（血脉等级/战兽进化/领地扩张）
+- 大型战争场景需兼顾宏观战场和个人对决
+- 奇遇和机缘要有代价或隐患，不能无代价变强
+- 配角要有独立的动机和成长线，不能只是主角的陪衬
+writing_formula:
+  sentence:
+    avg_length_max: 32
+    short_pct_min: 30
+    long_pct_max: 22
+  dialogue:
+    ratio_min: 0.2
+    max_consecutive_lines: 8
+  paragraph:
+    max_sentences: 5
+    max_words: 300
+  emotional_beat_density_min: 1.4
+  satisfaction_beat_min: 3
+  suspense_hook_required: true
+taboo_words:
+- 放弃抵抗
+- 我不行了
+- 太强了打不过
+- 就这样吧
+- 无聊的战斗
+- 魔法师
+- 骑士精神
+taboos:
+- name: 血统至上
+  type: sliding_window
+  keywords:
+  - 血脉压制
+  - 天生高贵
+  - 血统无敌
+  - 出身决定一切
+  - 低贱血脉
+  - 血脉歧视
+  max_chars: 300
+  severity: warning
+- name: 无代价变强
+  type: consecutive_match
+  failure_keywords:
+  - 轻松突破
+  - 轻易获得
+  - 无人能挡
+  - 秒杀
+  - 碾压一切
+  - 毫无压力
+  max_consecutive: 2
+  severity: error
+- name: 猥琐发育
+  type: sliding_window
+  keywords:
+  - 躲起来修炼
+  - 不敢出面
+  - 苟且偷生
+  - 胆小怕事
+  - 缩头乌龟
+  - 贪生怕死
+  max_chars: 250
+  severity: error
+trope_patterns:
+- name: 血脉觉醒
+  description: 主角血脉力量苏醒,实力大幅提升
+  min_interval: 5
+- name: 魔兽契约
+  description: 与强大魔兽/神兽签订契约
+  max_per_volume: 2
+- name: 遗迹探索
+  description: 探索远古遗迹获得传承或神器
+  min_interval: 4
+- name: 大陆争霸
+  description: 势力之间的领土和资源争夺
+  min_interval: 8
+- name: 位面战争
+  description: 不同位面/大陆之间的全面战争
+  max_per_volume: 1
+thresholds:
+  addiction_critical: 40
+  addiction_moderate: 28
+  frustration_high: 70
+  frustration_moderate: 55
+  fatigue_moderate: 50
+  fatigue_low: 38
+  fatigue_formula:
+    threshold: 60
+    decay: 1.0
+  curiosity_moderate: 25
+  curiosity_low: 12
+  tension_moderate: 60
+  tension_low: 45
+  satisfaction_moderate: 50
+  satisfaction_low: 35
+  discussion_high: 55
+  discussion_moderate: 40
+model_preferences:
+  creative_core: deepseek-chat
+  temperature: 0.9
+fusion_meta:
+  distances:
+    cool_novel: 0.25
+    xianxia: 0.5
+    dushi: 0.8
+    kehuan: 0.8
+    xuanyi: 0.8
+    yanqing: 0.8

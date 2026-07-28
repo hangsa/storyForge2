@@ -1,0 +1,121 @@
+id: cool_novel
+label_zh: 爽文
+label_en: Power Fantasy
+family: power_fantasy
+pacing:
+  min_beats_per_1k: 1.5
+  escalation_interval: 3
+  action_ratio: 0.45
+  max_consecutive_non_action: 2
+  chapter_words:
+    min: 3000
+    max: 6000
+  scene_words:
+    min: 500
+    max: 2000
+tone: '轻松自信,节奏明快。主角遇强则强,逆势崛起。在困境中保持乐观,
+
+  在逆境中展现智慧。避免过度悲情和无力感。
+
+  '
+style_rules:
+- 每500字内至少有一个爽点（能力展示/打脸/逆袭/收获）
+- 战斗场景每300字插入一次能力使用描写
+- 升级描写要具体（数值/层次/境界），不能含糊
+- 配角反应要描写（震惊/羡慕/嫉妒），强化主角成就感
+- 每章结尾必须有悬念钩子（新敌人/新目标/新线索）
+- 避免超过200字的纯静态描写
+- 对话占比不低于全文的20%
+writing_formula:
+  sentence:
+    avg_length_max: 30
+    short_pct_min: 30
+    long_pct_max: 20
+  dialogue:
+    ratio_min: 0.2
+    max_consecutive_lines: 8
+  paragraph:
+    max_sentences: 5
+    max_words: 300
+  emotional_beat_density_min: 1.5
+  satisfaction_beat_min: 3
+  suspense_hook_required: true
+taboo_words:
+- 无能为力
+- 绝望
+- 放弃
+- 认命
+- 太强了打不过
+- 不可能
+- 没办法
+- 恐怖如斯
+- 倒吸一口凉气
+- 此子不可留
+taboos:
+- name: 虐主
+  type: sliding_window
+  keywords:
+  - 受伤
+  - 吐血
+  - 被击飞
+  - 惨叫
+  - 虐待
+  - 折磨
+  - 碾压
+  - 断臂
+  max_chars: 300
+  severity: error
+- name: 连续失败
+  type: consecutive_match
+  failure_keywords:
+  - 失败
+  - 输了
+  - 不敌
+  - 落败
+  - 被击败
+  - 无力
+  - 败退
+  max_consecutive: 2
+  severity: error
+trope_patterns:
+- name: 逆袭打脸
+  description: 被轻视后展现实力,打脸反派
+  min_interval: 3
+- name: 越级挑战
+  description: 主角以弱胜强,跨境界/层次战斗
+  intensity_boost: 0.3
+- name: 奇遇突破
+  description: 意外收获导致实力大幅提升
+  max_per_volume: 2
+- name: 身份揭露
+  description: 主角隐藏身份被揭露引发震惊
+  min_interval: 5
+thresholds:
+  addiction_critical: 50
+  addiction_moderate: 35
+  frustration_high: 60
+  frustration_moderate: 45
+  fatigue_moderate: 55
+  fatigue_low: 40
+  fatigue_formula:
+    threshold: 60
+    decay: 1.0
+  curiosity_moderate: 35
+  curiosity_low: 20
+  tension_moderate: 55
+  tension_low: 40
+  satisfaction_moderate: 60
+  satisfaction_low: 45
+  discussion_high: 50
+  discussion_moderate: 35
+model_preferences:
+  creative_core: deepseek-chat
+  temperature: 0.9
+fusion_meta:
+  distances:
+    xianxia: 0.25
+    xuanhuan: 0.25
+    dushi: 0.5
+    kehuan: 0.5
+    xuanyi: 0.8
+    yanqing: 0.8

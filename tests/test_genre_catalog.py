@@ -100,6 +100,17 @@ class TestGenreCatalogLoad:
         with pytest.raises(CatalogLoadError, match="symmetric"):
             cat._load()
 
+    def test_compatibility_within_tolerance_passes(self, tmp_catalog):
+        (tmp_catalog / "compatibility.yaml").write_text(yaml.safe_dump({
+            "matrix": {
+                "alpha": {"beta": 0.5},
+                "beta":  {"alpha": 0.505},  # within 0.01 tolerance
+            }
+        }), encoding="utf-8")
+        cat = GenreCatalog(genres_dir=tmp_catalog)
+        cat._load()  # should not raise
+        assert cat.get_compatibility("alpha", "beta") == 0.5
+
 
 class TestGenreCatalogGetters:
     def test_list_returns_all(self, tmp_catalog):
@@ -136,3 +147,32 @@ class TestGenreCatalogGetters:
         # First entry is the fallback
         fallback = cat.get("nonexistent")
         assert fallback["id"] in ("alpha", "beta")
+
+    def test_list_with_ui_visible_only_hides_flagged(self, tmp_catalog):
+        data = yaml.safe_load((tmp_catalog / "index.yaml").read_text(encoding="utf-8"))
+        # Mark alpha as hidden
+        for entry in data["genres"]:
+            if entry["id"] == "alpha":
+                entry["ui_visible"] = False
+        (tmp_catalog / "index.yaml").write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+
+        cat = GenreCatalog(genres_dir=tmp_catalog)
+        assert [e["id"] for e in cat.list(ui_visible_only=True)] == ["beta"]
+        # And unfiltered: both present (ui_visible still surfaces in the dict for clients to inspect)
+        assert {e["id"] for e in cat.list(ui_visible_only=False)} == {"alpha", "beta"}
+        # And the hidden one has ui_visible=False in the result
+        alpha_result = next(e for e in cat.list(ui_visible_only=False) if e["id"] == "alpha")
+        assert alpha_result["ui_visible"] is False
+
+    def test_compatibility_missing_pair_returns_default(self, tmp_catalog):
+        cat = GenreCatalog(genres_dir=tmp_catalog)
+        # alpha/beta is in matrix, but alpha/alpha_or_other_unknown returns 0.0 (self)
+        assert cat.get_compatibility("alpha", "alpha") == 0.0
+        # Unknown pair not in matrix returns default 1.0
+        assert cat.get_compatibility("alpha", "no_such_genre") == 1.0
+
+    def test_default_ui_visible_is_true(self, tmp_catalog):
+        cat = GenreCatalog(genres_dir=tmp_catalog)
+        results = cat.list()
+        # Both alpha and beta lack ui_visible in the index — default to True
+        assert all(e["ui_visible"] is True for e in results)

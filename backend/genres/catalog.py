@@ -7,6 +7,7 @@ Engine, prompts, frontend API) read from this singleton.
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -125,6 +126,7 @@ class GenreCatalog:
     # --- Public API ---
 
     def get(self, genre_id: str) -> dict:
+        """Return full entry dict; falls back to first index entry on unknown id."""
         if self._entries is None:
             self._load()
         if genre_id in self._entries:  # type: ignore[operator]
@@ -134,6 +136,7 @@ class GenreCatalog:
         return self._entries[fallback_id]  # type: ignore[index]
 
     def list(self, ui_visible_only: bool = False) -> list[dict]:
+        """Return list of index entries; if ui_visible_only=True, hide entries with ui_visible=False."""
         if self._index is None:
             self._load()
         result = []
@@ -170,6 +173,7 @@ class GenreCatalog:
         }
 
     def get_compatibility(self, a: str, b: str) -> float:
+        """Return compatibility score [0.0, 1.0]. 0.0 for self-pairs, 1.0 default for unknown pairs."""
         if a == b:
             return 0.0
         if self._compatibility is None:
@@ -181,12 +185,15 @@ class GenreCatalog:
 
 
 _catalog: GenreCatalog | None = None
+_catalog_lock = threading.Lock()
 
 
 def get_catalog() -> GenreCatalog:
-    """Module-level singleton. Lazy-loads on first call."""
+    """Module-level singleton. Lazy-loads on first call. Thread-safe."""
     global _catalog
     if _catalog is None:
-        _catalog = GenreCatalog()
-        _catalog._load()
+        with _catalog_lock:
+            if _catalog is None:
+                _catalog = GenreCatalog()
+                _catalog._load()
     return _catalog

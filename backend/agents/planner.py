@@ -2,6 +2,7 @@ import json
 from typing import Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse
+from backend.agents.writer import _resolve_genre_label
 
 
 # Role labels surfaced to the LLM. Must match the user-facing wizard labels
@@ -99,7 +100,7 @@ class PlannerAgent(BaseAgent):
         result, response = await self.generate_from_template(
             "concept_generation",
             initial_intent=initial_intent,
-            genre=genre,
+            genre=_resolve_genre_label(genre),
         )
         self.log_usage("concept_generation", response)
         return result, response
@@ -116,7 +117,7 @@ class PlannerAgent(BaseAgent):
         result, response = await self.generate_from_template(
             "canvas_to_concept",
             canvas_summary=canvas_summary,
-            genre=genre,
+            genre=_resolve_genre_label(genre),
         )
         self.log_usage("canvas_to_concept", response)
         return result, response
@@ -136,7 +137,7 @@ class PlannerAgent(BaseAgent):
             core_contradiction=story_dna.get("core_contradiction", {}).get(
                 "statement", ""
             ),
-            genre=genre,
+            genre=_resolve_genre_label(genre),
         )
         self.log_usage("world_generation", response)
         return result, response

@@ -1,9 +1,33 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse, StreamChunk
+
+logger = logging.getLogger(__name__)
+
+
+def _resolve_genre_label(genre: str) -> str:
+    """Resolve a genre id to its Chinese label via the catalog.
+
+    Falls back to the raw id if the catalog is unavailable or the entry
+    is missing ``label_zh``. This keeps the {genre} prompt placeholder
+    human-readable for Chinese prompts while preserving existing behavior
+    when the catalog is not yet wired up.
+    """
+    try:
+        from backend.genres.catalog import get_catalog
+        label = get_catalog().get(genre).get("label_zh")
+        if label:
+            return label
+    except Exception as e:  # noqa: BLE001 - catalog may be unconfigured in tests
+        logger.warning(
+            "GenreCatalog unavailable for {genre} placeholder, using raw id '%s': %s",
+            genre, e,
+        )
+    return genre
 
 
 def _name_in_text(name: str, text: str, other_names: set[str] | None = None) -> bool:
@@ -383,7 +407,7 @@ class WriterAgent(BaseAgent):
         )
 
         return {
-            "genre": genre,
+            "genre": _resolve_genre_label(genre),
             "core_contradiction": core_contradiction.get("statement", ""),
             "premise": premise,
             "power_system_name": ps_name,

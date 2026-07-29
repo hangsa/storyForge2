@@ -93,6 +93,32 @@ trope_patterns:
 - name: 社会事件
   description: 与当下社会热点相关的事件
   max_per_volume: 2
+beat_patterns:
+  - keywords: [商业, 博弈, 商战, 谈判, 收购]
+    priority: 85
+    beats:
+      - { description: "利益格局：各方势力、行业背景",                    words: 500, focus: "dialogue" }
+      - { description: "策略布局：信息战、资源整合",                      words: 900, focus: "action" }
+      - { description: "关键对决：商业谈判/法庭/发布会",                  words: 1000, focus: "action" }
+      - { description: "胜负揭晓：对手溃败/反转、格局重塑",               words: 600, focus: "reveal" }
+  - keywords: [身份反转, 真实身份, 身份暴露, 隐藏身份]
+    priority: 80
+    beats:
+      - { description: "伏笔铺垫：身份线索散落前文",                       words: 500, focus: "suspense" }
+      - { description: "揭露瞬间：所有人反应、关系重构",                  words: 800, focus: "reveal" }
+      - { description: "新格局展开：资源/盟友/敌人重新分配",              words: 600, focus: "emotion" }
+  - keywords: [职场, 升职, 跳槽, 同事, 老板]
+    priority: 70
+    beats:
+      - { description: "职场困境：被排挤/背锅/边缘化",                    words: 500, focus: "sensory" }
+      - { description: "破局行动：主动出击/借力/反制",                    words: 800, focus: "action" }
+      - { description: "结果兑现：晋升/跳槽/逆袭",                        words: 600, focus: "emotion" }
+  - keywords: [现实, 社会事件, 热点, 突发事件]
+    priority: 60
+    beats:
+      - { description: "事件背景：社会环境、人物关系",                    words: 500, focus: "dialogue" }
+      - { description: "事件发展：人物卷入、利益权衡",                    words: 800, focus: "action" }
+      - { description: "事件影响：人物成长、关系变化",                    words: 600, focus: "emotion" }
 thresholds:
   addiction_critical: 30
   addiction_moderate: 20

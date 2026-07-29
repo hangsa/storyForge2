@@ -74,6 +74,12 @@ async def generate_concept(data: dict):
             detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
         )
 
+    # Warnings are runtime-only (e.g. tone-alignment mismatch). Pop them
+    # BEFORE writing to concept_and_dna.json so they don't pollute the
+    # persisted data file. Surface them in the API response so the frontend
+    # can flag them; the next /stage1/generate call re-evaluates.
+    warnings = result.pop("warnings", [])
+
     fm.write_json(project_id, "concept_and_dna.json", result)
 
     return {
@@ -81,6 +87,7 @@ async def generate_concept(data: dict):
         "code": "OK",
         "message": "概念和 Story DNA 生成成功",
         "detail": result,
+        "warnings": warnings,
     }
 
 

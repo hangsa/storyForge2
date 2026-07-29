@@ -40,6 +40,17 @@ user_prompt_template: |
   - 力量体系：{power_system_name}
   - 力量规则：{power_system_rules}
 
+  题材类型：{genre}
+
+  【题材语气基线】
+  {genre_tone}
+
+  【题材风格规则】
+  {genre_style_rules}
+
+  【题材典型套路】
+  {genre_trope_patterns}
+
   角色类型：{character_type}
   {existing_characters_section}
 

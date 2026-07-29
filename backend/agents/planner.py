@@ -5,6 +5,49 @@ from backend.agents.base_agent import BaseAgent, LLMResponse
 from backend.agents.writer import _resolve_genre_label
 
 
+def _resolve_genre_extras(genre: str) -> dict[str, str]:
+    """Resolve a genre id to its tone, style_rules, and trope_patterns
+    formatted for prompt injection.
+
+    Each field is rendered as a multi-line string ready to drop into a
+    user_prompt_template. Missing catalog entries return empty strings so
+    the prompt still renders without raising.
+
+    Format:
+      tone:           the prose block as-is
+      style_rules:    numbered list ("1. rule\\n2. rule\\n...")
+      trope_patterns: bulleted list ("- name: description\\n...")
+    """
+    try:
+        from backend.genres.catalog import get_catalog
+        entry = get_catalog().get(genre)
+    except Exception:
+        return {"tone": "", "style_rules": "", "trope_patterns": ""}
+
+    tone = (entry.get("tone") or "").strip()
+
+    rules = entry.get("style_rules") or []
+    if rules:
+        style_rules = "\n".join(f"{i + 1}. {r}" for i, r in enumerate(rules))
+    else:
+        style_rules = ""
+
+    tropes = entry.get("trope_patterns") or []
+    if tropes:
+        trope_patterns = "\n".join(
+            f"- {t.get('name', '')}: {t.get('description', '')}"
+            for t in tropes
+        )
+    else:
+        trope_patterns = ""
+
+    return {
+        "tone": tone,
+        "style_rules": style_rules,
+        "trope_patterns": trope_patterns,
+    }
+
+
 # Role labels surfaced to the LLM. Must match the user-facing wizard labels
 # (CharacterStep.tsx CHARACTER_TYPES) so the LLM's output is consistent with
 # what the user sees when reviewing.
@@ -97,12 +140,35 @@ class PlannerAgent(BaseAgent):
     async def generate_concept_and_dna(
         self, initial_intent: str, genre: str = "cool_novel"
     ) -> tuple[dict, LLMResponse]:
+        extras = _resolve_genre_extras(genre)
         result, response = await self.generate_from_template(
             "concept_generation",
             initial_intent=initial_intent,
             genre=_resolve_genre_label(genre),
+            genre_tone=extras["tone"],
+            genre_style_rules=extras["style_rules"],
+            genre_trope_patterns=extras["trope_patterns"],
         )
         self.log_usage("concept_generation", response)
+
+        # Light tone-alignment check: if LLM's concept.tone drifts far from
+        # the catalog's tone, attach a warning so the frontend can flag it.
+        # Non-blocking — the concept is still accepted.
+        from backend.style_engine.tone_check import check_tone_alignment
+        concept_tone = (
+            result.get("concept", {}).get("tone", "")
+            if isinstance(result, dict)
+            else ""
+        )
+        alignment = check_tone_alignment(concept_tone, genre)
+        if not alignment["aligned"]:
+            result.setdefault("warnings", []).append({
+                "field": "concept.tone",
+                "code": "TONE_ALIGNMENT_LOW",
+                "score": alignment["score"],
+                "message": alignment["warning"],
+            })
+
         return result, response
 
     async def generate_concept_from_canvas(
@@ -128,6 +194,7 @@ class PlannerAgent(BaseAgent):
         story_dna: dict,
         genre: str = "cool_novel",
     ) -> tuple[dict, LLMResponse]:
+        extras = _resolve_genre_extras(genre)
         result, response = await self.generate_from_template(
             "world_generation",
             concept_title=concept.get("title", ""),
@@ -138,6 +205,9 @@ class PlannerAgent(BaseAgent):
                 "statement", ""
             ),
             genre=_resolve_genre_label(genre),
+            genre_tone=extras["tone"],
+            genre_style_rules=extras["style_rules"],
+            genre_trope_patterns=extras["trope_patterns"],
         )
         self.log_usage("world_generation", response)
         return result, response
@@ -149,6 +219,7 @@ class PlannerAgent(BaseAgent):
         character_type: str = "protagonist",
         character_index: int = 0,
         existing_characters: Optional[list[dict]] = None,
+        genre: str = "cool_novel",
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
 
@@ -189,6 +260,7 @@ class PlannerAgent(BaseAgent):
         else:
             existing_section = ""
 
+        extras = _resolve_genre_extras(genre)
         result, response = await self.generate_from_template(
             "character_generation",
             concept_context=concept_context,
@@ -199,6 +271,10 @@ class PlannerAgent(BaseAgent):
             character_type_label=type_labels.get(character_type, "角色"),
             is_core_character=is_core,
             existing_characters_section=existing_section,
+            genre=_resolve_genre_label(genre),
+            genre_tone=extras["tone"],
+            genre_style_rules=extras["style_rules"],
+            genre_trope_patterns=extras["trope_patterns"],
         )
         self.log_usage("character_generation", response)
         return result, response

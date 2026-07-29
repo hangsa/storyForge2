@@ -170,6 +170,7 @@ async def generate_character(data: dict):
 
     concept_and_dna = fm.read_json(project_id, "concept_and_dna.json")
     world = fm.read_json(project_id, "world.json")
+    project = fm.read_json(project_id, "project.json") or {}
     if concept_and_dna is None or world is None:
         raise HTTPException(
             status_code=400,
@@ -186,6 +187,8 @@ async def generate_character(data: dict):
         fm.write_json(project_id, "characters.json", existing)
     existing_characters = existing.get("characters", [])
 
+    genre = project.get("genre", "cool_novel")
+
     agent = PlannerAgent(
         project_id,
         override_store=project_override_store(),
@@ -197,6 +200,7 @@ async def generate_character(data: dict):
             world=world,
             character_type=character_type,
             existing_characters=existing_characters,
+            genre=genre,
         )
     except ValueError as e:
         raise HTTPException(
@@ -404,6 +408,8 @@ async def regenerate_character_examples(
     # Minimal inputs to keep the LLM focused on examples. Reuse existing context if present.
     concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
     world = _file_manager().read_json(project_id, "world.json") or {}
+    project = _file_manager().read_json(project_id, "project.json") or {}
+    genre = project.get("genre", "cool_novel")
 
     agent = PlannerAgent(
         project_id,
@@ -416,6 +422,7 @@ async def regenerate_character_examples(
             world=world,
             character_type=target.get("character_type", "supporting"),
             existing_characters=[target],
+            genre=genre,
         )
     except ValueError as e:
         raise HTTPException(

@@ -17,7 +17,6 @@ class Settings(BaseSettings):
 
     projects_dir: Path = Path("projects")
     prompts_dir: Path = Path("backend/prompts")
-    style_dir: Path = Path("data/style")
     genres_dir: Path = Path(__file__).parent.parent / "config" / "genres"
     global_prompt_overrides_path: Path = Path("config/global_prompt_overrides.json")
 

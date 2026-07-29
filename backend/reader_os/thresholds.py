@@ -1,7 +1,5 @@
-from pathlib import Path
+from __future__ import annotations
 import logging
-
-import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +17,7 @@ GENRE_NAME_MAPPING = {
     "仙侠": "xianxia",
 }
 
-# Hardcoded fallback when YAML is missing or invalid
+# Hardcoded fallback when catalog is missing
 # Uses internal severity-based key names (lower threshold = more severe warning)
 GENRE_THRESHOLDS = {
     "cool_novel": {
@@ -79,85 +77,37 @@ def _normalize_thresholds(thresholds: dict) -> dict:
     return normalized
 
 
-def _map_threshold_keys(genres: dict) -> dict[str, dict]:
-    """Emit both Chinese and pinyin keys for each normalized genre."""
-    result = {}
-    for name, thresholds in genres.items():
-        normalized = _normalize_thresholds(thresholds)
-        result[name] = normalized
-        pinyin = GENRE_NAME_MAPPING.get(name)
-        if pinyin:
-            result[pinyin] = normalized
-    return result
-
-
 def load_genre_thresholds() -> dict[str, dict]:
-    """Load genre thresholds. GenreCatalog first, legacy YAML fallback.
+    """Load genre thresholds from GenreCatalog.
 
-    One-release dual-read window: if GenreCatalog is unavailable or fails to
-    load, fall back to config/genre_thresholds.yaml. Remove the fallback in the
-    next release.
-
-    Return shape is unchanged: keys are genre ids (pinyin) and Chinese labels,
-    values are normalized threshold dicts, plus a "generic" fallback key.
+    Return shape includes both pinyin ids and Chinese labels so existing
+    project.json genre values (which may use either form) keep resolving.
     """
-    try:
-        from backend.genres.catalog import get_catalog
+    from backend.genres.catalog import get_catalog
 
-        catalog = get_catalog()
-        entries = catalog.list()
-        if not entries:
-            raise ValueError("GenreCatalog returned an empty genre list")
+    catalog = get_catalog()
+    entries = catalog.list()
+    if not entries:
+        raise ValueError("GenreCatalog returned an empty genre list")
 
-        result: dict[str, dict] = {}
-        for entry in entries:
-            genre_id = entry["id"]
-            normalized = _normalize_thresholds(catalog.get_thresholds(genre_id))
-            result[genre_id] = normalized
-            label_zh = entry.get("label_zh")
-            if label_zh:
-                result[label_zh] = normalized
+    result: dict[str, dict] = {}
+    for entry in entries:
+        genre_id = entry["id"]
+        normalized = _normalize_thresholds(catalog.get_thresholds(genre_id))
+        result[genre_id] = normalized
+        label_zh = entry.get("label_zh")
+        if label_zh:
+            result[label_zh] = normalized
 
-        # Preserve legacy Chinese aliases (e.g. 悬疑推理 → xuanyi) so existing
-        # project.json genre values keep resolving.
-        for alias, genre_id in GENRE_NAME_MAPPING.items():
-            if alias not in result and genre_id in result:
-                result[alias] = result[genre_id]
+    # Preserve legacy Chinese aliases (e.g. 悬疑推理 → xuanyi) so existing
+    # project.json genre values keep resolving.
+    for alias, genre_id in GENRE_NAME_MAPPING.items():
+        if alias not in result and genre_id in result:
+            result[alias] = result[genre_id]
 
-        if "generic" not in result:
-            result["generic"] = dict(GENRE_THRESHOLDS["generic"])
-        return result
-    except Exception as e:
-        logger.warning(
-            "GenreCatalog unavailable, falling back to genre_thresholds.yaml: %s", e
-        )
-        return _legacy_load_genre_thresholds()
-
-
-def _legacy_load_genre_thresholds() -> dict[str, dict]:
-    """Original implementation, kept as fallback for one release.
-
-    Load genre thresholds from config/genre_thresholds.yaml.
-
-    Falls back to hardcoded GENRE_THRESHOLDS if file is missing or invalid.
-    Keys are emitted in both Chinese and pinyin forms via GENRE_NAME_MAPPING.
-    Always includes a "generic" fallback key.
-    """
-    config_path = Path("config/genre_thresholds.yaml")
-    try:
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-            genres = data.get("genres", {}) if data else {}
-            if genres:
-                result = _map_threshold_keys(genres)
-                if "generic" not in result:
-                    result["generic"] = dict(GENRE_THRESHOLDS["generic"])
-                return result
-    except Exception:
-        logger.warning("Failed to load genre_thresholds.yaml, using defaults")
-
-    return dict(GENRE_THRESHOLDS)
+    if "generic" not in result:
+        result["generic"] = dict(GENRE_THRESHOLDS["generic"])
+    return result
 
 
 INTENSITY_SCORES = {

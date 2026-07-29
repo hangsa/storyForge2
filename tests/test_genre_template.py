@@ -30,9 +30,9 @@ class TestGenreTemplateLoad:
         # First entry is cool_novel
         assert data["id"] == "cool_novel"
 
-    def test_constructor_ignores_style_dir(self):
-        """Legacy style_dir constructor arg is ignored — delegator still works."""
-        gt = GenreTemplate(style_dir="/nonexistent/path/that/does/not/exist")
+    def test_no_constructor_args(self):
+        """GenreTemplate takes no constructor args — catalog is a singleton."""
+        gt = GenreTemplate()
         data = gt.load("cool_novel")
         assert data["id"] == "cool_novel"
 

@@ -7,174 +7,51 @@ from backend.models.creative_os import FusionAnalysis
 
 logger = logging.getLogger(__name__)
 
-# Legacy Chinese-id genre graph (kept as the one-release fallback path for
-# Fusion Engine). The GenreCatalog currently exposes pinyin ids (xianxia,
-# xuanhuan, ...) which are incompatible with this engine's Chinese-string
-# public API (get_compatibility returns "高"/"中"/"低"). _build_graph() detects
-# the shape mismatch and falls back to these constants.
-_LEGACY_GENRE_GRAPH: dict[str, set[str]] = {
-    "修仙": {"玄幻", "武侠", "仙侠", "神话"},
-    "玄幻": {"修仙", "武侠", "奇幻", "神话", "异界"},
-    "武侠": {"修仙", "玄幻", "历史", "都市", "仙侠"},
-    "奇幻": {"玄幻", "科幻", "都市", "游戏", "恐怖", "异界"},
-    "科幻": {"奇幻", "都市", "末世", "游戏", "悬疑", "推理", "战争"},
-    "都市": {"武侠", "奇幻", "科幻", "悬疑", "言情", "推理"},
-    "悬疑": {"都市", "恐怖", "科幻", "推理", "言情"},
-    "恐怖": {"悬疑", "末世", "奇幻"},
-    "末世": {"科幻", "恐怖", "游戏", "战争"},
-    "历史": {"武侠", "言情", "战争", "神话"},
-    "神话": {"修仙", "玄幻", "历史", "仙侠"},
-    "游戏": {"奇幻", "科幻", "末世", "异界"},
-    "言情": {"都市", "历史", "悬疑"},
-    "推理": {"悬疑", "都市", "科幻"},
-    "仙侠": {"修仙", "武侠", "神话"},
-    "异界": {"玄幻", "奇幻", "游戏"},
-    "战争": {"历史", "末世", "科幻"},
-}
-
-# Backward-compatible alias: tests and external callers still import GENRE_GRAPH.
-GENRE_GRAPH: dict[str, set[str]] = _LEGACY_GENRE_GRAPH
-
 
 class GenreFusionEngine:
-
-    # Legacy Chinese-id compatibility matrix (fallback path). Shape preserved
-    # for the existing public API: get_compatibility returns "高"/"中"/"低"
-    # strings. The GenreCatalog stores numeric [0.0, 1.0] floats keyed by
-    # pinyin ids, so the catalog path is only used when the catalog's genre
-    # set overlaps with the legacy Chinese keys.
-    _LEGACY_COMPATIBILITY_MATRIX: dict[str, dict[str, str]] = {
-        "修仙": {"玄幻": "高", "武侠": "高", "仙侠": "高", "神话": "中", "历史": "中", "奇幻": "中",
-                 "科幻": "低", "都市": "低", "悬疑": "低", "恐怖": "低", "末世": "低", "游戏": "低",
-                 "言情": "低", "推理": "低", "异界": "中", "战争": "低"},
-        "玄幻": {"修仙": "高", "武侠": "中", "仙侠": "中", "神话": "中", "历史": "中", "奇幻": "高",
-                 "科幻": "低", "都市": "低", "悬疑": "低", "恐怖": "低", "末世": "低", "游戏": "中",
-                 "言情": "低", "推理": "低", "异界": "中", "战争": "低"},
-        "科幻": {"奇幻": "中", "都市": "中", "末世": "高", "游戏": "中", "修仙": "低", "玄幻": "低",
-                 "武侠": "低", "仙侠": "低", "神话": "低", "历史": "低", "悬疑": "中", "恐怖": "低",
-                 "言情": "低", "推理": "中", "异界": "低", "战争": "中"},
-        "都市": {"言情": "高", "悬疑": "中", "武侠": "低", "奇幻": "中", "科幻": "中", "历史": "中",
-                 "推理": "中", "修仙": "低", "玄幻": "低", "仙侠": "低", "神话": "低", "恐怖": "低",
-                 "末世": "低", "游戏": "低", "异界": "低", "战争": "低"},
-        "推理": {"悬疑": "高", "都市": "中", "科幻": "中", "恐怖": "中", "修仙": "低", "玄幻": "低",
-                 "武侠": "低", "仙侠": "低", "神话": "低", "奇幻": "低", "末世": "低", "游戏": "低",
-                 "言情": "低", "历史": "低", "异界": "低", "战争": "低"},
-        "末世": {"科幻": "高", "恐怖": "中", "游戏": "中", "战争": "中", "修仙": "低", "玄幻": "低",
-                 "武侠": "低", "仙侠": "低", "神话": "低", "奇幻": "低", "都市": "低", "悬疑": "低",
-                 "言情": "低", "推理": "低", "历史": "低", "异界": "低"},
-        "游戏": {"奇幻": "高", "科幻": "中", "末世": "中", "修仙": "低", "玄幻": "中", "武侠": "低",
-                 "仙侠": "低", "神话": "低", "都市": "低", "悬疑": "低", "恐怖": "低", "言情": "低",
-                 "推理": "低", "历史": "低", "异界": "中", "战争": "低"},
-        "悬疑": {"推理": "高", "恐怖": "中", "都市": "中", "科幻": "中", "修仙": "低", "玄幻": "低",
-                 "武侠": "低", "仙侠": "低", "神话": "低", "奇幻": "低", "末世": "低", "游戏": "低",
-                 "言情": "中", "历史": "低", "异界": "低", "战争": "低"},
-        "恐怖": {"悬疑": "中", "末世": "中", "推理": "中", "修仙": "低", "玄幻": "低", "武侠": "低",
-                 "仙侠": "低", "神话": "低", "奇幻": "中", "科幻": "低", "都市": "低", "游戏": "低",
-                 "言情": "低", "历史": "低", "异界": "低", "战争": "低"},
-        "武侠": {"修仙": "高", "玄幻": "中", "仙侠": "高", "历史": "高", "神话": "中", "奇幻": "低",
-                 "科幻": "低", "都市": "低", "悬疑": "低", "恐怖": "低", "末世": "低", "游戏": "低",
-                 "言情": "低", "推理": "低", "异界": "低", "战争": "中"},
-        "仙侠": {"修仙": "高", "玄幻": "中", "武侠": "高", "神话": "中", "历史": "中", "奇幻": "中",
-                 "科幻": "低", "都市": "低", "悬疑": "低", "恐怖": "低", "末世": "低", "游戏": "低",
-                 "言情": "低", "推理": "低", "异界": "中", "战争": "低"},
-        "历史": {"修仙": "中", "玄幻": "中", "武侠": "高", "仙侠": "中", "神话": "中", "奇幻": "中",
-                 "科幻": "低", "都市": "中", "悬疑": "低", "恐怖": "低", "末世": "低", "游戏": "低",
-                 "言情": "高", "推理": "低", "异界": "低", "战争": "高"},
-        "奇幻": {"修仙": "中", "玄幻": "高", "武侠": "低", "仙侠": "中", "神话": "中", "历史": "中",
-                 "科幻": "中", "都市": "中", "悬疑": "低", "恐怖": "中", "末世": "低", "游戏": "高",
-                 "言情": "低", "推理": "低", "异界": "高", "战争": "低"},
-        "异界": {"修仙": "中", "玄幻": "中", "武侠": "低", "仙侠": "中", "神话": "低", "历史": "低",
-                 "奇幻": "高", "科幻": "低", "都市": "低", "悬疑": "低", "恐怖": "低", "末世": "低",
-                 "游戏": "中", "言情": "低", "推理": "低", "战争": "低"},
-        "战争": {"修仙": "低", "玄幻": "低", "武侠": "中", "仙侠": "低", "神话": "低", "历史": "高",
-                 "奇幻": "低", "科幻": "中", "都市": "低", "悬疑": "低", "恐怖": "低", "末世": "中",
-                 "游戏": "低", "言情": "低", "推理": "低", "异界": "低"},
-        "神话": {"修仙": "中", "玄幻": "中", "武侠": "中", "仙侠": "中", "历史": "中", "奇幻": "中",
-                 "科幻": "低", "都市": "低", "悬疑": "低", "恐怖": "低", "末世": "低", "游戏": "低",
-                 "言情": "低", "推理": "低", "异界": "低", "战争": "低"},
-        "言情": {"修仙": "低", "玄幻": "低", "武侠": "低", "仙侠": "低", "神话": "低", "历史": "高",
-                 "奇幻": "低", "科幻": "低", "都市": "高", "悬疑": "中", "恐怖": "低", "末世": "低",
-                 "游戏": "低", "推理": "低", "异界": "低", "战争": "低"},
-    }
-
-    # Backward-compatible alias: tests access engine.COMPATIBILITY_MATRIX
-    # (class attribute lookup) to verify the matrix is populated.
-    COMPATIBILITY_MATRIX: dict[str, dict[str, str]] = _LEGACY_COMPATIBILITY_MATRIX
 
     def __init__(self, model_router=None) -> None:
         self._router = model_router
         self._build_graph()
 
     def _build_graph(self) -> None:
-        """Build internal genre graph and compatibility map.
+        """Build internal genre graph and compatibility map from GenreCatalog.
 
-        One-release dual-read window: try GenreCatalog first, fall back to the
-        legacy Chinese-id constants if the catalog can't serve the engine's
-        public API. See module-level note on _LEGACY_GENRE_GRAPH.
+        Self-edges are excluded. _graph stores bare genre ids as BFS-traversable
+        lists; the float weight is preserved separately in _compatibility.
+        Threshold 0.3 marks a "knows-about" relationship for BFS purposes.
         """
-        try:
-            from backend.genres.catalog import get_catalog
+        from backend.genres.catalog import get_catalog
 
-            catalog = get_catalog()
-            entries = catalog.list()
-            if not entries:
-                raise ValueError("GenreCatalog returned an empty genre list")
+        catalog = get_catalog()
+        entries = catalog.list()
+        if not entries:
+            raise ValueError("GenreCatalog returned an empty genre list")
 
-            catalog_genre_ids = {e["id"] for e in entries}
-            legacy_genre_ids = set(_LEGACY_GENRE_GRAPH.keys())
-            # The catalog's pinyin ids don't overlap with the legacy Chinese
-            # ids, and the engine's public API returns "高"/"中"/"低" strings
-            # while the catalog stores numeric floats. Detect this shape
-            # mismatch and fall back to legacy.
-            if not (catalog_genre_ids & legacy_genre_ids):
-                raise ValueError(
-                    "GenreCatalog uses pinyin ids; Fusion Engine API requires "
-                    "Chinese ids. Falling back to legacy constants."
-                )
-
-            # Build 2-level _compatibility (catalog floats) and _graph from
-            # catalog entries. Threshold 0.3 matches the legacy "中" boundary.
-            # _graph stores bare genre ids (matching the legacy set[str] shape)
-            # so compute_distance() can traverse it as a BFS; the float weight
-            # is preserved separately in _compatibility for callers that need it.
-            self._compatibility = {}
-            self._graph = {}
-            for genre in catalog_genre_ids:
-                self._compatibility[genre] = {}
-                self._graph[genre] = []
-                for other in catalog_genre_ids:
-                    if other == genre:
-                        continue
-                    compat = catalog.get_compatibility(genre, other)
-                    self._compatibility[genre][other] = compat
-                    if compat >= 0.3:
-                        self._graph[genre].append(other)
-            return
-        except Exception as e:
-            logger.warning(
-                "GenreCatalog unavailable, falling back to legacy graph: %s", e
-            )
-
-        # Legacy fallback: full 17-genre Chinese graph.
-        legacy_matrix = type(self)._LEGACY_COMPATIBILITY_MATRIX
-        self._compatibility = {k: dict(v) for k, v in legacy_matrix.items()}
-        self._graph = {k: set(v) for k, v in _LEGACY_GENRE_GRAPH.items()}
+        catalog_genre_ids = {e["id"] for e in entries}
+        self._compatibility = {}
+        self._graph = {}
+        for genre in catalog_genre_ids:
+            self._compatibility[genre] = {}
+            self._graph[genre] = []
+            for other in catalog_genre_ids:
+                if other == genre:
+                    continue
+                compat = catalog.get_compatibility(genre, other)
+                self._compatibility[genre][other] = compat
+                if compat >= 0.3:
+                    self._graph[genre].append(other)
 
     def get_compatibility(self, genre_a: str, genre_b: str) -> str:
         if genre_a == genre_b:
             return "高"
         row = self._compatibility.get(genre_a, {})
-        value = row.get(genre_b, "低")
-        # Legacy fallback produces strings; catalog path produces floats.
-        # Convert catalog floats to legacy qualitative strings for a stable
-        # public API.
-        if isinstance(value, float):
-            if value >= 0.7:
-                return "高"
-            if value >= 0.4:
-                return "中"
-            return "低"
-        return value
+        value = row.get(genre_b, 0.0)
+        if value >= 0.7:
+            return "高"
+        if value >= 0.4:
+            return "中"
+        return "低"
 
     def compute_distance(self, genre_a: str, genre_b: str) -> int:
         if genre_a == genre_b:
@@ -185,7 +62,7 @@ class GenreFusionEngine:
         queue = deque([(genre_a, 0)])
         while queue:
             current, dist = queue.popleft()
-            for neighbor in self._graph.get(current, set()):
+            for neighbor in self._graph.get(current, []):
                 if neighbor == genre_b:
                     return dist + 1
                 if neighbor not in visited:

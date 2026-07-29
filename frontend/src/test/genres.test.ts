@@ -1,7 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import fs from "node:fs";
-import path from "node:path";
 import { useGenres } from "../hooks/useGenres";
 
 vi.mock("../api/client", () => ({
@@ -18,27 +16,14 @@ vi.mock("../api/client", () => ({
   },
 }));
 
-const BACKEND_STYLE_DIR = path.resolve(__dirname, "../../../data/style");
-
-function listBackendTemplates(): string[] {
-  return fs
-    .readdirSync(BACKEND_STYLE_DIR)
-    .filter((f) => f.endsWith(".yaml"))
-    .map((f) => f.replace(/\.yaml$/, ""))
-    .sort();
-}
-
 describe("useGenres hook", () => {
-  it("renders a list that includes every backend data/style template", async () => {
+  it("returns all 7 catalog genres", async () => {
     const { result } = renderHook(() => useGenres(true));
     await waitFor(() => {
-      expect(result.current.length).toBeGreaterThanOrEqual(listBackendTemplates().length);
+      expect(result.current.length).toBe(7);
     });
     const ids = result.current.map((g) => g.id).sort();
-    const backend = listBackendTemplates();
-    // Backend templates that should be visible
-    expect(ids.length).toBeGreaterThanOrEqual(backend.length);
-    for (const t of backend) expect(ids).toContain(t);
+    expect(ids).toEqual(["cool_novel", "dushi", "kehuan", "xianxia", "xuanhuan", "xuanyi", "yanqing"]);
   });
 
   it("includes the two previously missing genres (xuanyi, yanqing)", async () => {

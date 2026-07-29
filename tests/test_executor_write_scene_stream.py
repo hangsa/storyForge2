@@ -28,12 +28,21 @@ def _bootstrap_project(tmp_path: Path) -> dict:
         json.dumps({"project_id": proj_id, "stage": "STAGE4"}),
         encoding="utf-8",
     )
+    # Bootstrap with scenes 1..9 so pre-existing tests that reference scene 3
+    # (test_write_scene_stream_publishes_failed_on_exception) and scene 9
+    # (test_write_scene_stream_normalizes_think_block_per_chunk) still hit
+    # the writer path. The precheck added in 2026-07-27 short-circuits any
+    # queue item whose scene isn't in this scene_plan, so the bootstrap must
+    # cover every scene_number the existing tests reference.
     (pd / "outline.json").write_text(json.dumps({
         "chapters": [{
             "chapter_number": 1,
-            "scene_plan": [{"scene_number": 1, "goal": "g", "conflict": "c",
-                            "emotional_arc": "ea", "narrative_role": "setup",
-                            "required_logs": []}],
+            "scene_plan": [
+                {"scene_number": n, "goal": "g", "conflict": "c",
+                 "emotional_arc": "ea", "narrative_role": "setup",
+                 "required_logs": []}
+                for n in range(1, 10)
+            ],
         }],
     }), encoding="utf-8")
     (pd / "chapters").mkdir()
@@ -169,6 +178,88 @@ def test_write_scene_stream_normalizes_think_block_per_chunk(tmp_path, monkeypat
     for t in scene_chunks:
         assert open_think not in t, f"think-open leaked: {t!r}"
         assert "model is planning" not in t, f"planning text leaked: {t!r}"
+
+
+def test_write_scene_stream_returns_scene_missing_without_invoking_writer(tmp_path, monkeypatch):
+    """Outline drift: queue references scene 99 but outline.json only has
+    scene 1. Executor must short-circuit with status="scene_missing",
+    publish scene_failed so the cockpit clears stale UI, and NOT call
+    _write_scene_chapter_stream() (no LLM call, no chunks persisted)."""
+    info = _setup(tmp_path, monkeypatch)
+    ex = _build(tmp_path, info["broadcaster"])
+
+    invoked = {"called": False}
+
+    async def must_not_run(*, project_id, chapter_number, scene_number, **kw):
+        invoked["called"] = True
+        yield {"event": "done", "draft_text": "", "status": "completed"}
+
+    monkeypatch.setattr(ex_mod, "_write_scene_chapter_stream", must_not_run)
+
+    item = QueueItem(id="w-1-99", kind="write_scene", chapter_number=1,
+                     scheduled_at=None, priority=20,
+                     payload={"scene_number": 99})  # outline only has scene 1
+
+    async def _run():
+        return await ex.execute_stream(item, info["project_id"])
+
+    result = asyncio.run(_run())
+    assert result["status"] == "scene_missing", result
+    assert "scene 99" in result["error"].lower() or "scene 99" in result["error"]
+    assert invoked["called"] is False, "_write_scene_chapter_stream must not be called"
+
+    history = [ev.event for ev in info["broadcaster"].history]
+    assert "scene_start" not in history, "scene_start must NOT fire for scene_missing"
+    assert "scene_failed" in history
+    failed = next(ev for ev in info["broadcaster"].history if ev.event == "scene_failed")
+    assert "大纲已被修改" in failed.data["error"]
+    # scene_number is preserved in the SSE payload so the cockpit can clear UI
+    assert failed.data["scene_number"] == 99
+
+
+def test_write_scene_stream_returns_scene_missing_when_chapter_missing(tmp_path, monkeypatch):
+    """Outline drift: queue references chapter 9 but outline.json has no
+    chapter 9 at all. Same short-circuit applies."""
+    info = _setup(tmp_path, monkeypatch)
+    ex = _build(tmp_path, info["broadcaster"])
+
+    invoked = {"called": False}
+
+    async def must_not_run(*, project_id, chapter_number, scene_number, **kw):
+        invoked["called"] = True
+        yield {"event": "done", "draft_text": "", "status": "completed"}
+
+    monkeypatch.setattr(ex_mod, "_write_scene_chapter_stream", must_not_run)
+
+    item = QueueItem(id="w-9-1", kind="write_scene", chapter_number=9,
+                     scheduled_at=None, priority=20,
+                     payload={"scene_number": 1})  # outline only has chapter 1
+
+    result = asyncio.run(ex.execute_stream(item, info["project_id"]))
+    assert result["status"] == "scene_missing", result
+    assert invoked["called"] is False
+
+
+def test_write_scene_non_stream_returns_scene_missing_without_invoking_writer(tmp_path, monkeypatch):
+    """Same precheck applies to the non-streaming _write_scene() path."""
+    info = _setup(tmp_path, monkeypatch)
+    ex = _build(tmp_path, info["broadcaster"])
+
+    invoked = {"called": False}
+
+    async def must_not_run(*, project_id, chapter_number, scene_number, **kw):
+        invoked["called"] = True
+        return {"detail": {"status": "completed"}}
+
+    monkeypatch.setattr(ex_mod, "_write_scene_chapter", must_not_run)
+
+    item = QueueItem(id="w-1-77", kind="write_scene", chapter_number=1,
+                     scheduled_at=None, priority=20,
+                     payload={"scene_number": 77})
+
+    result = asyncio.run(ex.execute(item, info["project_id"]))
+    assert result["status"] == "scene_missing", result
+    assert invoked["called"] is False
 
 
 # --- helpers ------------------------------------------------------------

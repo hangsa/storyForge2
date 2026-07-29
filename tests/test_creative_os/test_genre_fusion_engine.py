@@ -4,11 +4,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from backend.creative_os.genre_fusion_engine import GENRE_GRAPH, GenreFusionEngine
+from backend.creative_os.genre_fusion_engine import GenreFusionEngine
+from backend.genres.catalog import get_catalog
 from backend.models.creative_os import FusionAnalysis
 
 
-ALL_GENRES = sorted(GENRE_GRAPH.keys())
+ALL_GENRES = sorted(e["id"] for e in get_catalog().list())
 
 
 @pytest.fixture
@@ -24,14 +25,14 @@ def engine(mock_router):
 class TestCompatibilityMatrix:
 
     def test_same_genre_high_compatibility(self, engine):
-        assert engine.get_compatibility("修仙", "修仙") == "高"
+        assert engine.get_compatibility("xianxia", "xianxia") == "高"
 
     def test_different_genres(self, engine):
-        result = engine.get_compatibility("修仙", "科幻")
+        result = engine.get_compatibility("xianxia", "kehuan")
         assert result in {"高", "中", "低"}
 
     def test_unknown_genre_returns_low(self, engine):
-        result = engine.get_compatibility("不存在的类型", "修仙")
+        result = engine.get_compatibility("nonexistent_genre", "xianxia")
         assert result == "低"
 
     def test_get_compatibility_symmetric(self, engine):
@@ -46,14 +47,14 @@ class TestCompatibilityMatrix:
 class TestBFSDistance:
 
     def test_same_genre_distance_zero(self, engine):
-        assert engine.compute_distance("修仙", "修仙") == 0
+        assert engine.compute_distance("xianxia", "xianxia") == 0
 
     def test_adjacent_genres(self, engine):
-        dist = engine.compute_distance("修仙", "玄幻")
+        dist = engine.compute_distance("xianxia", "xuanhuan")
         assert dist >= 0
 
     def test_distant_genres(self, engine):
-        dist = engine.compute_distance("修仙", "科幻")
+        dist = engine.compute_distance("xianxia", "kehuan")
         assert dist >= 1
 
     def test_bfs_symmetric(self, engine):
@@ -66,21 +67,13 @@ class TestBFSDistance:
                 assert d1 == d2, f"BFS asymmetric: {a} ↔ {b} ({d1} vs {d2})"
 
 
-class TestDistanceBonus:
-
-    def test_distance_bonus_threshold(self, engine):
-        dist = engine.compute_distance("修仙", "科幻")
-        if dist >= 3:
-            bonus = 1.2
-            assert bonus > 1.0
-
-
 class TestEngineInit:
 
     def test_engine_initialization(self, mock_router):
         engine = GenreFusionEngine(model_router=mock_router)
         assert engine._router is mock_router
-        assert len(engine.COMPATIBILITY_MATRIX) > 0
+        assert len(engine._compatibility) > 0
+        assert len(engine._graph) > 0
 
 
 class TestGenreFusionEngineLLM:
@@ -101,10 +94,10 @@ class TestGenreFusionEngineLLM:
             "tier": "tier_1",
         })
         engine = GenreFusionEngine(model_router=router)
-        result = await engine.analyze_fusion("修仙", "科幻", "测试前提")
+        result = await engine.analyze_fusion("xianxia", "kehuan", "测试前提")
         assert isinstance(result, FusionAnalysis)
-        assert result.genre_a == "修仙"
-        assert result.genre_b == "科幻"
+        assert result.genre_a == "xianxia"
+        assert result.genre_b == "kehuan"
         assert len(result.fusion_points) == 5
         assert len(result.caution_areas) == 2
 
@@ -112,4 +105,4 @@ class TestGenreFusionEngineLLM:
     async def test_analyze_fusion_without_router_raises(self):
         engine = GenreFusionEngine(model_router=None)
         with pytest.raises(NotImplementedError):
-            await engine.analyze_fusion("修仙", "科幻")
+            await engine.analyze_fusion("xianxia", "kehuan")

@@ -1,0 +1,9 @@
+# Family-to-genres map. Used by Fusion Engine for BFS seeding.
+# Each genre id listed here MUST have a matching entry in index.yaml.
+families:
+  cultivation:    [xianxia, xuanhuan]
+  mystery:        [xuanyi]
+  sci_fi:         [kehuan]
+  contemporary:   [dushi]
+  power_fantasy:  [cool_novel]
+  romance:        [yanqing]

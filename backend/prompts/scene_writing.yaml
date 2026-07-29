@@ -56,6 +56,9 @@ user_prompt_template: |
   - 绝对上限：
   {ceilings}
 
+  【本章大纲】
+  {chapter_outline_context}
+
   {characters_context}
 
   【本场场景规划】

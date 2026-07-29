@@ -22,6 +22,15 @@ user_prompt_template: |
 
   目标类型：{genre}
 
+  【题材语气基线】
+  {genre_tone}
+
+  【题材风格规则】
+  {genre_style_rules}
+
+  【题材典型套路】
+  {genre_trope_patterns}
+
   请生成：
   1. 故事概念（title, genre, premise, tone, theme, target_audience）
   2. Story DNA（core_contradiction + value_stack）

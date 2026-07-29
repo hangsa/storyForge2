@@ -5,6 +5,10 @@
 :root {
   /* Canvas & Background */
   --color-canvas-bg: #020617;
+  --color-canvas-surface: #0b1326;
+  --color-canvas-text-muted: #64748b;
+  --color-canvas-text-secondary: #b9cacb;
+  --color-canvas-accent: #00dbe9;
   --color-background: #0b1326;
   --color-on-background: #dae2fd;
 

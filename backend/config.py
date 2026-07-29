@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -17,10 +17,17 @@ class Settings(BaseSettings):
 
     projects_dir: Path = Path("projects")
     prompts_dir: Path = Path("backend/prompts")
-    style_dir: Path = Path("data/style")
+    genres_dir: Path = Path(__file__).parent.parent / "config" / "genres"
     global_prompt_overrides_path: Path = Path("config/global_prompt_overrides.json")
 
-    model_config = {"env_file": "backend/.env", "env_file_encoding": "utf-8"}
+    # Allow unknown env vars so the migration can write new prefixed keys
+    # (e.g. STORYFORGE_PROVIDER_API_KEY_DEEPSEEK) without Settings rejecting
+    # the loaded file.
+    model_config = SettingsConfigDict(
+        env_file="backend/.env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

@@ -1,0 +1,153 @@
+id: dushi
+label_zh: 都市
+label_en: Contemporary
+family: contemporary
+pacing:
+  min_beats_per_1k: 1.0
+  escalation_interval: 5
+  action_ratio: 0.2
+  max_consecutive_non_action: 5
+  chapter_words:
+    min: 2500
+    max: 5000
+  scene_words:
+    min: 400
+    max: 1800
+tone: |
+  真实亲切，贴近生活。时代感强，能反映当下社会的热点和痛点。
+  角色要真实立体，动机要能引发共鸣。幽默和温情作为调节剂，
+  避免过度说教和理想化。
+style_rules:
+- 时代背景要有真实细节（手机/APP/热搜/社交方式）
+- 职场/商战描写要有行业真实感，不能过于儿戏
+- 角色关系要有现实的复杂性（利益/人情/道德）
+- 冲突要源于现实矛盾（阶级/价值观/信息差）
+- 爽点要建立在聪明和努力之上，不能全靠运气
+- 对话要有生活气息，符合角色的年龄和身份
+- 避免过度使用网络流行语导致快速过时
+writing_formula:
+  sentence:
+    avg_length_max: 30
+    short_pct_min: 28
+    long_pct_max: 18
+  dialogue:
+    ratio_min: 0.22
+    max_consecutive_lines: 10
+  paragraph:
+    max_sentences: 5
+    max_words: 280
+  emotional_beat_density_min: 0.8
+  satisfaction_beat_min: 2
+  suspense_hook_required: true
+taboo_words:
+- 无聊的生活
+- 平凡就好
+- 算了不争了
+- 给力
+- 神马都是浮云
+- 蓝瘦香菇
+- 穷人活该
+- 有钱就是大爷
+taboos:
+- name: 不劳而获
+  type: sliding_window
+  keywords:
+  - 天降横财
+  - 彩票中奖
+  - 意外继承
+  - 不劳而获
+  - 运气爆棚
+  - 躺赢
+  max_chars: 250
+  severity: warning
+- name: 社会达尔文
+  type: sliding_window
+  keywords:
+  - 弱肉强食
+  - 丛林法则
+  - 优胜劣汰
+  - 适者生存
+  - 强者通吃
+  max_chars: 200
+  severity: warning
+- name: 无脑打脸
+  type: consecutive_match
+  failure_keywords:
+  - 当众打脸
+  - 啪啪打脸
+  - 脸都肿了
+  - 脸被打肿
+  - 所有人都惊呆了
+  max_consecutive: 2
+  severity: error
+trope_patterns:
+- name: 商业博弈
+  description: 商场上的计谋对抗和利益争夺
+  min_interval: 3
+- name: 身份反转
+  description: 角色真实身份或实力被揭示
+  min_interval: 5
+- name: 人际危机
+  description: 朋友/恋人/亲人关系出现重大危机
+  min_interval: 6
+- name: 社会事件
+  description: 与当下社会热点相关的事件
+  max_per_volume: 2
+beat_patterns:
+  - keywords: [商业, 博弈, 商战, 谈判, 收购]
+    priority: 85
+    beats:
+      - { description: "利益格局：各方势力、行业背景",                    words: 500, focus: "dialogue" }
+      - { description: "策略布局：信息战、资源整合",                      words: 900, focus: "action" }
+      - { description: "关键对决：商业谈判/法庭/发布会",                  words: 1000, focus: "action" }
+      - { description: "胜负揭晓：对手溃败/反转、格局重塑",               words: 600, focus: "reveal" }
+  - keywords: [身份反转, 真实身份, 身份暴露, 隐藏身份]
+    priority: 80
+    beats:
+      - { description: "伏笔铺垫：身份线索散落前文",                       words: 500, focus: "suspense" }
+      - { description: "揭露瞬间：所有人反应、关系重构",                  words: 800, focus: "reveal" }
+      - { description: "新格局展开：资源/盟友/敌人重新分配",              words: 600, focus: "emotion" }
+  - keywords: [职场, 升职, 跳槽, 同事, 老板]
+    priority: 70
+    beats:
+      - { description: "职场困境：被排挤/背锅/边缘化",                    words: 500, focus: "sensory" }
+      - { description: "破局行动：主动出击/借力/反制",                    words: 800, focus: "action" }
+      - { description: "结果兑现：晋升/跳槽/逆袭",                        words: 600, focus: "emotion" }
+  - keywords: [现实, 社会事件, 热点, 突发事件]
+    priority: 60
+    beats:
+      - { description: "事件背景：社会环境、人物关系",                    words: 500, focus: "dialogue" }
+      - { description: "事件发展：人物卷入、利益权衡",                    words: 800, focus: "action" }
+      - { description: "事件影响：人物成长、关系变化",                    words: 600, focus: "emotion" }
+thresholds:
+  addiction_critical: 30
+  addiction_moderate: 20
+  frustration_high: 80
+  frustration_moderate: 65
+  fatigue_moderate: 40
+  fatigue_low: 30
+  fatigue_formula:
+    threshold: 50
+    decay: 1.5
+  curiosity_moderate: 20
+  curiosity_low: 10
+  tension_moderate: 70
+  tension_low: 55
+  satisfaction_moderate: 40
+  satisfaction_low: 25
+  discussion_high: 70
+  discussion_moderate: 55
+model_preferences:
+  creative_core: deepseek-chat
+  temperature: 0.85
+fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[dushi][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
+  distances:
+    cool_novel: 0.5
+    xianxia: 0.8
+    xuanhuan: 0.8
+    kehuan: 0.5
+    xuanyi: 0.5
+    yanqing: 0.25

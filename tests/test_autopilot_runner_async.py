@@ -1431,3 +1431,152 @@ class TestRetryThenPause:
         # loop's abort path doesn't call pause; user's pause() does). So
         # pause_reason is the user's.
         assert mgr.load().pause_reason == "user_intervention"
+
+
+class TestSceneMissingShortCircuit:
+    """Bug 2026-07-27 proj_bb0375eb: outline.json was overwritten by the
+    /api/stage3/generate endpoint after the autopilot session was already
+    seeded, stranding write-10-4 in the queue. The runner retried 3x then
+    paused the whole session. Fix: executor returns {"status":"scene_missing"}
+    when outline doesn't contain the scene; runner drops + fails task
+    without retrying or pausing.
+
+    These tests pin down that short-circuit at the runner boundary."""
+
+    @pytest.mark.asyncio
+    async def test_scene_missing_drops_without_retry_or_pause(
+        self, mgr, projects_dir, fake_project
+    ):
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        mgr.start(ManagedStartConfig())
+        # Row-major priority: chapter * 1000 + scene. Lower = picked first.
+        # Pick order: w-1-1 (1001, valid) → w-1-9 (1009, scene_missing).
+        # Outline's chapter 1 only has scenes 1, 2 — scene 9 was removed.
+        mgr.add_queue(QueueItem(id="w-1-1", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=1001,
+                                payload={"scene_number": 1}))
+        mgr.add_queue(QueueItem(id="w-1-9", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=1009,
+                                payload={"scene_number": 9}))
+
+        attempts = {"n": 0}
+
+        class CountAttempts:
+            async def execute(self, item, project_id):
+                attempts["n"] += 1
+                if item.id == "w-1-9":
+                    # Pretend the executor returned scene_missing (what the real
+                    # AsyncStage4Executor does after the precheck).
+                    return {"status": "scene_missing",
+                            "error": "Scene 9 不存在（大纲已被修改）"}
+                return {"status": "ok", "scene_status": "completed"}
+            @property
+            def _calls(self): return []
+
+        runner = AsyncAutopilotRunner(mgr, CountAttempts(), cadence="fast")
+
+        # Step 1: valid scene 1 succeeds normally
+        s = mgr.load()
+        item1 = runner._pick_next(s.queue)
+        result1 = await runner._step_one(item1, "p1")
+        assert result1["completed"] is True
+        assert result1["picked"] == "w-1-1"
+        assert attempts["n"] == 1
+
+        # Step 2: scene_missing item short-circuits — no retry, no pause
+        s = mgr.load()
+        item2 = runner._pick_next(s.queue)
+        result2 = await runner._step_one(item2, "p1")
+        assert result2["completed"] is False
+        assert result2["skipped"] == "scene_missing"
+        assert result2["picked"] == "w-1-9"
+        assert attempts["n"] == 2, "scene_missing must NOT be retried"
+
+        s = mgr.load()
+        # Session still running (not paused)
+        assert s.state.value == "running"
+        assert s.pause_reason is None
+        # Both items dropped
+        assert all(q.id not in ("w-1-1", "w-1-9") for q in s.queue)
+        # task_fail event recorded for chapter 1 with the outline-drift reason.
+        # Note: CurrentTask.scene_id is always None for write_scene in the
+        # runner (the queue item id lives in queue events only), so we filter
+        # by chapter_number instead of task_id.
+        fail_events = [e for e in s.history if e.type == "task_fail" and e.chapter_number == 1]
+        assert len(fail_events) == 1, [e for e in s.history if e.type == "task_fail"]
+        assert "大纲已被修改" in fail_events[0].payload.get("error", "")
+        # queue_drop event recorded for w-1-9 (carries the queue item id)
+        drop_events = [e for e in s.history if e.type == "queue_drop" and e.task_id == "w-1-9"]
+        assert len(drop_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_scene_missing_emits_task_fail_and_queue_drop(
+        self, mgr, projects_dir, fake_project
+    ):
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-2-7", kind="write_scene", chapter_number=2,
+                                scheduled_at=None, priority=27,
+                                payload={"scene_number": 7}))  # ch2 only has scene 1
+
+        class AlwaysSceneMissing:
+            async def execute(self, item, project_id):
+                return {"status": "scene_missing",
+                        "error": "Scene 7 不存在（大纲已被修改）"}
+            @property
+            def _calls(self): return []
+
+        runner = AsyncAutopilotRunner(mgr, AlwaysSceneMissing(), cadence="fast")
+        s = mgr.load()
+        item = runner._pick_next(s.queue)
+        await runner._step_one(item, "p1")
+
+        s = mgr.load()
+        # queue_drop event recorded (carries the queue item id)
+        drop_events = [e for e in s.history if e.type == "queue_drop" and e.task_id == "w-2-7"]
+        assert len(drop_events) == 1
+        # task_fail event recorded. The runner's CurrentTask.scene_id is
+        # always None for write_scene items (the queue item id lives in
+        # queue events only), so we filter by chapter_number instead of
+        # task_id — that's enough to disambiguate from a prior chapter's
+        # failures in the same session.
+        fail_events = [e for e in s.history if e.type == "task_fail" and e.chapter_number == 2]
+        assert len(fail_events) == 1, [e for e in s.history if e.type == "task_fail"]
+        assert "大纲已被修改" in fail_events[0].payload.get("error", "")
+        assert s.state.value == "running"
+        assert s.pause_reason is None
+
+    @pytest.mark.asyncio
+    async def test_async_stage4_executor_precheck_integration(
+        self, mgr, projects_dir, fake_project
+    ):
+        """End-to-end: real AsyncStage4Executor returns scene_missing BEFORE
+        calling _write_scene_chapter when the outline lacks the scene. Runner
+        picks up the scene_missing status and short-circuits."""
+        from backend.conductor.autopilot_runner_async import AsyncAutopilotRunner
+        from backend.conductor.stage4_async_executor import AsyncStage4Executor
+
+        mgr.start(ManagedStartConfig())
+        mgr.add_queue(QueueItem(id="w-1-9", kind="write_scene", chapter_number=1,
+                                scheduled_at=None, priority=29,
+                                payload={"scene_number": 9}))
+
+        # Stub _write_scene_chapter to fail the test if the precheck didn't fire.
+        def must_not_run(*args, **kwargs):
+            raise AssertionError(
+                "AsyncStage4Executor precheck failed — _write_scene_chapter "
+                "was called for scene 9 even though outline.json has no scene 9"
+            )
+        from backend.conductor import stage4_async_executor as ex_mod
+        ex_mod._write_scene_chapter = must_not_run
+
+        executor = AsyncStage4Executor(projects_dir)
+        runner = AsyncAutopilotRunner(mgr, executor, cadence="fast")
+
+        s = mgr.load()
+        item = runner._pick_next(s.queue)
+        result = await runner._step_one(item, "p1")
+        assert result["skipped"] == "scene_missing"
+        s = mgr.load()
+        assert s.state.value == "running"  # not paused
+        assert all(q.id != "w-1-9" for q in s.queue)

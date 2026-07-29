@@ -1,12 +1,5 @@
 import { useState } from "react";
-
-const GENRES: Array<{ value: string; label: string }> = [
-  { value: "cool_novel", label: "爽文" },
-  { value: "xianxia", label: "仙侠" },
-  { value: "xuanhuan", label: "玄幻" },
-  { value: "dushi", label: "都市" },
-  { value: "kehuan", label: "科幻" },
-];
+import { useGenres } from "../../hooks/useGenres";
 
 // Per-chapter target is uniform across all length options — see CLAUDE.md
 // for context. Total word count is what differentiates the three categories.
@@ -32,6 +25,7 @@ interface CreateProjectCardProps {
 }
 
 export default function CreateProjectCard({ onSubmit, submitting, error }: CreateProjectCardProps) {
+  const genres = useGenres(true);
   const [intent, setIntent] = useState("");
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("cool_novel");
@@ -105,8 +99,8 @@ export default function CreateProjectCard({ onSubmit, submitting, error }: Creat
               className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2
                          text-sm text-primary focus:outline-none focus:border-primary-container"
             >
-              {GENRES.map((g) => (
-                <option key={g.value} value={g.value}>{g.label}</option>
+              {genres.map((g) => (
+                <option key={g.id} value={g.id}>{g.label_zh}</option>
               ))}
             </select>
           </div>

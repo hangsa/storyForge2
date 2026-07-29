@@ -16,6 +16,98 @@ from backend.llm.model_router import (
 )
 
 
+# ── Providers catalog tests (Task 10) ─────────────────────────────────
+
+@pytest.fixture
+def cfg_path(tmp_path):
+    data = {
+        "providers": {
+            "anthropic": {
+                "type": "anthropic",
+                "display_name": "Anthropic",
+                "base_url": "https://api.anthropic.com",
+                "api_key_env": "ANTHROPIC_API_KEY",
+                "enabled": True,
+                "models": {
+                    "claude-opus-4": {
+                        "display_name": "Claude Opus 4",
+                        "cost_per_1k_input": 0.015,
+                        "cost_per_1k_output": 0.075,
+                        "max_tokens": 200000,
+                        "temperature": 0.7,
+                        "json_mode": False,
+                        "stream": True,
+                    }
+                },
+            },
+            "mockprov": {
+                "type": "mock",
+                "display_name": "Mock",
+                "base_url": "",
+                "api_key_env": "",
+                "enabled": True,
+                "models": {
+                    "mock-m": {
+                        "display_name": "Mock M",
+                        "cost_per_1k_input": 0,
+                        "cost_per_1k_output": 0,
+                        "max_tokens": 8,
+                        "temperature": 0,
+                        "json_mode": False,
+                        "stream": True,
+                    }
+                },
+            },
+        },
+        "tiers": {
+            "tier_1": {
+                "description": "",
+                "default": "claude-opus-4",
+                "fallback": None,
+                "retry_on_failure": True,
+                "max_retries": 0,
+            },
+            "tier_0": {"description": "", "default": "none", "fallback": None},
+        },
+        "agent_mapping": {
+            "writer": {"scene_writing": {"tier": "tier_1", "model": "claude-opus-4"}}
+        },
+    }
+    p = tmp_path / "model_tiers.yaml"
+    p.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    reset_model_router()
+    return p
+
+
+def test_router_loads_providers_block(cfg_path):
+    router = ModelRouter(cfg_path)
+    assert "anthropic" in router._providers
+    assert "mockprov" in router._providers
+    assert "claude-opus-4" in router._providers["anthropic"].models
+
+
+def test_router_resolves_anthropic_provider(cfg_path, monkeypatch):
+    router = ModelRouter(cfg_path)
+    info = router._find_model_info("claude-opus-4")
+    assert info["provider"] == "anthropic"
+    assert info["max_tokens"] == 200000
+
+
+def test_router_dispatches_to_mock_provider(cfg_path):
+    from backend.llm.mock_provider import MockProvider
+    router = ModelRouter(cfg_path)
+    info = router._find_model_info("mock-m")
+    provider = router._create_provider_for_model(info)
+    assert isinstance(provider, MockProvider)
+
+
+def test_router_resolve_unknown_model_raises(cfg_path):
+    from backend.llm.errors import ModelNotFoundError
+    router = ModelRouter(cfg_path)
+    with pytest.raises(ModelNotFoundError):
+        router._find_model_info_or_raise("does-not-exist")
+
+
 @pytest.fixture(autouse=True)
 def _reset_singleton():
     reset_model_router()
@@ -29,6 +121,29 @@ def temp_config():
     with tempfile.TemporaryDirectory() as tmp:
         config_path = Path(tmp) / "model_tiers.yaml"
         config_data = {
+            "providers": {
+                "anthropic": {
+                    "type": "anthropic",
+                    "display_name": "Anthropic",
+                    "base_url": "https://api.anthropic.com",
+                    "api_key_env": "ANTHROPIC_API_KEY",
+                    "enabled": True,
+                    "models": {
+                        "claude-haiku": {"display_name": "Claude Haiku", "cost_per_1k_input": 0.001, "cost_per_1k_output": 0.005, "max_tokens": 4096},
+                        "claude-sonnet": {"display_name": "Claude Sonnet", "cost_per_1k_input": 0.003, "cost_per_1k_output": 0.015, "max_tokens": 4096},
+                    },
+                },
+                "deepseek": {
+                    "type": "openai_compatible",
+                    "display_name": "DeepSeek",
+                    "base_url": "https://api.deepseek.com/v1",
+                    "api_key_env": "DEEPSEEK_API_KEY",
+                    "enabled": True,
+                    "models": {
+                        "deepseek-chat": {"display_name": "DeepSeek Chat", "cost_per_1k_input": 0.001, "cost_per_1k_output": 0.002, "max_tokens": 8192},
+                    },
+                },
+            },
             "tiers": {
                 "tier_1": {
                     "default": "deepseek-chat",
@@ -120,6 +235,33 @@ class TestConfigLoading:
             assert len(router._tiers) == 4
 
 
+def test_router_load_triggers_legacy_migrate(tmp_path, monkeypatch):
+    legacy_data = {
+        "tiers": {
+            "tier_1": {
+                "description": "",
+                "models": [
+                    {"id": "claude-opus-4", "provider": "anthropic", "cost_per_1k_input": 0.015, "cost_per_1k_output": 0.075, "max_tokens": 8192}
+                ],
+                "default": "claude-opus-4",
+                "fallback": None,
+                "retry_on_failure": True,
+                "max_retries": 1,
+            },
+            "tier_0": {"description": "", "models": [], "default": "none"},
+        },
+        "agent_mapping": {},
+    }
+    p = tmp_path / "model_tiers.yaml"
+    p.write_text(yaml.safe_dump(legacy_data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    reset_model_router()
+    router = ModelRouter(p)
+    # After migration, providers block should exist on disk
+    reloaded = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert "providers" in reloaded
+    assert "anthropic" in reloaded["providers"]
+
+
 class TestResolve:
     def test_resolves_tier_1_model(self, temp_config):
         router = ModelRouter(temp_config)
@@ -130,7 +272,7 @@ class TestResolve:
 
     def test_respects_force_model(self, temp_config):
         router = ModelRouter(temp_config)
-        # Force model must exist in the tier's models
+        # Force model is looked up in the providers catalog
         decision = router.resolve("planner", "chapter_outline", force_model="claude-haiku")
         assert decision.model_id == "claude-haiku"
         assert decision.provider_name == "anthropic"
@@ -229,3 +371,58 @@ class TestReloadConfig:
         router.reload_config()
         assert len(router._tiers) > 0
         assert len(router._mappings) > 0
+
+
+def test_router_picks_up_custom_provider_key_via_prefix(monkeypatch, tmp_path):
+    """Custom (non-builtin) provider whose API key is set ONLY via the new
+    `STORYFORGE_PROVIDER_API_KEY_<ID>` prefix. The router must read it from
+    os.environ — neither the builtin settings attr lookup nor the provider's
+    declared `api_key_env` would otherwise see it.
+    """
+    monkeypatch.setenv("STORYFORGE_PROVIDER_API_KEY_TESTOPENAI", "sk-prefix-key")
+    # Make sure the legacy alias env var is empty so we know the prefix is
+    # what actually resolves the key.
+    monkeypatch.delenv("TESTOPENAI_API_KEY", raising=False)
+
+    data = {
+        "providers": {
+            "testopenai": {
+                "type": "openai_compatible",
+                "display_name": "TestOpenAI",
+                "base_url": "https://api.testopenai.com/v1",
+                "api_key_env": "TESTOPENAI_API_KEY",
+                "enabled": True,
+                "models": {
+                    "test-m": {
+                        "display_name": "Test M",
+                        "cost_per_1k_input": 0,
+                        "cost_per_1k_output": 0,
+                        "max_tokens": 1024,
+                        "temperature": 0.7,
+                        "json_mode": False,
+                        "stream": True,
+                    }
+                },
+            }
+        },
+        "tiers": {
+            "tier_1": {
+                "description": "",
+                "default": "test-m",
+                "fallback": None,
+                "retry_on_failure": True,
+                "max_retries": 0,
+            },
+            "tier_0": {"description": "", "default": "none", "fallback": None},
+        },
+        "agent_mapping": {},
+    }
+    p = tmp_path / "model_tiers.yaml"
+    p.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    reset_model_router()
+    router = ModelRouter(p)
+    info = router._find_model_info_or_raise("test-m")
+    from backend.llm.openai_compatible_provider import OpenAICompatibleProvider
+    provider = router._create_provider_for_model(info)
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert provider.config.api_key == "sk-prefix-key"

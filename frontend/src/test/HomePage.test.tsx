@@ -13,6 +13,7 @@ const { mockApi } = vi.hoisted(() => ({
     getCharacter: vi.fn(),
     getNovelOutline: vi.fn(),
     getOutline: vi.fn(),
+    listGenres: vi.fn(),
   },
 }));
 
@@ -55,6 +56,8 @@ beforeEach(() => {
   mockApi.getCharacter.mockResolvedValue(null);
   mockApi.getNovelOutline.mockResolvedValue(null);
   mockApi.getOutline.mockResolvedValue(null);
+  mockApi.listGenres.mockReset();
+  mockApi.listGenres.mockResolvedValue([]);
 });
 
 function renderPage() {

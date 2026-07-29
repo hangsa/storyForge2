@@ -24,6 +24,15 @@ user_prompt_template: |
   - 核心矛盾：{core_contradiction}
   - 类型：{genre}
 
+  【题材语气基线】
+  {genre_tone}
+
+  【题材风格规则】
+  {genre_style_rules}
+
+  【题材典型套路】
+  {genre_trope_patterns}
+
   请生成世界观设定，包含：
   1. 时代背景与地理环境
   2. 当下社会的结构与历史文化

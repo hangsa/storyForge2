@@ -8,7 +8,24 @@ vi.mock("../api/client", () => ({
   default: {
     listProjects: vi.fn(),
     bulkDeleteProjects: vi.fn(),
+    // v1.9 genre-catalog unification: CreateProjectCard now calls useGenres()
+    // → api.listGenres(). Stub it so HomePage integration tests don't crash.
+    listGenres: vi.fn().mockResolvedValue([
+      { id: "cool_novel", label_zh: "爽文", label_en: "Power Fantasy", family: "power_fantasy", ui_visible: true },
+      { id: "xuanyi", label_zh: "悬疑", label_en: "Mystery", family: "mystery", ui_visible: true },
+    ]),
   },
+}));
+
+// v1.9 genre-catalog unification: BookShelf now calls useGenres() (instead of
+// importing the static GENRE_LABELS map). Stub the hook so we don't need a
+// real API call in unit tests.
+vi.mock("../hooks/useGenres", () => ({
+  useGenres: () => [
+    { id: "cool_novel", label_zh: "爽文", label_en: "Power Fantasy", family: "power_fantasy", ui_visible: true },
+    { id: "xianxia", label_zh: "仙侠", label_en: "Xianxia", family: "cultivation", ui_visible: true },
+    { id: "xuanyi", label_zh: "悬疑", label_en: "Mystery", family: "mystery", ui_visible: true },
+  ],
 }));
 
 import api from "../api/client";

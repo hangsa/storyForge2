@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import api, { Character, CharacterSet } from "../../api/client";
+import api, { BehaviorExample, Character, CharacterSet } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
 import CharacterRelationsEditor from "./CharacterRelationsEditor";
+import BehaviorExamplesSection from "./BehaviorExamplesSection";
 
 interface CharacterStepProps {
   projectId: string;
@@ -55,6 +56,9 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   charactersRef.current = characters;
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
+  // Per-card pending flag for the BehaviorExamplesSection AI regenerate button.
+  // Tracked as a Set so multiple cards can be independently loading.
+  const [regeneratingExamplesIds, setRegeneratingExamplesIds] = useState<Set<string>>(() => new Set());
 
   const handleBatchStart = async () => {
     wizard.startStep(3);
@@ -182,6 +186,43 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       [key]: value,
     };
     updateCharacterAt(id, { voice_signature: nextVoice });
+  };
+
+  const updateVoiceBehaviorExamples = (id: string, next: BehaviorExample[]) => {
+    const c = characters?.characters.find((x) => x.id === id);
+    if (!c) return;
+    const nextVoice = {
+      ...(c.voice_signature ?? { speech_style: "", thought_patterns: "", taboos: [] }),
+      behavior_examples: next,
+    };
+    updateCharacterAt(id, { voice_signature: nextVoice });
+  };
+
+  const handleRegenerateExamples = async (characterId: string) => {
+    setRegeneratingExamplesIds((prev) => {
+      const next = new Set(prev);
+      next.add(characterId);
+      return next;
+    });
+    try {
+      const updated = await api.regenerateCharacterExamples(projectId, characterId, false);
+      setCharacters((prev) => {
+        const list = (prev?.characters ?? []).map((c) =>
+          c.id === characterId ? { ...c, ...updated } : c,
+        );
+        return { characters: list, current: prev?.current ?? list[0] };
+      });
+    } catch (e) {
+      // Follow the existing pattern: route through wizard.setStatus so the
+      // error banner above the cards displays the message. No new toast UI.
+      wizard.setStatus("error", e instanceof Error ? e.message : "行为示例重新生成失败");
+    } finally {
+      setRegeneratingExamplesIds((prev) => {
+        const next = new Set(prev);
+        next.delete(characterId);
+        return next;
+      });
+    }
   };
 
   const updateCurrentState = (
@@ -417,6 +458,14 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                         items={voice.taboos ?? []}
                         onItemsChange={(next) => updateVoiceField(c.id, "taboos", next)}
                         saving={busy}
+                      />
+                    </div>
+                    <div className="border-t border-outline-variant pt-3">
+                      <BehaviorExamplesSection
+                        examples={voice.behavior_examples ?? []}
+                        onChange={(next) => updateVoiceBehaviorExamples(c.id, next)}
+                        onRegenerate={() => handleRegenerateExamples(c.id)}
+                        regenerating={regeneratingExamplesIds.has(c.id)}
                       />
                     </div>
                   </div>

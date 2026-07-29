@@ -16,6 +16,9 @@ interface StatsSidebarProps {
   onOpenPlaza?: () => void;
   plazaDisabled?: boolean;
   plazaTooltip?: string;
+  onOpenConsole?: () => void;
+  consoleDisabled?: boolean;
+  consoleTooltip?: string;
 }
 
 export default function StatsSidebar({
@@ -26,6 +29,9 @@ export default function StatsSidebar({
   onOpenPlaza,
   plazaDisabled,
   plazaTooltip,
+  onOpenConsole,
+  consoleDisabled,
+  consoleTooltip,
 }: StatsSidebarProps) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
@@ -102,6 +108,9 @@ export default function StatsSidebar({
               onOpenPlaza={onOpenPlaza}
               plazaDisabled={plazaDisabled}
               plazaTooltip={plazaTooltip}
+              onOpenConsole={onOpenConsole}
+              consoleDisabled={consoleDisabled}
+              consoleTooltip={consoleTooltip}
             />
             {statsLoading && (
               <div className="mt-3 text-[10px] font-label-mono text-system-log/60">
@@ -124,6 +133,9 @@ export default function StatsSidebar({
               onOpenPlaza={onOpenPlaza}
               plazaDisabled={plazaDisabled}
               plazaTooltip={plazaTooltip}
+              onOpenConsole={onOpenConsole}
+              consoleDisabled={consoleDisabled}
+              consoleTooltip={consoleTooltip}
             />
           </div>
         </div>

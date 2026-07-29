@@ -36,6 +36,10 @@ user_prompt_template: |
   目标章节：第 {chapter_number} 章
   最低字数：{min_words} 字
 
+  {genre_beat_patterns}
+
+  {genre_focus_vocabulary}
+
   请生成该章节的场景规划大纲。
 
   输出JSON格式：

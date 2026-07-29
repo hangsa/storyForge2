@@ -1,3 +1,7 @@
+import type { Genre } from "../hooks/useGenres";
+
+export type { Genre };
+
 const API_BASE = "/api";
 const TIMEOUT_MS = 600_000;
 
@@ -68,9 +72,16 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   // also undefined, so we fall through to the return below.
   const detailObj = (json?.detail as Record<string, unknown> | undefined) ?? undefined;
   const topError = json?.error;
-  const nestedError = detailObj && typeof detailObj === "object" ? detailObj.error : undefined;
+  // Only treat nested detail as an error envelope when `error === true` and
+  // a `code` string is present — otherwise payloads like the probe result
+  // (`detail: {success, error: "<message>", error_code: "..."}`) would be
+  // mis-parsed as error responses because `error` is a string there.
+  const nestedError =
+    detailObj && typeof detailObj === "object" && detailObj.error === true && typeof detailObj.code === "string"
+      ? detailObj
+      : undefined;
   if (topError || nestedError) {
-    const payload = (nestedError ? detailObj : json) as Record<string, unknown>;
+    const payload = (nestedError ? nestedError : json) as Record<string, unknown>;
     throw new ApiError(
       (payload.code as string) || "UNKNOWN",
       (payload.message as string) || "未知错误",
@@ -231,6 +242,12 @@ export interface WorkshopDiscussResponse {
   skipped_reason?: string;
 }
 
+export interface BehaviorExample {
+  situation: string;
+  action: string;
+  speech_sample: string;
+}
+
 export interface Character {
   id: string;
   name: string;
@@ -253,6 +270,7 @@ export interface Character {
     speech_style: string;
     thought_patterns: string;
     taboos: string[];
+    behavior_examples?: BehaviorExample[];
   };
   unknown_to_character: string[];
   relations: Record<string, RelationStatus>;
@@ -424,7 +442,6 @@ export interface GenreThresholds {
 
 export interface ModelTierConfig {
   description: string;
-  models: Array<{ id: string; provider: string; cost_per_1k_input: number; cost_per_1k_output: number; max_tokens: number }>;
   default: string | null;
   retry_on_failure: boolean;
   max_retries: number;
@@ -720,6 +737,11 @@ export const api = {
   listProjects: () =>
     request<ProjectSummary[]>("GET", "/project/list"),
 
+  listGenres: (uiVisibleOnly = true): Promise<Genre[]> => {
+    const qs = uiVisibleOnly ? "?ui_visible_only=true" : "";
+    return request<Genre[]>("GET", `/v1/genres${qs}`);
+  },
+
   deleteProject: (projectId: string) =>
     request<{ project_id: string }>("DELETE", `/project/${encodeURIComponent(projectId)}`),
 
@@ -796,6 +818,17 @@ export const api = {
     request<{ deleted_id: string; cascaded_relation_removals: number }>(
       "DELETE",
       `/stage2/character/${encodeURIComponent(characterId)}?project_id=${encodeURIComponent(projectId)}`,
+    ),
+
+  regenerateCharacterExamples: (
+    projectId: string,
+    characterId: string,
+    keepExisting: boolean = false,
+  ): Promise<Character> =>
+    request<Character>(
+      "POST",
+      `/stage2/character/${encodeURIComponent(characterId)}/regenerate-examples?project_id=${encodeURIComponent(projectId)}`,
+      { keep_existing: keepExisting },
     ),
 
   growthWorkshopCheck: (projectId: string, characterId: string) =>
@@ -1108,7 +1141,141 @@ export const api = {
       "GET",
       `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`
     ),
+
+  getLLMConfig: () =>
+    request<ModelTiersConfig>("GET", "/settings/llm-config"),
+
+  putLLMConfig: (cfg: ModelTiersConfig) =>
+    request<LLMRouterSummary>("PUT", "/settings/llm-config", cfg),
+
+  reloadLLMConfig: () =>
+    request<LLMRouterSummary>("POST", "/settings/llm-config/reload"),
+
+  getProviders: () =>
+    request<ProviderStatus[]>("GET", "/settings/llm-providers"),
+
+  upsertProvider: (id: string, provider: ProviderEntry) =>
+    request<LLMRouterSummary>("POST", "/settings/llm-config/providers", { id, provider }),
+  deleteProvider: (id: string) =>
+    request<LLMRouterSummary>("DELETE", `/settings/llm-config/providers/${id}`),
+  upsertModel: (providerId: string, modelId: string, model: ModelEntry) =>
+    request<LLMRouterSummary>(
+      "POST",
+      `/settings/llm-config/providers/${providerId}/models`,
+      { id: modelId, model },
+    ),
+  deleteModel: (providerId: string, modelId: string) =>
+    request<LLMRouterSummary>(
+      "DELETE",
+      `/settings/llm-config/providers/${providerId}/models/${modelId}`,
+    ),
+  setProviderApiKey: (providerId: string, value: string) =>
+    request<LLMRouterSummary>(
+      "PUT",
+      `/settings/llm-config/providers/${providerId}/api-key`,
+      { value },
+    ),
+  probeProvider: (providerId: string) =>
+    request<ProbeResult>(
+      "POST",
+      `/settings/llm-config/providers/${providerId}/probe`,
+    ),
+  migrateConfig: () =>
+    request<{ backup_path?: string | null; added?: string[]; summary: object }>(
+      "POST",
+      "/settings/llm-config/migrate",
+    ),
+
+  getLLMUsage: (limit: number = 100) =>
+    request<LLMUsageEntry[]>("GET", `/settings/llm-usage?limit=${limit}`),
 };
+
+export interface LLMUsageEntry {
+  timestamp: string;
+  agent: string;
+  task: string;
+  tier: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost: number;
+}
+
+export interface ModelEntry {
+  id: string;
+  display_name?: string;
+  provider: string;
+  cost_per_1k_input: number;
+  cost_per_1k_output: number;
+  max_tokens: number;
+  temperature?: number;
+  json_mode?: boolean;
+  stream?: boolean;
+}
+
+export interface TierConfig {
+  description: string;
+  default: string;
+  retry_on_failure?: boolean;
+  max_retries?: number;
+  fallback?: string | null;
+}
+
+export interface AgentTaskMapping {
+  tier: string;
+  model?: string;
+  fallback?: string | null;
+}
+
+export interface ProvidersConfig {
+  [providerId: string]: ProviderEntry;
+}
+
+export interface ProviderEntry {
+  type: "anthropic" | "openai_compatible" | "mock";
+  display_name: string;
+  base_url: string;
+  api_key_env: string;
+  enabled: boolean;
+  models: Record<string, ModelEntry>;
+}
+
+export interface ModelTiersConfig {
+  providers?: ProvidersConfig;
+  tiers: Record<string, TierConfig>;
+  agent_mapping: Record<string, Record<string, AgentTaskMapping>>;
+}
+
+export interface LLMRouterSummary {
+  tiers: number;
+  agents: number;
+}
+
+export interface ProviderStatus {
+  provider: string;
+  type: ProviderEntry["type"];
+  display_name: string;
+  base_url: string;
+  api_key_env: string;
+  api_key_configured: boolean;
+  enabled: boolean;
+  models: ModelEntry[];
+}
+
+export type ProbeErrorCode = "auth_error" | "unreachable" | "provider_error";
+
+export interface ProbeModel {
+  id: string;
+  display_name: string;
+}
+
+export interface ProbeResult {
+  success: boolean;
+  latency_ms: number;
+  models: ProbeModel[] | null;
+  error?: string;
+  error_code?: ProbeErrorCode;
+}
 
 export { ApiError };
 export default api;

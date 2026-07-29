@@ -474,6 +474,16 @@ async def _write_scene_chapter(
         else "无预警"
     )
 
+    # Load chapter outline so Writer sees the arc before the scene context.
+    outline_data = fm.read_json(project_id, "outline.json") or {}
+    outline_chapters = (
+        outline_data.get("chapters", []) if isinstance(outline_data, dict) else []
+    )
+    outline_chapter = next(
+        (c for c in outline_chapters if c.get("chapter_number") == chapter_number),
+        None,
+    )
+
     if draft_factory is not None:
         # Test seam: skip LLM call entirely.
         draft_text = draft_factory(chapter_number, scene_number)
@@ -495,6 +505,7 @@ async def _write_scene_chapter(
                 character_growth_context=character_growth_context,
                 reader_os_warnings=reader_warnings_str,
                 custom_style_config=custom_style_config,
+                outline_chapter=outline_chapter,
             )
         except ValueError as e:
             raise HTTPException(
@@ -592,6 +603,7 @@ async def _write_scene_chapter(
                         character_growth_context=character_growth_context,
                         reader_os_warnings=reader_warnings_str,
                         custom_style_config=custom_style_config,
+                        outline_chapter=outline_chapter,
                     )
                 except ValueError as e:
                     raise HTTPException(
@@ -844,6 +856,16 @@ async def _write_scene_chapter_stream(
         else "无预警"
     )
 
+    # Load chapter outline so Writer sees the arc before the scene context.
+    outline_data = fm.read_json(project_id, "outline.json") or {}
+    outline_chapters = (
+        outline_data.get("chapters", []) if isinstance(outline_data, dict) else []
+    )
+    outline_chapter = next(
+        (c for c in outline_chapters if c.get("chapter_number") == chapter_number),
+        None,
+    )
+
     # ---- streaming flush infrastructure ---------------------------------
     buffer = ""
     last_flush = time.time()
@@ -887,6 +909,7 @@ async def _write_scene_chapter_stream(
             character_growth_context=character_growth_context,
             reader_os_warnings=reader_warnings_str,
             custom_style_config=custom_style_config,
+            outline_chapter=outline_chapter,
         ):
             buffer += stream_chunk.text
             force = stream_chunk.finish_reason is not None

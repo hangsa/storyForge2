@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ProjectSummary } from "../../api/client";
 import BookShelfModal from "./BookShelfModal";
 import { isPreWizardStage } from "./stages";
+import { useGenres } from "../../hooks/useGenres";
 
 const STAGE_COLORS: Record<string, string> = {
   INIT: "bg-system-log/20 text-system-log",
@@ -23,14 +24,6 @@ const STAGE_LABELS: Record<string, string> = {
   STAGE5: "诊断",
   STAGE6: "导出",
   COMPLETED: "已完成",
-};
-
-const GENRES: Record<string, string> = {
-  cool_novel: "爽文",
-  xianxia: "仙侠",
-  xuanhuan: "玄幻",
-  dushi: "都市",
-  kehuan: "科幻",
 };
 
 const DEFAULT_VISIBLE = 5;
@@ -149,6 +142,9 @@ export default function BookShelf({ projects, loading, onProjectsDeleted }: Book
 }
 
 function BookCard({ project }: { project: ProjectSummary }) {
+  const genres = useGenres(false); // include all so labels render for any project genre
+  const labelByGenre = Object.fromEntries(genres.map((g) => [g.id, g.label_zh]));
+
   const handleClick = () => {
     // Pre-wizard stages (INIT, STAGE1, STAGE2, STAGE3) are mid-initialization —
     // open the wizard so the user can continue from the latest step they
@@ -183,7 +179,7 @@ function BookCard({ project }: { project: ProjectSummary }) {
         </span>
       </div>
       <div className="flex items-center gap-2 text-xs font-label-mono text-system-log">
-        <span>{GENRES[project.genre] || project.genre}</span>
+        <span>{labelByGenre[project.genre] || project.genre}</span>
         <span>·</span>
         <span>
           {project.target_length_category || `${(project.target_total_words / 10000).toFixed(0)}万字`}

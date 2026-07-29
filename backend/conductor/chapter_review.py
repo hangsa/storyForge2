@@ -413,7 +413,7 @@ class ChapterReviewBuilder:
             if not texts:
                 return []
 
-            formula = GenreTemplate().get_style_formula()
+            formula = GenreTemplate().get_style_formula(self._detect_genre())
             if not formula:
                 return []
 
@@ -438,7 +438,7 @@ class ChapterReviewBuilder:
             if not texts:
                 return []
 
-            formula = GenreTemplate().get_style_formula()
+            formula = GenreTemplate().get_style_formula(self._detect_genre())
             if not formula:
                 return []
 

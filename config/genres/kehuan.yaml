@@ -1,0 +1,167 @@
+id: kehuan
+label_zh: 科幻
+label_en: Sci-Fi
+family: sci_fi
+pacing:
+  min_beats_per_1k: 0.9
+  escalation_interval: 5
+  action_ratio: 0.3
+  max_consecutive_non_action: 4
+  chapter_words:
+    min: 2500
+    max: 6000
+  scene_words:
+    min: 500
+    max: 2200
+tone: |
+  理性克制，格局宏大。科学设定要有内部自洽性，技术描写要有
+  可信度。对人性和社会的探讨要深刻，不回避伦理困境。
+  描写的冷静与想象的宏大形成张力。
+style_rules:
+- 科学设定必须前后一致，不能出现逻辑矛盾
+- 技术描写要有层次——先现象，再原理，后影响
+- 世界观展示要融入叙事，避免大段说明书式文字
+- 角色决策要基于科学理性，不能凭感情用事
+- 每章至少有一处体现科技与人性关系的思考
+- 未来社会的政治/经济/文化要有可信的演化逻辑
+- 硬科幻元素要准确，软科幻可以模糊但必须自洽
+writing_formula:
+  sentence:
+    avg_length_max: 35
+    short_pct_min: 22
+    long_pct_max: 28
+  dialogue:
+    ratio_min: 0.15
+    max_consecutive_lines: 8
+  paragraph:
+    max_sentences: 6
+    max_words: 320
+  emotional_beat_density_min: 0.7
+  satisfaction_beat_min: 1
+  suspense_hook_required: true
+taboo_words:
+- 魔法
+- 神仙
+- 诅咒
+- 灵魂出窍
+- 不讲科学
+- 无法解释
+- 超越科学
+- 就像魔法一样
+taboos:
+- name: 科技万能
+  type: sliding_window
+  keywords:
+  - 万能科技
+  - 无所不能
+  - 解决一切
+  - 科技无敌
+  - 心想事成
+  - 完全控制
+  max_chars: 300
+  severity: warning
+- name: 逻辑矛盾
+  type: sliding_window
+  keywords:
+  - 违背物理定律
+  - 凭空出现
+  - 莫名其妙
+  - 说变就变
+  - 突然失效
+  - 时而有效
+  max_chars: 250
+  severity: error
+- name: 冗长说教
+  type: consecutive_match
+  failure_keywords:
+  - 众所周知
+  - 根据物理定律
+  - 从科学角度
+  - 理论上来讲
+  - 根据相对论
+  - 量子力学告诉我们
+  max_consecutive: 3
+  severity: warning
+trope_patterns:
+- name: 技术突破
+  description: 关键科学难题被攻克或新技术诞生
+  min_interval: 3
+- name: 首次接触
+  description: 人类与外星文明/新物种的首次接触
+  max_per_volume: 1
+- name: 伦理困境
+  description: 科技发展引发的人性/道德/社会问题
+  min_interval: 4
+- name: 系统危机
+  description: 技术故障或系统失控引发连锁危机
+  min_interval: 5
+- name: 文明抉择
+  description: 人类文明面临根本性的命运选择
+  max_per_volume: 1
+beat_patterns:
+  - keywords: [技术突破, 突破, 攻关, 发明]
+    priority: 75
+    beats:
+      - { description: "问题浮现：技术瓶颈、社会需求",                    words: 500, focus: "dialogue" }
+      - { description: "攻关过程：理论推演、实验失败、迭代",              words: 1000, focus: "action" }
+      - { description: "突破瞬间：核心原理揭示、实验成功",                words: 800, focus: "reveal" }
+      - { description: "技术影响：产业变革、社会震荡",                    words: 600, focus: "emotion" }
+  - keywords: [首次接触, 外星, 异种, 接触]
+    priority: 90
+    beats:
+      - { description: "信号发现：异常现象、科学探测",                    words: 600, focus: "sensory" }
+      - { description: "接触准备：内部博弈、伦理争议",                    words: 800, focus: "dialogue" }
+      - { description: "正式接触：沟通尝试、文化碰撞",                    words: 1000, focus: "action" }
+      - { description: "接触后果：人类认知颠覆、新格局",                  words: 600, focus: "reveal" }
+  - keywords: [伦理, 困境, 道德, 两难]
+    priority: 80
+    beats:
+      - { description: "伦理浮现：技术应用的两难抉择",                    words: 500, focus: "dialogue" }
+      - { description: "多方博弈：科学家/政客/公众立场",                  words: 800, focus: "dialogue" }
+      - { description: "抉择时刻：主角的关键决定",                        words: 700, focus: "action" }
+      - { description: "后果承担：决定的影响、长期回响",                  words: 500, focus: "emotion" }
+  - keywords: [系统危机, 故障, 失控, 连锁]
+    priority: 85
+    beats:
+      - { description: "异常苗头：系统警告、异常数据",                    words: 500, focus: "sensory" }
+      - { description: "危机升级：连锁反应、规模扩大",                    words: 900, focus: "action" }
+      - { description: "危机解除：临时方案、根本修复",                    words: 700, focus: "reveal" }
+  - keywords: [文明, 抉择, 命运, 根本]
+    priority: 95
+    beats:
+      - { description: "危机规模：文明存亡的威胁",                        words: 600, focus: "sensory" }
+      - { description: "方案辩论：多条路径的利弊",                        words: 900, focus: "dialogue" }
+      - { description: "终极抉择：牺牲与获得的权衡",                      words: 800, focus: "action" }
+      - { description: "新文明起点：执行后的世界格局",                    words: 600, focus: "emotion" }
+thresholds:
+  addiction_critical: 35
+  addiction_moderate: 25
+  frustration_high: 70
+  frustration_moderate: 55
+  fatigue_moderate: 55
+  fatigue_low: 40
+  fatigue_formula:
+    threshold: 65
+    decay: 1.0
+  curiosity_moderate: 25
+  curiosity_low: 12
+  tension_moderate: 65
+  tension_low: 50
+  satisfaction_moderate: 45
+  satisfaction_low: 30
+  discussion_high: 55
+  discussion_moderate: 40
+model_preferences:
+  creative_core: deepseek-chat
+  temperature: 0.8
+fusion_meta:
+  # Per-pair distances mirror 1 - compatibility.yaml matrix[kehuan][other].
+  # The Task 2 loader should add a consistency check:
+  #   abs(distance + compatibility - 1.0) < 0.05
+  distances:
+    cool_novel: 0.5
+    xianxia: 0.8
+    xuanhuan: 0.8
+    dushi: 0.5
+    xuanyi: 0.5
+    yanqing: 0.8

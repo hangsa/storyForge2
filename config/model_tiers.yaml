@@ -1,108 +1,177 @@
-# StoryForge v1.7 — Agent LLM 配置
-# 层级 (Tier) 定义模型池，Agent 映射声明每个任务使用哪个 Tier 的哪个模型。
-# 热重载：POST /api/settings/reload-config 或 SIGHUP 信号。
-
 tiers:
-  tier_1:                        # 创意核心 —— 写作质量敏感
-    description: "Scene 写作、STAGE 1-3 内容生成"
-    models:
-      - id: claude-opus-4
-        provider: anthropic
-        cost_per_1k_input: 0.015
-        cost_per_1k_output: 0.075
-        max_tokens: 8192
-      - id: deepseek-v4-pro
-        provider: deepseek
-        cost_per_1k_input: 0.002
-        cost_per_1k_output: 0.008
-        max_tokens: 8192
+  tier_1:
+    description: 创意核心 — 概念/世界观/角色/地图/大纲/创意引擎/成长讨论
     default: deepseek-v4-pro
     retry_on_failure: true
     max_retries: 2
-    fallback: claude-opus-4
-
-  tier_2:                        # 分析 —— 推理质量敏感，成本适中
-    description: "Narrative Guard 状态漂移检测"
-    models:
-      - id: claude-sonnet-4
-        provider: anthropic
-        cost_per_1k_input: 0.003
-        cost_per_1k_output: 0.015
-        max_tokens: 4096
-    default: claude-sonnet-4
+    fallback: MiniMax-M3
+  tier_2:
+    description: Scene 写作、Narrative Guard、Novelty/Arc 分析
+    default: MiniMax-M3
     retry_on_failure: true
     max_retries: 1
-    fallback: null               # 无降级 → 失败则跳过（Narrative Guard 不阻断）
-
-  tier_3:                        # 辅助 —— 成本优先
-    description: "L1 细节重提取、章摘要生成、风格分类"
-    models:
-      - id: claude-haiku
-        provider: anthropic
-        cost_per_1k_input: 0.00025
-        cost_per_1k_output: 0.00125
-        max_tokens: 2048
-    default: claude-haiku
+    fallback: deepseek-v4-flash
+  tier_3:
+    description: L1 细节重提取、章摘要生成、风格分类
+    default: MiniMax-M3
     retry_on_failure: true
     max_retries: 1
-    fallback: null
-
-  tier_0:                        # 确定性 —— 零 LLM
-    description: "Fact Guard、StoryOS SF_LOG 解析、ReaderOS 计算"
-    models: []
+    fallback: deepseek-v4-flash
+  tier_0:
+    description: Fact Guard、StoryOS SF_LOG 解析、ReaderOS 计算
     default: none
-
-# Agent → 任务 → Tier 映射
 agent_mapping:
   planner:
-    concept_generation:        { tier: tier_1, model: default }
-    canvas_to_concept:         { tier: tier_1, model: default }
-    world_generation:          { tier: tier_1, model: default }
-    character_generation:      { tier: tier_1, model: default }
-    outline_generation:        { tier: tier_1, model: default }
-    novel_outline_generation:  { tier: tier_1, model: default }
-    creative_brainstorming:    { tier: tier_1, model: default }
-    whatif_expansion:          { tier: tier_1, model: default }
-    novelty_evaluation:        { tier: tier_2, model: default }
-
+    concept_generation:
+      tier: tier_1
+      model: default
+    canvas_to_concept:
+      tier: tier_1
+      model: default
+    world_generation:
+      tier: tier_1
+      model: default
+    map_system:
+      tier: tier_1
+      model: default
+    character_generation:
+      tier: tier_1
+      model: default
+    outline_generation:
+      tier: tier_1
+      model: default
+    novel_outline_generation:
+      tier: tier_1
+      model: default
+    creative_brainstorming:
+      tier: tier_1
+      model: default
+    whatif_expansion:
+      tier: tier_1
+      model: default
+    novelty_evaluation:
+      tier: tier_2
+      model: default
   writer:
-    scene_writing:             { tier: tier_1, model: deepseek-v4-pro, fallback: claude-opus-4 }
-    scene_rewrite:             { tier: tier_1, model: default }
-    context_assembly:          { tier: tier_0 }
-
+    scene_writing:
+      tier: tier_2
+      model: deepseek-v4-pro
+      fallback: deepseek-v4-flash
+    scene_rewrite:
+      tier: tier_2
+      model: default
+    context_assembly:
+      tier: tier_0
   reviewer:
-    fact_guard:                { tier: tier_0 }
-    narrative_guard:           { tier: tier_2, model: default }
-    style_guard:               { tier: tier_0 }
-    coherence_scoring:         { tier: tier_0 }
-    semantic_precheck:         { tier: tier_3, model: default }
-
+    fact_guard:
+      tier: tier_0
+    narrative_guard:
+      tier: tier_2
+      model: default
+    style_guard:
+      tier: tier_0
+    coherence_scoring:
+      tier: tier_0
+    semantic_precheck:
+      tier: tier_3
+      model: default
   storyos_agent:
-    sf_log_parsing:            { tier: tier_0 }
-    cascade_propagation:       { tier: tier_0 }
-    conflict_detection:        { tier: tier_0 }
-    sf_log_suggestion:         { tier: tier_3, model: default }
-
+    sf_log_parsing:
+      tier: tier_0
+    cascade_propagation:
+      tier: tier_0
+    conflict_detection:
+      tier: tier_0
+    sf_log_suggestion:
+      tier: tier_3
+      model: default
   summary_archiver:
-    chapter_summary:           { tier: tier_3, model: default }
-    l1_reextraction:           { tier: tier_3, model: default }
-    style_extraction:          { tier: tier_3, model: default }
-
-  # v1.7 新增 — CreativeOS agents
+    chapter_summary:
+      tier: tier_3
+      model: default
+    l1_reextraction:
+      tier: tier_3
+      model: default
+    style_extraction:
+      tier: tier_3
+      model: default
   creative_director:
-    creative_brainstorming:    { tier: tier_1, model: default }
-    whatif_expansion:          { tier: tier_1, model: default }
-    whatif_direction:          { tier: tier_1, model: default }
-    mutation:                  { tier: tier_1, model: default }
-    path_evaluation:           { tier: tier_1, model: default }
-    fusion_analysis:           { tier: tier_1, model: default }
-    trope_extraction:          { tier: tier_3, model: default }
-
+    creative_brainstorming:
+      tier: tier_1
+      model: default
+    whatif_expansion:
+      tier: tier_1
+      model: default
+    whatif_direction:
+      tier: tier_1
+      model: default
+    mutation:
+      tier: tier_1
+      model: default
+    path_evaluation:
+      tier: tier_1
+      model: default
+    fusion_analysis:
+      tier: tier_1
+      model: default
+    trope_extraction:
+      tier: tier_3
+      model: default
   character_designer:
-    growth_discuss:            { tier: tier_1, model: default }
-    growth_discussion:         { tier: tier_1, model: default }
-    arc_analysis:              { tier: tier_2, model: default }
-
+    growth_discuss:
+      tier: tier_1
+      model: default
+    growth_discussion:
+      tier: tier_1
+      model: default
+    arc_analysis:
+      tier: tier_2
+      model: default
   style_sandbox:
     preview:
       tier: tier_3
+providers:
+  deepseek:
+    type: openai_compatible
+    display_name: deepseek
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    enabled: true
+    models:
+      deepseek-v4-pro:
+        id: deepseek-v4-pro
+        provider: deepseek
+        display_name: deepseek-v4-pro
+        cost_per_1k_input: 0
+        cost_per_1k_output: 0
+        max_tokens: 393216
+        temperature: 0.7
+        json_mode: true
+        stream: true
+      deepseek-v4-flash:
+        id: deepseek-v4-flash
+        provider: deepseek
+        display_name: deepseek-v4-flash
+        cost_per_1k_input: 0
+        cost_per_1k_output: 0
+        max_tokens: 393216
+        temperature: 0.7
+        json_mode: false
+        stream: true
+  minimax:
+    type: openai_compatible
+    display_name: minimax
+    base_url: https://api.minimax.chat/v1
+    api_key_env: MINIMAX_API_KEY
+    enabled: true
+    models:
+      MiniMax-M3:
+        id: MiniMax-M3
+        provider: minimax
+        display_name: MiniMax-M3
+        cost_per_1k_input: 0
+        cost_per_1k_output: 0
+        max_tokens: 524288
+        temperature: 0.7
+        json_mode: false
+        stream: true

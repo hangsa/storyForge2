@@ -1,87 +1,83 @@
-"""
-Unit tests for genre_template.py — genre template loading and retrieval.
-"""
-import tempfile
-from pathlib import Path
-
+"""Unit tests for GenreTemplate delegator — verifies the wrapper forwards to GenreCatalog."""
 import pytest
 
 from backend.style_engine.genre_template import GenreTemplate
 
 
-@pytest.fixture
-def style_dir():
-    with tempfile.TemporaryDirectory() as tmp:
-        yield Path(tmp)
-
-
-def _write_yaml(path: Path, content: str):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
-
-
 class TestGenreTemplateLoad:
-    def test_load_cool_novel_default(self):
-        """Load the real cool_novel.yaml template."""
+    def test_load_cool_novel_returns_full_entry(self):
+        """The default catalog genre loads with all expected fields."""
         gt = GenreTemplate()
         data = gt.load("cool_novel")
         assert isinstance(data, dict)
+        assert data["id"] == "cool_novel"
+        assert "pacing" in data
         assert "tone" in data
+        assert "writing_formula" in data
+        assert "thresholds" in data
 
-    def test_load_nonexistent_raises(self, style_dir):
-        gt = GenreTemplate(style_dir)
-        with pytest.raises(FileNotFoundError):
-            gt.load("nonexistent")
+    def test_load_all_seven_genres(self):
+        """All 7 catalog genres load successfully."""
+        gt = GenreTemplate()
+        for gid in ("cool_novel", "xianxia", "xuanhuan", "dushi", "kehuan", "xuanyi", "yanqing"):
+            data = gt.load(gid)
+            assert data["id"] == gid
 
-    def test_load_custom_template(self, style_dir):
-        _write_yaml(style_dir / "custom.yaml", "tone: dark\npacing:\n  scenes_per_chapter: 3\n")
-        gt = GenreTemplate(style_dir)
-        data = gt.load("custom")
-        assert data["tone"] == "dark"
-        assert data["pacing"]["scenes_per_chapter"] == 3
+    def test_load_unknown_falls_back(self):
+        """Unknown genres fall back to first index entry — no raise."""
+        gt = GenreTemplate()
+        data = gt.load("nonexistent")
+        # First entry is cool_novel
+        assert data["id"] == "cool_novel"
 
-    def test_load_empty_yaml_returns_dict(self, style_dir):
-        _write_yaml(style_dir / "empty.yaml", "")
-        gt = GenreTemplate(style_dir)
-        data = gt.load("empty")
-        assert data == {}
+    def test_no_constructor_args(self):
+        """GenreTemplate takes no constructor args — catalog is a singleton."""
+        gt = GenreTemplate()
+        data = gt.load("cool_novel")
+        assert data["id"] == "cool_novel"
 
 
 class TestGenreTemplateGetters:
-    def test_get_pacing(self, style_dir):
-        _write_yaml(style_dir / "test.yaml",
-            "pacing:\n  scenes_per_chapter: 4\n  words_per_scene: 1500\n")
-        gt = GenreTemplate(style_dir)
-        pacing = gt.get_pacing("test")
-        assert pacing["scenes_per_chapter"] == 4
+    def test_get_pacing_returns_pacing_subdict(self):
+        gt = GenreTemplate()
+        pacing = gt.get_pacing("cool_novel")
+        assert isinstance(pacing, dict)
+        assert "min_beats_per_1k" in pacing
 
-    def test_get_pacing_defaults(self, style_dir):
-        _write_yaml(style_dir / "minimal.yaml", "tone: light\n")
-        gt = GenreTemplate(style_dir)
-        pacing = gt.get_pacing("minimal")
-        assert pacing == {}
+    def test_get_pacing_xuanyi_distinct_from_cool_novel(self):
+        """Different genres have distinct pacing configs."""
+        gt = GenreTemplate()
+        pacing_cn = gt.get_pacing("cool_novel")
+        pacing_xy = gt.get_pacing("xuanyi")
+        # At minimum they should not be the exact same dict (different genre ids)
+        assert pacing_cn is not pacing_xy
 
-    def test_get_tone_rules(self, style_dir):
-        _write_yaml(style_dir / "rules.yaml",
-            "tone: dark\n"
-            "taboo_words:\n  - 死亡\n  - 血腥\n"
-            "style_rules:\n  - 句长不超过40字\n")
-        gt = GenreTemplate(style_dir)
-        rules = gt.get_tone_rules("rules")
-        assert rules["tone"] == "dark"
-        assert len(rules["taboo_words"]) == 2
-        assert len(rules["style_rules"]) == 1
+    def test_get_tone_rules_returns_combined_dict(self):
+        gt = GenreTemplate()
+        rules = gt.get_tone_rules("cool_novel")
+        assert "tone" in rules
+        assert "taboo_words" in rules
+        assert "style_rules" in rules
 
-    def test_get_taboos(self, style_dir):
-        _write_yaml(style_dir / "taboo.yaml",
-            "taboo_words:\n  - 死亡\n  - 背叛\n")
-        gt = GenreTemplate(style_dir)
-        taboos = gt.get_taboos("taboo")
-        assert taboos == ["死亡", "背叛"]
+    def test_get_taboos_returns_list_of_strings(self):
+        gt = GenreTemplate()
+        taboos = gt.get_taboos("cool_novel")
+        assert isinstance(taboos, list)
+        # All entries should be strings (the taboo_words field)
+        for t in taboos:
+            assert isinstance(t, str)
 
-    def test_get_taboos_empty(self, style_dir):
-        _write_yaml(style_dir / "no_taboo.yaml", "tone: light\n")
-        gt = GenreTemplate(style_dir)
-        taboos = gt.get_taboos("no_taboo")
-        assert taboos == []
+    def test_get_style_formula_returns_writing_formula(self):
+        gt = GenreTemplate()
+        formula = gt.get_style_formula("cool_novel")
+        assert isinstance(formula, dict)
+        assert "sentence" in formula
+
+    def test_get_structured_taboos_returns_list_of_dicts(self):
+        """Structured taboos are dicts, not strings."""
+        gt = GenreTemplate()
+        taboos = gt.get_structured_taboos("cool_novel")
+        assert isinstance(taboos, list)
+        # Structured taboos may be empty list — that's fine, but if present they should be dicts
+        for t in taboos:
+            assert isinstance(t, dict)

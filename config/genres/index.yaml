@@ -1,0 +1,10 @@
+# Genre catalog index. Each id MUST have a matching config/genres/<id>.yaml.
+# UI dropdown order matches this list. ui_visible defaults to true when omitted.
+genres:
+  - { id: cool_novel, label_zh: 爽文, label_en: Power Fantasy,  family: power_fantasy }
+  - { id: xianxia,    label_zh: 仙侠, label_en: Xianxia,         family: cultivation   }
+  - { id: xuanhuan,   label_zh: 玄幻, label_en: Xuanhuan,        family: cultivation   }
+  - { id: dushi,      label_zh: 都市, label_en: Contemporary,    family: contemporary  }
+  - { id: kehuan,     label_zh: 科幻, label_en: Sci-Fi,          family: sci_fi        }
+  - { id: xuanyi,     label_zh: 悬疑, label_en: Mystery,         family: mystery       }
+  - { id: yanqing,    label_zh: 言情, label_en: Romance,         family: romance       }

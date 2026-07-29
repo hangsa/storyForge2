@@ -1,4 +1,6 @@
 import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse
@@ -46,6 +48,38 @@ def _resolve_genre_extras(genre: str) -> dict[str, str]:
         "style_rules": style_rules,
         "trope_patterns": trope_patterns,
     }
+
+
+_FOCUS_VOCAB_PATH = Path(__file__).resolve().parents[2] / "config" / "genre_focus_vocabulary.yaml"
+
+
+@lru_cache(maxsize=1)
+def _resolve_genre_focus_vocabulary() -> str:
+    """Load focus vocabulary once and return formatted legend string.
+
+    Returns multi-line text:
+      【focus 字段图例】
+      - sensory:  感官描写为主，渲染氛围/环境/细节
+      - action:   动作/事件推进为主，节奏紧凑
+      - dialogue: 对话/心理独白为主，人物互动
+      - emotion:  情感波动为主，内心刻画
+      - suspense: 悬念/不安为主，信息管控
+      - reveal:   揭露/反转为主，情节兑现
+
+    The leading 【focus 字段图例】 header is included so the prompt template
+    only needs to place {genre_focus_vocabulary} on its own line.
+
+    Raises FileNotFoundError if the YAML is missing (caller should let it
+    propagate so misconfiguration is loud).
+    """
+    import yaml
+    data = yaml.safe_load(_FOCUS_VOCAB_PATH.read_text(encoding="utf-8")) or {}
+    legend = data.get("focus_legend") or {}
+    lines = ["【focus 字段图例】"]
+    for key in ("sensory", "action", "dialogue", "emotion", "suspense", "reveal"):
+        desc = legend.get(key, "")
+        lines.append(f"- {key}: {desc}")
+    return "\n".join(lines)
 
 
 # Role labels surfaced to the LLM. Must match the user-facing wizard labels

@@ -101,3 +101,44 @@ class TestSchemaValidation:
         ])
         with pytest.raises(CatalogLoadError, match="beat_patterns invalid"):
             GenreCatalog(genres_dir=tmp_path).get("test_genre")
+
+
+class TestKeywordMatching:
+    """_resolve_genre_beat_patterns filters templates by outline keywords."""
+
+    def test_substring_match_returns_matching_template_only(self):
+        """outline_text='主角打脸反派' → only the 打脸 template appears."""
+        from backend.agents.planner import _resolve_genre_beat_patterns
+        result = _resolve_genre_beat_patterns("cool_novel", "主角打脸反派")
+        assert "【题材节拍模板】" in result
+        assert "打脸" in result
+        # The cool_novel 突破 template should NOT appear (no 突破 keyword in outline)
+        assert "升级契机" not in result
+
+    def test_multiple_keyword_match_sorts_by_priority_desc(self):
+        """outline containing both '打脸' and '突破' keywords → 2 templates, priority desc."""
+        from backend.agents.planner import _resolve_genre_beat_patterns
+        result = _resolve_genre_beat_patterns("cool_novel", "打脸突破升级")
+        # 打脸 is priority 90, 突破 is priority 70; 打脸 should appear first
+        idx_face = result.find("打脸")
+        idx_break = result.find("升级契机")
+        assert idx_face != -1 and idx_break != -1
+        assert idx_face < idx_break
+
+    def test_empty_outline_returns_all_templates_unfiltered(self):
+        """outline_text='' → all templates returned, sorted by priority desc."""
+        from backend.agents.planner import _resolve_genre_beat_patterns
+        result = _resolve_genre_beat_patterns("cool_novel", "")
+        # cool_novel has 4 templates; all keywords should appear
+        assert "打脸" in result
+        assert "越级" in result
+        assert "突破" in result
+        assert "身份" in result
+
+    def test_no_keyword_match_returns_empty_string(self):
+        """outline_text with no matching keywords → empty string (no section header)."""
+        from backend.agents.planner import _resolve_genre_beat_patterns
+        # '天气预报' has no overlap with cool_novel's keywords
+        result = _resolve_genre_beat_patterns("cool_novel", "今天的天气预报说明天有雨")
+        assert result == ""
+        assert "【题材节拍模板】" not in result

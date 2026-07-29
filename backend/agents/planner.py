@@ -82,6 +82,72 @@ def _resolve_genre_focus_vocabulary() -> str:
     return "\n".join(lines)
 
 
+def _resolve_genre_beat_patterns(
+    genre: str,
+    outline_text: Optional[str] = "",
+) -> str:
+    """Return keyword-matched beat templates as a formatted multi-line string,
+    INCLUDING the leading 【题材节拍模板】 section header.
+
+    For the given genre, read `beat_patterns` from catalog. If `outline_text`
+    is non-empty (and not None), keep only templates where at least one
+    keyword is a substring of outline_text. Sort by priority desc.
+
+    Render shape (whole section, including header):
+      【题材节拍模板】（按优先级排序；仅显示与当前大纲关键词匹配的模板）
+      1. keywords=[打脸, 装逼, ...] priority=90
+         - 铺垫：对手嚣张/轻视/嘲讽主角 (500 字, focus: dialogue)
+         - 交锋：... (700 字, focus: action)
+         ...
+      2. keywords=[突破, 升级, ...] priority=70
+         ...
+
+    If no templates match (after filtering), return empty string. The whole
+    section disappears from the rendered prompt — no blank header.
+
+    outline_text=None is normalized to "" (defensive: substring match would
+    TypeError on None).
+    """
+    outline = (outline_text or "")
+    filter_active = bool(outline)
+
+    try:
+        from backend.genres.catalog import get_catalog
+        entry = get_catalog().get(genre)
+    except Exception:
+        return ""
+
+    patterns = entry.get("beat_patterns") or []
+    if not patterns:
+        return ""
+
+    if filter_active:
+        matched = [
+            tmpl for tmpl in patterns
+            if any(kw in outline for kw in tmpl.get("keywords", []))
+        ]
+    else:
+        matched = list(patterns)
+
+    if not matched:
+        return ""
+
+    # Sort by priority desc; stable on tie
+    matched = sorted(matched, key=lambda t: -t.get("priority", 0))
+
+    lines = ["【题材节拍模板】（按优先级排序；仅显示与当前大纲关键词匹配的模板）"]
+    for i, tmpl in enumerate(matched, start=1):
+        keywords_str = ", ".join(tmpl.get("keywords", []))
+        priority = tmpl.get("priority", 0)
+        lines.append(f"{i}. keywords=[{keywords_str}] priority={priority}")
+        for beat in tmpl.get("beats", []):
+            desc = beat.get("description", "")
+            words = beat.get("words", 0)
+            focus = beat.get("focus", "")
+            lines.append(f"   - {desc} ({words} 字, focus: {focus})")
+    return "\n".join(lines)
+
+
 # Role labels surfaced to the LLM. Must match the user-facing wizard labels
 # (CharacterStep.tsx CHARACTER_TYPES) so the LLM's output is consistent with
 # what the user sees when reviewing.

@@ -98,6 +98,41 @@ trope_patterns:
 - name: 文明抉择
   description: 人类文明面临根本性的命运选择
   max_per_volume: 1
+beat_patterns:
+  - keywords: [技术突破, 突破, 攻关, 发明]
+    priority: 75
+    beats:
+      - { description: "问题浮现：技术瓶颈、社会需求",                    words: 500, focus: "dialogue" }
+      - { description: "攻关过程：理论推演、实验失败、迭代",              words: 1000, focus: "action" }
+      - { description: "突破瞬间：核心原理揭示、实验成功",                words: 800, focus: "reveal" }
+      - { description: "技术影响：产业变革、社会震荡",                    words: 600, focus: "emotion" }
+  - keywords: [首次接触, 外星, 异种, 接触]
+    priority: 90
+    beats:
+      - { description: "信号发现：异常现象、科学探测",                    words: 600, focus: "sensory" }
+      - { description: "接触准备：内部博弈、伦理争议",                    words: 800, focus: "dialogue" }
+      - { description: "正式接触：沟通尝试、文化碰撞",                    words: 1000, focus: "action" }
+      - { description: "接触后果：人类认知颠覆、新格局",                  words: 600, focus: "reveal" }
+  - keywords: [伦理, 困境, 道德, 两难]
+    priority: 80
+    beats:
+      - { description: "伦理浮现：技术应用的两难抉择",                    words: 500, focus: "dialogue" }
+      - { description: "多方博弈：科学家/政客/公众立场",                  words: 800, focus: "dialogue" }
+      - { description: "抉择时刻：主角的关键决定",                        words: 700, focus: "action" }
+      - { description: "后果承担：决定的影响、长期回响",                  words: 500, focus: "emotion" }
+  - keywords: [系统危机, 故障, 失控, 连锁]
+    priority: 85
+    beats:
+      - { description: "异常苗头：系统警告、异常数据",                    words: 500, focus: "sensory" }
+      - { description: "危机升级：连锁反应、规模扩大",                    words: 900, focus: "action" }
+      - { description: "危机解除：临时方案、根本修复",                    words: 700, focus: "reveal" }
+  - keywords: [文明, 抉择, 命运, 根本]
+    priority: 95
+    beats:
+      - { description: "危机规模：文明存亡的威胁",                        words: 600, focus: "sensory" }
+      - { description: "方案辩论：多条路径的利弊",                        words: 900, focus: "dialogue" }
+      - { description: "终极抉择：牺牲与获得的权衡",                      words: 800, focus: "action" }
+      - { description: "新文明起点：执行后的世界格局",                    words: 600, focus: "emotion" }
 thresholds:
   addiction_critical: 35
   addiction_moderate: 25

@@ -4,7 +4,7 @@
 
 **Goal:** Make the active genre's beat templates context-aware in Stage 3 outline generation — LLM receives only the beat templates whose keywords appear in the current outline, so each outline node can be expanded with the right pacing/shape for its genre.
 
-**Architecture:** Extend the `GenreCatalog` schema with a new optional `beat_patterns` field per genre, add a 4th prompt placeholder `{genre_beat_patterns}` (plus `{genre_focus_vocabulary}` for the focus legend), and match outline text against template keywords at outline-generation time. Backend wiring uses pure YAML data + 2 new helper functions in `planner.py`; no Python class hierarchy, no Skills, no per-genre code.
+**Architecture:** Extend the `GenreCatalog` schema with a new **required** `beat_patterns` field per genre (validates at load time), add a 4th prompt placeholder `{genre_beat_patterns}` (plus `{genre_focus_vocabulary}` for the focus legend), and match outline text against template keywords at outline-generation time. Backend wiring uses pure YAML data + 2 new helper functions in `planner.py`; no Python class hierarchy, no Skills, no per-genre code.
 
 **Tech Stack:** Python 3.9 + FastAPI + PyYAML + pytest. Existing `GenreCatalog` singleton, existing `PlannerAgent.generate_novel_outline` / `generate_outline`, existing 3-tier prompt override chain (YAML → Global → Project). Frontend: no changes.
 
@@ -34,9 +34,10 @@ The smallest borrow that closes this gap: add a fourth placeholder `{genre_beat_
 | Beat shape | `[{description: str, words: int, focus: str}]` | Matches plotPilot; LLM-friendly; minimum viable granularity |
 | Focus vocabulary | 6 words: `sensory / action / dialogue / emotion / suspense / reveal` | Smaller than plotPilot's 8; covers the 6 most common beat foci in Chinese web novels |
 | Focus vocabulary location | New file `config/genre_focus_vocabulary.yaml` | Shared across all genres; single source of truth; loaded once at startup |
-| Keyword match algorithm | Substring match, case-sensitive, multi-keyword OR | Robust to Chinese (no tokenizer dependency); plotPilot-style; "打脸" matches "打脸充胖子" — desired |
+| Keyword match algorithm | Substring match, multi-keyword OR; **minimum keyword length 2 chars** | Robust to Chinese (no tokenizer dependency); plotPilot-style; "打脸" matches "打脸充胖子" — desired. Minimum 2 chars prevents single-character keywords like "脸" from generating noise matches |
 | Empty outline_text behavior | Return all beat templates unfiltered (priority sorted) | First-pass outline generation has no prior text to match; useful for "scaffolding" pass |
-| No-match behavior | Return empty string (omit the placeholder section) | Avoids polluting prompt with empty "【题材节拍模板】" headers |
+| No-match behavior | Helper returns empty string (the entire `【题材节拍模板】` section disappears from the prompt) | Avoids polluting prompt with empty section headers |
+| `outline_text=None` handling | Normalize to `""` at the top of the helper | Defensive — `None in str` would TypeError on substring match; cheap insurance |
 | Priority sort direction | Descending (higher priority first) | When multiple templates match, the more impactful one leads |
 | Scope | Both `generate_novel_outline` (全本大纲) and `generate_outline` (章节大纲) | Both produce outline text and benefit from beat expansion |
 | Renaming `_resolve_genre_extras`? | **No** — keep as backward-compatible shim, add 2 new helpers | External consumers exist; renaming breaks them without functional benefit |
@@ -97,7 +98,7 @@ beat_patterns:
 | `xuanyi` | 线索发现, 嫌疑人反转, 个人危机, 大反转, 终极对决 | plotPilot suspense_agent.py + xuanyi trope_patterns |
 | `yanqing` | 误会和解, 关系升级, 第三者介入, 外力阻挠, 情感转折 | plotPilot romance_agent.py + yanqing trope_patterns |
 
-Total: ~35 beat templates across 7 genres, ~140 beats. Each beat description is 1 sentence (~30 chars Chinese), each genre YAML grows by ~30-50 lines.
+Total: 33 beat templates across 7 genres (2 genres × 4 templates + 5 genres × 5 templates = 33). Assuming ~4 beats per template, that's ~132 beats total. Each beat description is 1 sentence (~30 chars Chinese), each genre YAML grows by ~30-50 lines.
 
 ---
 
@@ -107,8 +108,8 @@ Total: ~35 beat templates across 7 genres, ~140 beats. Each beat description is 
 
 1. Add `"beat_patterns"` to `_REQUIRED_GENRE_FIELDS` tuple — all 7 genre YAMLs must declare it.
 2. New private method `_validate_beat_patterns(gid, entry)` called inside `_load_entries()` after the existing field check:
-   - `entry["beat_patterns"]` must be a list
-   - Each template must have `keywords: list[str]` (non-empty, all strings), `priority: int` (0-100), `beats: list[dict]`
+   - `entry["beat_patterns"]` must be a list (≥1 element)
+   - Each template must have `keywords: list[str]` (non-empty, all strings ≥2 chars), `priority: int` (0-100), `beats: list[dict]` (≥1 element)
    - Each beat must have `description: str` (non-empty), `words: int` (>0), `focus: str` ∈ focus vocabulary
    - On violation: `raise CatalogLoadError(f"config/genres/{gid}.yaml beat_patterns invalid: {detail}")`
 
@@ -120,30 +121,38 @@ Two new helpers, both module-level functions next to `_resolve_genre_extras`:
 _FOCUS_VOCAB_PATH = Path(__file__).resolve().parents[2] / "config" / "genre_focus_vocabulary.yaml"
 
 
+@lru_cache(maxsize=1)
 def _resolve_genre_focus_vocabulary() -> str:
     """Load focus vocabulary once and return formatted legend string.
-    
+
     Returns multi-line text:
-      focus 字段图例：
+      【focus 字段图例】
       - sensory:  感官描写为主，渲染氛围/环境/细节
       - action:   动作/事件推进为主，节奏紧凑
-      - ...
-    
+      - dialogue: 对话/心理独白为主，人物互动
+      - emotion:  情感波动为主，内心刻画
+      - suspense: 悬念/不安为主，信息管控
+      - reveal:   揭露/反转为主，情节兑现
+
+    The leading 【focus 字段图例】 header is included so the prompt template
+    only needs to place {genre_focus_vocabulary} on its own line.
+
     Raises CatalogLoadError only if file is missing or malformed.
     """
-    # Use @lru_cache to avoid re-reading on every call.
 
 
 def _resolve_genre_beat_patterns(
     genre: str,
-    outline_text: str = "",
+    outline_text: Optional[str] = "",
 ) -> str:
-    """Return keyword-matched beat templates as a formatted multi-line string.
-    
+    """Return keyword-matched beat templates as a formatted multi-line string,
+    INCLUDING the leading 【题材节拍模板】 section header.
+
     For the given genre, read `beat_patterns` from catalog. If `outline_text`
-    is non-empty, keep only templates where at least one keyword is a substring
-    of outline_text. Sort by priority desc. Render as:
-    
+    is non-empty (and not None), keep only templates where at least one
+    keyword is a substring of outline_text. Sort by priority desc.
+
+    Render shape (whole section, including header):
       【题材节拍模板】（按优先级排序；仅显示与当前大纲关键词匹配的模板）
       1. keywords=[打脸, 装逼, ...] priority=90
          - 铺垫：对手嚣张/轻视/嘲讽主角 (500 字, focus: dialogue)
@@ -151,9 +160,12 @@ def _resolve_genre_beat_patterns(
          ...
       2. keywords=[突破, 升级, ...] priority=70
          ...
-    
-    If no templates match, return empty string (placeholder renders to nothing,
-    and the prompt section is omitted).
+
+    If no templates match (after filtering), return empty string. The whole
+    section disappears from the rendered prompt — no blank header.
+
+    outline_text=None is normalized to "" (defensive: substring match would
+    TypeError on None).
     """
 ```
 
@@ -181,9 +193,13 @@ async def generate_outline(
 
 The `outline_text` parameter is `Optional[str] = ""` — default behavior unchanged (returns all beat templates unfiltered).
 
-### `backend/api/stage3_outline.py` (MODIFIED, if exists)
+### `backend/api/stage3_outline.py` (REVIEW)
 
-The Stage 3 API calls into `generate_novel_outline` / `generate_outline`. For first-pass generation, the API passes `outline_text=""` (no prior outline to match). If Stage 3 supports incremental regeneration, it passes the current outline text as `outline_text`.
+The Stage 3 API calls into `generate_novel_outline` / `generate_outline`. No source changes are required for first-pass generation — the new `outline_text` parameter has a default of `""`, so existing call sites continue to work (returning all beat templates unfiltered).
+
+**For incremental regeneration** (if supported by Stage 3): when re-running outline generation against an existing `novel_outline.json` or per-chapter plan, the API should pass that JSON content as `outline_text`. This enables keyword matching against the prior outline so beat templates are filtered to only those relevant to the current text.
+
+This is **not in scope** for this spec — the new `outline_text` parameter is provided but the API doesn't wire it up yet. Implementation review during planning should check `backend/api/stage3_outline.py` to confirm no immediate changes are needed.
 
 ---
 
@@ -191,23 +207,21 @@ The Stage 3 API calls into `generate_novel_outline` / `generate_outline`. For fi
 
 ### `backend/prompts/novel_outline_generation.yaml` (MODIFIED)
 
-Add before the "请生成" section:
+Add before the "请生成" section. The helpers return whole sections (header + body), so the template just needs placeholder lines:
 
 ```yaml
-【题材节拍模板】（按优先级排序；仅显示与当前大纲关键词匹配的模板）
 {genre_beat_patterns}
 
-【focus 字段图例】
 {genre_focus_vocabulary}
 ```
 
-When `genre_beat_patterns` is empty (no keyword matches), the first section renders to nothing — `Jinja2`-style rendering will leave a blank line, which is acceptable. The focus vocabulary always renders.
+When `genre_beat_patterns` is empty (no keyword matches), the section disappears entirely from the rendered prompt. The focus vocabulary section always renders.
 
 ### `backend/prompts/outline_generation.yaml` (MODIFIED)
 
-Same two-section insert as above.
+Same two-placeholder insert as above.
 
-### Render output example
+### Render output example (with matched keywords)
 
 ```
 【题材节拍模板】（按优先级排序；仅显示与当前大纲关键词匹配的模板）
@@ -239,18 +253,20 @@ New file `tests/test_genre_beat_patterns.py` with 4 test classes (target: 14 tes
 
 ### `TestSchemaValidation` (4 tests)
 
+Test isolation pattern: use `GenreCatalog(tmp_genres_dir)` constructor (the existing constructor already accepts a custom dir at `catalog.py:36-39`). For each test, write a malformed YAML into a temp dir and instantiate a fresh `GenreCatalog` — its `_load()` is called on first `get()` / `get_catalog()` access, raising `CatalogLoadError` on invalid data.
+
 ```python
 def test_all_7_genres_have_beat_patterns_field():
     """catalog loading succeeds → all 7 genres declare beat_patterns."""
 
-def test_beat_pattern_with_empty_keywords_raises_on_load():
-    """beat_pattern with keywords=[] → CatalogLoadError."""
+def test_beat_pattern_with_empty_keywords_raises_on_load(tmp_path):
+    """Write a genre YAML with keywords=[]; GenreCatalog(tmp_path).get() → CatalogLoadError."""
 
-def test_beat_with_unknown_focus_raises_on_load():
-    """beat with focus='random_word' (not in vocabulary) → CatalogLoadError."""
+def test_beat_with_unknown_focus_raises_on_load(tmp_path):
+    """Write a genre YAML with focus='random_word'; GenreCatalog(tmp_path).get() → CatalogLoadError."""
 
-def test_beat_with_missing_words_field_raises_on_load():
-    """beat missing 'words' key → CatalogLoadError."""
+def test_beat_with_single_char_keyword_raises_on_load(tmp_path):
+    """Write a genre YAML with keywords=['脸']; GenreCatalog(tmp_path).get() → CatalogLoadError (min length 2)."""
 ```
 
 ### `TestKeywordMatching` (4 tests)
@@ -325,7 +341,7 @@ The 14 existing tests in `tests/test_genre_template_propagation.py` MUST continu
 | `backend/prompts/outline_generation.yaml` | MODIFY | +5 lines |
 | `tests/test_genre_beat_patterns.py` | NEW | ~250 lines |
 
-Total: 1 new config file, 1 new test file, 7 genre YAMLs + 3 backend files modified. Net addition ~640 lines.
+Total: 1 new config file, 1 new test file, 7 genre YAMLs + 4 backend files modified (catalog + planner + 2 prompts). Net addition ~640 lines.
 
 ---
 

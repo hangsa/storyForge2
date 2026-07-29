@@ -88,6 +88,32 @@ trope_patterns:
 - name: 身份揭露
   description: 主角隐藏身份被揭露引发震惊
   min_interval: 5
+beat_patterns:
+  - keywords: [打脸, 装逼, 嘲讽, 不自量力, 蝼蚁]
+    priority: 90
+    beats:
+      - { description: "铺垫：对手嚣张/轻视/嘲讽主角，旁观者不看好",     words: 500, focus: "dialogue" }
+      - { description: "交锋：主角被压制或隐藏实力，对手更得意",         words: 700, focus: "action"   }
+      - { description: "反转：底牌揭露、压倒性爆发",                     words: 900, focus: "reveal"   }
+      - { description: "余波：围观者震惊、势力格局变动",                 words: 600, focus: "emotion"  }
+  - keywords: [越级, 跨境界, 以弱胜强, 不可能]
+    priority: 85
+    beats:
+      - { description: "实力差展示：明确当前境界差距，铺垫不可能感",       words: 400, focus: "sensory" }
+      - { description: "战术/底牌/代价铺垫：主角的准备过程",               words: 800, focus: "action" }
+      - { description: "决胜时刻：压倒性胜利，反派不可置信",               words: 1000, focus: "reveal" }
+  - keywords: [突破, 升级, 晋升, 实力提升]
+    priority: 70
+    beats:
+      - { description: "升级契机：资源/对手/事件触发",                   words: 500, focus: "sensory" }
+      - { description: "升级过程：具体数值/层次/境界变化",                 words: 1000, focus: "action" }
+      - { description: "升级余波：配角反应、爽感兑现",                     words: 600, focus: "emotion" }
+  - keywords: [身份, 揭露, 暴露, 真实身份]
+    priority: 75
+    beats:
+      - { description: "伏笔激活：之前埋下的身份线索浮现",                 words: 600, focus: "suspense" }
+      - { description: "揭露瞬间：所有人震惊、关系重构",                   words: 800, focus: "reveal"   }
+      - { description: "新格局展开：新的敌人/盟友/目标",                   words: 500, focus: "emotion"  }
 thresholds:
   addiction_critical: 50
   addiction_moderate: 35

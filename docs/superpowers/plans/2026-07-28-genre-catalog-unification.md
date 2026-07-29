@@ -82,7 +82,7 @@ Files this plan creates or modifies:
 - Create: `config/genres/yanqing.yaml`
 - Modify: `backend/config.py` (add `genres_dir` setting)
 
-- [ ] **Step 1.1: Add `genres_dir` to backend/config.py**
+- [x] **Step 1.1: Add `genres_dir` to backend/config.py**
 
 Read `backend/config.py` first; then add this field alongside the existing settings (e.g., near `style_dir`):
 
@@ -90,7 +90,7 @@ Read `backend/config.py` first; then add this field alongside the existing setti
 genres_dir: Path = Path(__file__).parent.parent / "config" / "genres"
 ```
 
-- [ ] **Step 1.2: Create `config/genres/index.yaml` (7 entries, no fusion-only genres yet)**
+- [x] **Step 1.2: Create `config/genres/index.yaml` (7 entries, no fusion-only genres yet)**
 
 ```yaml
 # Genre catalog index. Each id MUST have a matching config/genres/<id>.yaml.
@@ -105,7 +105,7 @@ genres:
   - { id: yanqing,    label_zh: 言情, label_en: Romance,         family: romance       }
 ```
 
-- [ ] **Step 1.3: Create `config/genres/families.yaml`**
+- [x] **Step 1.3: Create `config/genres/families.yaml`**
 
 ```yaml
 families:
@@ -117,7 +117,7 @@ families:
   romance:        [yanqing]
 ```
 
-- [ ] **Step 1.4: Create `config/genres/compatibility.yaml` for the 7 ids**
+- [x] **Step 1.4: Create `config/genres/compatibility.yaml` for the 7 ids**
 
 The loader requires symmetry. For these 7 ids, mirror the values from `backend/creative_os/genre_fusion_engine.py:COMPATIBILITY_MATRIX` (already in the codebase). Example format:
 
@@ -142,7 +142,7 @@ matrix:
 
 To get the exact values, read `backend/creative_os/genre_fusion_engine.py` lines containing `COMPATIBILITY_MATRIX`. Extract only the entries for the 7 listed ids.
 
-- [ ] **Step 1.5: Create the 7 per-genre YAML files**
+- [x] **Step 1.5: Create the 7 per-genre YAML files**
 
 For each existing id, read `data/style/<id>.yaml` and `config/genre_thresholds.yaml` and merge into one `config/genres/<id>.yaml`:
 
@@ -239,7 +239,7 @@ The exact `thresholds` block for each of the 7 ids comes from `config/genre_thre
 
 If a genre has no entry in `genre_thresholds.yaml`, copy the closest family-mate's thresholds and add a `# TODO: tune for <id>` comment.
 
-- [ ] **Step 1.6: Commit**
+- [x] **Step 1.6: Commit**
 
 ```bash
 cd /Users/longsa/Codes/storyForge2
@@ -258,7 +258,7 @@ git commit -m "feat(genres): create config skeleton with 7 existing genres"
 - Create: `backend/genres/catalog.py`
 - Create: `tests/test_genre_catalog.py`
 
-- [ ] **Step 2.1: Write the failing test for index/per-genre validation**
+- [x] **Step 2.1: Write the failing test for index/per-genre validation**
 
 Create `tests/test_genre_catalog.py`:
 
@@ -403,12 +403,12 @@ class TestGenreCatalogGetters:
         assert fallback["id"] in ("alpha", "beta")
 ```
 
-- [ ] **Step 2.2: Run test to verify it fails**
+- [x] **Step 2.2: Run test to verify it fails**
 
 Run: `source venv/bin/activate && pytest tests/test_genre_catalog.py -v`
 Expected: ImportError or ModuleNotFoundError because `backend.genres.catalog` doesn't exist yet.
 
-- [ ] **Step 2.3: Implement `backend/genres/__init__.py`**
+- [x] **Step 2.3: Implement `backend/genres/__init__.py`**
 
 ```python
 from backend.genres.catalog import GenreCatalog, CatalogLoadError, get_catalog
@@ -416,7 +416,7 @@ from backend.genres.catalog import GenreCatalog, CatalogLoadError, get_catalog
 __all__ = ["GenreCatalog", "CatalogLoadError", "get_catalog"]
 ```
 
-- [ ] **Step 2.4: Implement `backend/genres/catalog.py`**
+- [x] **Step 2.4: Implement `backend/genres/catalog.py`**
 
 ```python
 """Single source of truth for genre config.
@@ -611,12 +611,12 @@ def get_catalog() -> GenreCatalog:
     return _catalog
 ```
 
-- [ ] **Step 2.5: Run test to verify it passes**
+- [x] **Step 2.5: Run test to verify it passes**
 
 Run: `source venv/bin/activate && pytest tests/test_genre_catalog.py -v`
 Expected: All 14 tests pass.
 
-- [ ] **Step 2.6: Commit**
+- [x] **Step 2.6: Commit**
 
 ```bash
 git add backend/genres/ tests/test_genre_catalog.py
@@ -633,11 +633,11 @@ git commit -m "feat(genres): GenreCatalog loader with full validation"
 - Modify: `backend/style_engine/genre_template.py`
 - Test: `tests/test_genre_template.py` (existing — must still pass)
 
-- [ ] **Step 3.1: Read existing `genre_template.py` and `tests/test_genre_template.py`**
+- [x] **Step 3.1: Read existing `genre_template.py` and `tests/test_genre_template.py`**
 
 Note that the existing `GenreTemplate` class loads from `settings.style_dir` (data/style). We'll make it a thin delegator to `GenreCatalog`.
 
-- [ ] **Step 3.2: Rewrite `genre_template.py`**
+- [x] **Step 3.2: Rewrite `genre_template.py`**
 
 Replace the entire content of `backend/style_engine/genre_template.py`:
 
@@ -684,12 +684,12 @@ class GenreTemplate:
         return self._catalog().get_taboos(template_name)
 ```
 
-- [ ] **Step 3.3: Run existing Style Engine tests**
+- [x] **Step 3.3: Run existing Style Engine tests**
 
 Run: `source venv/bin/activate && pytest tests/test_genre_template.py tests/test_writing_formulas.py tests/test_taboo_constraints.py -v`
 Expected: All pass. If anything fails, debug until it does.
 
-- [ ] **Step 3.4: Commit**
+- [x] **Step 3.4: Commit**
 
 ```bash
 git add backend/style_engine/genre_template.py
@@ -704,11 +704,11 @@ git commit -m "refactor(style): GenreTemplate delegates to GenreCatalog"
 - Modify: `backend/reader_os/thresholds.py`
 - Test: `tests/test_reader_os.py` (existing — must still pass)
 
-- [ ] **Step 4.1: Read existing `backend/reader_os/thresholds.py`**
+- [x] **Step 4.1: Read existing `backend/reader_os/thresholds.py`**
 
 Identify the `load_genre_thresholds()` function. We wrap it to consult catalog first.
 
-- [ ] **Step 4.2: Add catalog-first lookup with legacy fallback**
+- [x] **Step 4.2: Add catalog-first lookup with legacy fallback**
 
 In `backend/reader_os/thresholds.py`, modify `load_genre_thresholds()` to:
 
@@ -734,12 +734,12 @@ def _legacy_load_genre_thresholds(genre: str = "cool_novel") -> dict:
 
 Keep the legacy function as-is. Wrap the public function.
 
-- [ ] **Step 4.3: Run existing ReaderOS tests**
+- [x] **Step 4.3: Run existing ReaderOS tests**
 
 Run: `source venv/bin/activate && pytest tests/test_reader_os.py tests/test_settings_api.py -v`
 Expected: All pass.
 
-- [ ] **Step 4.4: Commit**
+- [x] **Step 4.4: Commit**
 
 ```bash
 git add backend/reader_os/thresholds.py
@@ -754,11 +754,11 @@ git commit -m "refactor(reader): thresholds delegate to GenreCatalog with legacy
 - Modify: `backend/creative_os/genre_fusion_engine.py`
 - Test: `tests/test_creative_os/test_genre_fusion_engine.py` (existing — must still pass)
 
-- [ ] **Step 5.1: Read existing `genre_fusion_engine.py`**
+- [x] **Step 5.1: Read existing `genre_fusion_engine.py`**
 
 Note the hardcoded `GENRE_GRAPH` and `COMPATIBILITY_MATRIX` constants. The class uses these to build its internal graph.
 
-- [ ] **Step 5.2: Replace hardcoded reads with catalog reads (keep legacy fallback)**
+- [x] **Step 5.2: Replace hardcoded reads with catalog reads (keep legacy fallback)**
 
 In `backend/creative_os/genre_fusion_engine.py`:
 
@@ -788,12 +788,12 @@ def _build_graph(self):
 
 Adjust the rest of the class to handle either source uniformly. The simplest path: have a single `_compatibility` dict and a single `_graph` (built by the function above), and remove all other references to `GENRE_GRAPH`/`COMPATIBILITY_MATRIX` constants.
 
-- [ ] **Step 5.3: Run existing Fusion Engine tests**
+- [x] **Step 5.3: Run existing Fusion Engine tests**
 
 Run: `source venv/bin/activate && pytest tests/test_creative_os/test_genre_fusion_engine.py -v`
 Expected: All pass.
 
-- [ ] **Step 5.4: Commit**
+- [x] **Step 5.4: Commit**
 
 ```bash
 git add backend/creative_os/genre_fusion_engine.py
@@ -808,12 +808,12 @@ git commit -m "refactor(fusion): genre graph reads from GenreCatalog with legacy
 - Modify: `backend/prompts/` (find the placeholder renderer)
 - Test: existing prompt tests
 
-- [ ] **Step 6.1: Locate the `{genre}` placeholder renderer**
+- [x] **Step 6.1: Locate the `{genre}` placeholder renderer**
 
 Run: `grep -rn "{genre}" /Users/longsa/Codes/storyForge2/backend/prompts/ /Users/longsa/Codes/storyForge2/backend/`
 Look for `prompt_placeholders.py` or similar. Identify where `{genre}` gets replaced with a literal Chinese label.
 
-- [ ] **Step 6.2: Update the renderer to use catalog**
+- [x] **Step 6.2: Update the renderer to use catalog**
 
 Replace any hardcoded mapping with:
 
@@ -829,12 +829,12 @@ except Exception as e:
 
 Where `_legacy_genre_label(genre)` is the original hardcoded mapping extracted to a helper function.
 
-- [ ] **Step 6.3: Run prompt tests**
+- [x] **Step 6.3: Run prompt tests**
 
 Run: `source venv/bin/activate && pytest tests/ -k "prompt" -v`
 Expected: All pass.
 
-- [ ] **Step 6.4: Commit**
+- [x] **Step 6.4: Commit**
 
 ```bash
 git add backend/prompts/
@@ -850,7 +850,7 @@ git commit -m "refactor(prompts): {genre} placeholder reads from GenreCatalog"
 - Modify: `backend/main.py`
 - Create: `tests/test_genres_api.py`
 
-- [ ] **Step 7.1: Write the failing test**
+- [x] **Step 7.1: Write the failing test**
 
 Create `tests/test_genres_api.py`:
 
@@ -890,12 +890,12 @@ def test_list_genres_ui_visible_only(client):
         assert entry["ui_visible"] is True
 ```
 
-- [ ] **Step 7.2: Run test to verify it fails**
+- [x] **Step 7.2: Run test to verify it fails**
 
 Run: `source venv/bin/activate && pytest tests/test_genres_api.py -v`
 Expected: 404 (route not found).
 
-- [ ] **Step 7.3: Implement `backend/api/genres.py`**
+- [x] **Step 7.3: Implement `backend/api/genres.py`**
 
 ```python
 """GET /api/v1/genres — list all genres for the frontend."""
@@ -916,7 +916,7 @@ async def list_genres(ui_visible_only: bool = True) -> list[dict]:
     return get_catalog().list(ui_visible_only=ui_visible_only)
 ```
 
-- [ ] **Step 7.4: Register the router in `backend/main.py`**
+- [x] **Step 7.4: Register the router in `backend/main.py`**
 
 Locate where other routers are included (e.g., `app.include_router(project.router)`) and add:
 
@@ -925,12 +925,12 @@ from backend.api import genres as genres_api
 app.include_router(genres_api.router)
 ```
 
-- [ ] **Step 7.5: Run test to verify it passes**
+- [x] **Step 7.5: Run test to verify it passes**
 
 Run: `source venv/bin/activate && pytest tests/test_genres_api.py -v`
 Expected: 3 tests pass.
 
-- [ ] **Step 7.6: Commit**
+- [x] **Step 7.6: Commit**
 
 ```bash
 git add backend/api/genres.py backend/main.py tests/test_genres_api.py
@@ -947,7 +947,7 @@ git commit -m "feat(api): GET /api/v1/genres endpoint"
 - Create: `frontend/src/hooks/useGenres.ts`
 - Modify: `frontend/src/api/client.ts`
 
-- [ ] **Step 8.1: Add `listGenres()` to `frontend/src/api/client.ts`**
+- [x] **Step 8.1: Add `listGenres()` to `frontend/src/api/client.ts`**
 
 Read the existing `client.ts` to find the right place. Add:
 
@@ -963,7 +963,7 @@ listGenres(uiVisibleOnly = true): Promise<Genre[]> {
 }
 ```
 
-- [ ] **Step 8.2: Create `frontend/src/hooks/useGenres.ts`**
+- [x] **Step 8.2: Create `frontend/src/hooks/useGenres.ts`**
 
 ```typescript
 import { useEffect, useState } from "react";
@@ -1004,12 +1004,12 @@ export function useGenres(uiVisibleOnly = true): Genre[] {
 }
 ```
 
-- [ ] **Step 8.3: Run existing frontend tests to confirm no regression**
+- [x] **Step 8.3: Run existing frontend tests to confirm no regression**
 
 Run: `cd frontend && npx vitest run src/test/genres.test.ts src/test/BookShelf.test.tsx src/test/BookShelfModal.test.tsx`
 Expected: All pass (the hook is new; nothing should break yet).
 
-- [ ] **Step 8.4: Commit**
+- [x] **Step 8.4: Commit**
 
 ```bash
 git add frontend/src/api/client.ts frontend/src/hooks/useGenres.ts
@@ -1025,7 +1025,7 @@ git commit -m "feat(frontend): useGenres hook fetching from /api/v1/genres"
 - Modify: `frontend/src/test/CreateProjectCard.test.tsx` (create if doesn't exist)
 - Modify: `frontend/src/test/genres.test.ts`
 
-- [ ] **Step 9.1: Update `CreateProjectCard.tsx`**
+- [x] **Step 9.1: Update `CreateProjectCard.tsx`**
 
 Replace:
 ```typescript
@@ -1046,7 +1046,7 @@ const genres = useGenres(true);
 ))}
 ```
 
-- [ ] **Step 9.2: Update or create `CreateProjectCard.test.tsx`**
+- [x] **Step 9.2: Update or create `CreateProjectCard.test.tsx`**
 
 If the file doesn't exist, create it with:
 
@@ -1076,12 +1076,12 @@ describe("CreateProjectCard", () => {
 
 If it exists, update existing mocks to use `useGenres`.
 
-- [ ] **Step 9.3: Run CreateProjectCard tests**
+- [x] **Step 9.3: Run CreateProjectCard tests**
 
 Run: `cd frontend && npx vitest run src/test/CreateProjectCard.test.tsx -v`
 Expected: pass.
 
-- [ ] **Step 9.4: Commit**
+- [x] **Step 9.4: Commit**
 
 ```bash
 git add frontend/src/components/home/CreateProjectCard.tsx frontend/src/test/CreateProjectCard.test.tsx
@@ -1098,7 +1098,7 @@ git commit -m "feat(frontend): CreateProjectCard uses useGenres()"
 - Modify: `frontend/src/test/BookShelf.test.tsx`
 - Modify: `frontend/src/test/BookShelfModal.test.tsx`
 
-- [ ] **Step 10.1: Update `BookShelf.tsx`**
+- [x] **Step 10.1: Update `BookShelf.tsx`**
 
 Replace:
 ```typescript
@@ -1118,11 +1118,11 @@ const labelByGenre = Object.fromEntries(genres.map((g) => [g.id, g.label_zh]));
 
 Replace `{GENRE_LABELS[project.genre] || project.genre}` with `{labelByGenre[project.genre] || project.genre}`.
 
-- [ ] **Step 10.2: Apply the same change to `BookShelfModal.tsx`**
+- [x] **Step 10.2: Apply the same change to `BookShelfModal.tsx`**
 
 Same imports, same pattern.
 
-- [ ] **Step 10.3: Update `BookShelf.test.tsx` and `BookShelfModal.test.tsx` mocks**
+- [x] **Step 10.3: Update `BookShelf.test.tsx` and `BookShelfModal.test.tsx` mocks**
 
 In each test file, add the mock at the top:
 
@@ -1138,12 +1138,12 @@ vi.mock("../../hooks/useGenres", () => ({
 
 Add it near the existing `vi.mock("../api/client", ...)` calls.
 
-- [ ] **Step 10.4: Run BookShelf + BookShelfModal tests**
+- [x] **Step 10.4: Run BookShelf + BookShelfModal tests**
 
 Run: `cd frontend && npx vitest run src/test/BookShelf.test.tsx src/test/BookShelfModal.test.tsx -v`
 Expected: All pass.
 
-- [ ] **Step 10.5: Commit**
+- [x] **Step 10.5: Commit**
 
 ```bash
 git add frontend/src/components/home/BookShelf.tsx frontend/src/components/home/BookShelfModal.tsx frontend/src/test/BookShelf.test.tsx frontend/src/test/BookShelfModal.test.tsx
@@ -1157,7 +1157,7 @@ git commit -m "feat(frontend): BookShelf + Modal use useGenres() for labels"
 **Files:**
 - Modify: `frontend/src/constants/genres.ts`
 
-- [ ] **Step 11.1: Add DEPRECATED notice and keep stub exports**
+- [x] **Step 11.1: Add DEPRECATED notice and keep stub exports**
 
 ```typescript
 /**
@@ -1179,12 +1179,12 @@ export const GENRE_LABELS: Readonly<Record<string, string>> = Object.freeze({});
 export const GENRE_TEMPLATE_KEYS: ReadonlyArray<string> = Object.freeze([]);
 ```
 
-- [ ] **Step 11.2: Run frontend tests**
+- [x] **Step 11.2: Run frontend tests**
 
 Run: `cd frontend && npx vitest run src/test/genres.test.ts src/test/BookShelf.test.tsx src/test/BookShelfModal.test.tsx src/test/CreateProjectCard.test.tsx -v`
 Expected: The `genres.test.ts` test that expects `GENRE_TEMPLATE_KEYS` to cover backend templates **will fail** — update it next.
 
-- [ ] **Step 11.3: Update `frontend/src/test/genres.test.ts`**
+- [x] **Step 11.3: Update `frontend/src/test/genres.test.ts`**
 
 Replace the `GENRES constant` describe block with hook-based coverage:
 
@@ -1237,12 +1237,12 @@ describe("useGenres hook", () => {
 });
 ```
 
-- [ ] **Step 11.4: Run genres test**
+- [x] **Step 11.4: Run genres test**
 
 Run: `cd frontend && npx vitest run src/test/genres.test.ts -v`
 Expected: pass.
 
-- [ ] **Step 11.5: Commit**
+- [x] **Step 11.5: Commit**
 
 ```bash
 git add frontend/src/constants/genres.ts frontend/src/test/genres.test.ts
@@ -1260,7 +1260,7 @@ git commit -m "refactor(frontend): mark genres.ts deprecated; test useGenres()"
 - Create: `backend/genres/migrations.py`
 - Create: `tests/test_migrate_genre_catalog.py`
 
-- [ ] **Step 12.1: Write helper module `backend/genres/migrations.py`**
+- [x] **Step 12.1: Write helper module `backend/genres/migrations.py`**
 
 ```python
 """Extract genre config from the legacy three-system layout.
@@ -1332,7 +1332,7 @@ def write_catalog(target_dir: Path, *, force: bool = False) -> None:
     raise NotImplementedError("write_catalog is implemented by the script")
 ```
 
-- [ ] **Step 12.2: Write the failing integration test**
+- [x] **Step 12.2: Write the failing integration test**
 
 Create `tests/test_migrate_genre_catalog.py`:
 
@@ -1360,7 +1360,7 @@ def test_migrate_apply_produces_valid_catalog(tmp_path):
                 "output dir and assert .get('cool_novel') returns expected fields")
 ```
 
-- [ ] **Step 12.3: Implement `scripts/migrate_genre_catalog.py`**
+- [x] **Step 12.3: Implement `scripts/migrate_genre_catalog.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -1506,17 +1506,17 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 12.4: Run dry-run against current repo**
+- [x] **Step 12.4: Run dry-run against current repo**
 
 Run: `cd /Users/longsa/Codes/storyForge2 && source venv/bin/activate && python scripts/migrate_genre_catalog.py --dry-run --target /tmp/preview-genres`
 Expected: Reports the genres it would write, exits 0.
 
-- [ ] **Step 12.5: Run apply to a temporary target**
+- [x] **Step 12.5: Run apply to a temporary target**
 
 Run: `python scripts/migrate_genre_catalog.py --apply --target /tmp/migrated-genres`
 Expected: Writes files; logs list.
 
-- [ ] **Step 12.6: Verify generated catalog loads**
+- [x] **Step 12.6: Verify generated catalog loads**
 
 ```bash
 source venv/bin/activate && python -c "
@@ -1530,7 +1530,7 @@ print('OK, loaded:', sorted(cat._entries.keys())[:5], '...')
 
 Expected: prints first 5 ids, no exception.
 
-- [ ] **Step 12.7: Replace integration test stubs with real-repo-based tests**
+- [x] **Step 12.7: Replace integration test stubs with real-repo-based tests**
 
 Replace `tests/test_migrate_genre_catalog.py` with:
 
@@ -1592,7 +1592,7 @@ def test_apply_is_idempotent(tmp_path):
         assert result.returncode == 0, f"stderr: {result.stderr}"
 ```
 
-- [ ] **Step 12.8: Commit**
+- [x] **Step 12.8: Commit**
 
 ```bash
 git add scripts/migrate_genre_catalog.py backend/genres/migrations.py
@@ -1607,7 +1607,7 @@ git commit -m "feat(scripts): one-shot migration from legacy three-system layout
 - Create: `scripts/validate_project_genres.py`
 - Modify: `scripts/migrate_genre_catalog.py` (call validator as final step)
 
-- [ ] **Step 13.1: Implement the validator**
+- [x] **Step 13.1: Implement the validator**
 
 Create `scripts/validate_project_genres.py`:
 
@@ -1663,12 +1663,12 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 13.2: Run the validator**
+- [x] **Step 13.2: Run the validator**
 
 Run: `source venv/bin/activate && python scripts/validate_project_genres.py`
 Expected: "OK: all project genres are in catalog." (since project genres are already pinyin keys that exist in the catalog).
 
-- [ ] **Step 13.3: Commit**
+- [x] **Step 13.3: Commit**
 
 ```bash
 git add scripts/validate_project_genres.py
@@ -1689,7 +1689,7 @@ git commit -m "feat(scripts): validate all project genres against catalog"
 - Modify: `data/style/yanqing.yaml`
 - Modify: `config/genre_thresholds.yaml`
 
-- [ ] **Step 14.1: Prepend deprecation banner to each `data/style/*.yaml`**
+- [x] **Step 14.1: Prepend deprecation banner to each `data/style/*.yaml`**
 
 For each of the 7 files, prepend:
 
@@ -1702,7 +1702,7 @@ For each of the 7 files, prepend:
 
 Preserve the rest of the file content verbatim.
 
-- [ ] **Step 14.2: Prepend deprecation banner to `config/genre_thresholds.yaml`**
+- [x] **Step 14.2: Prepend deprecation banner to `config/genre_thresholds.yaml`**
 
 ```yaml
 # DEPRECATED: This file will be removed in the next release.
@@ -1711,12 +1711,12 @@ Preserve the rest of the file content verbatim.
 ---
 ```
 
-- [ ] **Step 14.3: Verify no regression**
+- [x] **Step 14.3: Verify no regression**
 
 Run: `source venv/bin/activate && pytest tests/test_genre_template.py tests/test_reader_os.py tests/test_genre_catalog.py -v`
 Expected: All pass. (The deprecation banners are comments; the legacy fallback path in thresholds.py still reads the file when catalog fails.)
 
-- [ ] **Step 14.4: Commit**
+- [x] **Step 14.4: Commit**
 
 ```bash
 git add data/style/ config/genre_thresholds.yaml
@@ -1729,17 +1729,17 @@ git commit -m "chore: deprecation banners on legacy genre files"
 
 **Files:** none
 
-- [ ] **Step 15.1: Backend test sweep**
+- [x] **Step 15.1: Backend test sweep**
 
 Run: `source venv/bin/activate && pytest tests/ -v --timeout=60 2>&1 | tail -20`
 Expected: 0 failures (except any pre-existing failures unrelated to this work; e.g., the EventSource-related Workspace.test.tsx failures noted in CLAUDE.md memory).
 
-- [ ] **Step 15.2: Frontend test sweep**
+- [x] **Step 15.2: Frontend test sweep**
 
 Run: `cd frontend && npx vitest run --no-coverage 2>&1 | tail -10`
 Expected: 0 failures from changed files; the unrelated Workspace.test.tsx EventSource failures are pre-existing.
 
-- [ ] **Step 15.3: Live smoke test**
+- [x] **Step 15.3: Live smoke test**
 
 Start backend and frontend, create a project with `genre: "xuanyi"`, write one chapter, and verify in the response that:
 - `GET /api/v1/genres` returns 7 entries
@@ -1748,7 +1748,7 @@ Start backend and frontend, create a project with `genre: "xuanyi"`, write one c
 
 If anything fails, debug before declaring done.
 
-- [ ] **Step 15.4: Final commit (if any cleanup needed)**
+- [x] **Step 15.4: Final commit (if any cleanup needed)**
 
 If any cleanup was needed from Step 15.3:
 

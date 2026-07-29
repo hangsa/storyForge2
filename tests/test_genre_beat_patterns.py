@@ -142,3 +142,72 @@ class TestKeywordMatching:
         result = _resolve_genre_beat_patterns("cool_novel", "今天的天气预报说明天有雨")
         assert result == ""
         assert "【题材节拍模板】" not in result
+
+
+class TestPromptWiring:
+    """Verify beat_patterns + focus_vocabulary reach the outline prompt."""
+
+    @pytest.mark.asyncio
+    async def test_novel_outline_prompt_contains_beat_patterns_section(self):
+        """generate_novel_outline with outline_text='打脸' → prompt contains the section."""
+        from backend.agents.planner import PlannerAgent
+
+        captured = {}
+
+        async def fake_tier(self, task_name, system_prompt, user_prompt, **kwargs):
+            captured["user"] = user_prompt
+            return {"volumes": []}, _mock_response()
+
+        planner = PlannerAgent(project_id="test")
+        with patch.object(PlannerAgent, "generate_with_tier", new=fake_tier):
+            await planner.generate_novel_outline(
+                concept={"title": "测试", "premise": "x", "tone": "x", "theme": "x"},
+                story_dna={"core_contradiction": {"statement": "x"}},
+                world={"era": "x", "power_system": {"name": "x", "core_rules": []}, "core_rules": []},
+                characters=[],
+                target_total_words=1_000_000,
+                min_words=2000,
+                outline_text="主角在擂台上打脸反派，震惊全场",
+            )
+
+        rendered = captured["user"]
+        assert "【题材节拍模板】" in rendered
+        assert "打脸" in rendered
+        assert "【focus 字段图例】" in rendered
+        assert "sensory" in rendered
+
+    @pytest.mark.asyncio
+    async def test_novel_outline_prompt_omits_beat_section_when_no_match(self):
+        """generate_novel_outline with no-keyword outline → no beat section, but vocab still appears."""
+        from backend.agents.planner import PlannerAgent
+
+        captured = {}
+
+        async def fake_tier(self, task_name, system_prompt, user_prompt, **kwargs):
+            captured["user"] = user_prompt
+            return {"volumes": []}, _mock_response()
+
+        planner = PlannerAgent(project_id="test")
+        with patch.object(PlannerAgent, "generate_with_tier", new=fake_tier):
+            await planner.generate_novel_outline(
+                concept={"title": "测试", "premise": "x", "tone": "x", "theme": "x"},
+                story_dna={"core_contradiction": {"statement": "x"}},
+                world={"era": "x", "power_system": {"name": "x", "core_rules": []}, "core_rules": []},
+                characters=[],
+                target_total_words=1_000_000,
+                min_words=2000,
+                outline_text="今天的天气预报说明天有雨",  # no matching keywords
+            )
+
+        rendered = captured["user"]
+        assert "【题材节拍模板】" not in rendered  # section disappears entirely
+        assert "【focus 字段图例】" in rendered  # vocab always present
+
+
+def _mock_response():
+    """Real LLMResponse dataclass — log_usage JSON-serializes its fields."""
+    from backend.llm.base_provider import LLMResponse
+    return LLMResponse(
+        text="", tokens_in=0, tokens_out=0,
+        model="test", provider="test", finish_reason="stop",
+    )

@@ -101,6 +101,38 @@ trope_patterns:
 - name: 外力阻挠
   description: 家庭/社会/命运对关系的阻碍
   min_interval: 8
+beat_patterns:
+  - keywords: [误会, 误解, 矛盾, 和解]
+    priority: 70
+    beats:
+      - { description: "误会形成：信息差导致的认知偏差",                  words: 500, focus: "dialogue" }
+      - { description: "误会加深：行为冲突、关系紧张",                    words: 700, focus: "emotion" }
+      - { description: "化解过程：坦诚、第三方调停、真相揭示",            words: 700, focus: "reveal" }
+  - keywords: [关系升级, 暧昧, 告白, 确认关系]
+    priority: 85
+    beats:
+      - { description: "情感铺垫：日常相处、细节积累",                    words: 600, focus: "sensory" }
+      - { description: "情感升温：关键时刻、试探",                        words: 700, focus: "dialogue" }
+      - { description: "关系确认：告白/接受/确立",                        words: 600, focus: "reveal" }
+      - { description: "新关系磨合：身份转换、规则建立",                  words: 500, focus: "emotion" }
+  - keywords: [第三者, 情敌, 介入, 三角]
+    priority: 65
+    beats:
+      - { description: "第三者登场：动机背景、人物魅力",                  words: 500, focus: "sensory" }
+      - { description: "冲突显化：争夺、试探、紧张",                      words: 700, focus: "dialogue" }
+      - { description: "关系考验：主角的选择、第三者退场",                words: 600, focus: "emotion" }
+  - keywords: [外力阻挠, 家庭, 反对, 命运]
+    priority: 75
+    beats:
+      - { description: "阻挠来源：家庭/社会/命运的压力",                  words: 500, focus: "dialogue" }
+      - { description: "压力升级：威胁、限制、分离",                      words: 700, focus: "action" }
+      - { description: "突破阻挠：坚持、牺牲、新平衡",                    words: 600, focus: "reveal" }
+  - keywords: [情感转折, 真相, 揭示, 动摇]
+    priority: 80
+    beats:
+      - { description: "真相浮现：过去的秘密或误会被发现",                words: 600, focus: "suspense" }
+      - { description: "情感冲击：信任/信念动摇",                         words: 700, focus: "emotion" }
+      - { description: "重新抉择：是去是留、新关系建立",                  words: 600, focus: "dialogue" }
 thresholds:
   addiction_critical: 30
   addiction_moderate: 20

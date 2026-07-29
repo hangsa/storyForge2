@@ -99,6 +99,42 @@ trope_patterns:
 - name: 因果了结
   description: 前世的因果或恩怨在今生清算
   min_interval: 10
+beat_patterns:
+  - keywords: [境界突破, 突破, 飞升, 晋升]
+    priority: 85
+    beats:
+      - { description: "境界壁垒感知：修士意识到瓶颈与契机",             words: 500, focus: "sensory" }
+      - { description: "闭关修炼：灵气运转、功法运转、心境磨练",           words: 1000, focus: "action" }
+      - { description: "突破瞬间：天地异象、力量升华、旁人震惊",           words: 900, focus: "reveal" }
+      - { description: "新境界感知：感官扩展、神识变化、寿命延长",         words: 600, focus: "emotion" }
+  - keywords: [宗门大比, 比武, 擂台, 论道, 选拔]
+    priority: 75
+    beats:
+      - { description: "赛前氛围：规则宣布、对手出场、赌注/奖励",          words: 500, focus: "sensory" }
+      - { description: "前期对战：试探性交锋、展示修为底蕴",               words: 800, focus: "action" }
+      - { description: "核心对战：功法对抗、术法克制、险象环生",           words: 1000, focus: "action" }
+      - { description: "胜负揭晓：底牌对决、意外变故",                     words: 700, focus: "reveal" }
+      - { description: "赛后余波：名次确定、新的挑战预告",                 words: 400, focus: "emotion" }
+  - keywords: [秘境, 遗迹, 上古, 仙府, 探索]
+    priority: 70
+    beats:
+      - { description: "秘境入口：危险预兆、历史背景暗示",                 words: 500, focus: "sensory" }
+      - { description: "探索与危机：禁制、守护兽、阵法",                   words: 1000, focus: "action" }
+      - { description: "核心发现：传承/法宝/秘密出现",                     words: 800, focus: "reveal" }
+      - { description: "收获与离开：获得机缘、脱险、伏笔",                 words: 500, focus: "emotion" }
+  - keywords: [因果, 了结, 恩怨, 前世, 清算]
+    priority: 80
+    beats:
+      - { description: "因果浮现：前世/宿怨线索激活",                     words: 600, focus: "suspense" }
+      - { description: "清算过程：双方对峙、陈年往事揭示",                 words: 900, focus: "dialogue" }
+      - { description: "了断结局：恩怨归零、新关系建立",                   words: 600, focus: "emotion" }
+  - keywords: [天劫, 渡劫, 心魔, 大劫]
+    priority: 95
+    beats:
+      - { description: "劫云汇聚：天地异变、劫雷酝酿",                     words: 600, focus: "sensory" }
+      - { description: "渡劫过程：法力对抗、身躯淬炼、心境考验",           words: 1200, focus: "action" }
+      - { description: "心魔降临：执念显化、内心抉择",                     words: 800, focus: "dialogue" }
+      - { description: "渡劫成功/失败：飞升/陨落、天地回应",               words: 600, focus: "reveal" }
 # TODO: tune for xianxia — copied from config/genre_thresholds.yaml "奇幻" block
 # (closest cultivation-family mate). Replace with hand-authored xianxia values.
 thresholds:

@@ -233,6 +233,51 @@ class TestPromptWiring:
         assert "【focus 字段图例】" in rendered
 
 
+class TestIntegration:
+    """End-to-end integration: same concept, different outlines → different prompts."""
+
+    @pytest.mark.asyncio
+    async def test_keyword_match_changes_prompt_with_different_outlines(self):
+        """cool_novel + same concept; outline_text='打脸' vs '突破' → prompts differ."""
+        from backend.agents.planner import PlannerAgent
+
+        captured = {}
+
+        async def capturing_fake(self, task_name, system_prompt, user_prompt, **kwargs):
+            captured.setdefault("prompts", []).append(user_prompt)
+            return {"volumes": []}, _mock_response()
+
+        planner = PlannerAgent(project_id="test")
+        with patch.object(PlannerAgent, "generate_with_tier", new=capturing_fake):
+            common = dict(
+                concept={"title": "测试", "premise": "x", "tone": "x", "theme": "x"},
+                story_dna={"core_contradiction": {"statement": "x"}},
+                world={"era": "x", "power_system": {"name": "x", "core_rules": []}, "core_rules": []},
+                characters=[],
+                target_total_words=1_000_000,
+                min_words=2000,
+                genre="cool_novel",
+            )
+            await planner.generate_novel_outline(outline_text="打脸", **common)
+            await planner.generate_novel_outline(outline_text="突破升级", **common)
+
+        prompt_face, prompt_break = captured["prompts"]
+        # 打脸 outline → contains 打脸 template, does NOT contain 突破 template
+        assert "打脸" in prompt_face
+        assert "升级契机" not in prompt_face
+        # 突破 outline → contains 突破 template, does NOT contain 打脸 template
+        assert "升级契机" in prompt_break
+        assert "打脸" not in prompt_break
+
+    def test_unknown_genre_falls_back_to_first_index_entry(self):
+        """genre='nonexistent_xyz' → cool_novel's beat_patterns used (matches existing fallback)."""
+        from backend.agents.planner import _resolve_genre_beat_patterns
+        # First index entry is cool_novel (per config/genres/index.yaml)
+        result = _resolve_genre_beat_patterns("nonexistent_xyz", "打脸")
+        assert "打脸" in result
+        assert "【题材节拍模板】" in result
+
+
 def _mock_response():
     """Real LLMResponse dataclass — log_usage JSON-serializes its fields."""
     from backend.llm.base_provider import LLMResponse

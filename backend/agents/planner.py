@@ -388,6 +388,8 @@ class PlannerAgent(BaseAgent):
         chapter_number: int = 1,
         min_words: int = 4000,
         novel_outline: Optional[dict] = None,
+        outline_text: str = "",
+        genre: str = "cool_novel",
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
         story_dna_context = json.dumps(story_dna, ensure_ascii=False, indent=2)
@@ -424,6 +426,8 @@ class PlannerAgent(BaseAgent):
             chapter_number=chapter_number,
             min_words=min_words,
             novel_outline_context=novel_outline_context,
+            genre_beat_patterns=_resolve_genre_beat_patterns(genre, outline_text),
+            genre_focus_vocabulary=_resolve_genre_focus_vocabulary(),
         )
         self.log_usage("outline_generation", response)
         return result, response

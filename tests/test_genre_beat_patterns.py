@@ -203,6 +203,35 @@ class TestPromptWiring:
         assert "【题材节拍模板】" not in rendered  # section disappears entirely
         assert "【focus 字段图例】" in rendered  # vocab always present
 
+    @pytest.mark.asyncio
+    async def test_chapter_outline_prompt_uses_outline_text_for_matching(self):
+        """generate_outline with outline_text='打脸场景' → matching template appears."""
+        from backend.agents.planner import PlannerAgent
+
+        captured = {}
+
+        async def fake_tier(self, task_name, system_prompt, user_prompt, **kwargs):
+            captured["user"] = user_prompt
+            return {"scenes": []}, _mock_response()
+
+        planner = PlannerAgent(project_id="test")
+        with patch.object(PlannerAgent, "generate_with_tier", new=fake_tier):
+            await planner.generate_outline(
+                concept={"title": "测试"},
+                story_dna={},
+                world={},
+                character={"name": "x"},
+                chapter_number=5,
+                min_words=2000,
+                outline_text="打脸场景：对手嘲讽主角",
+                genre="cool_novel",
+            )
+
+        rendered = captured["user"]
+        assert "【题材节拍模板】" in rendered
+        assert "打脸" in rendered
+        assert "【focus 字段图例】" in rendered
+
 
 def _mock_response():
     """Real LLMResponse dataclass — log_usage JSON-serializes its fields."""

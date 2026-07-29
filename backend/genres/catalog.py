@@ -26,6 +26,7 @@ _REQUIRED_GENRE_FIELDS = (
     "id", "label_zh", "label_en", "family",
     "pacing", "tone", "style_rules", "writing_formula",
     "taboo_words", "taboos", "trope_patterns",
+    "beat_patterns",  # NEW: required for Stage 3 outline generation prompts
     "thresholds", "model_preferences", "fusion_meta",
 )
 
@@ -80,7 +81,83 @@ class GenreCatalog:
                 raise CatalogLoadError(
                     f"config/genres/{gid}.yaml has id='{data['id']}' (mismatch)"
                 )
+            self._validate_beat_patterns(gid, data)  # NEW
             self._entries[gid] = data
+
+    def _validate_beat_patterns(self, gid: str, entry: dict) -> None:
+        """Validate the shape of `beat_patterns` for a single genre entry.
+
+        Rules (per spec 2026-07-29):
+          - beat_patterns must be a non-empty list
+          - Each template must have:
+            - keywords: non-empty list of strings, each ≥2 chars
+            - priority: int in [0, 100]
+            - beats: non-empty list of dicts
+          - Each beat must have:
+            - description: non-empty string
+            - words: int > 0
+            - focus: str ∈ focus vocabulary (config/genre_focus_vocabulary.yaml)
+        """
+        focus_vocab_path = self._dir.parent / "genre_focus_vocabulary.yaml"
+        if focus_vocab_path.is_file():
+            vocab = (yaml.safe_load(focus_vocab_path.read_text(encoding="utf-8")) or {}).get("focus_legend") or {}
+            valid_focuses = set(vocab.keys())
+        else:
+            valid_focuses = set()  # If vocab file missing, validation will reject all focus values
+
+        patterns = entry.get("beat_patterns")
+        if not isinstance(patterns, list) or len(patterns) == 0:
+            raise CatalogLoadError(
+                f"config/genres/{gid}.yaml beat_patterns invalid: must be a non-empty list"
+            )
+
+        for i, tmpl in enumerate(patterns):
+            if not isinstance(tmpl, dict):
+                raise CatalogLoadError(
+                    f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}] must be a dict"
+                )
+            keywords = tmpl.get("keywords")
+            if not isinstance(keywords, list) or len(keywords) == 0:
+                raise CatalogLoadError(
+                    f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}].keywords must be non-empty list"
+                )
+            for k_idx, kw in enumerate(keywords):
+                if not isinstance(kw, str) or len(kw) < 2:
+                    raise CatalogLoadError(
+                        f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}].keywords[{k_idx}] must be string ≥2 chars, got {kw!r}"
+                    )
+
+            priority = tmpl.get("priority")
+            if not isinstance(priority, int) or not (0 <= priority <= 100):
+                raise CatalogLoadError(
+                    f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}].priority must be int in [0,100], got {priority!r}"
+                )
+
+            beats = tmpl.get("beats")
+            if not isinstance(beats, list) or len(beats) == 0:
+                raise CatalogLoadError(
+                    f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}].beats must be non-empty list"
+                )
+            for b_idx, beat in enumerate(beats):
+                if not isinstance(beat, dict):
+                    raise CatalogLoadError(
+                        f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}].beats[{b_idx}] must be a dict"
+                    )
+                desc = beat.get("description")
+                if not isinstance(desc, str) or not desc.strip():
+                    raise CatalogLoadError(
+                        f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}].beats[{b_idx}].description must be non-empty string"
+                    )
+                words = beat.get("words")
+                if not isinstance(words, int) or words <= 0:
+                    raise CatalogLoadError(
+                        f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}].beats[{b_idx}].words must be int > 0"
+                    )
+                focus = beat.get("focus")
+                if not isinstance(focus, str) or focus not in valid_focuses:
+                    raise CatalogLoadError(
+                        f"config/genres/{gid}.yaml beat_patterns invalid: beat_patterns[{i}].beats[{b_idx}].focus must be in {sorted(valid_focuses)}, got {focus!r}"
+                    )
 
     def _load_compatibility(self) -> None:
         path = self._dir / "compatibility.yaml"

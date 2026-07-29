@@ -11,6 +11,21 @@ def tmp_catalog(tmp_path):
     cat_dir = tmp_path / "config" / "genres"
     cat_dir.mkdir(parents=True)
 
+    # Focus vocabulary lives at config/genre_focus_vocabulary.yaml (sibling of genres/).
+    (tmp_path / "config" / "genre_focus_vocabulary.yaml").write_text(
+        yaml.safe_dump({
+            "focus_legend": {
+                "sensory": "感官描写",
+                "action": "动作推进",
+                "dialogue": "对话互动",
+                "emotion": "情感波动",
+                "suspense": "悬念",
+                "reveal": "揭露",
+            }
+        }, allow_unicode=True),
+        encoding="utf-8",
+    )
+
     (cat_dir / "index.yaml").write_text(yaml.safe_dump({
         "genres": [
             {"id": "alpha", "label_zh": "甲", "label_en": "Alpha", "family": "test"},
@@ -42,6 +57,10 @@ def tmp_catalog(tmp_path):
             "taboo_words": [],
             "taboos": [],
             "trope_patterns": [],
+            "beat_patterns": [
+                {"keywords": ["测试关键词"], "priority": 80,
+                 "beats": [{"description": "test beat", "words": 100, "focus": "sensory"}]}
+            ],
             "thresholds": {"addiction_critical": 50, "fatigue_formula": {"threshold": 60, "decay": 1.0}},
             "model_preferences": {"creative_core": "claude-opus-4-7", "temperature": 0.7},
             "fusion_meta": {"distances": dist},

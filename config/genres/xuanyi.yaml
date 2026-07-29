@@ -97,6 +97,37 @@ trope_patterns:
 - name: 终极对决
   description: 与最终反派的智力或武力对决
   max_per_volume: 1
+beat_patterns:
+  - keywords: [线索, 发现, 证据, 物证, 发现线索]
+    priority: 85
+    beats:
+      - { description: "线索埋设：日常场景中的异常细节",                  words: 500, focus: "sensory" }
+      - { description: "主角发现：推理过程+逻辑链",                        words: 800, focus: "dialogue" }
+      - { description: "线索价值评估：对剧情的推进意义",                  words: 400, focus: "suspense" }
+  - keywords: [嫌疑人, 反转, 排除, 新嫌疑人]
+    priority: 80
+    beats:
+      - { description: "原嫌疑人的嫌疑松动",                              words: 500, focus: "suspense" }
+      - { description: "新线索指向新嫌疑人",                              words: 700, focus: "action" }
+      - { description: "推理链更新：排除/确认",                           words: 600, focus: "dialogue" }
+  - keywords: [个人危机, 危险, 陷入, 目标]
+    priority: 70
+    beats:
+      - { description: "危机逼近：环境/时间/敌人压力",                    words: 500, focus: "suspense" }
+      - { description: "主角应对：有限资源下的选择",                      words: 800, focus: "action" }
+      - { description: "脱险/反制：利用线索或盟友",                       words: 600, focus: "reveal" }
+  - keywords: [大反转, 真相, 颠覆, 推翻]
+    priority: 95
+    beats:
+      - { description: "伏笔回收：之前章节的细节全部指向新结论",          words: 800, focus: "reveal" }
+      - { description: "推理链重构：之前的错误推理被推翻",                words: 1000, focus: "dialogue" }
+      - { description: "真相的冲击：人物动机/关系重新理解",               words: 600, focus: "emotion" }
+  - keywords: [终极对决, 终局, 幕后, 决战]
+    priority: 90
+    beats:
+      - { description: "对决前奏：双方准备、心理博弈",                    words: 600, focus: "dialogue" }
+      - { description: "智力/武力对决：策略与反策略",                     words: 1000, focus: "action" }
+      - { description: "终局揭晓：真相落地、伏笔全部回收",                words: 700, focus: "reveal" }
 thresholds:
   addiction_critical: 45
   addiction_moderate: 30

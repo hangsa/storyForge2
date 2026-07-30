@@ -182,3 +182,55 @@ class TestPromptWiring:
 
         prompt = load_prompt_effective("scene_writing")
         assert "{genre_pacing_scene}" in prompt.get("user_prompt_template", "")
+
+
+class TestChapterReview:
+    def test_chapter_review_includes_pacing_compliance_key(self, tmp_path):
+        from backend.conductor.chapter_review import ChapterReviewBuilder
+
+        # Create a minimal project skeleton with one scene draft.
+        project_id = "test_pacing_proj"
+        project_dir = tmp_path / project_id
+        chapters_dir = project_dir / "chapters"
+        chapters_dir.mkdir(parents=True)
+        draft = chapters_dir / "ch01_scene_01_draft.md"
+        draft.write_text("林峰拔剑出鞘。<!-- SF_LOG knowledge_gain char=\"A\" -->\n\n他说：\"来吧。\"", encoding="utf-8")
+        (project_dir / "story_dna.json").write_text('{"genre": "xianxia"}', encoding="utf-8")
+        (project_dir / "progress.json").write_text('{"chapters": [{"chapter_number": 1, "scenes": [{"status": "completed"}]}]}', encoding="utf-8")
+
+        builder = ChapterReviewBuilder(project_id, projects_dir=tmp_path)
+        review = builder.build_review(1)
+        assert "pacing_compliance" in review
+        assert isinstance(review["pacing_compliance"], list)
+        assert len(review["pacing_compliance"]) > 0
+
+    def test_chapter_review_empty_scene_texts_yields_empty_list(self, tmp_path):
+        from backend.conductor.chapter_review import ChapterReviewBuilder
+
+        project_id = "test_pacing_empty"
+        project_dir = tmp_path / project_id
+        (project_dir / "chapters").mkdir(parents=True)
+        (project_dir / "story_dna.json").write_text('{"genre": "xianxia"}', encoding="utf-8")
+        (project_dir / "progress.json").write_text('{"chapters": [{"chapter_number": 1, "scenes": []}]}', encoding="utf-8")
+
+        builder = ChapterReviewBuilder(project_id, projects_dir=tmp_path)
+        review = builder.build_review(1)
+        assert review["pacing_compliance"] == []
+
+    def test_chapter_review_pacing_failure_does_not_block_build(self, tmp_path):
+        from backend.conductor.chapter_review import ChapterReviewBuilder
+
+        project_id = "test_pacing_fail"
+        project_dir = tmp_path / project_id
+        chapters_dir = project_dir / "chapters"
+        chapters_dir.mkdir(parents=True)
+        # Massive scene (>> 7000 chars) → chapter_words.max will fail (xianxia max=7000).
+        huge_text = "林峰" * 4000  # 8000 chars
+        (chapters_dir / "ch01_scene_01_draft.md").write_text(huge_text, encoding="utf-8")
+        (project_dir / "story_dna.json").write_text('{"genre": "xianxia"}', encoding="utf-8")
+        (project_dir / "progress.json").write_text('{"chapters": [{"chapter_number": 1, "scenes": [{"status": "completed"}]}]}', encoding="utf-8")
+
+        builder = ChapterReviewBuilder(project_id, projects_dir=tmp_path)
+        review = builder.build_review(1)  # MUST NOT raise
+        cw_max = [r for r in review["pacing_compliance"] if r["metric"] == "chapter_words.max"]
+        assert any(not r["passed"] for r in cw_max)

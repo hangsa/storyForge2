@@ -167,6 +167,7 @@ class ChapterReviewBuilder:
             "narrative_guard_warnings": ng_warnings,
             "fact_guard_summary": fact_guard,
             "writing_formula_compliance": formula_compliance,
+            "pacing_compliance": self._check_pacing(chapter_number),
             "style_guard_violations": self._collect_style_guard_violations(chapter_number),
             "discussion_topics": self._derive_discussion_topics(
                 reader_snapshot, ng_warnings, fact_guard, formula_compliance,
@@ -193,6 +194,7 @@ class ChapterReviewBuilder:
         review["coherence_comment"] = comment
         # Upgrade writing formula compliance with LLM-assisted metrics
         review["writing_formula_compliance"] = await self._check_writing_formula_async(chapter_number)
+        review["pacing_compliance"] = await self._check_pacing_async(chapter_number)
         return review
 
     def _compute_base_coherence(
@@ -452,6 +454,50 @@ class ChapterReviewBuilder:
         except Exception as e:
             logger.warning("Writing formula async check failed (non-blocking): %s", e)
             return []
+
+    def _check_pacing(self, chapter_number: int) -> list[dict]:
+        """Synchronous pacing compliance check. Mirrors _check_writing_formula."""
+        try:
+            from backend.style_engine.pacing import PacingAnalyzer
+            from backend.style_engine.genre_template import GenreTemplate
+
+            texts = self._collect_scene_texts(chapter_number)
+            if not texts:
+                return []
+
+            pacing = GenreTemplate().get_pacing(self._detect_genre())
+            if not pacing:
+                return []
+
+            stats = PacingAnalyzer().analyze_sync(texts)
+            tolerances = self._extract_pacing_tolerances(pacing)
+            results = PacingAnalyzer().check_compliance(stats, pacing, tolerances)
+            return [
+                {
+                    "metric": r.metric,
+                    "expected": r.expected,
+                    "actual": r.actual,
+                    "passed": r.passed,
+                    "delta_pct": r.delta_pct,
+                }
+                for r in results
+            ]
+        except Exception as e:
+            logger.warning("Pacing check failed (non-blocking): %s", e)
+            return []
+
+    async def _check_pacing_async(self, chapter_number: int) -> list[dict]:
+        """Async pacing compliance — still deterministic (no LLM for pacing)."""
+        return self._check_pacing(chapter_number)
+
+    @staticmethod
+    def _extract_pacing_tolerances(pacing: dict) -> dict:
+        """Pull every `<metric>_tolerance` field out of the pacing dict."""
+        out = {}
+        for key, val in pacing.items():
+            if key.endswith("_tolerance") and isinstance(val, (int, float)) and not isinstance(val, bool):
+                out[key] = val
+        return out
 
     def _save_review(self, review: dict) -> None:
         """Save review to project directory."""

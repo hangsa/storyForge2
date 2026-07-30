@@ -51,6 +51,7 @@ class BaseAgent:
         model_router: Optional[ModelRouter] = None,
         override_store: Optional["PromptOverrideStore"] = None,
         global_override_store: Optional["GlobalPromptOverrideStore"] = None,
+        genre: str = "cool_novel",
     ):
         self.project_id = project_id
         self.prompts_dir = Path(prompts_dir) if prompts_dir else settings.prompts_dir
@@ -59,6 +60,7 @@ class BaseAgent:
         self._router = model_router
         self._override_store = override_store
         self._global_override_store = global_override_store
+        self.genre = genre
 
     @property
     def provider(self) -> BaseLLMProvider:
@@ -71,6 +73,24 @@ class BaseAgent:
         if self._router is None:
             self._router = get_model_router()
         return self._router
+
+    def _is_tier_1_agent(self) -> bool:
+        """Check if THIS agent's tasks are all routed to tier_1.
+
+        Agent-level granularity: all known tier_1 agents (planner, writer,
+        creative_director, character_designer) are exclusively tier_1, and
+        tier_2/3 agents have at least one non-tier_1 task. Returns False on
+        any lookup failure so the caller keeps the old prompt-only behavior.
+        """
+        try:
+            mappings = self.router._mappings.get(self.agent_name, {})
+            if not mappings:
+                return False
+            tiers = {m.tier_name for m in mappings.values()}
+            return tiers == {"tier_1"}
+        except (AttributeError, KeyError, TypeError) as exc:
+            logger.debug("tier-1 lookup failed for agent %s: %s", self.agent_name, exc)
+            return False
 
     def _ensure_usage_log(self) -> Path:
         if self._usage_log_path is None:

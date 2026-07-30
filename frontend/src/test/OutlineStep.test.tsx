@@ -71,7 +71,8 @@ describe("OutlineStep", () => {
     (api.generateNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(SAMPLE_OUTLINE);
     setup();
     expect(screen.queryByTestId("outline-start")).not.toBeInTheDocument();
-    await waitFor(() => expect(api.generateNovelOutline).toHaveBeenCalledWith(PROJECT));
+    // v1.9: auto-trigger passes "" as user_modifications by default.
+    await waitFor(() => expect(api.generateNovelOutline).toHaveBeenCalledWith(PROJECT, ""));
   });
 
   it("after auto-trigger the completed form is shown", async () => {

@@ -18,7 +18,6 @@ import ModeSwitchConfirmModal from "../components/workspace/ModeSwitchConfirmMod
 import ManagedStartModal, { type ManagedStartConfig } from "../components/workspace/ManagedStartModal";
 import AutopilotMiddlePanel from "../components/workspace/AutopilotMiddlePanel";
 import AddChaptersModal, { type AddChaptersProgress } from "../components/workspace/AddChaptersModal";
-import ConfirmDialog from "../components/shared/ConfirmDialog";
 import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
 import AIConsoleModal from "../components/aiConsole/AIConsoleModal";
 
@@ -136,10 +135,9 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
 
   // 重新生成: when true, the user has chosen to proceed with regenerate
   // after the unsaved-changes confirm dialog.
-  const [regenerateGuard, setRegenerateGuard] = useState<{
-    open: boolean;
-    pending: boolean;
-  }>({ open: false, pending: false });
+  // v1.9: removed — RegenerateModal (rendered inside WritingArea) now
+  // owns the confirm action. The unsaved-changes warning is rendered as
+  // a placeholder hint inside the modal.
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmKind, setConfirmKind] = useState<"mode-switch" | "take-over">("mode-switch");
@@ -483,13 +481,17 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     setPanel("outline");
   };
 
-  const doRegenerate = async (sceneNumber: number) => {
+  const doRegenerate = async (sceneNumber: number, userModifications: string = "") => {
     setBusy(true);
     try {
+      // v1.9: thread user_modifications through to /stage4/write-scene.
+      // Empty string is equivalent to today's behavior (no user_modifications
+      // block appended to the scene_writing prompt).
       const resp = await api.writeScene({
         project_id: projectId,
         chapter_number: currentChapter,
         scene_number: sceneNumber,
+        user_modifications: userModifications,
       });
       if (resp.draft_text) {
         setContent(resp.draft_text);
@@ -602,19 +604,17 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
                   setBusy(false);
                 }
               }}
-              onRegenerate={async () => {
+              onRegenerate={async (text: string) => {
                 if (!currentScene) return;
                 const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
                 if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
-                // Confirm only when the editor has edits the user has NOT
-                // saved. If content matches what's on disk (lastSavedContent),
-                // the regenerate doesn't destroy anything.
-                if (content !== lastSavedContent) {
-                  setRegenerateGuard({ open: true, pending: true });
-                  return;
-                }
-                await doRegenerate(sceneNumber);
+                // v1.9: RegenerateModal (rendered by WritingArea) collects
+                // user_modifications and the confirm action. The unsaved-
+                // changes warning is shown as a placeholder hint inside
+                // the modal — hasUnsavedChanges prop wires that.
+                await doRegenerate(sceneNumber, text);
               }}
+              hasUnsavedChanges={content !== lastSavedContent}
               onFactGuard={async () => {
                 if (!currentScene) return;
                 const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
@@ -691,20 +691,11 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         }}
         onConfirm={handleAddChapters}
       />
-      <ConfirmDialog
-        open={regenerateGuard.open}
-        title="重新生成场景？"
-        message="当前编辑的内容将被覆盖。是否继续？"
-        confirmLabel="重新生成"
-        onCancel={() => setRegenerateGuard({ open: false, pending: false })}
-        onConfirm={async () => {
-          setRegenerateGuard({ open: false, pending: false });
-          if (!currentScene) return;
-          const sceneNumber = Number.parseInt(currentScene.split("-")[1] ?? "", 10);
-          if (!Number.isFinite(sceneNumber) || sceneNumber < 1) return;
-          await doRegenerate(sceneNumber);
-        }}
-      />
+      {/* v1.9: regenerate unsaved-changes confirm dialog removed — the
+          RegenerateModal (rendered inside WritingArea) now doubles as
+          both the input collector and the confirm action. The unsaved-
+          changes warning is rendered as a placeholder hint inside the
+          modal via the hasUnsavedChanges prop. */}
       <PromptPlazaModal
         isOpen={plazaOpen}
         projectId={projectId}

@@ -356,11 +356,20 @@ describe("Workspace integration", () => {
     const regen = await screen.findByTestId("editor-regenerate");
     fireEvent.click(regen);
 
+    // v1.9: 重新生成 now opens a RegenerateModal; writeScene only fires
+    // after the user confirms. Confirm with empty user_modifications
+    // (the "留空 = 仅重新生成" path).
+    await screen.findByTestId("regenerate-modal");
+    fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+
     await waitFor(() => {
       expect(mockedWriteScene).toHaveBeenCalledWith({
         project_id: "p1",
         chapter_number: 1,
         scene_number: 1,
+        // v1.9: empty string = "regenerate without guidance" — backend
+        // appends no 【用户修改意见】 block, behavior identical to v1.8.
+        user_modifications: "",
       });
     });
     const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
@@ -917,28 +926,32 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("chapter-1")).toBeInTheDocument();
   });
 
-  // Task 5 — "重新生成" with unsaved edits must show a confirm dialog
-  // before invoking writeScene. Without this, a power user clicking
+  // v1.9 — "重新生成" with unsaved edits still gates the API call on
+  // user confirmation, but the gate is now the RegenerateModal (not a
+  // bare confirm-dialog). Without the modal gate, a power user clicking
   // 重新生成 after typing for 10 minutes would silently lose their work.
-  it("重新生成 with unsaved changes shows a confirm dialog", async () => {
+  it("重新生成 with unsaved changes opens the RegenerateModal (writeScene is NOT yet called)", async () => {
     mockedGetOutline.mockResolvedValueOnce({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
     });
     setup("/project/p1/workspace?mode=manual&chapter=1&scene=1-1");
+    const { default: api } = await import("../api/client");
+    const writeSceneSpy = api.writeScene as ReturnType<typeof vi.fn>;
+    writeSceneSpy.mockClear();
     const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
     fireEvent.change(body, { target: { value: "未保存的改动" } });
     fireEvent.click(screen.getByTestId("editor-regenerate"));
-    // Confirm dialog should appear; writeScene is NOT called yet.
-    expect(await screen.findByTestId("confirm-dialog")).toBeInTheDocument();
+    // RegenerateModal appears; writeScene is NOT called yet.
+    expect(await screen.findByTestId("regenerate-modal")).toBeInTheDocument();
+    expect(writeSceneSpy).not.toHaveBeenCalled();
   });
 
-  // Task 5 — when content matches what's on disk (lastSavedContent),
-  // 重新生成 fires writeScene immediately without a confirm. Using
-  // `content.length > 0` would falsely fire the dialog on every regenerate
-  // for chapters that already have a saved draft.
-  it("重新生成 with no edits (content matches saved) does NOT show a confirm dialog", async () => {
+  // v1.9 — even when content matches what's on disk, the RegenerateModal
+  // still opens (it doubles as the input collector). writeScene only fires
+  // after the user clicks the modal's confirm button.
+  it("重新生成 with no edits still opens RegenerateModal before calling writeScene", async () => {
     const { default: api } = await import("../api/client");
     const getSceneDraftSpy = api.getSceneDraft as ReturnType<typeof vi.fn>;
     getSceneDraftSpy.mockReset();
@@ -962,16 +975,19 @@ describe("Workspace integration", () => {
     // Wait for the draft load to populate the editor.
     const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
     await waitFor(() => expect(body.value).toBe("磁盘上已有的内容"));
-    // User clicks regenerate without editing. No confirm — writeScene fires
-    // immediately (since content matches the loaded draft = not dirty).
+    // v1.9: clicking regenerate opens the modal — writeScene is NOT yet
+    // called (even when content matches lastSavedContent, the modal still
+    // gates the API call).
     fireEvent.click(screen.getByTestId("editor-regenerate"));
-    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("regenerate-modal")).toBeInTheDocument();
+    expect(writeSceneSpy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
     await waitFor(() => expect(writeSceneSpy).toHaveBeenCalled());
   });
 
-  // Task 5 — cancelling the confirm dialog must NOT call writeScene, and
+  // v1.9 — cancelling the RegenerateModal must NOT call writeScene, and
   // the editor content must be preserved exactly as the user left it.
-  it("cancelling the regenerate confirm does NOT call writeScene", async () => {
+  it("cancelling the regenerate modal does NOT call writeScene", async () => {
     mockedGetOutline.mockResolvedValueOnce({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
@@ -984,11 +1000,10 @@ describe("Workspace integration", () => {
     const body = (await screen.findByTestId("editor-body")) as HTMLTextAreaElement;
     fireEvent.change(body, { target: { value: "未保存的改动" } });
     fireEvent.click(screen.getByTestId("editor-regenerate"));
-    // Click the cancel button (global — there's only one confirm dialog
-    // on the page at a time, so a global getByTestId is fine).
-    await screen.findByTestId("confirm-dialog");
-    fireEvent.click(screen.getByTestId("confirm-dialog-cancel"));
-    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
+    // Click the modal's cancel button.
+    await screen.findByTestId("regenerate-modal");
+    fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
+    expect(screen.queryByTestId("regenerate-modal")).not.toBeInTheDocument();
     expect(writeSceneSpy).not.toHaveBeenCalled();
     // Editor content is preserved.
     expect((screen.getByTestId("editor-body") as HTMLTextAreaElement).value).toBe("未保存的改动");

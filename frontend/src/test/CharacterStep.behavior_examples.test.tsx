@@ -171,14 +171,24 @@ describe("CharacterStep behavior examples integration", () => {
     // Alice has the regenerate button inside her section.
     const aliceRegenerate = within(aliceCard).getByTestId("behavior-example-regenerate");
 
-    // Click Alice's regenerate; Bob's regenerate must NOT be called.
+    // v1.9: clicking the per-card regenerate now opens a RegenerateModal
+    // first; the API call only fires after the user clicks the modal's
+    // "重新生成" button. Confirm it here so the rest of the test runs.
     await act(async () => {
       aliceRegenerate.click();
     });
+    // Modal title should reflect Alice + the per-card target suffix.
+    expect(screen.getByText(/重新生成.*Alice.*行为例示/)).toBeInTheDocument();
+    await act(async () => {
+      screen.getByTestId("regenerate-modal-confirm").click();
+    });
+
+    // Click Alice's regenerate; Bob's regenerate must NOT be called.
     await waitFor(() => {
       expect(api.regenerateCharacterExamples).toHaveBeenCalledTimes(1);
     });
-    expect(api.regenerateCharacterExamples).toHaveBeenCalledWith(PROJECT, "char_alice", false);
+    // v1.9: user_modifications is now threaded as the 4th positional arg.
+    expect(api.regenerateCharacterExamples).toHaveBeenCalledWith(PROJECT, "char_alice", false, "");
 
     // After success, Alice's card shows the new behavior_examples.
     await waitFor(() => {
@@ -204,6 +214,10 @@ describe("CharacterStep behavior examples integration", () => {
     const aliceCard = screen.getByTestId("character-char_alice");
     await act(async () => {
       within(aliceCard).getByTestId("behavior-example-regenerate").click();
+    });
+    // v1.9: the per-card modal must be confirmed before the API call fires.
+    await act(async () => {
+      screen.getByTestId("regenerate-modal-confirm").click();
     });
     // Existing pattern: wizard.setStatus("error", message) renders the error
     // banner. No new toast infrastructure.

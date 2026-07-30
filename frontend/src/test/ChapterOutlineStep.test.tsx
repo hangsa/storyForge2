@@ -99,7 +99,9 @@ describe("ChapterOutlineStep", () => {
     // POSTs in chapter_number order, no parallelism.
     await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
     for (let i = 1; i <= 10; i++) {
-      expect(api.generateOutline).toHaveBeenNthCalledWith(i, PROJECT, i);
+      // v1.9: auto-trigger calls handleStart() with no user_modifications,
+      // so the 3rd arg defaults to "" — equivalent to today's behavior.
+      expect(api.generateOutline).toHaveBeenNthCalledWith(i, PROJECT, i, "");
     }
   });
 
@@ -188,7 +190,8 @@ describe("ChapterOutlineStep", () => {
     );
     setup();
     await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
-    expect(api.generateOutline).toHaveBeenLastCalledWith(PROJECT, 10);
+    // v1.9: auto-trigger passes "" as user_modifications by default.
+    expect(api.generateOutline).toHaveBeenLastCalledWith(PROJECT, 10, "");
   });
 
   it("scope: novel_outline with 5 chapters (1-5) → caps at 5", async () => {
@@ -205,7 +208,8 @@ describe("ChapterOutlineStep", () => {
     );
     setup();
     await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(5));
-    expect(api.generateOutline).toHaveBeenLastCalledWith(PROJECT, 5);
+    // v1.9: auto-trigger passes "" as user_modifications by default.
+    expect(api.generateOutline).toHaveBeenLastCalledWith(PROJECT, 5, "");
   });
 
   it("scope: unparseable chapter_range → defaults to 10", async () => {

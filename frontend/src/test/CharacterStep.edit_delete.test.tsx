@@ -114,11 +114,14 @@ describe("CharacterStep edit + delete", () => {
     expect(modal.textContent).toMatch(/0.*反向关系/);
   });
 
-  it("regenerate button shows confirmation modal", () => {
+  it("regenerate button opens the full-character RegenerateModal", () => {
     setup();
     render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
     fireEvent.click(screen.getByTestId("wizard-regenerate"));
-    expect(screen.getByTestId("regenerate-confirm-modal")).toBeInTheDocument();
+    // v1.9: RegenerateModal replaces the v1.8 destructive-confirm dialog.
+    expect(screen.getByTestId("regenerate-modal")).toBeInTheDocument();
+    // Modal title contains the step target string.
+    expect(screen.getByText(/重新生成.*角色/)).toBeInTheDocument();
   });
 
   it("regenerate confirmation calls generateCharacter on confirm (fresh batch)", async () => {
@@ -130,7 +133,7 @@ describe("CharacterStep edit + delete", () => {
     });
     render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
     fireEvent.click(screen.getByTestId("wizard-regenerate"));
-    fireEvent.click(screen.getByTestId("regenerate-confirm-button"));
+    fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
     await waitFor(() => {
       expect(api.generateCharacter).toHaveBeenCalled();
     });
@@ -140,7 +143,7 @@ describe("CharacterStep edit + delete", () => {
     setup();
     render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
     fireEvent.click(screen.getByTestId("wizard-regenerate"));
-    fireEvent.click(screen.getByTestId("regenerate-cancel-button"));
+    fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
     expect(api.generateCharacter).not.toHaveBeenCalled();
   });
 });

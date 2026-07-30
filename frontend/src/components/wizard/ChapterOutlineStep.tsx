@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api, { NovelOutline, Outline } from "../../api/client";
 import { computePlannedTotal } from "../../utils/outline";
 import { useWizard } from "./WizardContext";
+import { RegenerateModal } from "../shared/RegenerateModal";
 
 interface ChapterOutlineStepProps {
   projectId: string;
@@ -29,13 +30,17 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
   // Batch progress (chapter 1..N in flight). null when idle. Kept in state
   // so the loading UI can show "第 X / N 章" without a global refetch.
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  // v1.9: RegenerateModal opens when the user clicks the modal-footer's
+  // "重新生成" button. The modal returns the typed modification string,
+  // which is passed to every api.generateOutline call in the batch.
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   // Mirror latest state for handlers registered in the modal footer.
   const outlineRef = useRef(outline);
   outlineRef.current = outline;
   const onFinishRef = useRef(onFinish);
   onFinishRef.current = onFinish;
 
-  const handleStart = async () => {
+  const handleStart = async (userModifications: string = "") => {
     const scope = computeOutlineScope(wizard.data.novel_outline);
     wizard.startStep(6);
     setBusy(true);
@@ -49,7 +54,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       // generated so far while the batch is still running.
       let latest: Outline | null = null;
       for (let i = 1; i <= scope; i++) {
-        const result = await api.generateOutline(projectId, i);
+        const result = await api.generateOutline(projectId, i, userModifications);
         latest = result;
         setOutline(result);
         setProgress({ done: i, total: scope });
@@ -136,7 +141,10 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       hasOutline ||
       wizard.status === "completed" ||
       wizard.status === "error";
-    wizard.setRegenerateHandler(canRegenerate ? handleStart : null, busy);
+    wizard.setRegenerateHandler(
+      canRegenerate ? () => setShowRegenerateModal(true) : null,
+      busy,
+    );
     return () => {
       wizard.setRegenerateHandler(null, false);
     };
@@ -217,6 +225,16 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
           {/* 重新生成 moved to modal footer (see useEffect above). */}
         </div>
       )}
+
+      <RegenerateModal
+        open={showRegenerateModal}
+        target="章纲"
+        onConfirm={async (text) => {
+          setShowRegenerateModal(false);
+          await handleStart(text);
+        }}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
     </div>
   );
 }

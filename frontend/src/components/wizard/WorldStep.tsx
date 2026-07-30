@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api, { World } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
+import { RegenerateModal } from "../shared/RegenerateModal";
 
 interface WorldStepProps {
   projectId: string;
@@ -23,6 +24,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   const wizard = useWizard();
   const [world, setWorld] = useState<World>(wizard.data.world ?? EMPTY_WORLD);
   const [busy, setBusy] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   // Mirror the latest `world` and `busy` so handlers registered in the
   // modal footer (with limited deps) always read fresh values, not the
   // snapshot from when the useEffect last ran.
@@ -31,11 +33,11 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   const busyRef = useRef(busy);
   busyRef.current = busy;
 
-  const handleStart = async () => {
+  const handleStart = async (userModifications: string = "") => {
     wizard.startStep(2);
     setBusy(true);
     try {
-      const result = await api.generateWorld(projectId);
+      const result = await api.generateWorld(projectId, userModifications);
       const merged = { ...EMPTY_WORLD, ...result };
       setWorld(merged);
       // v1.8.4: mark generated so step 2 stays reachable in the indicator
@@ -118,7 +120,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       wizard.status === "completed" ||
       wizard.status === "error";
     const canSave = !!wizard.data.world || wizard.status === "completed";
-    wizard.setRegenerateHandler(canRegenerate ? handleStart : null, busy);
+    wizard.setRegenerateHandler(canRegenerate ? () => setShowRegenerateModal(true) : null, busy);
     wizard.setNextHandler(canSave ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
@@ -352,6 +354,16 @@ export default function WorldStep({ projectId }: WorldStepProps) {
           {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
         </div>
       )}
+
+      <RegenerateModal
+        open={showRegenerateModal}
+        target="世界观"
+        onConfirm={async (text) => {
+          setShowRegenerateModal(false);
+          await handleStart(text);
+        }}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
     </div>
   );
 }

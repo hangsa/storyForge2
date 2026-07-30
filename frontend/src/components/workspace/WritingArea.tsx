@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { RegenerateModal } from "../shared/RegenerateModal";
 
 const OUTLINE_COLLAPSED_KEY = "storyforge.workspace.outline-collapsed";
 
@@ -27,7 +28,20 @@ interface Props {
   content: string;
   onContentChange: (next: string) => void;
   onSaveDraft: () => Promise<void>;
-  onRegenerate: () => Promise<void>;
+  /**
+   * v1.9: the page passes user_modifications (collected by RegenerateModal)
+   * to the API. Empty string means "regenerate without guidance" — the
+   * page's call into the backend then becomes equivalent to today's
+   * behavior (no user_modifications block appended to the prompt).
+   */
+  onRegenerate: (userModifications: string) => Promise<void>;
+  /**
+   * Optional: when true, the RegenerateModal renders an extra subtitle
+   * warning the user that unsaved edits will be overwritten. Defaults to
+   * false so the modal looks identical to other regenerate flows when
+   * the editor matches the on-disk draft.
+   */
+  hasUnsavedChanges?: boolean;
   onFactGuard: () => Promise<void>;
   busy: boolean;
   /** Optional: scenario that's empty because the chapter has no outline yet */
@@ -41,8 +55,36 @@ interface Props {
 }
 
 export default function WritingArea({
-  current, content, onContentChange, onSaveDraft, onRegenerate, onFactGuard, busy, emptyStatePrompt, onNavigateToOutline,
+  current, content, onContentChange, onSaveDraft, onRegenerate, hasUnsavedChanges = false, onFactGuard, busy, emptyStatePrompt, onNavigateToOutline,
 }: Props) {
+  // Hooks must be called in the same order every render — declare them all
+  // before any early return. (Rules of Hooks: never conditional.)
+  // v1.9: RegenerateModal state. Opens when the user clicks the footer's
+  // "重新生成" button; closes after confirm/cancel. The modal returns
+  // user_modifications which the page passes to /stage4/write-scene.
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [outlineCollapsed, setOutlineCollapsed] = useState<boolean>(() => {
+    if (typeof localStorage === "undefined") return false;
+    try {
+      return localStorage.getItem(OUTLINE_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(OUTLINE_COLLAPSED_KEY, outlineCollapsed ? "1" : "0");
+    } catch {
+      // localStorage unavailable (SSR, quota) — non-fatal.
+    }
+  }, [outlineCollapsed]);
+
+  const wordCount = useMemo(
+    () => content.replace(/\s+/g, "").length,
+    [content],
+  );
+
   if (!current) {
     return (
       <div
@@ -64,27 +106,6 @@ export default function WritingArea({
       </div>
     );
   }
-
-  const [outlineCollapsed, setOutlineCollapsed] = useState<boolean>(() => {
-    if (typeof localStorage === "undefined") return false;
-    try {
-      return localStorage.getItem(OUTLINE_COLLAPSED_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(OUTLINE_COLLAPSED_KEY, outlineCollapsed ? "1" : "0");
-    } catch {
-      // localStorage unavailable (SSR, quota) — non-fatal.
-    }
-  }, [outlineCollapsed]);
-
-  const wordCount = useMemo(
-    () => content.replace(/\s+/g, "").length,
-    [content],
-  );
 
   return (
     <div data-testid="writing-area" className="h-full flex flex-col">
@@ -180,7 +201,7 @@ export default function WritingArea({
           <button
             type="button"
             data-testid="editor-regenerate"
-            onClick={() => onRegenerate()}
+            onClick={() => setShowRegenerateModal(true)}
             disabled={busy}
             className="px-3 py-1 rounded bg-surface-container hover:bg-surface-container-low disabled:opacity-40"
           >重新生成</button>
@@ -200,6 +221,19 @@ export default function WritingArea({
           >保存草稿</button>
         </div>
       </footer>
+
+      <RegenerateModal
+        open={showRegenerateModal}
+        // target uses the scene's display title (e.g. "第2章第3场") so
+        // the user can confirm they're regenerating the right scene.
+        target={`第${current.chapter_number}章${current.scene_id.split("-")[1] ?? ""}场`}
+        placeholder={hasUnsavedChanges ? "你有未保存的修改,继续前请输入修改意见或留空" : undefined}
+        onConfirm={async (text) => {
+          setShowRegenerateModal(false);
+          await onRegenerate(text);
+        }}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
     </div>
   );
 }

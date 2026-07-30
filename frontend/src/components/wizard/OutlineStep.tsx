@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api, { NovelOutline } from "../../api/client";
 import { useWizard } from "./WizardContext";
+import { RegenerateModal } from "../shared/RegenerateModal";
 
 interface OutlineStepProps {
   projectId: string;
@@ -19,15 +20,16 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
   const wizard = useWizard();
   const [outline, setOutline] = useState<NovelOutline>(wizard.data.novel_outline ?? EMPTY_OUTLINE);
   const [busy, setBusy] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   // Mirror latest state for handlers registered in the modal footer.
   const outlineRef = useRef(outline);
   outlineRef.current = outline;
 
-  const handleStart = async () => {
+  const handleStart = async (userModifications: string = "") => {
     wizard.startStep(5);
     setBusy(true);
     try {
-      const result = await api.generateNovelOutline(projectId);
+      const result = await api.generateNovelOutline(projectId, userModifications);
       setOutline(result);
       // v1.8.4: mark generated so step 5 stays reachable in the indicator
       // when the user navigates away before clicking "下一步".
@@ -100,7 +102,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       wizard.status === "completed" ||
       wizard.status === "error";
     const canSave = !!wizard.data.novel_outline || wizard.status === "completed";
-    wizard.setRegenerateHandler(canRegenerate ? handleStart : null, busy);
+    wizard.setRegenerateHandler(canRegenerate ? () => setShowRegenerateModal(true) : null, busy);
     wizard.setNextHandler(canSave ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
@@ -185,6 +187,16 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
           {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
         </div>
       )}
+
+      <RegenerateModal
+        open={showRegenerateModal}
+        target="细纲"
+        onConfirm={async (text) => {
+          setShowRegenerateModal(false);
+          await handleStart(text);
+        }}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
 import CharacterRelationsEditor from "./CharacterRelationsEditor";
 import BehaviorExamplesSection from "./BehaviorExamplesSection";
+import { RegenerateModal } from "../shared/RegenerateModal";
 
 interface CharacterStepProps {
   projectId: string;
@@ -55,12 +56,23 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   const charactersRef = useRef(characters);
   charactersRef.current = characters;
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
+  // v1.9: full-character RegenerateModal opens when the user clicks the
+  // modal-footer's "重新生成" button. The modal returns the typed
+  // modification string, which is passed to every api.generateCharacter
+  // call in the default batch.
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  // v1.9: per-card RegenerateModal state. Tracks which character's
+  // "行为例示" AI regenerate button was clicked; null when the modal is
+  // closed. The character name is captured at click time so the modal
+  // title doesn't have to re-derive it from `characters` (which can be
+  // stale by the time the modal renders).
+  const [regenerateExamplesId, setRegenerateExamplesId] = useState<string | null>(null);
+  const [regenerateExamplesName, setRegenerateExamplesName] = useState<string>("");
   // Per-card pending flag for the BehaviorExamplesSection AI regenerate button.
   // Tracked as a Set so multiple cards can be independently loading.
   const [regeneratingExamplesIds, setRegeneratingExamplesIds] = useState<Set<string>>(() => new Set());
 
-  const handleBatchStart = async () => {
+  const handleBatchStart = async (userModifications: string = "") => {
     wizard.startStep(3);
     setBusy(true);
     try {
@@ -70,7 +82,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       // to fail (6 cards named the same; see "6×李玄阳" diagnosis).
       const newChars: Character[] = [];
       for (const type of DEFAULT_BATCH) {
-        const result = await api.generateCharacter(projectId, type);
+        const result = await api.generateCharacter(projectId, type, userModifications);
         const fresh = pickNewlyCreated(result);
         if (!fresh) throw new Error("生成结果为空");
         newChars.push(fresh);
@@ -103,12 +115,13 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     }
   };
 
+  // v1.9: open the full-character RegenerateModal. Replaces the previous
+  // destructive-confirm dialog — RegenerateModal already doubles as
+  // confirmation (the user must click "重新生成" inside the modal to
+  // trigger the overwrite). The modal returns user_modifications which
+  // handleBatchStart threads into each generateCharacter call.
   const requestRegenerate = () => {
-    if (characters && characters.characters.length > 0) {
-      setRegenerateConfirmOpen(true);
-      return;
-    }
-    void handleBatchStart();
+    setShowRegenerateModal(true);
   };
 
   const handleNext = async () => {
@@ -144,11 +157,6 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色删除失败");
     }
-  };
-
-  const handleRegenerateConfirm = async () => {
-    setRegenerateConfirmOpen(false);
-    await handleBatchStart();
   };
 
   // Local-state patch for inline editing. Mirrors WorldStep's pattern: edits
@@ -198,14 +206,19 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     updateCharacterAt(id, { voice_signature: nextVoice });
   };
 
-  const handleRegenerateExamples = async (characterId: string) => {
+  const handleRegenerateExamples = async (characterId: string, userModifications: string = "") => {
     setRegeneratingExamplesIds((prev) => {
       const next = new Set(prev);
       next.add(characterId);
       return next;
     });
     try {
-      const updated = await api.regenerateCharacterExamples(projectId, characterId, false);
+      const updated = await api.regenerateCharacterExamples(
+        projectId,
+        characterId,
+        false,
+        userModifications,
+      );
       setCharacters((prev) => {
         const list = (prev?.characters ?? []).map((c) =>
           c.id === characterId ? { ...c, ...updated } : c,
@@ -464,7 +477,15 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                       <BehaviorExamplesSection
                         examples={voice.behavior_examples ?? []}
                         onChange={(next) => updateVoiceBehaviorExamples(c.id, next)}
-                        onRegenerate={() => handleRegenerateExamples(c.id)}
+                        onRegenerate={() => {
+                          // v1.9: open the per-card RegenerateModal so the
+                          // user can type modification guidance before the
+                          // /regenerate-examples call. Modal title uses
+                          // the character's display name; falls back to id
+                          // when name is empty.
+                          setRegenerateExamplesId(c.id);
+                          setRegenerateExamplesName(c.name || c.id);
+                        }}
                         regenerating={regeneratingExamplesIds.has(c.id)}
                       />
                     </div>
@@ -601,31 +622,40 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
         );
       })()}
 
-      {/* Regenerate confirmation modal */}
-      {regenerateConfirmOpen && (
-        <div data-testid="regenerate-confirm-modal" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface-container p-6 rounded-lg max-w-md space-y-4">
-            <h3 className="font-display text-lg text-primary">重新生成所有角色？</h3>
-            <p className="font-body-ui text-sm text-system-log">
-              现有 <strong>{characters?.characters.length ?? 0}</strong> 个角色（包含你的编辑）将被覆盖，无法恢复。
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                data-testid="regenerate-cancel-button"
-                onClick={() => setRegenerateConfirmOpen(false)}
-                className="px-3 py-1 text-xs bg-surface-container-low text-system-log rounded-lg"
-              >取消</button>
-              <button
-                type="button"
-                data-testid="regenerate-confirm-button"
-                onClick={() => void handleRegenerateConfirm()}
-                className="px-4 py-1 text-xs bg-error text-on-error rounded-lg"
-              >确认重新生成</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* v1.9: full-character RegenerateModal — replaces the v1.8
+          destructive-confirm dialog. Reuses handleBatchStart which now
+          threads user_modifications through to every generateCharacter
+          call. */}
+      <RegenerateModal
+        open={showRegenerateModal}
+        target="角色"
+        onConfirm={async (text) => {
+          setShowRegenerateModal(false);
+          await handleBatchStart(text);
+        }}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
+
+      {/* v1.9: per-card RegenerateModal for the BehaviorExamplesSection
+          "AI 重新生成" button. target uses the character name captured
+          at click time (so the modal title stays accurate even if the
+          characters list changes). user_modifications is threaded into
+          the /regenerate-examples call via handleRegenerateExamples. */}
+      <RegenerateModal
+        open={!!regenerateExamplesId}
+        target={`${regenerateExamplesName} · 行为例示`}
+        onConfirm={async (text) => {
+          const id = regenerateExamplesId;
+          setRegenerateExamplesId(null);
+          setRegenerateExamplesName("");
+          if (!id) return;
+          await handleRegenerateExamples(id, text);
+        }}
+        onCancel={() => {
+          setRegenerateExamplesId(null);
+          setRegenerateExamplesName("");
+        }}
+      />
     </div>
   );
 }

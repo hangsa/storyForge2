@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api, { Concept, StoryDNA } from "../../api/client";
 import { useWizard } from "./WizardContext";
+import { RegenerateModal } from "../shared/RegenerateModal";
 
 interface ConceptStepProps {
   projectId: string;
@@ -20,6 +21,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
   const [concept, setConcept] = useState<Concept>(wizard.data.concept ?? EMPTY_CONCEPT);
   const [dna, setDna] = useState<StoryDNA>(wizard.data.story_dna ?? EMPTY_DNA);
   const [busy, setBusy] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   // Mirror the latest state so handlers registered in the modal footer
   // (with limited deps) read fresh values, not the snapshot from when the
   // useEffect last ran.
@@ -28,11 +30,11 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
   const dnaRef = useRef(dna);
   dnaRef.current = dna;
 
-  const handleStart = async () => {
+  const handleStart = async (userModifications: string = "") => {
     wizard.startStep(1);
     setBusy(true);
     try {
-      const result = await api.generateConcept(projectId);
+      const result = await api.generateConcept(projectId, userModifications);
       setConcept(result.concept);
       setDna(result.story_dna);
       // v1.8.4: mark generated so step 1 stays reachable in the indicator
@@ -104,7 +106,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       wizard.status === "completed" ||
       wizard.status === "error";
     const canSave = wizard.status === "completed" || !!wizard.data.concept;
-    wizard.setRegenerateHandler(canRegenerate ? handleStart : null, busy);
+    wizard.setRegenerateHandler(canRegenerate ? () => setShowRegenerateModal(true) : null, busy);
     wizard.setNextHandler(canSave ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
@@ -218,6 +220,16 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
           {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
         </div>
       )}
+
+      <RegenerateModal
+        open={showRegenerateModal}
+        target="概念"
+        onConfirm={async (text) => {
+          setShowRegenerateModal(false);
+          await handleStart(text);
+        }}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
     </div>
   );
 }

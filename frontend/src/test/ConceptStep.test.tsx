@@ -76,7 +76,8 @@ describe("ConceptStep", () => {
       screen.getByTestId("mark-prefill").click();
     });
     expect(screen.queryByTestId("concept-start")).not.toBeInTheDocument();
-    await waitFor(() => expect(api.generateConcept).toHaveBeenCalledWith("proj_x"));
+    // v1.9: auto-trigger passes "" as user_modifications by default.
+    await waitFor(() => expect(api.generateConcept).toHaveBeenCalledWith("proj_x", ""));
   });
 
   it("after auto-trigger the completed form is shown populated", async () => {

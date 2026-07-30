@@ -279,8 +279,12 @@ class PlannerAgent(BaseAgent):
     agent_name = "planner"
 
     async def generate_concept_and_dna(
-        self, initial_intent: str, genre: str = "cool_novel"
+        self,
+        initial_intent: str,
+        genre: str = "cool_novel",
+        user_modifications: str = "",
     ) -> tuple[dict, LLMResponse]:
+        from backend.agents._injection_helpers import _build_user_modifications_block
         extras = _resolve_genre_extras(genre)
         result, response = await self.generate_from_template(
             "concept_generation",
@@ -289,6 +293,7 @@ class PlannerAgent(BaseAgent):
             genre_tone=extras["tone"],
             genre_style_rules=extras["style_rules"],
             genre_trope_patterns=extras["trope_patterns"],
+            user_modifications=_build_user_modifications_block(user_modifications),
         )
         self.log_usage("concept_generation", response)
 
@@ -334,7 +339,9 @@ class PlannerAgent(BaseAgent):
         concept: dict,
         story_dna: dict,
         genre: str = "cool_novel",
+        user_modifications: str = "",
     ) -> tuple[dict, LLMResponse]:
+        from backend.agents._injection_helpers import _build_user_modifications_block
         extras = _resolve_genre_extras(genre)
         result, response = await self.generate_from_template(
             "world_generation",
@@ -349,6 +356,7 @@ class PlannerAgent(BaseAgent):
             genre_tone=extras["tone"],
             genre_style_rules=extras["style_rules"],
             genre_trope_patterns=extras["trope_patterns"],
+            user_modifications=_build_user_modifications_block(user_modifications),
         )
         self.log_usage("world_generation", response)
         return result, response
@@ -361,6 +369,7 @@ class PlannerAgent(BaseAgent):
         character_index: int = 0,
         existing_characters: Optional[list[dict]] = None,
         genre: str = "cool_novel",
+        user_modifications: str = "",
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
 
@@ -402,6 +411,7 @@ class PlannerAgent(BaseAgent):
             existing_section = ""
 
         extras = _resolve_genre_extras(genre)
+        from backend.agents._injection_helpers import _build_user_modifications_block
         result, response = await self.generate_from_template(
             "character_generation",
             concept_context=concept_context,
@@ -416,6 +426,7 @@ class PlannerAgent(BaseAgent):
             genre_tone=extras["tone"],
             genre_style_rules=extras["style_rules"],
             genre_trope_patterns=extras["trope_patterns"],
+            user_modifications=_build_user_modifications_block(user_modifications),
         )
         self.log_usage("character_generation", response)
         return result, response
@@ -431,6 +442,7 @@ class PlannerAgent(BaseAgent):
         novel_outline: Optional[dict] = None,
         outline_text: str = "",
         genre: str = "cool_novel",
+        user_modifications: str = "",
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
         story_dna_context = json.dumps(story_dna, ensure_ascii=False, indent=2)
@@ -458,6 +470,7 @@ class PlannerAgent(BaseAgent):
             else "（暂无全书大纲 — 章节生成时按故事 DNA 和概念自主设计）"
         )
 
+        from backend.agents._injection_helpers import _build_user_modifications_block
         result, response = await self.generate_from_template(
             "outline_generation",
             concept_context=concept_context,
@@ -470,6 +483,7 @@ class PlannerAgent(BaseAgent):
             genre_beat_patterns=_resolve_genre_beat_patterns(genre, outline_text),
             genre_focus_vocabulary=_resolve_genre_focus_vocabulary(),
             genre_pacing=_resolve_genre_pacing(genre),
+            user_modifications=_build_user_modifications_block(user_modifications),
         )
         self.log_usage("outline_generation", response)
         return result, response
@@ -485,6 +499,7 @@ class PlannerAgent(BaseAgent):
         map_data: Optional[dict] = None,
         outline_text: str = "",
         genre: str = "cool_novel",
+        user_modifications: str = "",
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
         story_dna_context = json.dumps(story_dna, ensure_ascii=False, indent=2)
@@ -520,6 +535,7 @@ class PlannerAgent(BaseAgent):
         # per-chapter min_words (all three new options share 2000 字/章).
         length_category = length_category_for(target_total_words)
 
+        from backend.agents._injection_helpers import _build_user_modifications_block
         result, response = await self.generate_from_template(
             "novel_outline_generation",
             concept_context=concept_context,
@@ -533,6 +549,7 @@ class PlannerAgent(BaseAgent):
             genre_beat_patterns=_resolve_genre_beat_patterns(genre, outline_text),
             genre_focus_vocabulary=_resolve_genre_focus_vocabulary(),
             genre_pacing=_resolve_genre_pacing(genre),
+            user_modifications=_build_user_modifications_block(user_modifications),
         )
         self.log_usage("novel_outline_generation", response)
         return result, response

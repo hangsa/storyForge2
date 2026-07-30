@@ -86,3 +86,47 @@ class TestPromptCoverage:
         assert misplaced == [], (
             f"prompts where {{user_modifications}} is not trailing: {misplaced}"
         )
+
+
+PLANNER_TARGETS = [
+    ("PlannerAgent", "generate_concept_and_dna"),
+    ("PlannerAgent", "generate_world"),
+    ("PlannerAgent", "generate_character"),
+    ("PlannerAgent", "generate_outline"),
+    ("PlannerAgent", "generate_novel_outline"),
+]
+WRITER_TARGETS = [
+    ("WriterAgent", "write_scene"),
+]
+
+
+class TestAgentSignatureCoverage:
+    def test_all_six_agent_methods_accept_user_modifications(self):
+        import inspect
+
+        from backend.agents.planner import PlannerAgent
+        from backend.agents.writer import WriterAgent
+
+        for class_name, method_name in PLANNER_TARGETS + WRITER_TARGETS:
+            cls = PlannerAgent if class_name == "PlannerAgent" else WriterAgent
+            method = getattr(cls, method_name)
+            sig = inspect.signature(method)
+            assert "user_modifications" in sig.parameters, (
+                f"{class_name}.{method_name} is missing user_modifications kwarg"
+            )
+
+    def test_user_modifications_defaults_to_empty_string(self):
+        import inspect
+
+        from backend.agents.planner import PlannerAgent
+        from backend.agents.writer import WriterAgent
+
+        for class_name, method_name in PLANNER_TARGETS + WRITER_TARGETS:
+            cls = PlannerAgent if class_name == "PlannerAgent" else WriterAgent
+            param = inspect.signature(getattr(cls, method_name)).parameters[
+                "user_modifications"
+            ]
+            assert param.default == "", (
+                f"{class_name}.{method_name}.user_modifications default "
+                f"should be empty string, got {param.default!r}"
+            )

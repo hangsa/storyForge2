@@ -488,8 +488,10 @@ class WriterAgent(BaseAgent):
         reader_os_warnings: str = "",
         custom_style_config=None,
         outline_chapter: Optional[dict] = None,
+        user_modifications: str = "",
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
+        from backend.agents._injection_helpers import _build_user_modifications_block
         template_vars = self._build_base_vars(
             genre, concept, world_rules, characters, scene_plan,
             l0_context, l1_context,
@@ -500,6 +502,9 @@ class WriterAgent(BaseAgent):
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["genre_pacing_scene"] = _resolve_genre_scene_pacing(genre)
+        template_vars["user_modifications"] = _build_user_modifications_block(
+            user_modifications
+        )
         return await self.generate_from_template(
             "scene_writing", **template_vars, **kwargs
         )

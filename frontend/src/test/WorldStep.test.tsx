@@ -223,4 +223,72 @@ describe("WorldStep", () => {
     expect(screen.queryByTestId("world-faction-1")).not.toBeInTheDocument();
     expect(screen.getByTestId("world-faction-0-name")).toHaveValue("B");
   });
+
+  // Regression: proj_ec67d3e2 — the LLM ignored the prompt's string schema
+  // for `era_social_structure` and `power_system.stages` and produced nested
+  // objects instead. The wizard's textareas expect strings and the
+  // TagEditor expects a string array, so the form failed to render. Both
+  // the backend (World model field_validator) and the frontend
+  // (normalizeLegacyWorld) coerce object shapes so the form renders.
+  it("renders the form even when world.json has object-shaped fields (legacy data shape)", async () => {
+    // Legacy shape: era_social_structure is an object, power_system.stages
+    // is an object grouped by tier. The wizard must normalize these to
+    // strings / string arrays so the form mounts.
+    const legacyWorld = {
+      era: "清末民初",
+      geography: "华南",
+      era_social_structure: {
+        人类阶层: "军阀",
+        异类阶层: "僵尸",
+      },
+      era_cultural_history: "太平天国",
+      power_system: {
+        name: "道炁",
+        description: "...",
+        stages: {
+          人道阶: ["养气期", "凝神期"],
+          地道阶: ["贯通期"],
+        },
+        core_rules: ["境界匹配"],
+        ceilings: ["合道期"],
+      },
+      factions: [],
+      core_rules: [],
+    };
+    sessionStorage.setItem(
+      KEY,
+      JSON.stringify({
+        currentStep: 2,
+        completedSteps: [1, 2],
+        status: "completed",
+        data: {
+          concept: null, story_dna: null,
+          world: legacyWorld,
+          characters: null, novel_outline: null, chapter1_outline: null,
+        },
+        errorMessage: null,
+      }),
+    );
+    // generateWorld must NOT be called — the auto-trigger only fires when
+    // `wizard.data.world` is null. The legacy shape is still treated as a
+    // populated world.
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(legacyWorld);
+    render(
+      <MemoryRouter>
+        <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} />
+      </MemoryRouter>,
+    );
+    // The form renders despite the legacy shape.
+    const form = await screen.findByTestId("world-form");
+    expect(form).toBeInTheDocument();
+    // era_social_structure is coerced to a JSON string (contains the keys).
+    const social = screen.getByTestId("world-era-social-structure") as HTMLTextAreaElement;
+    expect(social.value).toContain("人类阶层");
+    expect(social.value).toContain("军阀");
+    // power_system.stages is flattened — all string values appear in the
+    // TagEditor.
+    const stages = screen.getByTestId("world-power-stages");
+    expect(stages.textContent).toContain("养气期");
+    expect(stages.textContent).toContain("贯通期");
+  });
 });

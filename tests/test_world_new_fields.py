@@ -1,4 +1,5 @@
 """Tests for the two new optional World fields added in v1.8."""
+import json
 import pytest
 from backend.models.world import World
 
@@ -69,3 +70,80 @@ def test_world_yaml_prompt_includes_power_system_core_rules():
     assert '"core_rules"' in ps_block, (
         "world_generation.yaml power_system schema must include core_rules as a field"
     )
+
+
+# Regression: proj_ec67d3e2 — the LLM ignored the prompt's string schema for
+# `era_social_structure` and `power_system.stages` and produced nested
+# objects. The wizard's <textarea value={...}> threw on the object and the
+# form failed to render. The model's field_validator coerces objects to
+# JSON strings / flattens nested arrays so the schema stays self-consistent
+# and the wizard can render the legacy data.
+def test_world_coerces_object_era_social_structure_to_json_string():
+    raw = {
+        "era": "清末",
+        "geography": "华南",
+        "era_social_structure": {
+            "人类阶层": "军阀",
+            "异类阶层": "僵尸",
+        },
+        "era_cultural_history": "太平天国",
+        "power_system": {"name": "X", "description": "", "stages": [], "core_rules": [], "ceilings": []},
+        "factions": [],
+        "core_rules": [],
+    }
+    world = World.model_validate(raw)
+    # Validator serialized the object to a JSON string. The wizard's
+    # <textarea value={...}> needs a string, not an object.
+    assert isinstance(world.era_social_structure, str)
+    decoded = json.loads(world.era_social_structure)
+    assert decoded == {"人类阶层": "军阀", "异类阶层": "僵尸"}
+    # Round-trip through model_dump preserves the stringification.
+    dumped = world.model_dump()
+    assert isinstance(dumped["era_social_structure"], str)
+
+
+def test_world_coerces_object_power_system_stages_to_flat_array():
+    raw = {
+        "era": "清末",
+        "geography": "华南",
+        "power_system": {
+            "name": "道炁",
+            "description": "",
+            "stages": {
+                "人道阶": ["养气期", "凝神期"],
+                "地道阶": ["贯通期"],
+            },
+            "core_rules": ["境界匹配"],
+            "ceilings": ["合道期"],
+        },
+        "factions": [],
+        "core_rules": [],
+    }
+    world = World.model_validate(raw)
+    # Validator flattened the nested object to a flat string array.
+    assert world.power_system.stages == ["养气期", "凝神期", "贯通期"]
+    # Round-trip preserves the flattening.
+    assert world.model_dump()["power_system"]["stages"] == ["养气期", "凝神期", "贯通期"]
+
+
+def test_world_passes_through_valid_string_inputs_unchanged():
+    # The validator must be a no-op for data that already matches the schema.
+    raw = {
+        "era": "古代",
+        "geography": "中原",
+        "era_social_structure": "分封制",
+        "era_cultural_history": "百家争鸣",
+        "power_system": {
+            "name": "灵力",
+            "description": "...",
+            "stages": ["炼气", "筑基"],
+            "core_rules": [],
+            "ceilings": [],
+        },
+        "factions": [],
+        "core_rules": [],
+    }
+    world = World.model_validate(raw)
+    assert world.era_social_structure == "分封制"
+    assert world.era_cultural_history == "百家争鸣"
+    assert world.power_system.stages == ["炼气", "筑基"]

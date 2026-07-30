@@ -5,6 +5,7 @@ from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
 from backend.models.character import BehaviorExample, Character as CharacterModel, CharacterPatch
+from backend.models.world import World
 from backend.services.agent_prompt_stores import (
     project_override_store,
     global_override_store,
@@ -26,6 +27,17 @@ async def get_world(project_id: str = Query(...)):
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
         )
     data = fm.read_json(project_id, "world.json")
+    # Validate + coerce so legacy/malformed world.json (LLM sometimes ignores
+    # the schema and produces objects for fields that should be strings — see
+    # proj_ec67d3e2) returns the correct shape. The World model has
+    # field_validators that JSON-stringify objects and flatten nested arrays.
+    if data:
+        try:
+            data = World.model_validate(data).model_dump()
+        except Exception:
+            # Worst case: serve raw data — the frontend has its own
+            # normalizeLegacyWorld() fallback and will still render the form.
+            pass
     return {
         "error": False,
         "code": "OK",
@@ -130,6 +142,18 @@ async def generate_world(data: dict):
             status_code=503,
             detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
         )
+
+    # Validate + coerce the LLM result before writing so on-disk world.json
+    # always matches the World schema. Without this, the LLM can produce
+    # objects for fields the schema expects as strings (proj_ec67d3e2), and
+    # the wizard fails to render the form on re-entry.
+    try:
+        result = World.model_validate(result).model_dump()
+    except Exception:
+        # If the LLM output is malformed beyond what the validators can fix,
+        # write the raw result and let the frontend normalizeLegacyWorld()
+        # handle the legacy shape on read.
+        pass
 
     fm.write_json(project_id, "world.json", result)
 
@@ -254,6 +278,14 @@ async def update_world(data: dict):
             status_code=400,
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
         )
+
+    # Validate + coerce so the on-disk world.json always matches the schema.
+    # The frontend sends corrected data, but the user can edit raw fields, so
+    # defense-in-depth here is cheap.
+    try:
+        world_data = World.model_validate(world_data).model_dump()
+    except Exception:
+        pass
 
     fm.write_json(project_id, "world.json", world_data)
 

@@ -18,11 +18,50 @@ const EMPTY_WORLD: World = {
   core_rules: [],
 };
 
+/**
+ * Normalize legacy/malformed world.json shapes. The LLM sometimes ignores
+ * the prompt's string schema and produces nested objects for fields the
+ * wizard expects as strings (proj_ec67d3e2 — `era_social_structure` was
+ * returned as `{人类阶层, 异类阶层, 组织形态}` and `power_system.stages`
+ * as `{人道阶, 地道阶, 天道阶}`). Without this, React's `<textarea
+ * value={...}>` throws on the object and the form fails to render.
+ *
+ * The backend now coerces these via World model field_validators, but we
+ * keep this as a defensive fallback so the form renders even if a stale
+ * world.json slips through (e.g. cached response, in-flight save).
+ */
+function normalizeLegacyWorld(w: World | null): World {
+  if (!w) return EMPTY_WORLD;
+  const coerceString = (v: unknown): string => {
+    if (typeof v === "string") return v;
+    if (v && typeof v === "object") return JSON.stringify(v, null, 2);
+    return "";
+  };
+  const coerceStages = (s: unknown): string[] => {
+    if (Array.isArray(s)) return s.filter((x): x is string => typeof x === "string");
+    if (s && typeof s === "object") {
+      return Object.values(s as Record<string, unknown>)
+        .flat()
+        .filter((x): x is string => typeof x === "string");
+    }
+    return [];
+  };
+  return {
+    ...w,
+    era_social_structure: coerceString(w.era_social_structure),
+    era_cultural_history: coerceString(w.era_cultural_history),
+    power_system: {
+      ...w.power_system,
+      stages: coerceStages(w.power_system.stages),
+    },
+  };
+}
+
 type FactionField = "name" | "type" | "goal" | "relations";
 
 export default function WorldStep({ projectId }: WorldStepProps) {
   const wizard = useWizard();
-  const [world, setWorld] = useState<World>(wizard.data.world ?? EMPTY_WORLD);
+  const [world, setWorld] = useState<World>(normalizeLegacyWorld(wizard.data.world));
   const [busy, setBusy] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   // Mirror the latest `world` and `busy` so handlers registered in the
@@ -90,7 +129,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   useEffect(() => {
     const persisted = wizard.data.world;
     if (persisted && world.era === "" && world.geography === "") {
-      setWorld(persisted);
+      setWorld(normalizeLegacyWorld(persisted));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizard.data.world]);

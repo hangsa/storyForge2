@@ -332,7 +332,7 @@ describe("ChapterOutlineStep", () => {
     // Navigate back to step 6 — the component remounts and must hydrate
     // from wizard.data.chapter1_outline (which markStepGenerated wrote),
     // not re-trigger generation or render an empty form.
-    const callsBeforeRentry = api.generateOutline.mock.calls.length;
+    const callsBeforeRentry = (api.generateOutline as ReturnType<typeof vi.fn>).mock.calls.length;
     await act(async () => {
       step6.click();
     });

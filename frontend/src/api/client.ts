@@ -770,8 +770,8 @@ export const api = {
   advance: (projectId: string, targetStage: string) =>
     request<AdvanceResponse>("POST", "/conductor/advance", { project_id: projectId, target_stage: targetStage }),
 
-  generateConcept: (projectId: string) =>
-    request<ConceptResponse>("POST", "/stage1/generate", { project_id: projectId }),
+  generateConcept: (projectId: string, userModifications: string = "") =>
+    request<ConceptResponse>("POST", "/stage1/generate", { project_id: projectId, user_modifications: userModifications }),
 
   getConcept: (projectId: string) =>
     request<ConceptResponse>("GET", `/stage1/concept?project_id=${encodeURIComponent(projectId)}`),
@@ -779,14 +779,14 @@ export const api = {
   updateConcept: (projectId: string, concept: Concept, storyDna: StoryDNA) =>
     request<void>("PUT", "/stage1/concept", { project_id: projectId, concept, story_dna: storyDna }),
 
-  generateWorld: (projectId: string) =>
-    request<World>("POST", "/stage2/generate-world", { project_id: projectId }),
+  generateWorld: (projectId: string, userModifications: string = "") =>
+    request<World>("POST", "/stage2/generate-world", { project_id: projectId, user_modifications: userModifications }),
 
   getWorld: (projectId: string) =>
     request<World>("GET", `/stage2/world?project_id=${encodeURIComponent(projectId)}`),
 
-  generateCharacter: (projectId: string, characterType?: string) =>
-    request<CharacterSet>("POST", "/stage2/generate-character", { project_id: projectId, character_type: characterType || "protagonist" }),
+  generateCharacter: (projectId: string, characterType?: string, userModifications: string = "") =>
+    request<CharacterSet>("POST", "/stage2/generate-character", { project_id: projectId, character_type: characterType || "protagonist", user_modifications: userModifications }),
 
   getCharacter: (projectId: string, characterIndex?: number) =>
     request<CharacterSet>(
@@ -824,11 +824,12 @@ export const api = {
     projectId: string,
     characterId: string,
     keepExisting: boolean = false,
+    userModifications: string = "",
   ): Promise<Character> =>
     request<Character>(
       "POST",
       `/stage2/character/${encodeURIComponent(characterId)}/regenerate-examples?project_id=${encodeURIComponent(projectId)}`,
-      { keep_existing: keepExisting },
+      { keep_existing: keepExisting, user_modifications: userModifications },
     ),
 
   growthWorkshopCheck: (projectId: string, characterId: string) =>
@@ -877,8 +878,8 @@ export const api = {
       `/v1/projects/${projectId}/style/sandbox/configs/${encodeURIComponent(name)}`,
     ),
 
-  generateOutline: (projectId: string, chapterNumber?: number) =>
-    request<Outline>("POST", "/stage3/generate", { project_id: projectId, chapter_number: chapterNumber ?? 1 }),
+  generateOutline: (projectId: string, chapterNumber?: number, userModifications: string = "") =>
+    request<Outline>("POST", "/stage3/generate", { project_id: projectId, chapter_number: chapterNumber ?? 1, user_modifications: userModifications }),
 
   getOutline: (projectId: string) =>
     request<Outline>("GET", `/stage3/outline?project_id=${encodeURIComponent(projectId)}`),
@@ -889,8 +890,8 @@ export const api = {
   getNovelOutline: (projectId: string) =>
     request<NovelOutline>("GET", `/stage3/novel-outline?project_id=${encodeURIComponent(projectId)}`),
 
-  generateNovelOutline: (projectId: string) =>
-    request<NovelOutline>("POST", "/stage3/generate-novel-outline", { project_id: projectId }),
+  generateNovelOutline: (projectId: string, userModifications: string = "") =>
+    request<NovelOutline>("POST", "/stage3/generate-novel-outline", { project_id: projectId, user_modifications: userModifications }),
 
   updateNovelOutline: (projectId: string, novelOutline: NovelOutline) =>
     request<NovelOutline>("PUT", "/stage3/novel-outline", { project_id: projectId, novel_outline: novelOutline }),
@@ -903,10 +904,12 @@ export const api = {
     chapter_number: number;
     scene_number: number;
     custom_style_config?: SandboxParams | null;
+    user_modifications?: string;
   }) =>
     request<WriteSceneResponse>("POST", "/stage4/write-scene", {
       ...data,
       custom_style_config: data.custom_style_config ?? null,
+      user_modifications: data.user_modifications ?? "",
     }),
 
   factGuard: (data: {

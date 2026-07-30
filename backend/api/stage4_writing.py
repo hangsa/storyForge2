@@ -395,6 +395,7 @@ async def _write_scene_chapter(
     chapter_number: int,
     scene_number: int,
     custom_style_config=None,
+    user_modifications: str = "",
     *,
     # Test seam: when set, skip LLM calls and use these instead.
     draft_factory=None,           # Callable[[int, int], str] | None
@@ -507,6 +508,7 @@ async def _write_scene_chapter(
                 reader_os_warnings=reader_warnings_str,
                 custom_style_config=custom_style_config,
                 outline_chapter=outline_chapter,
+                user_modifications=user_modifications,
             )
         except ValueError as e:
             raise HTTPException(
@@ -1181,6 +1183,7 @@ async def write_scene(data: dict):
     chapter_number = data.get("chapter_number", 1)
     scene_number = data.get("scene_number", 1)
     custom_style_config = data.get("custom_style_config") or None
+    user_modifications = str(data.get("user_modifications", ""))[:1000]
     if not project_id:
         raise HTTPException(
             status_code=400,
@@ -1192,6 +1195,7 @@ async def write_scene(data: dict):
         chapter_number=chapter_number,
         scene_number=scene_number,
         custom_style_config=custom_style_config,
+        user_modifications=user_modifications,
     )
 
 

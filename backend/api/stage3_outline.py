@@ -83,6 +83,7 @@ async def generate_outline(data: dict):
         genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
+        user_modifications = str(data.get("user_modifications", ""))[:1000]
         result, response = await agent.generate_outline(
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
@@ -91,6 +92,7 @@ async def generate_outline(data: dict):
             chapter_number=data.get("chapter_number", 1),
             min_words=project.get("min_words", 4000) if project else 4000,
             novel_outline=novel_outline,
+            user_modifications=user_modifications,
         )
     except ValueError as e:
         raise HTTPException(
@@ -246,6 +248,7 @@ async def generate_novel_outline(data: dict):
         genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
+        user_modifications = str(data.get("user_modifications", ""))[:1000]
         result, response = await agent.generate_novel_outline(
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
@@ -254,6 +257,7 @@ async def generate_novel_outline(data: dict):
             target_total_words=target_total_words,
             min_words=min_words,
             map_data=map_data,
+            user_modifications=user_modifications,
         )
     except ValueError as e:
         raise HTTPException(

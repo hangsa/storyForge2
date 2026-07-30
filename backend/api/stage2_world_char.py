@@ -118,10 +118,12 @@ async def generate_world(data: dict):
         genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
+        user_modifications = str(data.get("user_modifications", ""))[:1000]
         result, response = await agent.generate_world(
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
             genre=project.get("genre", "cool_novel") if project else "cool_novel",
+            user_modifications=user_modifications,
         )
     except ValueError as e:
         raise HTTPException(
@@ -197,12 +199,14 @@ async def generate_character(data: dict):
         genre=genre,
     )
     try:
+        user_modifications = str(data.get("user_modifications", ""))[:1000]
         result, response = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),
             world=world,
             character_type=character_type,
             existing_characters=existing_characters,
             genre=genre,
+            user_modifications=user_modifications,
         )
     except ValueError as e:
         raise HTTPException(
@@ -420,12 +424,14 @@ async def regenerate_character_examples(
         genre=genre,
     )
     try:
+        user_modifications = str(payload.get("user_modifications", ""))[:1000]
         result, _resp = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),
             world=world,
             character_type=target.get("character_type", "supporting"),
             existing_characters=[target],
             genre=genre,
+            user_modifications=user_modifications,
         )
     except ValueError as e:
         raise HTTPException(

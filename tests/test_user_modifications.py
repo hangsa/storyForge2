@@ -1,5 +1,7 @@
 """Tests for backend.agents._injection_helpers._build_user_modifications_block."""
 
+import pytest
+
 from backend.agents._injection_helpers import _build_user_modifications_block
 
 
@@ -197,3 +199,100 @@ class TestCharLimit:
         long_text = "y" * 5000
         truncated = long_text[:1000]
         assert len(truncated) == 1000
+
+
+class TestEndpointWiring:
+    """Smoke tests: the 7 endpoint handlers must extract user_modifications
+    from the request body and pass it through to the agent method.
+
+    We invoke the handler functions directly and patch PlannerAgent /
+    WriterAgent to capture the kwargs. The StageStateMachine and file
+    manager are also patched so the test never hits disk or pre-condition
+    gates.
+    """
+
+    def _patch_planner(self, monkeypatch, attr, captured):
+        from backend.agents.planner import PlannerAgent
+
+        async def fake(self, *args, **kwargs):
+            captured[attr] = kwargs.get("user_modifications", "")
+            return ({"ok": True}, None)
+
+        monkeypatch.setattr(PlannerAgent, attr, fake)
+
+    def _patch_writer(self, monkeypatch, captured):
+        from backend.agents.writer import WriterAgent
+
+        async def fake(self, *args, **kwargs):
+            captured["write_scene"] = kwargs.get("user_modifications", "")
+            return ({"ok": True}, None)
+
+        monkeypatch.setattr(WriterAgent, "write_scene", fake)
+
+    def _bypass_state_and_files(self, monkeypatch):
+        """Skip preconditions + file reads so the handler reaches the agent call."""
+        from backend.api import stage1_concept, stage2_world_char, stage3_outline, stage4_writing
+        from backend.conductor.state_machine import Stage
+
+        class _StubSM:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def get_current_stage(self, project_id):
+                return Stage.STAGE4
+
+        for mod in (stage1_concept, stage2_world_char, stage3_outline, stage4_writing):
+            monkeypatch.setattr(mod, "StageStateMachine", _StubSM, raising=False)
+        monkeypatch.setattr(stage1_concept.fm, "read_json", lambda *a, **k: {"initial_intent": {"free_text": "x"}, "current_stage": "STAGE4", "genre": "cool_novel"}, raising=False)
+        monkeypatch.setattr(stage2_world_char.fm, "read_json", lambda *a, **k: {"concept": {"title": "t"}, "story_dna": {"core_contradiction": {"statement": "s"}}, "current_stage": "STAGE4", "genre": "cool_novel"}, raising=False)
+        monkeypatch.setattr(stage3_outline.fm, "read_json", lambda *a, **k: {"concept": {}, "story_dna": {}, "characters": {"characters": []}, "current_stage": "STAGE4", "genre": "cool_novel"}, raising=False)
+        monkeypatch.setattr(stage4_writing.fm, "read_json", lambda *a, **k: None, raising=False)
+
+    @pytest.mark.asyncio
+    async def test_stage1_generate_handler_accepts_user_modifications(self, monkeypatch):
+        from backend.api import stage1_concept
+
+        captured = {}
+        self._bypass_state_and_files(monkeypatch)
+        self._patch_planner(monkeypatch, "generate_concept_and_dna", captured)
+        await stage1_concept.generate_concept(
+            {"project_id": "test_proj_e2e_a", "user_modifications": "让动机更清晰"}
+        )
+        assert captured.get("generate_concept_and_dna") == "让动机更清晰"
+
+    @pytest.mark.asyncio
+    async def test_stage4_write_scene_handler_accepts_user_modifications(self, monkeypatch):
+        from backend.api import stage4_writing
+
+        captured = {}
+        self._bypass_state_and_files(monkeypatch)
+        self._patch_writer(monkeypatch, captured)
+        # The /write-scene handler is thin: it forwards to _write_scene_chapter.
+        # We need to also patch _write_scene_chapter to short-circuit and capture
+        # user_modifications, since the real one calls many things.
+        async def fake_inner(*args, **kwargs):
+            captured["write_scene"] = kwargs.get("user_modifications", "")
+            return {"error": False}
+        monkeypatch.setattr(stage4_writing, "_write_scene_chapter", fake_inner)
+        await stage4_writing.write_scene(
+            {
+                "project_id": "test_proj_e2e_b",
+                "chapter_number": 1,
+                "scene_number": 1,
+                "user_modifications": "场景更紧张一些",
+            }
+        )
+        assert captured.get("write_scene") == "场景更紧张一些"
+
+    @pytest.mark.asyncio
+    async def test_stage1_handler_truncates_user_modifications_to_1000_chars(self, monkeypatch):
+        from backend.api import stage1_concept
+
+        captured = {}
+        self._bypass_state_and_files(monkeypatch)
+        self._patch_planner(monkeypatch, "generate_concept_and_dna", captured)
+        long_text = "z" * 5000
+        await stage1_concept.generate_concept(
+            {"project_id": "test_proj_e2e_c", "user_modifications": long_text}
+        )
+        assert len(captured.get("generate_concept_and_dna", "")) <= 1000

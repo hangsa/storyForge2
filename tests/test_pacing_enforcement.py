@@ -234,3 +234,40 @@ class TestChapterReview:
         review = builder.build_review(1)  # MUST NOT raise
         cw_max = [r for r in review["pacing_compliance"] if r["metric"] == "chapter_words.max"]
         assert any(not r["passed"] for r in cw_max)
+
+
+class TestFieldCoverage:
+    """Verify every pacing field is either injected into a prompt or
+    surfaced in the review check, per spec §3.4."""
+
+    def test_all_six_pacing_fields_have_injection_or_check_coverage(self):
+        from backend.agents.planner import _resolve_genre_pacing
+        from backend.agents.writer import _resolve_genre_scene_pacing
+
+        planner_text = _resolve_genre_pacing("xianxia")
+        writer_text = _resolve_genre_scene_pacing("xianxia")
+
+        # Planner must cover all 4 chapter-level fields
+        assert "单章字数" in planner_text       # chapter_words
+        assert "单场字数" in planner_text        # scene_words (planner also shows it)
+        assert "SF_LOG 标签密度" in planner_text # min_beats_per_1k
+        assert "冲突升级间隔" in planner_text    # escalation_interval
+
+        # Writer must cover all 4 scene-level fields
+        assert "本场字数" in writer_text                 # scene_words
+        assert "动作/感官段占比" in writer_text          # action_ratio
+        assert "连续非动作段" in writer_text             # max_consecutive_non_action
+        assert "SF_LOG 标签密度" in writer_text          # min_beats_per_1k
+
+    def test_escalation_interval_only_prompt_no_review_check(self):
+        from backend.style_engine.pacing import PacingAnalyzer
+        # analyze_sync never produces anything related to escalation_interval
+        # (no field on PacingStats). check_compliance never produces a metric
+        # for it. Together this means it's prompt-only.
+        stats = PacingAnalyzer().analyze_sync(["林峰拔剑出鞘。" * 100])
+        results = PacingAnalyzer().check_compliance(
+            stats,
+            {"escalation_interval": 5, "scene_words": {"min": 100, "max": 1000}, "min_beats_per_1k": 1.0},
+        )
+        metrics = {r.metric for r in results}
+        assert "escalation_interval" not in metrics

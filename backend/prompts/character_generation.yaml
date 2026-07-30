@@ -122,5 +122,7 @@ user_prompt_template: |
     }}
   }}
 
+  {user_modifications}
+
 output_format:
   type: json

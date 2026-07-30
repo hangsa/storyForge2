@@ -95,5 +95,7 @@ user_prompt_template: |
   - character_location_change：位置变更
   - character_physical_change：物理状态变更
 
+  {user_modifications}
+
 output_format:
   type: json

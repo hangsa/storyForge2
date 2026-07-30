@@ -112,5 +112,7 @@ user_prompt_template: |
     "text": "场景完整文本（含SF_LOG标签）..."
   }}
 
+  {user_modifications}
+
 output_format:
   type: json

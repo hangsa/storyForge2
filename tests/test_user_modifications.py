@@ -52,3 +52,37 @@ class TestFormatUserDefault:
         )
         rendered = template.format_user(user_modifications="X")
         assert rendered == "你好 X"
+
+
+PROMPT_TEMPLATES_WITH_USER_MODIFICATIONS = [
+    "concept_generation",
+    "world_generation",
+    "character_generation",
+    "novel_outline_generation",
+    "outline_generation",
+    "scene_writing",
+]
+
+
+class TestPromptCoverage:
+    def test_every_template_declares_user_modifications_placeholder(self):
+        from backend.services.prompt_override_store import load_prompt_effective
+
+        missing = []
+        for name in PROMPT_TEMPLATES_WITH_USER_MODIFICATIONS:
+            template = load_prompt_effective(name)["user_prompt_template"]
+            if "{user_modifications}" not in template:
+                missing.append(name)
+        assert missing == [], f"prompts missing {{user_modifications}}: {missing}"
+
+    def test_placeholder_is_last_content_in_template(self):
+        from backend.services.prompt_override_store import load_prompt_effective
+
+        misplaced = []
+        for name in PROMPT_TEMPLATES_WITH_USER_MODIFICATIONS:
+            template = load_prompt_effective(name)["user_prompt_template"]
+            if not template.rstrip().endswith("{user_modifications}"):
+                misplaced.append(name)
+        assert misplaced == [], (
+            f"prompts where {{user_modifications}} is not trailing: {misplaced}"
+        )

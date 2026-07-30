@@ -30,6 +30,43 @@ def _resolve_genre_label(genre: str) -> str:
     return genre
 
 
+def _resolve_genre_scene_pacing(genre: str) -> str:
+    """Return a multi-line pacing section for scene-level prompt injection.
+
+    Includes 4 scene-level fields (excludes chapter_words + escalation_interval):
+      - scene_words.{min, max}
+      - action_ratio
+      - max_consecutive_non_action
+      - min_beats_per_1k
+
+    Returns "" on catalog failure or when no scene-level fields are present.
+    """
+    try:
+        from backend.genres.catalog import get_catalog
+        entry = get_catalog().get(genre)
+    except Exception:
+        return ""
+
+    pacing = entry.get("pacing") or {}
+    if not pacing:
+        return ""
+
+    lines = ["【本场节奏约束】（仅作写作参考，不阻塞）"]
+    sw = pacing.get("scene_words") or {}
+    if isinstance(sw.get("min"), (int, float)) and not isinstance(sw.get("min"), bool) and isinstance(sw.get("max"), (int, float)) and not isinstance(sw.get("max"), bool):
+        lines.append(f"- 本场字数：{sw['min']}~{sw['max']} 字（参考值）")
+    ar = pacing.get("action_ratio")
+    if isinstance(ar, (int, float)) and not isinstance(ar, bool):
+        lines.append(f"- 动作/感官段占比目标：{ar}（±30%）")
+    mcna = pacing.get("max_consecutive_non_action")
+    if isinstance(mcna, (int, float)) and not isinstance(mcna, bool) and mcna >= 0:
+        lines.append(f"- 连续非动作段最多：{mcna} 段")
+    mbk = pacing.get("min_beats_per_1k")
+    if isinstance(mbk, (int, float)) and not isinstance(mbk, bool):
+        lines.append(f"- SF_LOG 标签密度：≥ {mbk} 个/千字")
+    return "\n".join(lines)
+
+
 def _name_in_text(name: str, text: str, other_names: set[str] | None = None) -> bool:
     """Match a Chinese character name in CJK text.
 
@@ -462,6 +499,7 @@ class WriterAgent(BaseAgent):
             outline_chapter=outline_chapter,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
+        template_vars["genre_pacing_scene"] = _resolve_genre_scene_pacing(genre)
         return await self.generate_from_template(
             "scene_writing", **template_vars, **kwargs
         )
@@ -503,6 +541,7 @@ class WriterAgent(BaseAgent):
             outline_chapter=outline_chapter,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
+        template_vars["genre_pacing_scene"] = _resolve_genre_scene_pacing(genre)
         async for chunk in self.generate_from_template_stream(
             "scene_writing", **template_vars, **kwargs
         ):

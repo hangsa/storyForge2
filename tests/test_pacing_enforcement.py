@@ -161,3 +161,24 @@ class TestPromptWiring:
 
         # Unknown genre falls back to the first index entry — must not raise.
         assert isinstance(_resolve_genre_pacing("__definitely_not_a_genre__"), str)
+
+    # --- Task 5: scene-level pacing injection into writer.scene_writing ---
+
+    def test_resolve_genre_scene_pacing_includes_four_scene_fields(self):
+        from backend.agents.writer import _resolve_genre_scene_pacing
+
+        text = _resolve_genre_scene_pacing("xianxia")
+        # xianxia: scene_words 600-2500, action_ratio 0.35, max_consecutive_non_action 3, min_beats_per_1k 1.2
+        assert "600" in text and "2500" in text
+        assert "0.35" in text
+        assert "3" in text
+        assert "1.2" in text
+        # escalation_interval is chapter-level — must NOT appear
+        assert "升级间隔" not in text
+
+    def test_scene_writing_prompt_has_genre_pacing_scene_placeholder(self):
+        # Use the canonical loader discovered in T4
+        from backend.services.prompt_override_store import load_prompt_effective
+
+        prompt = load_prompt_effective("scene_writing")
+        assert "{genre_pacing_scene}" in prompt.get("user_prompt_template", "")

@@ -96,6 +96,9 @@ user_prompt_template: |
   【自定义风格参考】
   {custom_style_config_desc}
 
+  【本场节奏约束】
+  {genre_pacing_scene}
+
   请撰写该场景的完整文本。注意：
   1. 文中必须插入所有 "必需的 SF_LOG 标签"
   2. 不要违反任何行为禁忌

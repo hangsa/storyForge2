@@ -189,3 +189,42 @@ class TestAgentConstructorAcceptsGenre:
         import inspect
         sig = inspect.signature(CharacterDesigner.__init__)
         assert "genre" in sig.parameters
+
+
+class TestGenerateFromTemplateRouting:
+    """Verify generate_from_template routes temperature through _resolve_temperature."""
+
+    def test_generate_from_template_uses_resolve_temperature_for_tier_1(self, monkeypatch):
+        from backend.agents.base_agent import BaseAgent, PromptTemplate
+        agent = _make_agent("planner", genre="xianxia", tier_map={
+            "outline_generation": MagicMock(tier_name="tier_1"),
+        })
+        agent.project_id = "test_proj"
+        # Stub the loader
+        template = PromptTemplate({
+            "user_prompt_template": "{x}",
+            "system_prompt": "",
+            "temperature": None,
+        })
+        agent.load_prompt = MagicMock(return_value=template)
+
+        # Capture what kwargs are passed to router.execute
+        captured = {}
+        async def fake_execute(*args, **kwargs):
+            captured.update(kwargs)
+            return {
+                "content": "{}",
+                "usage": {"input": 0, "output": 0},
+                "model": "fake-model",
+                "tier": "tier_1",
+            }
+        agent.router.execute = fake_execute
+
+        import asyncio
+        asyncio.run(agent.generate_from_template(
+            "outline_generation",
+            x="y",
+            custom_style_config=None,
+        ))
+        # The temperature in the call should be xianxia's 0.85
+        assert captured.get("temperature") == 0.85

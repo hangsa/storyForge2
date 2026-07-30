@@ -251,7 +251,7 @@ class BaseAgent:
                 json_mode=prompt.is_json_mode,
                 max_retries=max_retries,
                 max_tokens=prompt.max_tokens,
-                temperature=prompt.temperature,
+                temperature=self._resolve_temperature(prompt, kwargs.get("custom_style_config")),
             )
 
         return await self.generate(
@@ -260,7 +260,7 @@ class BaseAgent:
             json_mode=prompt.is_json_mode,
             max_retries=max_retries,
             max_tokens=prompt.max_tokens,
-            temperature=prompt.temperature,
+            temperature=self._resolve_temperature(prompt, kwargs.get("custom_style_config")),
         )
 
     async def generate_stream(
@@ -306,7 +306,7 @@ class BaseAgent:
             system_prompt=prompt.format_system(**kwargs),
             user_prompt=prompt.format_user(**kwargs),
             max_tokens=prompt.max_tokens,
-            temperature=prompt.temperature,
+            temperature=self._resolve_temperature(prompt, kwargs.get("custom_style_config")),
         ):
             yield chunk
 

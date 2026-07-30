@@ -115,6 +115,7 @@ async def generate_world(data: dict):
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
         result, response = await agent.generate_world(
@@ -193,6 +194,7 @@ async def generate_character(data: dict):
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=genre,
     )
     try:
         result, response = await agent.generate_character(
@@ -415,6 +417,7 @@ async def regenerate_character_examples(
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=genre,
     )
     try:
         result, _resp = await agent.generate_character(

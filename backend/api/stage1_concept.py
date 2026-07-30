@@ -62,6 +62,7 @@ async def generate_concept(data: dict):
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=project.get("genre", "cool_novel"),
     )
     try:
         result, response = await agent.generate_concept_and_dna(

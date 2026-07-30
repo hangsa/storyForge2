@@ -1,5 +1,6 @@
 # backend/api/growth_workshop.py
 import logging
+import json
 from pathlib import Path
 from typing import List, Optional
 
@@ -200,6 +201,13 @@ async def discuss_endpoint(
     if inputs is None:
         raise _err("CHARACTER_NOT_FOUND", f"角色 {character_id} 不存在", status=404)
     character, outline, _, _ = inputs
+    project_path = Path(settings.projects_dir) / project_id / "project.json"
+    project = {}
+    if project_path.exists():
+        try:
+            project = json.loads(project_path.read_text())
+        except Exception:
+            project = {}
     router_instance = get_model_router()
     if router_instance is None:
         return _envelope(WorkshopDiscussResponse(
@@ -218,6 +226,7 @@ async def discuss_endpoint(
         model_router=router_instance,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=project.get("genre", "cool_novel"),
     )
     try:
         resp: WorkshopDiscussResponse = await agent.discuss(

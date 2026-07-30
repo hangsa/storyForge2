@@ -80,6 +80,7 @@ async def generate_outline(data: dict):
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
         result, response = await agent.generate_outline(
@@ -242,6 +243,7 @@ async def generate_novel_outline(data: dict):
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
         result, response = await agent.generate_novel_outline(

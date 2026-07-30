@@ -599,10 +599,12 @@ async def expand_node(project_id: str, data: dict):
             global_override_store,
         )
 
+        project = _get_fm().read_json(project_id, "project.json") or {}
         director = CreativeDirector(
             project_id,
             override_store=project_override_store(),
             global_override_store=global_override_store(),
+            genre=project.get("genre", "cool_novel"),
         )
         canvas_stats = {
             "total_nodes": len(canvas["nodes"]),
@@ -710,10 +712,12 @@ async def mutate_node(project_id: str, data: dict):
             global_override_store,
         )
 
+        project = _get_fm().read_json(project_id, "project.json") or {}
         director = CreativeDirector(
             project_id,
             override_store=project_override_store(),
             global_override_store=global_override_store(),
+            genre=project.get("genre", "cool_novel"),
         )
         recommendation = await director.recommend_mutation(node)
     except Exception as exc:
@@ -1178,10 +1182,12 @@ async def select_path(project_id: str, data: dict):
             global_override_store,
         )
 
+        project = _get_fm().read_json(project_id, "project.json") or {}
         director = CreativeDirector(
             project_id,
             override_store=project_override_store(),
             global_override_store=global_override_store(),
+            genre=project.get("genre", "cool_novel"),
         )
         path_nodes = [
             _dict_to_node(canvas["nodes"][nid]) for nid in path_node_ids
@@ -1530,6 +1536,7 @@ async def commit_canvas(project_id: str):
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=genre,
     )
     try:
         result, _ = await agent.generate_concept_from_canvas(

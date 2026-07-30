@@ -452,6 +452,7 @@ async def _write_scene_chapter(
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=ctx["genre"],
     )
     reviewer = ReviewerAgent(
         project_id,
@@ -835,6 +836,7 @@ async def _write_scene_chapter_stream(
         project_id,
         override_store=project_override_store(),
         global_override_store=global_override_store(),
+        genre=ctx["genre"],
     )
     reviewer = ReviewerAgent(
         project_id,

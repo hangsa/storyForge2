@@ -59,3 +59,61 @@ class TestPacingAnalyzer:
         text = '你好世界这是测试文本<!-- SF_LOG knowledge_gain char="A" -->'
         stats = PacingAnalyzer().analyze_sync([text])
         assert stats.sf_log_tags_per_1k == pytest.approx(100.0)
+
+
+class TestCompliance:
+    PACING = {
+        "chapter_words": {"min": 3000, "max": 6000},
+        "scene_words": {"min": 500, "max": 2000},
+        "action_ratio": 0.45,
+        "max_consecutive_non_action": 2,
+        "min_beats_per_1k": 1.5,
+    }
+
+    def test_check_compliance_scene_words_min_passes_when_above(self):
+        stats = PacingStats(scene_word_counts=[600, 700, 800], chapter_word_count=2100)
+        results = PacingAnalyzer().check_compliance(stats, self.PACING)
+        scene_min_results = [r for r in results if r.metric.startswith("scene_words.min#")]
+        assert len(scene_min_results) == 3
+        assert all(r.passed for r in scene_min_results)
+
+    def test_check_compliance_scene_words_max_fails_when_above(self):
+        stats = PacingStats(scene_word_counts=[2200, 700], chapter_word_count=2900)
+        results = PacingAnalyzer().check_compliance(stats, self.PACING)
+        scene_max_results = [r for r in results if r.metric.startswith("scene_words.max#")]
+        assert len(scene_max_results) == 2
+        assert any(not r.passed for r in scene_max_results)
+        # The failing one is scene #1 with 2200 chars (above max=2000).
+        failing = next(r for r in scene_max_results if not r.passed)
+        assert failing.actual == "2200"
+        assert failing.metric == "scene_words.max#1"
+
+    def test_check_compliance_action_ratio_uses_tolerance_window(self):
+        # 0.45 target, ±30% → pass range [0.315, 0.585]
+        for actual, expected_pass in [(0.40, True), (0.60, False), (0.30, False)]:
+            stats = PacingStats(action_ratio=actual, chapter_word_count=1000, scene_word_counts=[1000])
+            results = PacingAnalyzer().check_compliance(stats, self.PACING)
+            ratio_result = next(r for r in results if r.metric == "action_ratio")
+            assert ratio_result.passed is expected_pass, f"actual={actual}"
+
+    def test_check_compliance_max_consecutive_non_action_one_sided(self):
+        for actual, expected_pass in [(2, True), (3, False), (1, True)]:
+            stats = PacingStats(
+                max_consecutive_non_action=actual,
+                chapter_word_count=1000,
+                scene_word_counts=[1000],
+            )
+            results = PacingAnalyzer().check_compliance(stats, self.PACING)
+            mcna = next(r for r in results if r.metric == "max_consecutive_non_action")
+            assert mcna.passed is expected_pass, f"actual={actual}"
+
+    def test_check_compliance_min_beats_one_sided_actual_must_meet_target(self):
+        for actual, expected_pass in [(1.5, True), (2.0, True), (1.0, False)]:
+            stats = PacingStats(
+                sf_log_tags_per_1k=actual,
+                chapter_word_count=1000,
+                scene_word_counts=[1000],
+            )
+            results = PacingAnalyzer().check_compliance(stats, self.PACING)
+            beats = next(r for r in results if r.metric == "min_beats_per_1k")
+            assert beats.passed is expected_pass, f"actual={actual}"

@@ -102,5 +102,109 @@ class PacingAnalyzer:
         pacing: dict,
         tolerances: Optional[dict] = None,
     ) -> list[PacingCompliance]:
-        # Implemented in Task 3.
-        return []
+        """Compute one compliance entry per pacing metric.
+
+        Metric semantics (spec §4.4):
+          - chapter_words.min / chapter_words.max: one-sided threshold
+          - scene_words.min / scene_words.max: one-sided per scene
+          - action_ratio: tolerance window around target (default ±30%)
+          - max_consecutive_non_action: one-sided (actual ≤ target)
+          - min_beats_per_1k: one-sided (actual ≥ target)
+
+        delta_pct is always 0.0 for one-sided thresholds; for action_ratio
+        it is (actual - target) / target.
+        """
+        if not pacing:
+            return []
+
+        tol = tolerances or {}
+        default_tol = 0.30
+        results: list[PacingCompliance] = []
+
+        # chapter_words
+        cw = pacing.get("chapter_words") or {}
+        cw_min = cw.get("min")
+        cw_max = cw.get("max")
+        if isinstance(cw_min, (int, float)) and cw_min > 0:
+            passed = stats.chapter_word_count >= cw_min
+            results.append(PacingCompliance(
+                metric="chapter_words.min",
+                expected=str(cw_min),
+                actual=str(stats.chapter_word_count),
+                passed=passed,
+                delta_pct=0.0,
+            ))
+        if isinstance(cw_max, (int, float)) and cw_max > 0:
+            passed = stats.chapter_word_count <= cw_max
+            results.append(PacingCompliance(
+                metric="chapter_words.max",
+                expected=str(cw_max),
+                actual=str(stats.chapter_word_count),
+                passed=passed,
+                delta_pct=0.0,
+            ))
+
+        # scene_words (per scene)
+        sw = pacing.get("scene_words") or {}
+        sw_min = sw.get("min")
+        sw_max = sw.get("max")
+        for idx, scene_wc in enumerate(stats.scene_word_counts, start=1):
+            if isinstance(sw_min, (int, float)) and not isinstance(sw_min, bool) and sw_min > 0:
+                passed = scene_wc >= sw_min
+                results.append(PacingCompliance(
+                    metric=f"scene_words.min#{idx}",
+                    expected=str(sw_min),
+                    actual=str(scene_wc),
+                    passed=passed,
+                    delta_pct=round((scene_wc - sw_min) / sw_min, 3) if sw_min else 0.0,
+                ))
+            if isinstance(sw_max, (int, float)) and not isinstance(sw_max, bool) and sw_max > 0:
+                passed = scene_wc <= sw_max
+                results.append(PacingCompliance(
+                    metric=f"scene_words.max#{idx}",
+                    expected=str(sw_max),
+                    actual=str(scene_wc),
+                    passed=passed,
+                    delta_pct=round((scene_wc - sw_max) / sw_max, 3) if sw_max else 0.0,
+                ))
+
+        # action_ratio
+        ar = pacing.get("action_ratio")
+        if isinstance(ar, (int, float)):
+            tolerance = float(tol.get("action_ratio_tolerance", default_tol))
+            actual = stats.action_ratio
+            denom = ar if ar else 1.0
+            passed = abs(actual - ar) / denom <= tolerance
+            results.append(PacingCompliance(
+                metric="action_ratio",
+                expected=str(ar),
+                actual=str(actual),
+                passed=passed,
+                delta_pct=round((actual - ar) / denom, 3),
+            ))
+
+        # max_consecutive_non_action (one-sided: ≤ target)
+        mcna = pacing.get("max_consecutive_non_action")
+        if isinstance(mcna, (int, float)) and not isinstance(mcna, bool) and mcna >= 0:
+            passed = stats.max_consecutive_non_action <= mcna
+            results.append(PacingCompliance(
+                metric="max_consecutive_non_action",
+                expected=str(mcna),
+                actual=str(stats.max_consecutive_non_action),
+                passed=passed,
+                delta_pct=0.0,
+            ))
+
+        # min_beats_per_1k (one-sided: ≥ target)
+        mbk = pacing.get("min_beats_per_1k")
+        if isinstance(mbk, (int, float)):
+            passed = stats.sf_log_tags_per_1k >= mbk
+            results.append(PacingCompliance(
+                metric="min_beats_per_1k",
+                expected=str(mbk),
+                actual=str(stats.sf_log_tags_per_1k),
+                passed=passed,
+                delta_pct=0.0,
+            ))
+
+        return results

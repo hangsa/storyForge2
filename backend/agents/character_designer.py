@@ -21,6 +21,7 @@ class CharacterDesigner(BaseAgent):
         model_router=None,
         override_store=None,
         global_override_store=None,
+        genre: str = "cool_novel",
     ):
         super().__init__(
             project_id=project_id,
@@ -28,6 +29,7 @@ class CharacterDesigner(BaseAgent):
             model_router=model_router,
             override_store=override_store,
             global_override_store=global_override_store,
+            genre=genre,
         )
 
     @staticmethod

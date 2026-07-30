@@ -161,3 +161,31 @@ class TestErrorHandling:
         prompt = _prompt(temp=None)
         result = agent._resolve_temperature(prompt, bad_config)
         assert result == 0.85
+
+
+class TestAgentConstructorAcceptsGenre:
+    def test_planner_agent_accepts_genre_kwarg(self):
+        from backend.agents.planner import PlannerAgent
+        import inspect
+        sig = inspect.signature(PlannerAgent.__init__)
+        assert "genre" in sig.parameters
+        assert sig.parameters["genre"].default == "cool_novel"
+
+    def test_writer_agent_accepts_genre_kwarg(self):
+        from backend.agents.writer import WriterAgent
+        import inspect
+        sig = inspect.signature(WriterAgent.__init__)
+        assert "genre" in sig.parameters
+        assert sig.parameters["genre"].default == "cool_novel"
+
+    def test_creative_director_accepts_genre_kwarg(self):
+        from backend.agents.creative_director import CreativeDirector
+        import inspect
+        sig = inspect.signature(CreativeDirector.__init__)
+        assert "genre" in sig.parameters
+
+    def test_character_designer_accepts_genre_kwarg(self):
+        from backend.agents.character_designer import CharacterDesigner
+        import inspect
+        sig = inspect.signature(CharacterDesigner.__init__)
+        assert "genre" in sig.parameters

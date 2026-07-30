@@ -18,8 +18,9 @@ class CreativeDirector(BaseAgent):
         project_id: str,
         prompts_dir=None,
         model_router=None,
+        genre: str = "cool_novel",
     ):
-        super().__init__(project_id, prompts_dir, model_router)
+        super().__init__(project_id, prompts_dir, model_router, genre=genre)
 
     async def suggest_direction(
         self, current_node: WhatIfNode, canvas_state: dict

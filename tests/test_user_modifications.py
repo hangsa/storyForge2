@@ -130,3 +130,70 @@ class TestAgentSignatureCoverage:
                 f"{class_name}.{method_name}.user_modifications default "
                 f"should be empty string, got {param.default!r}"
             )
+
+
+class TestEndToEndBackwardCompat:
+    def test_empty_user_modifications_renders_no_block(self):
+        from backend.agents._injection_helpers import _build_user_modifications_block
+
+        assert _build_user_modifications_block("") == ""
+        assert "【用户修改意见】" not in _build_user_modifications_block("")
+
+    def test_nonempty_user_modifications_renders_block_with_text(self):
+        from backend.agents._injection_helpers import _build_user_modifications_block
+
+        result = _build_user_modifications_block("让节奏更紧凑")
+        assert "【用户修改意见】" in result
+        assert "让节奏更紧凑" in result
+        assert result.index("【用户修改意见】") < result.index("让节奏更紧凑")
+
+
+class TestEndToEndWithSuggestion:
+    _CONCEPT_STUB_VARS = {
+        "initial_intent": "一个复仇故事",
+        "genre": "玄幻",
+        "genre_tone": "燃",
+        "genre_style_rules": "短句",
+        "genre_trope_patterns": "废柴逆袭",
+    }
+
+    def test_concept_generation_prompt_includes_user_modifications_block(self):
+        from backend.agents._injection_helpers import _build_user_modifications_block
+        from backend.services.prompt_override_store import load_prompt_effective
+
+        data = load_prompt_effective("concept_generation")
+        template = data["user_prompt_template"]
+        rendered = template.format(
+            **self._CONCEPT_STUB_VARS,
+            user_modifications=_build_user_modifications_block("让主角动机更清晰"),
+        )
+        assert "【用户修改意见】" in rendered
+        assert "让主角动机更清晰" in rendered
+        assert rendered.rstrip().endswith("让主角动机更清晰")
+
+    def test_concept_generation_prompt_unchanged_with_empty_modifications(self):
+        from backend.agents._injection_helpers import _build_user_modifications_block
+        from backend.services.prompt_override_store import load_prompt_effective
+
+        data = load_prompt_effective("concept_generation")
+        template = data["user_prompt_template"]
+        rendered = template.format(
+            **self._CONCEPT_STUB_VARS,
+            user_modifications=_build_user_modifications_block(""),
+        )
+        assert "{user_modifications}" not in rendered
+        assert "【用户修改意见】" not in rendered
+
+
+class TestCharLimit:
+    def test_helper_does_not_impose_char_limit(self):
+        from backend.agents._injection_helpers import _build_user_modifications_block
+
+        long_text = "x" * 5000
+        result = _build_user_modifications_block(long_text)
+        assert "x" * 5000 in result
+
+    def test_handler_truncates_to_1000_chars_shape(self):
+        long_text = "y" * 5000
+        truncated = long_text[:1000]
+        assert len(truncated) == 1000

@@ -89,3 +89,75 @@ class TestGenreTemperatureResolution:
         result = agent._resolve_temperature(prompt, None)
         assert isinstance(result, float)
         assert 0.0 <= result <= 2.0
+
+
+class TestTierFilteringExtra:
+    """Edge cases for _is_tier_1_agent."""
+
+    def test_mixed_tier_agent_returns_false(self):
+        agent = _make_agent("hybrid", tier_map={
+            "task_a": MagicMock(tier_name="tier_1"),
+            "task_b": MagicMock(tier_name="tier_2"),
+        })
+        assert agent._is_tier_1_agent() is False
+
+    def test_tier_2_prompt_path_skips_genre(self):
+        agent = _make_agent("reviewer", genre="xianxia", tier_map={
+            "fact_guard": MagicMock(tier_name="tier_2"),
+        })
+        prompt = _prompt(temp=0.7)
+        assert agent._resolve_temperature(prompt, None) == 0.7
+
+    def test_tier_2_prompt_unset_falls_back_to_settings(self):
+        agent = _make_agent("reviewer", genre="xianxia", tier_map={
+            "fact_guard": MagicMock(tier_name="tier_2"),
+        })
+        prompt = _prompt(temp=None)
+        result = agent._resolve_temperature(prompt, None)
+        from backend.config import settings
+        assert result == settings.llm_temperature
+
+
+class TestIntegration:
+    def test_resolve_temperature_matches_real_xianxia_value_0_85(self):
+        agent = _make_agent("planner", genre="xianxia", tier_map={
+            "outline_generation": MagicMock(tier_name="tier_1"),
+        })
+        prompt = _prompt(temp=None)
+        assert agent._resolve_temperature(prompt, None) == 0.85
+
+    def test_resolve_temperature_matches_real_cool_novel_value_0_9(self):
+        agent = _make_agent("planner", genre="cool_novel", tier_map={
+            "outline_generation": MagicMock(tier_name="tier_1"),
+        })
+        prompt = _prompt(temp=None)
+        assert agent._resolve_temperature(prompt, None) == 0.9
+
+    def test_resolve_temperature_matches_real_xuanyi_value_0_75(self):
+        agent = _make_agent("planner", genre="xuanyi", tier_map={
+            "outline_generation": MagicMock(tier_name="tier_1"),
+        })
+        prompt = _prompt(temp=None)
+        assert agent._resolve_temperature(prompt, None) == 0.75
+
+
+class TestErrorHandling:
+    def test_catalog_failure_falls_back_silently(self):
+        from unittest.mock import patch
+        agent = _make_agent("planner", genre="xianxia", tier_map={
+            "outline_generation": MagicMock(tier_name="tier_1"),
+        })
+        prompt = _prompt(temp=None)
+        with patch("backend.genres.catalog.get_catalog", side_effect=RuntimeError("boom")):
+            result = agent._resolve_temperature(prompt, None)
+        from backend.config import settings
+        assert result == settings.llm_temperature
+
+    def test_invalid_sandbox_config_does_not_raise(self):
+        agent = _make_agent("writer", genre="xianxia", tier_map={
+            "scene_writing": MagicMock(tier_name="tier_1"),
+        })
+        bad_config = {"temperature": "not-a-number", "action_ratio": "junk"}
+        prompt = _prompt(temp=None)
+        result = agent._resolve_temperature(prompt, bad_config)
+        assert result == 0.85

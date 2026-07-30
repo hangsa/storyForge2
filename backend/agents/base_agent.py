@@ -92,6 +92,50 @@ class BaseAgent:
             logger.debug("tier-1 lookup failed for agent %s: %s", self.agent_name, exc)
             return False
 
+    def _resolve_temperature(
+        self,
+        prompt: "PromptTemplate",
+        custom_style_config: Optional[dict] = None,
+    ) -> float:
+        """Resolve effective temperature for the current LLM call.
+
+        Precedence (most specific wins): sandbox, prompt, genre for tier_1,
+        then the global settings fallback. Tier_2/3 agents skip genre config.
+        """
+        from backend.config import settings
+
+        if not self._is_tier_1_agent():
+            if isinstance(prompt.temperature, (int, float)) and not isinstance(prompt.temperature, bool):
+                return float(prompt.temperature)
+            return settings.llm_temperature
+
+        if custom_style_config is not None:
+            try:
+                from backend.style_engine.sandbox_models import SandboxParams
+                params = (
+                    custom_style_config
+                    if isinstance(custom_style_config, SandboxParams)
+                    else SandboxParams(**custom_style_config)
+                )
+                if isinstance(params.temperature, (int, float)) and not isinstance(params.temperature, bool):
+                    return float(params.temperature)
+            except (TypeError, ValueError, KeyError):
+                pass
+
+        if isinstance(prompt.temperature, (int, float)) and not isinstance(prompt.temperature, bool):
+            return float(prompt.temperature)
+
+        try:
+            from backend.genres.catalog import get_catalog
+            entry = get_catalog().get(self.genre)
+            mp_temp = (entry.get("model_preferences") or {}).get("temperature")
+            if isinstance(mp_temp, (int, float)) and not isinstance(mp_temp, bool):
+                return float(mp_temp)
+        except (AttributeError, KeyError, TypeError, RuntimeError):
+            pass
+
+        return settings.llm_temperature
+
     def _ensure_usage_log(self) -> Path:
         if self._usage_log_path is None:
             project_dir = settings.projects_dir / self.project_id

@@ -41,6 +41,7 @@ class SandboxParams(BaseModel):
     rhythm: SandboxRhythmParams = Field(default_factory=SandboxRhythmParams)
     density: SandboxDensityParams = Field(default_factory=SandboxDensityParams)
     satisfaction: SandboxSatisfactionParams = Field(default_factory=SandboxSatisfactionParams)
+    temperature: Optional[float] = None
 
 
 class PreviewRequest(BaseModel):

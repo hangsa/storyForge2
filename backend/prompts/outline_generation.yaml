@@ -40,6 +40,8 @@ user_prompt_template: |
 
   {genre_focus_vocabulary}
 
+  {genre_pacing}
+
   请生成该章节的场景规划大纲。
 
   输出JSON格式：

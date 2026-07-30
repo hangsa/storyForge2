@@ -117,3 +117,47 @@ class TestCompliance:
             results = PacingAnalyzer().check_compliance(stats, self.PACING)
             beats = next(r for r in results if r.metric == "min_beats_per_1k")
             assert beats.passed is expected_pass, f"actual={actual}"
+
+
+class TestPromptWiring:
+    """Task 4 — chapter-level pacing injection into the planner outline prompts."""
+
+    @staticmethod
+    def _load_prompt(name: str) -> dict:
+        # Canonical prompt loader used across the codebase (3-tier YAML → global
+        # → project merge). With no override stores passed it is YAML-only.
+        from backend.services.prompt_override_store import load_prompt_effective
+
+        return load_prompt_effective(name)
+
+    def test_resolve_genre_pacing_includes_chapter_words_and_interval(self):
+        from backend.agents.planner import _resolve_genre_pacing
+
+        text = _resolve_genre_pacing("xianxia")
+        # xianxia: chapter_words 3000-7000, escalation_interval 5, min_beats_per_1k 1.2
+        assert "3000" in text and "7000" in text
+        assert "5" in text  # escalation_interval
+        assert "1.2" in text  # min_beats_per_1k
+
+    def test_novel_outline_prompt_has_genre_pacing_placeholder(self):
+        prompt = self._load_prompt("novel_outline_generation")
+        assert "{genre_pacing}" in prompt.get("user_prompt_template", "")
+
+    def test_outline_prompt_has_genre_pacing_placeholder(self):
+        prompt = self._load_prompt("outline_generation")
+        assert "{genre_pacing}" in prompt.get("user_prompt_template", "")
+
+    def test_resolve_genre_pacing_returns_empty_when_catalog_raises(self):
+        """Exception path: catalog unavailable → "" instead of propagating."""
+        import unittest.mock
+
+        from backend.agents.planner import _resolve_genre_pacing
+
+        def _raise():
+            raise RuntimeError("test catalog unavailable")
+
+        with unittest.mock.patch("backend.genres.catalog.get_catalog", _raise):
+            assert _resolve_genre_pacing("xianxia") == ""
+
+        # Unknown genre falls back to the first index entry — must not raise.
+        assert isinstance(_resolve_genre_pacing("__definitely_not_a_genre__"), str)

@@ -148,6 +148,47 @@ def _resolve_genre_beat_patterns(
     return "\n".join(lines)
 
 
+def _resolve_genre_pacing(genre: str) -> str:
+    """Return a multi-line pacing section for prompt injection (chapter-level slice).
+
+    Includes 4 chapter-level fields:
+      - chapter_words.{min, max}
+      - scene_words.{min, max}
+      - min_beats_per_1k
+      - escalation_interval
+
+    Scene-level fields (action_ratio, max_consecutive_non_action) are
+    deliberately excluded — those belong to the Writer's scene prompt.
+
+    Section header is always present; field lines are omitted if the catalog
+    entry lacks the field. Returns "" on catalog failure or empty pacing.
+    """
+    try:
+        from backend.genres.catalog import get_catalog
+        entry = get_catalog().get(genre)
+    except Exception:
+        return ""
+
+    pacing = entry.get("pacing") or {}
+    if not pacing:
+        return ""
+
+    lines = ["【题材节奏约束】（仅供大纲章节拆分参考）"]
+    cw = pacing.get("chapter_words") or {}
+    if isinstance(cw.get("min"), (int, float)) and isinstance(cw.get("max"), (int, float)):
+        lines.append(f"- 单章字数：{cw['min']}~{cw['max']} 字（参考值，目标 min~max 之间）")
+    sw = pacing.get("scene_words") or {}
+    if isinstance(sw.get("min"), (int, float)) and isinstance(sw.get("max"), (int, float)):
+        lines.append(f"- 单场字数：{sw['min']}~{sw['max']} 字")
+    mbk = pacing.get("min_beats_per_1k")
+    if isinstance(mbk, (int, float)):
+        lines.append(f"- SF_LOG 标签密度：≥ {mbk} 个/千字")
+    ei = pacing.get("escalation_interval")
+    if isinstance(ei, int):
+        lines.append(f"- 冲突升级间隔：每 {ei} 章升级一次冲突烈度")
+    return "\n".join(lines)
+
+
 # Role labels surfaced to the LLM. Must match the user-facing wizard labels
 # (CharacterStep.tsx CHARACTER_TYPES) so the LLM's output is consistent with
 # what the user sees when reviewing.
@@ -428,6 +469,7 @@ class PlannerAgent(BaseAgent):
             novel_outline_context=novel_outline_context,
             genre_beat_patterns=_resolve_genre_beat_patterns(genre, outline_text),
             genre_focus_vocabulary=_resolve_genre_focus_vocabulary(),
+            genre_pacing=_resolve_genre_pacing(genre),
         )
         self.log_usage("outline_generation", response)
         return result, response
@@ -490,6 +532,7 @@ class PlannerAgent(BaseAgent):
             min_words=min_words,
             genre_beat_patterns=_resolve_genre_beat_patterns(genre, outline_text),
             genre_focus_vocabulary=_resolve_genre_focus_vocabulary(),
+            genre_pacing=_resolve_genre_pacing(genre),
         )
         self.log_usage("novel_outline_generation", response)
         return result, response

@@ -45,6 +45,8 @@ user_prompt_template: |
 
   {genre_focus_vocabulary}
 
+  {genre_pacing}
+
   请生成"全书大纲"，输出严格遵循以下 JSON 结构（不要代码块包裹）：
   {{
     "core_conflict_theme": "核心冲突/主题的 1-3 句概括",

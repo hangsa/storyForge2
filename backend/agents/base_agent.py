@@ -32,6 +32,7 @@ class PromptTemplate:
         return self.system_prompt.format(**kwargs)
 
     def format_user(self, **kwargs) -> str:
+        kwargs.setdefault("user_modifications", "")
         return self.user_prompt_template.format(**kwargs)
 
     @property

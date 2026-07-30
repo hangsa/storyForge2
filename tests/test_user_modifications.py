@@ -25,3 +25,30 @@ class TestUserModificationsHelper:
         result = _build_user_modifications_block(text)
         assert text in result
         assert "【用户修改意见】" in result
+
+
+class TestFormatUserDefault:
+    def test_format_user_supplies_default_for_user_modifications(self):
+        from backend.agents.base_agent import PromptTemplate
+
+        template = PromptTemplate(
+            {
+                "name": "default_guard_test",
+                "user_prompt_template": "你好 {user_modifications}",
+            }
+        )
+        rendered = template.format_user()
+        assert rendered == "你好 "
+        assert "{user_modifications}" not in rendered
+
+    def test_format_user_preserves_explicit_value(self):
+        from backend.agents.base_agent import PromptTemplate
+
+        template = PromptTemplate(
+            {
+                "name": "default_guard_test",
+                "user_prompt_template": "你好 {user_modifications}",
+            }
+        )
+        rendered = template.format_user(user_modifications="X")
+        assert rendered == "你好 X"

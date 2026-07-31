@@ -1,5 +1,6 @@
 import React from "react";
 import type { BehaviorExample } from "../../api/client";
+import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface BehaviorExamplesSectionProps {
   examples: BehaviorExample[];
@@ -96,7 +97,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
             <div className="space-y-2">
               <label className="block text-xs text-gray-600">
                 <span className="mb-1 block">情境</span>
-                <textarea
+                <AutoTextarea
                   value={ex.situation}
                   onChange={(e) => update(idx, "situation", e.target.value)}
                   rows={2}
@@ -106,7 +107,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
               </label>
               <label className="block text-xs text-gray-600">
                 <span className="mb-1 block">动作</span>
-                <textarea
+                <AutoTextarea
                   value={ex.action}
                   onChange={(e) => update(idx, "action", e.target.value)}
                   rows={2}
@@ -116,7 +117,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
               </label>
               <label className="block text-xs text-gray-600">
                 <span className="mb-1 block">台词示例</span>
-                <textarea
+                <AutoTextarea
                   value={ex.speech_sample}
                   onChange={(e) => update(idx, "speech_sample", e.target.value)}
                   rows={2}

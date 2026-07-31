@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api, { NovelOutline } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import { RegenerateModal } from "../shared/RegenerateModal";
+import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface OutlineStepProps {
   projectId: string;
@@ -130,7 +131,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
         <div data-testid="outline-form" className="space-y-4">
           <div>
             <label className="block font-label-mono text-system-log mb-1 text-xs">核心冲突与主题</label>
-            <textarea
+            <AutoTextarea
               value={outline.core_conflict_theme}
               onChange={(e) => setOutline({ ...outline, core_conflict_theme: e.target.value })}
               rows={5}

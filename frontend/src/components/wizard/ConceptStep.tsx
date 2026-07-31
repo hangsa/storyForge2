@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api, { Concept, StoryDNA } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import { RegenerateModal } from "../shared/RegenerateModal";
+import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface ConceptStepProps {
   projectId: string;
@@ -143,7 +144,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
           </div>
           <div>
             <label className="block font-label-mono text-system-log mb-1 text-xs">前提</label>
-            <textarea
+            <AutoTextarea
               data-testid="concept-premise"
               value={concept.premise}
               onChange={(e) => setConcept({ ...concept, premise: e.target.value })}
@@ -191,7 +192,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
           </div>
           <div className="border-t border-outline-variant pt-3 space-y-2">
             <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">核心矛盾</div>
-            <textarea
+            <AutoTextarea
               data-testid="concept-statement"
               value={dna.core_contradiction.statement}
               onChange={(e) => setDna({ ...dna, core_contradiction: { ...dna.core_contradiction, statement: e.target.value } })}
@@ -200,14 +201,14 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
               className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
             />
             <div className="grid grid-cols-2 gap-3">
-              <textarea
+              <AutoTextarea
                 value={dna.core_contradiction.side_a}
                 onChange={(e) => setDna({ ...dna, core_contradiction: { ...dna.core_contradiction, side_a: e.target.value } })}
                 rows={2}
                 placeholder="立场 A"
                 className="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
               />
-              <textarea
+              <AutoTextarea
                 value={dna.core_contradiction.side_b}
                 onChange={(e) => setDna({ ...dna, core_contradiction: { ...dna.core_contradiction, side_b: e.target.value } })}
                 rows={2}

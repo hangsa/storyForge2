@@ -3,6 +3,7 @@ import api, { World } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
 import { RegenerateModal } from "../shared/RegenerateModal";
+import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface WorldStepProps {
   projectId: string;
@@ -191,7 +192,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
             <div className="space-y-3">
               <div>
                 <label className="block font-label-mono text-system-log mb-1 text-xs">时代背景</label>
-                <textarea
+                <AutoTextarea
                   value={world.era}
                   onChange={(e) => setWorld({ ...world, era: e.target.value })}
                   rows={2}
@@ -200,7 +201,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
               </div>
               <div>
                 <label className="block font-label-mono text-system-log mb-1 text-xs">地理环境</label>
-                <textarea
+                <AutoTextarea
                   value={world.geography}
                   onChange={(e) => setWorld({ ...world, geography: e.target.value })}
                   rows={2}
@@ -211,7 +212,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                 <label className="block font-label-mono text-primary-container mb-1 text-xs">
                   社会结构 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
                 </label>
-                <textarea
+                <AutoTextarea
                   data-testid="world-era-social-structure"
                   value={world.era_social_structure ?? ""}
                   onChange={(e) => setWorld({ ...world, era_social_structure: e.target.value })}
@@ -223,7 +224,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                 <label className="block font-label-mono text-primary-container mb-1 text-xs">
                   历史文化 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
                 </label>
-                <textarea
+                <AutoTextarea
                   data-testid="world-era-cultural-history"
                   value={world.era_cultural_history ?? ""}
                   onChange={(e) => setWorld({ ...world, era_cultural_history: e.target.value })}
@@ -248,7 +249,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
               </div>
               <div>
                 <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
-                <textarea
+                <AutoTextarea
                   value={world.power_system.description}
                   onChange={(e) => setPowerSystemField("description", e.target.value)}
                   rows={2}
@@ -368,7 +369,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                   </div>
                   <div>
                     <label className="block font-label-mono text-system-log mb-1 text-[10px]">目标</label>
-                    <textarea
+                    <AutoTextarea
                       data-testid={`world-faction-${i}-goal`}
                       value={f.goal}
                       onChange={(e) => updateFaction(i, "goal", e.target.value)}

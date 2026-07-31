@@ -5,6 +5,7 @@ import TagEditor from "../shared/TagEditor";
 import CharacterRelationsEditor from "./CharacterRelationsEditor";
 import BehaviorExamplesSection from "./BehaviorExamplesSection";
 import { RegenerateModal } from "../shared/RegenerateModal";
+import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface CharacterStepProps {
   projectId: string;
@@ -445,7 +446,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                     <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音签名</div>
                     <div>
                       <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">说话风格</label>
-                      <textarea
+                      <AutoTextarea
                         data-testid={`character-${c.id}-speech-style`}
                         value={voice.speech_style}
                         onChange={(e) => updateVoiceField(c.id, "speech_style", e.target.value)}
@@ -456,7 +457,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                     </div>
                     <div>
                       <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">思维模式</label>
-                      <textarea
+                      <AutoTextarea
                         data-testid={`character-${c.id}-thought-patterns`}
                         value={voice.thought_patterns}
                         onChange={(e) => updateVoiceField(c.id, "thought_patterns", e.target.value)}

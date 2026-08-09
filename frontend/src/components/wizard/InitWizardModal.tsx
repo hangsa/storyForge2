@@ -115,8 +115,14 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
         }
         if (completed.length > 0) {
           if (resume) {
-            const nextStep = Math.min(Math.max(...completed) + 1, TOTAL_STEPS);
-            wizard.hydrateFromFilesAndAdvance(completed, data, nextStep);
+            // Land on the latest SAVED step, NOT the next one. Advancing
+            // past the saved step put the user on a step whose data is
+            // missing, which made that step's auto-trigger fire (e.g. saved
+            // up to novel_outline → landed on ChapterOutlineStep → LLM call
+            // to regenerate chapters the user had not asked for, 2026-08-09
+            // bug report).
+            const targetStep = Math.max(...completed);
+            wizard.hydrateFromFilesAndAdvance(completed, data, targetStep);
           } else {
             wizard.hydrateFromFiles(completed, data);
           }

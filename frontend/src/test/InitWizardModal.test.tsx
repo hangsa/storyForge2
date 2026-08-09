@@ -99,7 +99,7 @@ describe("InitWizardModal", () => {
     expect(screen.getByTestId("concept-step")).toBeInTheDocument();
   });
 
-  it("resume mode: hydrates from files and jumps to next uncompleted step", async () => {
+  it("resume mode: hydrates from files and lands on the latest SAVED step (step 2 = WorldStep)", async () => {
     (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
       concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
       story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
@@ -109,7 +109,7 @@ describe("InitWizardModal", () => {
       power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
       factions: [], core_rules: [],
     });
-    // No character/novel/outline files → steps 1, 2 completed, next is step 3.
+    // No character/novel/outline files → steps 1, 2 completed; latest saved = 2.
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
@@ -122,7 +122,10 @@ describe("InitWizardModal", () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => expect(screen.getByTestId("character-step")).toBeInTheDocument());
+    // Should land on WorldStep (latest saved = 2), NOT CharacterStep.
+    // The old buggy behavior jumped to step 3 (= max + 1).
+    await waitFor(() => expect(screen.getByTestId("world-step")).toBeInTheDocument());
+    expect(screen.queryByTestId("character-step")).not.toBeInTheDocument();
   });
 
   it("resume=false (default): hydrates from files but stays on step 1", async () => {
@@ -362,5 +365,58 @@ describe("InitWizardModal", () => {
     // The wizard should be on step 5 with the existing outline loaded.
     const step5 = screen.getByTestId("wizard-step-5");
     expect(step5.getAttribute("data-state")).toBe("completed");
+  });
+
+  // Bug report (2026-08-09): entering the wizard from the bookshelf
+  // deep-link (resume=true) used to advance to max(completed) + 1 instead
+  // of the latest saved step. For a project that saved step 5
+  // (novel_outline.json), the modal landed on step 6 (ChapterOutlineStep)
+  // and auto-triggered chapter-outline generation, burning tokens the user
+  // had not asked for. The fix: land on Math.max(...completed) (the latest
+  // SAVED step), not + 1.
+  it("resume mode: lands on the latest SAVED step, not the next one (no auto-trigger of next stage)", async () => {
+    // Set up: only novel_outline.json exists. Concept / world / characters /
+    // outline.json are missing → prefill will produce completed = [5].
+    const existingOutline = {
+      core_conflict_theme: "已生成的核心冲突描述",
+      volumes: [{ name: "第一卷", chapter_range: "1-50", summary: "阴阳眼觉醒", key_events: ["事件A"] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "2026-07-12T19:00:00",
+      updated_at: "2026-07-12T19:00:00",
+    };
+    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(existingOutline);
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (api.generateNovelOutline as ReturnType<typeof vi.fn>).mockReset();
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockReset();
+
+    render(
+      <MemoryRouter>
+        <WizardProvider projectId={PROJECT}>
+          <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} resume />
+        </WizardProvider>
+      </MemoryRouter>
+    );
+
+    // Wait for prefill to land.
+    await waitFor(() => expect(api.getNovelOutline).toHaveBeenCalled());
+
+    // The wizard should land on step 5 (OutlineStep) with the existing
+    // outline loaded — NOT advance to step 6 (ChapterOutlineStep), which
+    // would auto-trigger chapter-outline generation.
+    await waitFor(() => expect(screen.getByTestId("outline-step")).toBeInTheDocument());
+    expect(screen.queryByTestId("chapter-outline-step")).not.toBeInTheDocument();
+
+    // Allow any async auto-trigger to fire (it shouldn't).
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Neither novel-outline regeneration nor chapter-outline generation
+    // should fire. The novel_outline.json already on disk is the truth;
+    // we must not throw it away by triggering a fresh LLM call.
+    expect(api.generateNovelOutline).not.toHaveBeenCalled();
+    expect(api.generateOutline).not.toHaveBeenCalled();
   });
 });

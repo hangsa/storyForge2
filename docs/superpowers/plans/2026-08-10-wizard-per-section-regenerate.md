@@ -1606,7 +1606,7 @@ import { SectionRegenerateButton } from "../shared/SectionRegenerateButton";
 After `handleNext` (inside `ConceptStep`), add:
 
 ```tsx
-  const handleSectionRegenerate = async (section: "concept" | "dna") => async (mods: string) => {
+  const handleSectionRegenerate = (section: "concept" | "dna") => async (mods: string) => {
     try {
       const result = await api.regenerateConceptSection(projectId, section, mods);
       if (section === "concept" && result.concept) {

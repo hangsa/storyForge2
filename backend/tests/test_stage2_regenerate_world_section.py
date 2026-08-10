@@ -184,8 +184,8 @@ def test_regenerate_agent_value_error_returns_503(tmp_path, monkeypatch):
     assert resp.json()["detail"]["code"] == "LLM_GENERATION_FAILED"
 
 
-def test_regenerate_missing_project_returns_404(mock_planner, tmp_path):
-    # No project.json — planner never gets called.
+def test_regenerate_missing_project_returns_404(tmp_path):
+    # No project.json — 404 fires before planner access.
     resp = client.post(
         f"/api/stage2/regenerate-world-section?project_id={PROJ}",
         json={"section": "era", "user_modifications": ""},

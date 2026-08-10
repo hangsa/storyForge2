@@ -15,6 +15,8 @@ from backend.services.agent_prompt_stores import (
 router = APIRouter(prefix="/api/stage2", tags=["stage2"])
 fm = FileManager(settings.projects_dir)
 
+ERA_BLOCK_KEYS = ("era", "geography", "era_social_structure", "era_cultural_history")
+
 
 def _file_manager() -> FileManager:
     return FileManager(settings.projects_dir)
@@ -558,16 +560,8 @@ async def regenerate_world_section(
 
     merged = dict(existing)
     if payload.section == "era":
-        merged["era"] = result.get("era", existing.get("era", ""))
-        merged["geography"] = result.get("geography", existing.get("geography", ""))
-        merged["era_social_structure"] = result.get(
-            "era_social_structure",
-            existing.get("era_social_structure", ""),
-        )
-        merged["era_cultural_history"] = result.get(
-            "era_cultural_history",
-            existing.get("era_cultural_history", ""),
-        )
+        for key in ERA_BLOCK_KEYS:
+            merged[key] = result.get(key, existing.get(key, ""))
     elif payload.section == "power_system":
         merged["power_system"] = result.get("power_system", existing.get("power_system", {}))
     elif payload.section == "core_rules":

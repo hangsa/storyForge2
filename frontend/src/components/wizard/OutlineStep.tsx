@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api, { NovelOutline } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import { RegenerateModal } from "../shared/RegenerateModal";
+import { SectionRegenerateButton } from "../shared/SectionRegenerateButton";
 import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface OutlineStepProps {
@@ -51,6 +52,18 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       wizard.setStatus("error", e instanceof Error ? e.message : "大纲保存失败");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleSectionRegenerate = (
+    section: "core_conflict" | "volumes" | "mc_growth" | "key_plot",
+  ) => async (mods: string) => {
+    try {
+      const result = await api.regenerateNovelOutlineSection(projectId, section, mods);
+      setOutline(result);
+      wizard.markStepGenerated(5, { novel_outline: result });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "板块重新生成失败");
     }
   };
 
@@ -130,7 +143,14 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       {(wizard.status === "completed" || wizard.data.novel_outline) && (
         <div data-testid="outline-form" className="space-y-4">
           <div>
-            <label className="block font-label-mono text-system-log mb-1 text-xs">核心冲突与主题</label>
+            <div className="flex items-center justify-between mb-1">
+              <div className="font-label-mono text-system-log text-xs">核心冲突与主题</div>
+              <SectionRegenerateButton
+                target="核心冲突与主题"
+                onRegenerate={handleSectionRegenerate("core_conflict")}
+                testId="outline-core-conflict-regenerate"
+              />
+            </div>
             <AutoTextarea
               value={outline.core_conflict_theme}
               onChange={(e) => setOutline({ ...outline, core_conflict_theme: e.target.value })}
@@ -141,8 +161,13 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
 
           {outline.volumes.length > 0 && (
             <div>
-              <div className="font-label-mono text-system-log mb-2 text-[10px] uppercase tracking-wider">
-                分卷 / 阶段划分
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">分卷 / 阶段划分</div>
+                <SectionRegenerateButton
+                  target="分卷划分"
+                  onRegenerate={handleSectionRegenerate("volumes")}
+                  testId="outline-volumes-regenerate"
+                />
               </div>
               <div data-testid="outline-volumes" className="space-y-2">
                 {outline.volumes.map((v, i) => (
@@ -179,8 +204,27 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
             </div>
           )}
 
-          <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
-            {outline.volumes.length} 个分卷 · {outline.mc_growth_arc.length} 个主角成长节点 · {outline.key_plot_points.length} 个关键情节点
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center justify-between border border-outline-variant rounded-lg px-3 py-2">
+              <span className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+                主角成长节点 · {outline.mc_growth_arc.length}
+              </span>
+              <SectionRegenerateButton
+                target="主角成长节点"
+                onRegenerate={handleSectionRegenerate("mc_growth")}
+                testId="outline-mc-growth-regenerate"
+              />
+            </div>
+            <div className="flex items-center justify-between border border-outline-variant rounded-lg px-3 py-2">
+              <span className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+                关键情节点 · {outline.key_plot_points.length}
+              </span>
+              <SectionRegenerateButton
+                target="关键情节点"
+                onRegenerate={handleSectionRegenerate("key_plot")}
+                testId="outline-key-plot-regenerate"
+              />
+            </div>
           </div>
           <p className="font-body-ui text-system-log/60 text-xs">
             详细分卷/情节点编辑可在工作台的大纲标签页内进行。

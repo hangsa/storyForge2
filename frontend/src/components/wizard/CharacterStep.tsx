@@ -5,6 +5,7 @@ import TagEditor from "../shared/TagEditor";
 import CharacterRelationsEditor from "./CharacterRelationsEditor";
 import BehaviorExamplesSection from "./BehaviorExamplesSection";
 import { RegenerateModal } from "../shared/RegenerateModal";
+import { SectionRegenerateButton } from "../shared/SectionRegenerateButton";
 import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface CharacterStepProps {
@@ -239,6 +240,39 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     }
   };
 
+  const handleSectionRegenerate = (
+    characterId: string,
+    section: "personality" | "voice_signature" | "current_state" | "unknown" | "relations",
+    opts: { keepExisting?: boolean } = {},
+  ) => async (mods: string) => {
+    try {
+      const updated = await api.regenerateCharacterSection(
+        projectId,
+        characterId,
+        section,
+        { keepExisting: opts.keepExisting, userModifications: mods },
+      );
+      setCharacters((prev) => {
+        const list = (prev?.characters ?? []).map((c) =>
+          c.id === characterId ? { ...c, ...updated } : c,
+        );
+        return { characters: list, current: prev?.current ?? list[0] };
+      });
+      // Refresh wizard.data so the indicator stays accurate and prefill
+      // re-hydration doesn't overwrite our change. Don't saveStep here —
+      // the user may still be editing other sections; the footer "确认
+      // 修改并继续" will commit the full list.
+      const list = (charactersRef.current?.characters ?? []).map((c) =>
+        c.id === characterId ? { ...c, ...updated } : c,
+      );
+      wizard.markStepGenerated(3, {
+        characters: { characters: list, current: charactersRef.current?.current ?? list[0] },
+      });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "板块重新生成失败");
+    }
+  };
+
   const updateCurrentState = (
     id: string,
     key: "location" | "physical_condition" | "emotional" | "known_secrets",
@@ -426,7 +460,14 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
 
                   {/* 人格层 — 5 个 TagEditor（与世界观的力量体系/世界规则一致） */}
                   <div data-testid={`character-${c.id}-personality`} className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">人格层</div>
+                    <div className="flex items-center justify-between">
+                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">人格层</div>
+                      <SectionRegenerateButton
+                        target={`${c.name || c.id} · 人格层`}
+                        onRegenerate={handleSectionRegenerate(c.id, "personality")}
+                        testId={`character-${c.id}-personality-regenerate`}
+                      />
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {PERSONALITY_FIELDS.map(({ key, label }) => (
                         <div key={key}>
@@ -443,7 +484,14 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
 
                   {/* 声音签名 */}
                   <div data-testid={`character-${c.id}-voice`} className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音签名</div>
+                    <div className="flex items-center justify-between">
+                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音签名</div>
+                      <SectionRegenerateButton
+                        target={`${c.name || c.id} · 声音签名`}
+                        onRegenerate={handleSectionRegenerate(c.id, "voice_signature")}
+                        testId={`character-${c.id}-voice-regenerate`}
+                      />
+                    </div>
                     <div>
                       <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">说话风格</label>
                       <AutoTextarea
@@ -494,7 +542,14 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
 
                   {/* 当前状态 */}
                   <div className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">当前状态</div>
+                    <div className="flex items-center justify-between">
+                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">当前状态</div>
+                      <SectionRegenerateButton
+                        target={`${c.name || c.id} · 当前状态`}
+                        onRegenerate={handleSectionRegenerate(c.id, "current_state")}
+                        testId={`character-${c.id}-current-state-regenerate`}
+                      />
+                    </div>
                     <div>
                       <label className="block font-label-mono text-system-log/80 mb-1 text-[10px]">位置</label>
                       <input
@@ -539,7 +594,14 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
 
                   {/* 角色不知道的事 */}
                   <div className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色不知道的事</div>
+                    <div className="flex items-center justify-between">
+                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色不知道的事</div>
+                      <SectionRegenerateButton
+                        target={`${c.name || c.id} · 未知`}
+                        onRegenerate={handleSectionRegenerate(c.id, "unknown")}
+                        testId={`character-${c.id}-unknown-regenerate`}
+                      />
+                    </div>
                     <div className="font-label-mono text-system-log/80 mb-1 text-[10px]">未知 (unknown_to_character)</div>
                     <TagEditor
                       items={c.unknown_to_character ?? []}
@@ -550,7 +612,14 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
 
                   {/* 角色关系 — 始终可见，添加/删除关系直接操作本地状态 */}
                   <div data-testid={`character-${c.id}-relations`} className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色关系</div>
+                    <div className="flex items-center justify-between">
+                      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">角色关系</div>
+                      <SectionRegenerateButton
+                        target={`${c.name || c.id} · 角色关系`}
+                        onRegenerate={handleSectionRegenerate(c.id, "relations")}
+                        testId={`character-${c.id}-relations-regenerate`}
+                      />
+                    </div>
                     <CharacterRelationsEditor
                       relations={c.relations ?? {}}
                       allCharacters={characters?.characters ?? []}

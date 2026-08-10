@@ -3,6 +3,7 @@ import api, { World } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
 import { RegenerateModal } from "../shared/RegenerateModal";
+import { SectionRegenerateButton } from "../shared/SectionRegenerateButton";
 import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface WorldStepProps {
@@ -102,6 +103,19 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     }
   };
 
+  const handleSectionRegenerate = (
+    section: "era" | "power_system" | "core_rules" | "factions",
+  ) => async (mods: string) => {
+    try {
+      const result = await api.regenerateWorldSection(projectId, section, mods);
+      const merged = { ...EMPTY_WORLD, ...result };
+      setWorld(merged);
+      wizard.markStepGenerated(2, { world: merged });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "板块重新生成失败");
+    }
+  };
+
   const setPowerSystemField = <K extends "name" | "description" | "cost_system">(
     key: K,
     value: World["power_system"][K],
@@ -188,7 +202,14 @@ export default function WorldStep({ projectId }: WorldStepProps) {
         <div data-testid="world-form" className="space-y-4">
           {/* 时代与地理 */}
           <div className="border border-outline-variant rounded-lg p-4">
-            <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider mb-3">时代与地理</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">时代与地理</div>
+              <SectionRegenerateButton
+                target="时代与地理"
+                onRegenerate={handleSectionRegenerate("era")}
+                testId="world-era-regenerate"
+              />
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="block font-label-mono text-system-log mb-1 text-xs">时代背景</label>
@@ -237,7 +258,14 @@ export default function WorldStep({ projectId }: WorldStepProps) {
 
           {/* 力量体系 */}
           <div className="border border-outline-variant rounded-lg p-4">
-            <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider mb-3">力量体系</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">力量体系</div>
+              <SectionRegenerateButton
+                target="力量体系"
+                onRegenerate={handleSectionRegenerate("power_system")}
+                testId="world-power-system-regenerate"
+              />
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="block font-label-mono text-system-log mb-1 text-xs">体系名称</label>
@@ -299,7 +327,14 @@ export default function WorldStep({ projectId }: WorldStepProps) {
 
           {/* 世界规则 */}
           <div className="border border-outline-variant rounded-lg p-4">
-            <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider mb-3">世界规则</div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">世界规则</div>
+              <SectionRegenerateButton
+                target="世界规则"
+                onRegenerate={handleSectionRegenerate("core_rules")}
+                testId="world-core-rules-regenerate"
+              />
+            </div>
             <div data-testid="world-core-rules">
               <TagEditor
                 items={world.core_rules ?? []}
@@ -313,19 +348,26 @@ export default function WorldStep({ projectId }: WorldStepProps) {
           <div className="border border-outline-variant rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">势力分布</div>
-              <button
-                type="button"
-                data-testid="world-faction-add"
-                onClick={addFaction}
-                disabled={busy}
-                className="flex items-center gap-1 px-2 py-1 text-xs border border-dashed
-                           border-system-log/30 rounded text-system-log/60
-                           hover:text-primary-container hover:border-primary-container/50
-                           transition-colors disabled:opacity-30"
-              >
-                <span className="material-symbols-outlined text-xs">add</span>
-                添加势力
-              </button>
+              <div className="flex items-center gap-1">
+                <SectionRegenerateButton
+                  target="势力分布"
+                  onRegenerate={handleSectionRegenerate("factions")}
+                  testId="world-factions-regenerate"
+                />
+                <button
+                  type="button"
+                  data-testid="world-faction-add"
+                  onClick={addFaction}
+                  disabled={busy}
+                  className="flex items-center gap-1 px-2 py-1 text-xs border border-dashed
+                             border-system-log/30 rounded text-system-log/60
+                             hover:text-primary-container hover:border-primary-container/50
+                             transition-colors disabled:opacity-30"
+                >
+                  <span className="material-symbols-outlined text-xs">add</span>
+                  添加势力
+                </button>
+              </div>
             </div>
             <div data-testid="world-factions" className="space-y-3">
               {world.factions.length === 0 && (

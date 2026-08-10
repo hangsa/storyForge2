@@ -832,6 +832,55 @@ export const api = {
       { keep_existing: keepExisting, user_modifications: userModifications },
     ),
 
+  regenerateConceptSection: (
+    projectId: string,
+    section: "concept" | "dna",
+    userModifications: string = "",
+  ): Promise<ConceptResponse> =>
+    request<ConceptResponse>(
+      "POST",
+      `/stage1/regenerate-section?project_id=${encodeURIComponent(projectId)}`,
+      { section, user_modifications: userModifications },
+    ),
+
+  regenerateWorldSection: (
+    projectId: string,
+    section: "era" | "power_system" | "core_rules" | "factions",
+    userModifications: string = "",
+  ): Promise<World> =>
+    request<World>(
+      "POST",
+      `/stage2/regenerate-world-section?project_id=${encodeURIComponent(projectId)}`,
+      { section, user_modifications: userModifications },
+    ),
+
+  regenerateCharacterSection: (
+    projectId: string,
+    characterId: string,
+    section: "personality" | "voice_signature" | "current_state" | "unknown" | "relations",
+    opts: { keepExisting?: boolean; userModifications?: string } = {},
+  ): Promise<Character> =>
+    request<Character>(
+      "POST",
+      `/stage2/regenerate-character-section?project_id=${encodeURIComponent(projectId)}&character_id=${encodeURIComponent(characterId)}`,
+      {
+        section,
+        keep_existing: opts.keepExisting ?? false,
+        user_modifications: opts.userModifications ?? "",
+      },
+    ),
+
+  regenerateNovelOutlineSection: (
+    projectId: string,
+    section: "core_conflict" | "volumes" | "mc_growth" | "key_plot",
+    userModifications: string = "",
+  ): Promise<NovelOutline> =>
+    request<NovelOutline>(
+      "POST",
+      `/stage3/regenerate-novel-outline-section?project_id=${encodeURIComponent(projectId)}`,
+      { section, user_modifications: userModifications },
+    ),
+
   growthWorkshopCheck: (projectId: string, characterId: string) =>
     request<WorkshopCheckResult>(
       "POST",

@@ -205,4 +205,46 @@ describe("stage4 exemptions + sf-log + precheck client", () => {
     expect(err.message).toContain("502 Bad Gateway");
     expect(err.detail).toMatchObject({ path: "/project/create", status: 502 });
   });
+
+  it("regenerateConceptSection_sendsSectionAndModifications", async () => {
+    await api.regenerateConceptSection("p1", "concept", "更热血");
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/stage1/regenerate-section?project_id=p1");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      section: "concept",
+      user_modifications: "更热血",
+    });
+  });
+
+  it("regenerateWorldSection_postsBody", async () => {
+    await api.regenerateWorldSection("p1", "power_system", "");
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/stage2/regenerate-world-section?project_id=p1");
+    expect(JSON.parse(init.body as string)).toEqual({
+      section: "power_system",
+      user_modifications: "",
+    });
+  });
+
+  it("regenerateCharacterSection_includesKeepExisting", async () => {
+    await api.regenerateCharacterSection("p1", "c1", "personality", { keepExisting: true });
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/stage2/regenerate-character-section?project_id=p1&character_id=c1");
+    expect(JSON.parse(init.body as string)).toEqual({
+      section: "personality",
+      keep_existing: true,
+      user_modifications: "",
+    });
+  });
+
+  it("regenerateNovelOutlineSection_postsBody", async () => {
+    await api.regenerateNovelOutlineSection("p1", "volumes", "");
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/stage3/regenerate-novel-outline-section?project_id=p1");
+    expect(JSON.parse(init.body as string)).toEqual({
+      section: "volumes",
+      user_modifications: "",
+    });
+  });
 });

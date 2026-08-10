@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, waitFor } from "@testing-library/react";
+import { render, screen, act, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../api/client", () => ({
@@ -82,7 +82,7 @@ beforeEach(() => {
   (api.regenerateNovelOutlineSection as ReturnType<typeof vi.fn>).mockReset();
   (api.regenerateNovelOutlineSection as ReturnType<typeof vi.fn>).mockResolvedValue({
     core_conflict_theme: "",
-    volumes: [],
+    volumes: [{ name: "v1", chapter_range: "1-50", summary: "x", key_events: [] }],
     mc_growth_arc: [],
     key_plot_points: [],
     generated_at: "",
@@ -112,6 +112,76 @@ function buildData() {
     chapter1_outline: null,
   };
 }
+
+const CONCEPT_FIXTURE = {
+  concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+  story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
+};
+
+const WORLD_FIXTURE = {
+  era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
+  power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+  factions: [], core_rules: [],
+};
+
+function buildCharacter(id: string) {
+  return {
+    id,
+    name: "林峰",
+    is_core_character: true,
+    character_type: "protagonist",
+    personality: { beliefs: [], desires: [], fears: [], values: [], core_traits: [] },
+    current_state: { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] },
+    voice_signature: { speech_style: "", thought_patterns: "", taboos: [] },
+    unknown_to_character: [],
+    relations: {},
+    growth_curve: null,
+  };
+}
+
+const NOVEL_OUTLINE_FIXTURE = {
+  core_conflict_theme: "x",
+  volumes: [{ name: "v1", chapter_range: "1-50", summary: "x", key_events: [] }],
+  mc_growth_arc: [],
+  key_plot_points: [],
+  generated_at: "",
+  updated_at: "",
+};
+
+// Wire `api.get*` mocks for the 5 wizard data files. Each field defaults to
+// `null`. Returns the merged object so callers can reference seeded shapes.
+const seedFiles = (files: {
+  concept?: typeof CONCEPT_FIXTURE | null;
+  world?: typeof WORLD_FIXTURE | null;
+  character?: ReturnType<typeof buildCharacter> | { characters: unknown[]; current: unknown } | null;
+  novelOutline?: typeof NOVEL_OUTLINE_FIXTURE | null;
+  outline?: unknown | null;
+} = {}) => {
+  const concept = files.concept === undefined ? null : files.concept;
+  const world = files.world === undefined ? null : files.world;
+  const character = files.character === undefined ? null : files.character;
+  const novelOutline = files.novelOutline === undefined ? null : files.novelOutline;
+  const outline = files.outline === undefined ? null : files.outline;
+  (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue(concept);
+  (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue(world);
+  (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(character);
+  (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(novelOutline);
+  (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(outline);
+  return { concept, world, character, novelOutline, outline };
+};
+
+const seedStep = (currentStep: number, completedSteps: number[], data = buildData()) => {
+  sessionStorage.setItem(
+    KEY,
+    JSON.stringify({
+      currentStep,
+      completedSteps,
+      status: "idle",
+      data,
+      errorMessage: null,
+    }),
+  );
+};
 
 describe("InitWizardModal", () => {
   it("renders the step indicator with 6 steps", () => {
@@ -474,14 +544,7 @@ describe("InitWizardModal", () => {
   // the auto-trigger (ConceptStep line 113) sees wizard.data.concept and
   // skips; the form renders immediately from the hydrated state.
   it("concept-step renders section regenerate icons for 概念信息 and 核心矛盾", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
-    });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    seedFiles({ concept: CONCEPT_FIXTURE });
 
     renderModal();
     await waitFor(() => screen.getByTestId("concept-form"));
@@ -489,20 +552,16 @@ describe("InitWizardModal", () => {
     expect(screen.getByTestId("concept-dna-regenerate")).toBeInTheDocument();
   });
 
-  it("clicking concept-info-regenerate + confirm calls regenerateConceptSection", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
-    });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+  it("clicking concept-info-regenerate + confirm calls regenerateConceptSection with the typed text", async () => {
+    seedFiles({ concept: CONCEPT_FIXTURE });
 
     renderModal();
     const infoBtn = await screen.findByTestId("concept-info-regenerate");
     await act(async () => {
       infoBtn.click();
+    });
+    fireEvent.change(screen.getByLabelText("修改意见"), {
+      target: { value: "更强调赛博朋克" },
     });
     const confirmBtn = screen.getByTestId("regenerate-modal-confirm");
     await act(async () => {
@@ -512,7 +571,7 @@ describe("InitWizardModal", () => {
       expect(api.regenerateConceptSection).toHaveBeenCalledWith(
         PROJECT,
         "concept",
-        expect.any(String),
+        "更强调赛博朋克",
       ),
     );
   });
@@ -520,29 +579,9 @@ describe("InitWizardModal", () => {
   // Step 2 — WorldStep. Land on step 2 via sessionStorage. Seed getWorld so
   // the form has data to render (otherwise the section buttons wouldn't show).
   it("world-step renders 4 section regenerate icons (era, power_system, core_rules, factions)", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
-    });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
-      era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
-      factions: [], core_rules: [],
-    });
-    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE });
+    seedStep(2, [1]);
 
-    sessionStorage.setItem(
-      KEY,
-      JSON.stringify({
-        currentStep: 2,
-        completedSteps: [1],
-        status: "idle",
-        data: buildData(),
-        errorMessage: null,
-      }),
-    );
     renderModal();
     await waitFor(() => screen.getByTestId("world-form"));
     expect(screen.getByTestId("world-era-regenerate")).toBeInTheDocument();
@@ -552,29 +591,9 @@ describe("InitWizardModal", () => {
   });
 
   it("clicking world-power-system-regenerate + confirm calls regenerateWorldSection", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
-    });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
-      era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
-      factions: [], core_rules: [],
-    });
-    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE });
+    seedStep(2, [1]);
 
-    sessionStorage.setItem(
-      KEY,
-      JSON.stringify({
-        currentStep: 2,
-        completedSteps: [1],
-        status: "idle",
-        data: buildData(),
-        errorMessage: null,
-      }),
-    );
     renderModal();
     const psBtn = await screen.findByTestId("world-power-system-regenerate");
     await act(async () => {
@@ -600,59 +619,12 @@ describe("InitWizardModal", () => {
   // CharacterStep.tsx as `character-${c.id}-<section>-regenerate`.
   it("character-step renders 5 section regenerate icons per card", async () => {
     const cardId = "c1";
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
-    });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
-      era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
-      factions: [], core_rules: [],
-    });
-    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
-      characters: [
-        {
-          id: cardId,
-          name: "林峰",
-          is_core_character: true,
-          character_type: "protagonist",
-          personality: { beliefs: [], desires: [], fears: [], values: [], core_traits: [] },
-          current_state: { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] },
-          voice_signature: { speech_style: "", thought_patterns: "", taboos: [] },
-          unknown_to_character: [],
-          relations: {},
-          growth_curve: null,
-        },
-      ],
-      current: {
-        id: cardId,
-        name: "林峰",
-        is_core_character: true,
-        character_type: "protagonist",
-        personality: { beliefs: [], desires: [], fears: [], values: [], core_traits: [] },
-        current_state: { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] },
-        voice_signature: { speech_style: "", thought_patterns: "", taboos: [] },
-        unknown_to_character: [],
-        relations: {},
-        growth_curve: null,
-      },
-    });
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    const card = buildCharacter(cardId);
+    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE, character: { characters: [card], current: card } });
+    seedStep(3, [1, 2]);
 
-    sessionStorage.setItem(
-      KEY,
-      JSON.stringify({
-        currentStep: 3,
-        completedSteps: [1, 2],
-        status: "idle",
-        data: buildData(),
-        errorMessage: null,
-      }),
-    );
     renderModal();
     await waitFor(() => screen.getByTestId("character-form"));
-    // Use regex matchers since the card id is in the middle of the testId.
     expect(screen.getByTestId(`character-${cardId}-personality-regenerate`)).toBeInTheDocument();
     expect(screen.getByTestId(`character-${cardId}-voice-regenerate`)).toBeInTheDocument();
     expect(screen.getByTestId(`character-${cardId}-current-state-regenerate`)).toBeInTheDocument();
@@ -662,56 +634,10 @@ describe("InitWizardModal", () => {
 
   it("clicking character personality regenerate + confirm calls regenerateCharacterSection", async () => {
     const cardId = "c1";
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
-    });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
-      era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
-      factions: [], core_rules: [],
-    });
-    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
-      characters: [
-        {
-          id: cardId,
-          name: "林峰",
-          is_core_character: true,
-          character_type: "protagonist",
-          personality: { beliefs: [], desires: [], fears: [], values: [], core_traits: [] },
-          current_state: { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] },
-          voice_signature: { speech_style: "", thought_patterns: "", taboos: [] },
-          unknown_to_character: [],
-          relations: {},
-          growth_curve: null,
-        },
-      ],
-      current: {
-        id: cardId,
-        name: "林峰",
-        is_core_character: true,
-        character_type: "protagonist",
-        personality: { beliefs: [], desires: [], fears: [], values: [], core_traits: [] },
-        current_state: { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] },
-        voice_signature: { speech_style: "", thought_patterns: "", taboos: [] },
-        unknown_to_character: [],
-        relations: {},
-        growth_curve: null,
-      },
-    });
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    const card = buildCharacter(cardId);
+    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE, character: { characters: [card], current: card } });
+    seedStep(3, [1, 2]);
 
-    sessionStorage.setItem(
-      KEY,
-      JSON.stringify({
-        currentStep: 3,
-        completedSteps: [1, 2],
-        status: "idle",
-        data: buildData(),
-        errorMessage: null,
-      }),
-    );
     renderModal();
     const btn = await screen.findByTestId(`character-${cardId}-personality-regenerate`);
     await act(async () => {
@@ -735,39 +661,14 @@ describe("InitWizardModal", () => {
   // The volumes section button only renders when `outline.volumes.length > 0`
   // (OutlineStep line 162), so the fixture must include at least one volume.
   it("outline-step renders 4 section regenerate icons (core_conflict, volumes, mc_growth, key_plot)", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
+    seedFiles({
+      concept: CONCEPT_FIXTURE,
+      world: WORLD_FIXTURE,
+      character: { characters: [{ name: "林峰" }], current: { 林峰: { role: "protagonist" } } },
+      novelOutline: NOVEL_OUTLINE_FIXTURE,
     });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
-      era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
-      factions: [], core_rules: [],
-    });
-    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
-      characters: [{ name: "林峰" }],
-      current: { 林峰: { role: "protagonist" } },
-    });
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
-      core_conflict_theme: "x",
-      volumes: [{ name: "v1", chapter_range: "1-50", summary: "x", key_events: [] }],
-      mc_growth_arc: [],
-      key_plot_points: [],
-      generated_at: "",
-      updated_at: "",
-    });
-    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    seedStep(5, [1, 2, 3, 4]);
 
-    sessionStorage.setItem(
-      KEY,
-      JSON.stringify({
-        currentStep: 5,
-        completedSteps: [1, 2, 3, 4],
-        status: "idle",
-        data: buildData(),
-        errorMessage: null,
-      }),
-    );
     renderModal();
     await waitFor(() => screen.getByTestId("outline-form"));
     expect(screen.getByTestId("outline-core-conflict-regenerate")).toBeInTheDocument();
@@ -777,39 +678,14 @@ describe("InitWizardModal", () => {
   });
 
   it("clicking outline-volumes-regenerate + confirm calls regenerateNovelOutlineSection", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
+    seedFiles({
+      concept: CONCEPT_FIXTURE,
+      world: WORLD_FIXTURE,
+      character: { characters: [{ name: "林峰" }], current: { 林峰: { role: "protagonist" } } },
+      novelOutline: NOVEL_OUTLINE_FIXTURE,
     });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
-      era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
-      factions: [], core_rules: [],
-    });
-    (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
-      characters: [{ name: "林峰" }],
-      current: { 林峰: { role: "protagonist" } },
-    });
-    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
-      core_conflict_theme: "x",
-      volumes: [{ name: "v1", chapter_range: "1-50", summary: "x", key_events: [] }],
-      mc_growth_arc: [],
-      key_plot_points: [],
-      generated_at: "",
-      updated_at: "",
-    });
-    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    seedStep(5, [1, 2, 3, 4]);
 
-    sessionStorage.setItem(
-      KEY,
-      JSON.stringify({
-        currentStep: 5,
-        completedSteps: [1, 2, 3, 4],
-        status: "idle",
-        data: buildData(),
-        errorMessage: null,
-      }),
-    );
     renderModal();
     const btn = await screen.findByTestId("outline-volumes-regenerate");
     await act(async () => {

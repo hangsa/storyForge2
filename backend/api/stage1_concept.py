@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
@@ -120,4 +121,80 @@ async def update_concept(data: dict):
         "code": "OK",
         "message": "概念已更新",
         "detail": concept_and_dna,
+    }
+
+
+class RegenerateConceptSectionPayload(BaseModel):
+    section: str = Field(...)
+    user_modifications: str = Field(default="", max_length=1000)
+
+
+@router.post("/regenerate-section")
+async def regenerate_concept_section(
+    project_id: str = Query(...),
+    payload: RegenerateConceptSectionPayload = None,
+):
+    """Re-run concept generation and merge only the requested section
+    (`concept` or `story_dna`) back into `concept_and_dna.json`.
+    Other fields are preserved byte-identical."""
+    # Re-resolve at call time so test mocks patch correctly.
+    from backend.agents.planner import PlannerAgent
+
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    if payload.section not in ("concept", "dna"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 concept 或 dna，收到 {payload.section}", "detail": {"section": payload.section}},
+        )
+
+    project = fm.read_json(project_id, "project.json")
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "PROJECT_NOT_FOUND", "message": f"项目 {project_id} 不存在", "detail": {}},
+        )
+
+    existing = fm.read_json(project_id, "concept_and_dna.json") or {}
+
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+        genre=project.get("genre", "cool_novel"),
+    )
+    try:
+        result, _resp = await agent.generate_concept_and_dna(
+            initial_intent=project.get("initial_intent", {}).get("free_text", ""),
+            genre=project.get("genre", "cool_novel"),
+            user_modifications=payload.user_modifications,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
+        )
+
+    new_concept = result.get("concept", {})
+    new_dna = result.get("story_dna", {})
+
+    merged = dict(existing)
+    if payload.section == "concept":
+        merged["concept"] = new_concept
+    else:  # "dna"
+        merged["story_dna"] = new_dna
+
+    # Drop any runtime warnings from the LLM result — they live in `result`
+    # but we never merge the full result, so they don't pollute storage.
+    fm.write_json(project_id, "concept_and_dna.json", merged)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"{payload.section} 已重新生成",
+        "detail": merged,
     }

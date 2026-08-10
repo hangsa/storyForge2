@@ -24,6 +24,14 @@ def _write(tmp_path: Path, name: str, payload) -> None:
     )
 
 
+def _seed_project(tmp_path: Path) -> None:
+    _write(tmp_path, "project.json", {
+        "id": PROJ,
+        "genre": "cool_novel",
+        "initial_intent": {"free_text": "少年觉醒"},
+    })
+
+
 def _seed_old_world():
     return {
         "era": "旧时代",
@@ -85,6 +93,7 @@ def mock_planner():
 
 
 def test_regenerate_era_rewrites_only_era_block(mock_planner, tmp_path):
+    _seed_project(tmp_path)
     _write(tmp_path, "world.json", _seed_old_world())
     resp = client.post(
         f"/api/stage2/regenerate-world-section?project_id={PROJ}",
@@ -94,6 +103,8 @@ def test_regenerate_era_rewrites_only_era_block(mock_planner, tmp_path):
     detail = resp.json()["detail"]
     assert detail["era"] == "新时代"
     assert detail["geography"] == "新地理"
+    assert detail["era_social_structure"] == "新社会"
+    assert detail["era_cultural_history"] == "新历史"
     # power_system / factions / core_rules preserved
     assert detail["power_system"] == _seed_old_world()["power_system"]
     assert detail["factions"] == _seed_old_world()["factions"]
@@ -101,6 +112,7 @@ def test_regenerate_era_rewrites_only_era_block(mock_planner, tmp_path):
 
 
 def test_regenerate_power_system_rewrites_only_power_system(mock_planner, tmp_path):
+    _seed_project(tmp_path)
     _write(tmp_path, "world.json", _seed_old_world())
     resp = client.post(
         f"/api/stage2/regenerate-world-section?project_id={PROJ}",
@@ -116,6 +128,7 @@ def test_regenerate_power_system_rewrites_only_power_system(mock_planner, tmp_pa
 
 
 def test_regenerate_core_rules_rewrites_only_top_level_array(mock_planner, tmp_path):
+    _seed_project(tmp_path)
     _write(tmp_path, "world.json", _seed_old_world())
     resp = client.post(
         f"/api/stage2/regenerate-world-section?project_id={PROJ}",
@@ -130,6 +143,7 @@ def test_regenerate_core_rules_rewrites_only_top_level_array(mock_planner, tmp_p
 
 
 def test_regenerate_factions_rewrites_only_factions_array(mock_planner, tmp_path):
+    _seed_project(tmp_path)
     _write(tmp_path, "world.json", _seed_old_world())
     resp = client.post(
         f"/api/stage2/regenerate-world-section?project_id={PROJ}",
@@ -144,6 +158,7 @@ def test_regenerate_factions_rewrites_only_factions_array(mock_planner, tmp_path
 
 
 def test_regenerate_unknown_section_returns_400(mock_planner, tmp_path):
+    _seed_project(tmp_path)
     _write(tmp_path, "world.json", _seed_old_world())
     resp = client.post(
         f"/api/stage2/regenerate-world-section?project_id={PROJ}",
@@ -156,6 +171,7 @@ def test_regenerate_unknown_section_returns_400(mock_planner, tmp_path):
 def test_regenerate_agent_value_error_returns_503(tmp_path, monkeypatch):
     from backend.config import settings
     monkeypatch.setattr(settings, "projects_dir", tmp_path)
+    _seed_project(tmp_path)
     _write(tmp_path, "world.json", _seed_old_world())
     with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
         instance = MockPlanner.return_value
@@ -166,3 +182,13 @@ def test_regenerate_agent_value_error_returns_503(tmp_path, monkeypatch):
         )
     assert resp.status_code == 503
     assert resp.json()["detail"]["code"] == "LLM_GENERATION_FAILED"
+
+
+def test_regenerate_missing_project_returns_404(mock_planner, tmp_path):
+    # No project.json — planner never gets called.
+    resp = client.post(
+        f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+        json={"section": "era", "user_modifications": ""},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "PROJECT_NOT_FOUND"

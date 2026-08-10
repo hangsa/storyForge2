@@ -526,9 +526,15 @@ async def regenerate_world_section(
             detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 era/power_system/core_rules/factions，收到 {payload.section}", "detail": {"section": payload.section}},
         )
 
+    project = _file_manager().read_json(project_id, "project.json")
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "PROJECT_NOT_FOUND", "message": f"项目 {project_id} 不存在", "detail": {}},
+        )
+
     existing = _file_manager().read_json(project_id, "world.json") or {}
     concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
-    project = _file_manager().read_json(project_id, "project.json") or {}
     genre = project.get("genre", "cool_novel")
 
     agent = PlannerAgent(

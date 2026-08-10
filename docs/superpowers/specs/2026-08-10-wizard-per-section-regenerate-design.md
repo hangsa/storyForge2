@@ -95,6 +95,21 @@ When `section="voice_signature"`, the merge replaces
 **explicitly preserves** `voice_signature.behavior_examples`. This
 keeps the existing per-card regenerate-examples workflow intact.
 
+### `keep_existing` semantics
+
+For character sections whose underlying data is an **array of items**
+(`personality` — which holds five arrays: beliefs, desires, fears,
+values, core_traits), `keep_existing=true` means: append the
+LLM-generated items to the existing arrays. `keep_existing=false`
+(default) means: replace all arrays with the LLM output.
+
+For character sections whose underlying data is a **single object**
+(`voice_signature`, `current_state`, `relations`) or a single string
+array (`unknown_to_character`), `keep_existing` is ignored — the
+section is always replaced in full. The wrapper documentation will
+state this explicitly so callers don't pass the flag for non-array
+sections.
+
 ### Error handling
 
 | Failure | Response |
@@ -130,14 +145,40 @@ when `onRegenerate` is in flight. Clicking opens the existing
 
 ### API client wrappers
 
-`frontend/src/api/client.ts` — add four wrappers, each a thin POST:
+`frontend/src/api/client.ts` — add four wrappers, each a thin POST.
+Each returns the merged entity so the caller can `setState` directly:
 
 ```ts
-regenerateConceptSection(projectId, section, userModifications)
-regenerateWorldSection(projectId, section, userModifications)
-regenerateCharacterSection(projectId, characterId, section, opts?)
-regenerateNovelOutlineSection(projectId, section, userModifications)
+// returns Concept when section="concept", StoryDNA when section="dna"
+regenerateConceptSection(projectId, section, userModifications): Promise<Concept | StoryDNA>
+
+// returns the merged World
+regenerateWorldSection(projectId, section, userModifications): Promise<World>
+
+// returns the merged Character (single object, not the full CharacterSet)
+regenerateCharacterSection(projectId, characterId, section, opts?: { keepExisting?: boolean }): Promise<Character>
+
+// returns the merged NovelOutline
+regenerateNovelOutlineSection(projectId, section, userModifications): Promise<NovelOutline>
 ```
+
+### Known cross-character consistency trade-off
+
+Regenerating a section on **one character** does not update that
+character's relationships with **other** characters (their inbound
+`relations` entries). Specifically:
+
+- Regenerating `voice_signature` for character X — OK, isolated.
+- Regenerating `current_state` for character X — OK, isolated.
+- Regenerating `personality` for character X — OK, isolated.
+- Regenerating `unknown_to_character` for character X — OK, isolated.
+- Regenerating `relations` for character X — X's outbound relations are
+  updated, but other characters' inbound relations to X stay stale.
+
+The same trade-off applies to regenerating `factions` in WorldStep
+(relationships between factions live in two places). This is a known
+limitation of partial regeneration; the wizard footer "重新生成"
+remains available when the user wants a coherent re-derivation.
 
 ### Per-step wiring
 
@@ -174,10 +215,24 @@ Every labeled section header (e.g. "力量体系") becomes a flex row:
 </div>
 ```
 
-Sections that currently lack a labeled header (e.g. "概念信息" in
-ConceptStep, "核心冲突与主题" / "主角成长节点" / "关键情节点" in
-OutlineStep) get a new label header in the project's existing
-uppercase 10px style, paired with a regenerate icon.
+### Where new section labels are inserted
+
+Sections that currently lack a labeled header get one added in the
+project's existing uppercase 10px style (`font-label-mono text-system-log
+text-[10px] uppercase tracking-wider`), paired with the regenerate icon.
+
+- **ConceptStep** — insert a new "概念信息" label at the **top** of the
+  concept form, wrapping the existing 6 inline field labels (标题, 前提,
+  基调, 主题, 目标读者, 风格模板). The existing "核心矛盾" label stays as-is.
+- **OutlineStep** — three new labels wrap existing fields:
+  - "核心冲突与主题" replaces the current inline `<label>` for
+    `core_conflict_theme` (promotes it to a section header).
+  - "分卷 / 阶段划分" already exists; promote to flex row.
+  - "主角成长节点" wraps the existing `mc_growth_arc` TagEditor.
+  - "关键情节点" wraps the existing `key_plot_points` TagEditor.
+
+WorldStep, CharacterStep: all five labeled sections already exist; no
+new labels needed, only the flex-row wrapping.
 
 ### State isolation
 
@@ -205,6 +260,8 @@ Following the pattern of `backend/tests/test_stage2_regenerate_examples.py`:
   - same matrix over the 5 character sections
   - extra case: regenerating `voice_signature` does **not** clobber
     `behavior_examples`
+  - extra case: regenerating `personality` with `keep_existing=true`
+    appends items rather than replacing them
 - `tests/test_stage3_regenerate_novel_outline_section.py`
   - same matrix over `core_conflict` / `volumes` / `mc_growth` / `key_plot`
 

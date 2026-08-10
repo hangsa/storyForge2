@@ -19,6 +19,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/stage3", tags=["stage3"])
 fm = FileManager(settings.projects_dir)
 
+# Maps the section name in the request payload to (target_key, default_value)
+# on the novel_outline.json document. Single source of truth for both the
+# validation whitelist and the per-branch merge keys.
+NOVEL_OUTLINE_SECTION_TO_KEY = {
+    "core_conflict": ("core_conflict_theme", ""),
+    "volumes": ("volumes", []),
+    "mc_growth": ("mc_growth_arc", []),
+    "key_plot": ("key_plot_points", []),
+}
+
 
 @router.get("/outline")
 async def get_outline(project_id: str = Query(...)):
@@ -340,13 +350,13 @@ async def regenerate_novel_outline_section(
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
         )
 
-    if payload.section not in ("core_conflict", "volumes", "mc_growth", "key_plot"):
+    if payload.section not in NOVEL_OUTLINE_SECTION_TO_KEY:
         raise HTTPException(
             status_code=400,
             detail={
                 "error": True,
                 "code": "VALIDATION_ERROR",
-                "message": f"section 必须是 core_conflict/volumes/mc_growth/key_plot，收到 {payload.section}",
+                "message": f"section 必须是 {', '.join(NOVEL_OUTLINE_SECTION_TO_KEY)}，收到 {payload.section}",
                 "detail": {"section": payload.section},
             },
         )
@@ -398,36 +408,12 @@ async def regenerate_novel_outline_section(
         )
 
     merged = dict(existing)
-    if payload.section == "core_conflict":
-        merged["core_conflict_theme"] = result.get(
-            "core_conflict_theme",
-            existing.get("core_conflict_theme", ""),
-        )
-    elif payload.section == "volumes":
-        merged["volumes"] = result.get("volumes", existing.get("volumes", []))
-    elif payload.section == "mc_growth":
-        merged["mc_growth_arc"] = result.get(
-            "mc_growth_arc",
-            existing.get("mc_growth_arc", []),
-        )
-    elif payload.section == "key_plot":
-        merged["key_plot_points"] = result.get(
-            "key_plot_points",
-            existing.get("key_plot_points", []),
-        )
-    else:
-        # The 400-validation earlier only fires for values NOT in the whitelist.
-        # If we reach here, the validation tuple and the merge chain are out
-        # of sync — surface the drift loudly rather than silently storing the
-        # wrong section under `key_plot_points`.
-        raise RuntimeError(f"unhandled section: {payload.section!r}")
+    key, default = NOVEL_OUTLINE_SECTION_TO_KEY[payload.section]
+    merged[key] = result.get(key, existing.get(key, default))
 
     # Preserve generated_at from the existing file; refresh updated_at only.
     now = datetime.utcnow().isoformat()
-    if existing.get("generated_at"):
-        merged["generated_at"] = existing["generated_at"]
-    else:
-        merged["generated_at"] = now
+    merged["generated_at"] = existing.get("generated_at") or now
     merged["updated_at"] = now
 
     fm.write_json(project_id, "novel_outline.json", merged)

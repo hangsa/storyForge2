@@ -103,6 +103,7 @@ def test_regenerate_core_conflict_replaces_only_string(mock_planner, tmp_path):
     assert detail["mc_growth_arc"] == seeded["mc_growth_arc"]
     assert detail["key_plot_points"] == seeded["key_plot_points"]
     assert detail["generated_at"] == seeded["generated_at"]
+    assert detail["updated_at"] != seeded["updated_at"]
 
 
 def test_regenerate_volumes_replaces_only_volumes(mock_planner, tmp_path):
@@ -120,6 +121,7 @@ def test_regenerate_volumes_replaces_only_volumes(mock_planner, tmp_path):
     assert detail["core_conflict_theme"] == seeded["core_conflict_theme"]
     assert detail["mc_growth_arc"] == seeded["mc_growth_arc"]
     assert detail["key_plot_points"] == seeded["key_plot_points"]
+    assert detail["updated_at"] != seeded["updated_at"]
 
 
 def test_regenerate_mc_growth_replaces_only_mc_growth(mock_planner, tmp_path):
@@ -134,6 +136,7 @@ def test_regenerate_mc_growth_replaces_only_mc_growth(mock_planner, tmp_path):
     detail = resp.json()["detail"]
     assert detail["mc_growth_arc"][0]["label"] == "新成长一"
     assert detail["volumes"] == seeded["volumes"]
+    assert detail["updated_at"] != seeded["updated_at"]
 
 
 def test_regenerate_key_plot_replaces_only_key_plot(mock_planner, tmp_path):
@@ -148,9 +151,28 @@ def test_regenerate_key_plot_replaces_only_key_plot(mock_planner, tmp_path):
     detail = resp.json()["detail"]
     assert detail["key_plot_points"][0]["title"] == "新情节点"
     assert detail["mc_growth_arc"] == seeded["mc_growth_arc"]
+    assert detail["updated_at"] != seeded["updated_at"]
 
 
-def test_regenerate_unknown_section_returns_400(mock_planner, tmp_path):
+def test_regenerate_with_no_existing_outline_seeds_generated_at(mock_planner, tmp_path):
+    # No novel_outline.json seeded — endpoint must construct from scratch.
+    _seed_project(tmp_path)
+    resp = client.post(
+        f"/api/stage3/regenerate-novel-outline-section?project_id={PROJ}",
+        json={"section": "volumes", "user_modifications": ""},
+    )
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    # When there's no pre-existing generated_at, it falls back to `now`
+    # (same timestamp as updated_at — both written in the same request).
+    assert detail["generated_at"] == detail["updated_at"]
+    # The targeted section is filled in from the LLM.
+    assert len(detail["volumes"]) == 2
+    # Other sections are absent (no pre-existing file to preserve them from).
+    assert "core_conflict_theme" not in detail
+
+
+def test_regenerate_unknown_section_returns_400(tmp_path):
     _seed_project(tmp_path)
     _write(tmp_path, "novel_outline.json", _seed_old_outline())
     resp = client.post(
@@ -161,7 +183,7 @@ def test_regenerate_unknown_section_returns_400(mock_planner, tmp_path):
     assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
 
 
-def test_regenerate_missing_project_returns_404(mock_planner, tmp_path):
+def test_regenerate_missing_project_returns_404(tmp_path):
     # Seed only novel_outline.json — no project.json, so the 404 fires before the agent.
     _write(tmp_path, "novel_outline.json", _seed_old_outline())
     resp = client.post(

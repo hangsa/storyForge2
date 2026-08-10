@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
@@ -310,6 +311,133 @@ async def update_novel_outline(data: dict):
 
 
 # --- Branch Simulation Endpoints (v1.7 Phase 2) ---
+
+
+class RegenerateNovelOutlineSectionPayload(BaseModel):
+    section: str
+    user_modifications: str = Field(default="", max_length=1000)
+
+
+@router.post("/regenerate-novel-outline-section")
+async def regenerate_novel_outline_section(
+    project_id: str = Query(...),
+    payload: RegenerateNovelOutlineSectionPayload = None,
+):
+    """Re-run novel-outline generation and merge only the requested section
+    back into novel_outline.json. Other top-level fields preserved.
+
+    Sections: core_conflict (string), volumes (array), mc_growth (array),
+    key_plot (array). Preserve generated_at from the existing file;
+    refresh updated_at.
+    """
+    # Re-resolve at call time so test mocks patch correctly.
+    from backend.agents.planner import PlannerAgent
+    from datetime import datetime
+
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    if payload.section not in ("core_conflict", "volumes", "mc_growth", "key_plot"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "VALIDATION_ERROR",
+                "message": f"section 必须是 core_conflict/volumes/mc_growth/key_plot，收到 {payload.section}",
+                "detail": {"section": payload.section},
+            },
+        )
+
+    project = fm.read_json(project_id, "project.json")
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "PROJECT_NOT_FOUND",
+                "message": f"项目 {project_id} 不存在",
+                "detail": {},
+            },
+        )
+
+    existing = fm.read_json(project_id, "novel_outline.json") or {}
+    concept_and_dna = fm.read_json(project_id, "concept_and_dna.json") or {}
+    world = fm.read_json(project_id, "world.json") or {}
+    characters_data = fm.read_json(project_id, "characters.json") or {}
+    map_data = fm.read_json(project_id, "map.json")
+
+    characters = characters_data.get("characters", [])
+    min_words = project.get("min_words", 2000)
+    target_total_words = project.get("target_total_words", 1_000_000)
+    genre = project.get("genre", "cool_novel")
+
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+        genre=genre,
+    )
+    try:
+        result, _resp = await agent.generate_novel_outline(
+            concept=concept_and_dna.get("concept", {}),
+            story_dna=concept_and_dna.get("story_dna", {}),
+            world=world,
+            characters=characters,
+            target_total_words=target_total_words,
+            min_words=min_words,
+            map_data=map_data,
+            user_modifications=payload.user_modifications,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
+        )
+
+    merged = dict(existing)
+    if payload.section == "core_conflict":
+        merged["core_conflict_theme"] = result.get(
+            "core_conflict_theme",
+            existing.get("core_conflict_theme", ""),
+        )
+    elif payload.section == "volumes":
+        merged["volumes"] = result.get("volumes", existing.get("volumes", []))
+    elif payload.section == "mc_growth":
+        merged["mc_growth_arc"] = result.get(
+            "mc_growth_arc",
+            existing.get("mc_growth_arc", []),
+        )
+    elif payload.section == "key_plot":
+        merged["key_plot_points"] = result.get(
+            "key_plot_points",
+            existing.get("key_plot_points", []),
+        )
+    else:
+        # The 400-validation earlier only fires for values NOT in the whitelist.
+        # If we reach here, the validation tuple and the merge chain are out
+        # of sync — surface the drift loudly rather than silently storing the
+        # wrong section under `key_plot_points`.
+        raise RuntimeError(f"unhandled section: {payload.section!r}")
+
+    # Preserve generated_at from the existing file; refresh updated_at only.
+    now = datetime.utcnow().isoformat()
+    if existing.get("generated_at"):
+        merged["generated_at"] = existing["generated_at"]
+    else:
+        merged["generated_at"] = now
+    merged["updated_at"] = now
+
+    fm.write_json(project_id, "novel_outline.json", merged)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"{payload.section} 已重新生成",
+        "detail": merged,
+    }
 
 branch_router = APIRouter(
     prefix="/api/v1/projects/{project_id}/branches",

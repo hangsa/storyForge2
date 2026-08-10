@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
@@ -496,4 +497,83 @@ async def regenerate_character_examples(
         "code": "OK",
         "message": "行为示例已重新生成",
         "detail": target,
+    }
+
+
+class RegenerateWorldSectionPayload(BaseModel):
+    section: str
+    user_modifications: str = Field(default="", max_length=1000)
+
+
+@router.post("/regenerate-world-section")
+async def regenerate_world_section(
+    project_id: str = Query(...),
+    payload: RegenerateWorldSectionPayload = None,
+):
+    """Re-run world generation and merge only the requested section back
+    into world.json. Other top-level keys preserved byte-identical."""
+    from backend.agents.planner import PlannerAgent
+
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    if payload.section not in ("era", "power_system", "core_rules", "factions"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 era/power_system/core_rules/factions，收到 {payload.section}", "detail": {"section": payload.section}},
+        )
+
+    existing = _file_manager().read_json(project_id, "world.json") or {}
+    concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
+    project = _file_manager().read_json(project_id, "project.json") or {}
+    genre = project.get("genre", "cool_novel")
+
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+        genre=genre,
+    )
+    try:
+        result, _resp = await agent.generate_world(
+            concept=concept_and_dna.get("concept", {}),
+            story_dna=concept_and_dna.get("story_dna", {}),
+            genre=genre,
+            user_modifications=payload.user_modifications,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
+        )
+
+    merged = dict(existing)
+    if payload.section == "era":
+        merged["era"] = result.get("era", existing.get("era", ""))
+        merged["geography"] = result.get("geography", existing.get("geography", ""))
+        merged["era_social_structure"] = result.get(
+            "era_social_structure",
+            existing.get("era_social_structure", ""),
+        )
+        merged["era_cultural_history"] = result.get(
+            "era_cultural_history",
+            existing.get("era_cultural_history", ""),
+        )
+    elif payload.section == "power_system":
+        merged["power_system"] = result.get("power_system", existing.get("power_system", {}))
+    elif payload.section == "core_rules":
+        merged["core_rules"] = result.get("core_rules", existing.get("core_rules", []))
+    else:  # "factions"
+        merged["factions"] = result.get("factions", existing.get("factions", []))
+
+    _file_manager().write_json(project_id, "world.json", merged)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"world.{payload.section} 已重新生成",
+        "detail": merged,
     }

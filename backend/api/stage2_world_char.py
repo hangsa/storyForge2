@@ -577,3 +577,118 @@ async def regenerate_world_section(
         "message": f"world.{payload.section} 已重新生成",
         "detail": merged,
     }
+
+
+class RegenerateCharacterSectionPayload(BaseModel):
+    section: str
+    keep_existing: bool = False
+    user_modifications: str = Field(default="", max_length=1000)
+
+
+@router.post("/regenerate-character-section")
+async def regenerate_character_section(
+    project_id: str = Query(...),
+    character_id: str = Query(...),
+    payload: RegenerateCharacterSectionPayload = None,
+):
+    """Re-run character generation and merge only the requested section
+    back into the character dict. Other top-level keys preserved.
+
+    Special cases:
+    - `voice_signature`: replaces speech_style / thought_patterns / taboos
+      but explicitly preserves `behavior_examples` (per-card regenerate
+      workflow owns that field).
+    - `personality`: when `keep_existing=True`, appends LLM items to
+      existing arrays per-key. When False (default), replaces all arrays.
+    """
+    from backend.agents.planner import PlannerAgent
+
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    if payload.section not in ("personality", "voice_signature", "current_state", "unknown", "relations"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 personality/voice_signature/current_state/unknown/relations，收到 {payload.section}", "detail": {"section": payload.section}},
+        )
+
+    data = _file_manager().read_json(project_id, "characters.json") or {}
+    characters = data.get("characters", [])
+    target = next((c for c in characters if c.get("id") == character_id), None)
+    if target is None:
+        raise _not_found(f"角色不存在: {character_id}")
+
+    concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
+    world = _file_manager().read_json(project_id, "world.json") or {}
+    project = _file_manager().read_json(project_id, "project.json")
+    if project is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "PROJECT_NOT_FOUND", "message": f"项目 {project_id} 不存在", "detail": {}},
+        )
+    genre = project.get("genre", "cool_novel")
+
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+        genre=genre,
+    )
+    try:
+        result, _resp = await agent.generate_character(
+            concept=concept_and_dna.get("concept", {}),
+            world=world,
+            character_type=target.get("character_type", "supporting"),
+            existing_characters=[target],
+            genre=genre,
+            user_modifications=payload.user_modifications,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
+        )
+
+    if payload.section == "personality":
+        new_p = result.get("personality", {}) or {}
+        if payload.keep_existing:
+            existing_p = target.get("personality", {}) or {}
+            merged_p = {
+                "beliefs": existing_p.get("beliefs", []) + new_p.get("beliefs", []),
+                "desires": existing_p.get("desires", []) + new_p.get("desires", []),
+                "fears": existing_p.get("fears", []) + new_p.get("fears", []),
+                "values": existing_p.get("values", []) + new_p.get("values", []),
+                "core_traits": existing_p.get("core_traits", []) + new_p.get("core_traits", []),
+            }
+            target["personality"] = merged_p
+        else:
+            target["personality"] = new_p
+    elif payload.section == "voice_signature":
+        # CRITICAL: behavior_examples is owned by /regenerate-examples.
+        # Drop whatever the LLM returned and keep the existing field.
+        new_v = result.get("voice_signature", {}) or {}
+        existing_v = target.get("voice_signature", {}) or {}
+        target["voice_signature"] = {
+            "speech_style": new_v.get("speech_style", ""),
+            "thought_patterns": new_v.get("thought_patterns", ""),
+            "taboos": new_v.get("taboos", []),
+            "behavior_examples": existing_v.get("behavior_examples", []),
+        }
+    elif payload.section == "current_state":
+        target["current_state"] = result.get("current_state", {}) or {}
+    elif payload.section == "unknown":
+        target["unknown_to_character"] = result.get("unknown_to_character", []) or []
+    else:  # "relations"
+        target["relations"] = result.get("relations", {}) or {}
+
+    _file_manager().write_json(project_id, "characters.json", data)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"{payload.section} 已重新生成",
+        "detail": target,
+    }

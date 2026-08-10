@@ -18,7 +18,7 @@
 - Modify: `backend/api/stage1_concept.py`
 - Test: `backend/tests/test_stage1_regenerate_section.py`
 
-Sections supported: `concept`, `dna`. Reuses `PlannerAgent.generate_concept_and_dna`. After the agent call, merge only the requested section back into `concept_and_dna.json`; preserve everything else byte-identically. The endpoint validates `section` via Pydantic `Literal[...]` so unknown values fail with 400.
+Sections supported: `concept`, `dna`. Reuses `PlannerAgent.generate_concept_and_dna`. After the agent call, merge only the requested section back into `concept_and_dna.json`; preserve everything else byte-identically. The endpoint validates `section` manually (NOT via Pydantic Literal) so unknown values fail with 400 + VALIDATION_ERROR envelope — Pydantic auto-validation returns 422 with a foreign envelope shape.
 
 - [ ] **Step 1: Write the failing test file**
 
@@ -205,12 +205,11 @@ Expected: All 5 tests fail with `404 Not Found` (endpoint doesn't exist yet).
 Append to `backend/api/stage1_concept.py` (after the existing `update_concept` function, before any import-block at the bottom):
 
 ```python
-from typing import Literal
 from pydantic import BaseModel, Field
 
 
 class RegenerateConceptSectionPayload(BaseModel):
-    section: Literal["concept", "dna"]
+    section: str
     user_modifications: str = Field(default="", max_length=1000)
 
 
@@ -229,6 +228,12 @@ async def regenerate_concept_section(
         raise HTTPException(
             status_code=400,
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    if payload.section not in ("concept", "dna"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 concept 或 dna，收到 {payload.section}", "detail": {"section": payload.section}},
         )
 
     project = fm.read_json(project_id, "project.json")
@@ -486,12 +491,11 @@ Expected: All tests fail with `404 Not Found`.
 Append to `backend/api/stage2_world_char.py` (after `regenerate_character_examples`, at end of file):
 
 ```python
-from typing import Literal
 from pydantic import BaseModel, Field
 
 
 class RegenerateWorldSectionPayload(BaseModel):
-    section: Literal["era", "power_system", "core_rules", "factions"]
+    section: str
     user_modifications: str = Field(default="", max_length=1000)
 
 
@@ -508,6 +512,12 @@ async def regenerate_world_section(
         raise HTTPException(
             status_code=400,
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    if payload.section not in ("era", "power_system", "core_rules", "factions"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 era/power_system/core_rules/factions，收到 {payload.section}", "detail": {"section": payload.section}},
         )
 
     existing = _file_manager().read_json(project_id, "world.json") or {}
@@ -843,7 +853,7 @@ Append to `backend/api/stage2_world_char.py` (after the regenerate-world-section
 
 ```python
 class RegenerateCharacterSectionPayload(BaseModel):
-    section: Literal["personality", "voice_signature", "current_state", "unknown", "relations"]
+    section: str
     keep_existing: bool = False
     user_modifications: str = Field(default="", max_length=1000)
 
@@ -870,6 +880,12 @@ async def regenerate_character_section(
         raise HTTPException(
             status_code=400,
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    if payload.section not in ("personality", "voice_signature", "current_state", "unknown", "relations"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 personality/voice_signature/current_state/unknown/relations，收到 {payload.section}", "detail": {"section": payload.section}},
         )
 
     data = _file_manager().read_json(project_id, "characters.json") or {}
@@ -1142,12 +1158,11 @@ Expected: All tests fail with `404 Not Found`.
 Append to `backend/api/stage3_outline.py` (after `update_novel_outline`):
 
 ```python
-from typing import Literal
 from pydantic import BaseModel, Field
 
 
 class RegenerateNovelOutlineSectionPayload(BaseModel):
-    section: Literal["core_conflict", "volumes", "mc_growth", "key_plot"]
+    section: str
     user_modifications: str = Field(default="", max_length=1000)
 
 
@@ -1165,6 +1180,12 @@ async def regenerate_novel_outline_section(
         raise HTTPException(
             status_code=400,
             detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
+        )
+
+    if payload.section not in ("core_conflict", "volumes", "mc_growth", "key_plot"):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 core_conflict/volumes/mc_growth/key_plot，收到 {payload.section}", "detail": {"section": payload.section}},
         )
 
     existing = fm.read_json(project_id, "novel_outline.json") or {}

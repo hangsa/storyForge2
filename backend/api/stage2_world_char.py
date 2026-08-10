@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/stage2", tags=["stage2"])
 fm = FileManager(settings.projects_dir)
 
 ERA_BLOCK_KEYS = ("era", "geography", "era_social_structure", "era_cultural_history")
+PERSONALITY_KEYS = ("beliefs", "desires", "fears", "values", "core_traits")
 
 
 def _file_manager() -> FileManager:
@@ -656,13 +657,7 @@ async def regenerate_character_section(
         new_p = result.get("personality", {}) or {}
         if payload.keep_existing:
             existing_p = target.get("personality", {}) or {}
-            merged_p = {
-                "beliefs": existing_p.get("beliefs", []) + new_p.get("beliefs", []),
-                "desires": existing_p.get("desires", []) + new_p.get("desires", []),
-                "fears": existing_p.get("fears", []) + new_p.get("fears", []),
-                "values": existing_p.get("values", []) + new_p.get("values", []),
-                "core_traits": existing_p.get("core_traits", []) + new_p.get("core_traits", []),
-            }
+            merged_p = {k: existing_p.get(k, []) + new_p.get(k, []) for k in PERSONALITY_KEYS}
             target["personality"] = merged_p
         else:
             target["personality"] = new_p
@@ -681,8 +676,14 @@ async def regenerate_character_section(
         target["current_state"] = result.get("current_state", {}) or {}
     elif payload.section == "unknown":
         target["unknown_to_character"] = result.get("unknown_to_character", []) or []
-    else:  # "relations"
+    elif payload.section == "relations":
         target["relations"] = result.get("relations", {}) or {}
+    else:
+        # The 400-validation earlier only fires for values NOT in the whitelist.
+        # If we reach here, the validation tuple and the merge chain are out
+        # of sync — surface the drift loudly rather than silently storing the
+        # wrong section under `relations`.
+        raise RuntimeError(f"unhandled section: {payload.section!r}")
 
     _file_manager().write_json(project_id, "characters.json", data)
 

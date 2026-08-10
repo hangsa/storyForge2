@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import api, { Concept, StoryDNA } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import { RegenerateModal } from "../shared/RegenerateModal";
+import { SectionRegenerateButton } from "../shared/SectionRegenerateButton";
 import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface ConceptStepProps {
@@ -62,6 +63,21 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念保存失败");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleSectionRegenerate = (section: "concept" | "dna") => async (mods: string) => {
+    try {
+      const result = await api.regenerateConceptSection(projectId, section, mods);
+      if (section === "concept" && result.concept) {
+        setConcept(result.concept);
+        wizard.markStepGenerated(1, { concept: result.concept, story_dna: dnaRef.current });
+      } else if (section === "dna" && result.story_dna) {
+        setDna(result.story_dna);
+        wizard.markStepGenerated(1, { concept: conceptRef.current, story_dna: result.story_dna });
+      }
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "板块重新生成失败");
     }
   };
 
@@ -133,6 +149,17 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
 
       {(wizard.status === "completed" || wizard.data.concept) && (
         <div data-testid="concept-form" className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+              概念信息
+            </div>
+            <SectionRegenerateButton
+              target="概念信息"
+              onRegenerate={handleSectionRegenerate("concept")}
+              testId="concept-info-regenerate"
+            />
+          </div>
+          <div className="space-y-3">
           <div>
             <label className="block font-label-mono text-system-log mb-1 text-xs">标题</label>
             <input
@@ -190,8 +217,16 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
               />
             </div>
           </div>
+          </div>
           <div className="border-t border-outline-variant pt-3 space-y-2">
-            <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">核心矛盾</div>
+            <div className="flex items-center justify-between">
+              <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">核心矛盾</div>
+              <SectionRegenerateButton
+                target="核心矛盾"
+                onRegenerate={handleSectionRegenerate("dna")}
+                testId="concept-dna-regenerate"
+              />
+            </div>
             <AutoTextarea
               data-testid="concept-statement"
               value={dna.core_contradiction.statement}

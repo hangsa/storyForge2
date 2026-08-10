@@ -83,4 +83,26 @@ describe("SectionRegenerateButton", () => {
       expect(screen.getByTestId("world-power-system-regenerate")).not.toBeDisabled(),
     );
   });
+
+  it("respects the disabled prop and disables the button", () => {
+    render(
+      <SectionRegenerateButton
+        target="力量体系"
+        onRegenerate={async () => {}}
+        disabled
+        testId="world-power-system-regenerate"
+      />,
+    );
+    expect(screen.getByTestId("world-power-system-regenerate")).toBeDisabled();
+  });
+
+  it("uses `section-regenerate-${target}` as the default testId", () => {
+    render(
+      <SectionRegenerateButton
+        target="力量体系"
+        onRegenerate={async () => {}}
+      />,
+    );
+    expect(screen.getByTestId("section-regenerate-力量体系")).toBeInTheDocument();
+  });
 });

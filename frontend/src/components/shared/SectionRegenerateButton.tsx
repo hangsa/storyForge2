@@ -25,9 +25,15 @@ export function SectionRegenerateButton({
     setBusy(true);
     try {
       await onRegenerate(text);
+      // Parent's promise resolved → close the modal. If it rejected, the
+      // modal stays open so the user can read the error banner (the parent
+      // surfaces errors via wizard.setStatus or similar) and retry.
+      setOpen(false);
+    } catch {
+      // Errors are surfaced by the parent (e.g. wizard.setStatus). Keep the
+      // modal open so the user can adjust the modifications and retry.
     } finally {
       setBusy(false);
-      setOpen(false);
     }
   };
 

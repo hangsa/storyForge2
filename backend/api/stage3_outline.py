@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.api._errors import http_error
 from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
@@ -345,33 +346,19 @@ async def regenerate_novel_outline_section(
     from datetime import datetime
 
     if not project_id:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
-        )
+        raise http_error(400, "VALIDATION_ERROR", "project_id 不能为空")
 
     if payload.section not in NOVEL_OUTLINE_SECTION_TO_KEY:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": True,
-                "code": "VALIDATION_ERROR",
-                "message": f"section 必须是 {', '.join(NOVEL_OUTLINE_SECTION_TO_KEY)}，收到 {payload.section}",
-                "detail": {"section": payload.section},
-            },
+        raise http_error(
+            400,
+            "VALIDATION_ERROR",
+            f"section 必须是 {', '.join(NOVEL_OUTLINE_SECTION_TO_KEY)}，收到 {payload.section}",
+            section=payload.section,
         )
 
     project = fm.read_json(project_id, "project.json")
     if project is None:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": True,
-                "code": "PROJECT_NOT_FOUND",
-                "message": f"项目 {project_id} 不存在",
-                "detail": {},
-            },
-        )
+        raise http_error(404, "PROJECT_NOT_FOUND", f"项目 {project_id} 不存在")
 
     existing = fm.read_json(project_id, "novel_outline.json") or {}
     concept_and_dna = fm.read_json(project_id, "concept_and_dna.json") or {}
@@ -402,10 +389,7 @@ async def regenerate_novel_outline_section(
             user_modifications=payload.user_modifications,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
-        )
+        raise http_error(503, "LLM_GENERATION_FAILED", str(e))
 
     merged = dict(existing)
     key, default = NOVEL_OUTLINE_SECTION_TO_KEY[payload.section]

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from backend.api._errors import http_error
 from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
@@ -434,10 +435,7 @@ async def regenerate_character_examples(
     from backend.agents.planner import PlannerAgent
 
     if not project_id:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
-        )
+        raise http_error(400, "VALIDATION_ERROR", "project_id 不能为空")
     payload = payload or {}
     keep_existing = bool(payload.get("keep_existing", False))
 
@@ -470,10 +468,7 @@ async def regenerate_character_examples(
             user_modifications=user_modifications,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
-        )
+        raise http_error(503, "LLM_GENERATION_FAILED", str(e))
 
     # Extract behavior_examples — accept either top-level or nested under voice_signature.
     new_examples_raw = result.get("behavior_examples")
@@ -518,23 +513,19 @@ async def regenerate_world_section(
     from backend.agents.planner import PlannerAgent
 
     if not project_id:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
-        )
+        raise http_error(400, "VALIDATION_ERROR", "project_id 不能为空")
 
     if payload.section not in ("era", "power_system", "core_rules", "factions"):
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 era/power_system/core_rules/factions，收到 {payload.section}", "detail": {"section": payload.section}},
+        raise http_error(
+            400,
+            "VALIDATION_ERROR",
+            f"section 必须是 era/power_system/core_rules/factions，收到 {payload.section}",
+            section=payload.section,
         )
 
     project = _file_manager().read_json(project_id, "project.json")
     if project is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": True, "code": "PROJECT_NOT_FOUND", "message": f"项目 {project_id} 不存在", "detail": {}},
-        )
+        raise http_error(404, "PROJECT_NOT_FOUND", f"项目 {project_id} 不存在")
 
     existing = _file_manager().read_json(project_id, "world.json") or {}
     concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
@@ -554,10 +545,7 @@ async def regenerate_world_section(
             user_modifications=payload.user_modifications,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
-        )
+        raise http_error(503, "LLM_GENERATION_FAILED", str(e))
 
     merged = dict(existing)
     if payload.section == "era":
@@ -605,15 +593,14 @@ async def regenerate_character_section(
     from backend.agents.planner import PlannerAgent
 
     if not project_id:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "VALIDATION_ERROR", "message": "project_id 不能为空", "detail": {}},
-        )
+        raise http_error(400, "VALIDATION_ERROR", "project_id 不能为空")
 
     if payload.section not in ("personality", "voice_signature", "current_state", "unknown", "relations"):
-        raise HTTPException(
-            status_code=400,
-            detail={"error": True, "code": "VALIDATION_ERROR", "message": f"section 必须是 personality/voice_signature/current_state/unknown/relations，收到 {payload.section}", "detail": {"section": payload.section}},
+        raise http_error(
+            400,
+            "VALIDATION_ERROR",
+            f"section 必须是 personality/voice_signature/current_state/unknown/relations，收到 {payload.section}",
+            section=payload.section,
         )
 
     data = _file_manager().read_json(project_id, "characters.json") or {}
@@ -626,10 +613,7 @@ async def regenerate_character_section(
     world = _file_manager().read_json(project_id, "world.json") or {}
     project = _file_manager().read_json(project_id, "project.json")
     if project is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": True, "code": "PROJECT_NOT_FOUND", "message": f"项目 {project_id} 不存在", "detail": {}},
-        )
+        raise http_error(404, "PROJECT_NOT_FOUND", f"项目 {project_id} 不存在")
     genre = project.get("genre", "cool_novel")
 
     agent = PlannerAgent(
@@ -648,10 +632,7 @@ async def regenerate_character_section(
             user_modifications=payload.user_modifications,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=503,
-            detail={"error": True, "code": "LLM_GENERATION_FAILED", "message": str(e), "detail": {}},
-        )
+        raise http_error(503, "LLM_GENERATION_FAILED", str(e))
 
     if payload.section == "personality":
         new_p = result.get("personality", {}) or {}

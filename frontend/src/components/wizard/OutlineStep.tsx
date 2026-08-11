@@ -164,7 +164,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
               <div className="flex items-center justify-between mb-2">
                 <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">分卷 / 阶段划分</div>
                 <SectionRegenerateButton
-                  target="分卷划分"
+                  target="分卷 / 阶段划分"
                   onRegenerate={handleSectionRegenerate("volumes")}
                   testId="outline-volumes-regenerate"
                 />

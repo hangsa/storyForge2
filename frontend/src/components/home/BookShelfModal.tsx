@@ -1,4 +1,4 @@
-import { useState, useMemo, type MouseEvent } from "react";
+import { useState, useMemo, type MouseEvent, type KeyboardEvent } from "react";
 import api, { ProjectSummary } from "../../api/client";
 import { isPreWizardStage } from "./stages";
 import { useGenres } from "../../hooks/useGenres";
@@ -48,7 +48,6 @@ export default function BookShelfModal({
   projects, onClose, onProjectsDeleted,
 }: BookShelfModalProps) {
   const [query, setQuery] = useState("");
-  const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -59,11 +58,6 @@ export default function BookShelfModal({
     if (!q) return projects;
     return projects.filter((p) => p.title.toLowerCase().includes(q));
   }, [projects, query]);
-
-  const exitSelectMode = () => {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -84,7 +78,7 @@ export default function BookShelfModal({
       onProjectsDeleted?.(result.deleted);
       setShowBulkConfirm(false);
       if (result.failed.length === 0) {
-        exitSelectMode();
+        setSelectedIds(new Set());
       } else {
         const failedIds = new Set(result.failed.map((f) => f.id));
         setSelectedIds(failedIds);
@@ -129,17 +123,6 @@ export default function BookShelfModal({
               />
             </div>
             <button
-              type="button"
-              data-testid="select-toggle"
-              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-              className={`btn-ghost flex items-center gap-2 ${selectMode ? "border border-primary-container" : ""}`}
-            >
-              <span className="material-symbols-outlined text-lg">
-                {selectMode ? "check_box" : "check_box_outline_blank"}
-              </span>
-              {selectMode ? "退出多选" : "多选"}
-            </button>
-            <button
               onClick={onClose}
               aria-label="关闭"
               className="text-system-log hover:text-primary"
@@ -149,7 +132,7 @@ export default function BookShelfModal({
           </div>
         </div>
 
-        {selectMode && (
+        {selectedIds.size > 0 && (
           <div
             data-testid="bulk-action-bar"
             className="sticky top-0 z-10 bg-surface-container-low border border-primary-container/40
@@ -163,21 +146,19 @@ export default function BookShelfModal({
               onClick={() => setSelectedIds(new Set(filtered.map((p) => p.id)))}
               className="text-sm text-system-log hover:text-primary"
             >
-              全选可见
+              全选
             </button>
             <button
               onClick={() => setSelectedIds(new Set())}
-              disabled={selectedIds.size === 0}
-              className="text-sm text-system-log hover:text-primary disabled:opacity-40"
+              className="text-sm text-system-log hover:text-primary"
             >
               全不选
             </button>
             <button
               onClick={() => setShowBulkConfirm(true)}
-              disabled={selectedIds.size === 0}
               data-testid="bulk-delete-button"
               className="flex items-center gap-1 px-3 py-1 bg-error text-surface-container-low
-                         text-sm rounded hover:opacity-90 disabled:opacity-40"
+                         text-sm rounded hover:opacity-90"
             >
               <span className="material-symbols-outlined text-base">delete</span>
               批量删除 ({selectedIds.size})
@@ -197,7 +178,6 @@ export default function BookShelfModal({
               <ModalCard
                 key={p.id}
                 project={p}
-                selectMode={selectMode}
                 selected={selectedIds.has(p.id)}
                 onToggle={() => toggleSelect(p.id)}
               />
@@ -267,78 +247,71 @@ export default function BookShelfModal({
 }
 
 function ModalCard({
-  project, selectMode, selected, onToggle,
+  project, selected, onToggle,
 }: {
   project: ProjectSummary;
-  selectMode: boolean;
   selected: boolean;
   onToggle: () => void;
 }) {
-  const handleClick = (e: MouseEvent) => {
-    if (selectMode) {
-      e.preventDefault();
-      onToggle();
-    }
-    // Otherwise: <a href=...> handles navigation naturally.
+  const href = projectHref(project.current_stage, project.id);
+
+  const handleCardClick = () => {
+    onToggle();
   };
 
-  if (selectMode) {
-    return (
-      <button
-        type="button"
-        data-testid="book-card-modal"
-        data-selected={selected ? "true" : "false"}
-        onClick={handleClick}
-        className={`block w-full text-left bg-surface-container-low border rounded-lg p-4 cursor-pointer
-                    transition-colors
-                    ${selected ? "border-primary-container" : "border-outline-variant hover:border-primary-container/40"}`}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <span className="flex items-center gap-2">
-            <span className={`material-symbols-outlined text-xl ${selected ? "text-primary-container" : "text-system-log/50"}`}>
-              {selected ? "check_box" : "check_box_outline_blank"}
-            </span>
-            <span className="font-label-mono text-xs text-system-log">
-              {selected ? "已选" : "选择"}
-            </span>
-          </span>
-        </div>
-        <CardBody project={project} />
-      </button>
-    );
-  }
+  // Keyboard: Enter/Space toggles selection EXCEPT when focus is on the title
+  // <a> — in that case the browser handles activation natively (navigate on
+  // Enter, scroll on Space). The card div must not double-trigger.
+  const handleCardKey = (e: KeyboardEvent) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    if ((e.target as HTMLElement).closest("a")) return;
+    e.preventDefault();
+    onToggle();
+  };
 
-  const href = projectHref(project.current_stage, project.id);
   return (
-    <a
-      href={href}
-      className="block bg-surface-container-low border border-outline-variant rounded-lg p-4
-                 hover:border-primary-container/40 transition-colors"
+    <div
+      data-testid="book-card-modal"
+      data-selected={selected ? "true" : "false"}
+      role="button"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKey}
+      className={`relative block w-full text-left bg-surface-container-low border rounded-lg p-4 cursor-pointer
+                  transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-container
+                  ${selected ? "border-primary-container" : "border-outline-variant hover:border-primary-container/40"}`}
     >
+      <a
+        href={href}
+        onClick={(e) => e.stopPropagation()}
+        className="font-headline-md text-primary truncate hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container"
+      >
+        {project.title}
+      </a>
       <CardBody project={project} />
-    </a>
+      {selected && (
+        <span
+          data-testid="book-card-check"
+          className="material-symbols-outlined absolute top-2 right-2 text-xl text-primary-container"
+        >
+          check_box
+        </span>
+      )}
+    </div>
   );
 }
 
 function CardBody({ project }: { project: ProjectSummary }) {
-  const genres = useGenres(false); // include all so labels render for any project genre
+  const genres = useGenres(false);
   const labelByGenre = Object.fromEntries(genres.map((g) => [g.id, g.label_zh]));
 
   return (
-    <>
-      <div className="flex items-start justify-between mb-2 gap-2">
-        <h3 className="font-headline-md text-primary truncate">{project.title}</h3>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded font-label-mono shrink-0 ${STAGE_COLORS[project.current_stage] || "bg-system-log/20 text-system-log"}`}>
-          {STAGE_LABELS[project.current_stage] || project.current_stage}
-        </span>
-      </div>
-      <div className="flex items-center gap-2 text-xs font-label-mono text-system-log">
-        <span>{labelByGenre[project.genre] || project.genre}</span>
-        <span>·</span>
-        <span>
-          {project.target_length_category || `${(project.target_total_words / 10000).toFixed(0)}万字`}
-        </span>
-      </div>
-    </>
+    <div className="mt-2 flex items-center gap-2 text-xs font-label-mono text-system-log">
+      <span>{labelByGenre[project.genre] || project.genre}</span>
+      <span>·</span>
+      <span>
+        {project.target_length_category || `${(project.target_total_words / 10000).toFixed(0)}万字`}
+      </span>
+    </div>
   );
 }

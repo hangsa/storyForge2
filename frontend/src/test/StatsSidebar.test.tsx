@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
 import StatsSidebar from "../components/home/StatsSidebar";
 
@@ -125,5 +125,24 @@ describe("StatsSidebar", () => {
     expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.getByText("87")).toBeInTheDocument();
     expect(screen.getByText("214,000")).toBeInTheDocument();
+  });
+
+  it("更多 button is enabled and calls onOpenMore when clicked", () => {
+    const onOpenMore = vi.fn();
+    render(
+      <StatsSidebar
+        stats={SAMPLE_STATS}
+        statsLoading={false}
+        onRefresh={() => {}}
+        refreshing={false}
+        onOpenMore={onOpenMore}
+      />
+    );
+    const moreBtn = screen.getByTestId("qa-more");
+    expect(moreBtn).not.toBeDisabled();
+    act(() => {
+      moreBtn.click();
+    });
+    expect(onOpenMore).toHaveBeenCalledTimes(1);
   });
 });

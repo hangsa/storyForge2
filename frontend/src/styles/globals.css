@@ -83,6 +83,77 @@
   --font-mono: "JetBrains Mono", monospace;
 }
 
+/* Light theme overrides — Material Design 3 light scheme analogues of the
+   dark tokens above. Applied via .light on <html> (set by useTheme hook).
+   Default (no .light) keeps dark values. */
+.light {
+  --color-canvas-bg: #f8fafc;
+  --color-canvas-surface: #ffffff;
+  --color-canvas-text-muted: #64748b;
+  --color-canvas-text-secondary: #475569;
+  --color-canvas-accent: #006970;
+  --color-background: #ffffff;
+  --color-on-background: #0f172a;
+
+  --color-surface: #ffffff;
+  --color-surface-dim: #f1f5f9;
+  --color-surface-bright: #f8fafc;
+  --color-surface-panel: #f8fafc;
+  --color-surface-variant: #e2e8f0;
+  --color-surface-container: #f1f5f9;
+  --color-surface-container-low: #f8fafc;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-high: #e2e8f0;
+  --color-surface-container-highest: #cbd5e1;
+  --color-on-surface: #0f172a;
+  --color-on-surface-variant: #475569;
+  --color-inverse-surface: #0f172a;
+  --color-inverse-on-surface: #f1f5f9;
+  --color-outline: #94a3b8;
+  --color-outline-variant: #cbd5e1;
+  --color-surface-tint: #006970;
+
+  --color-primary: #006970;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #7df4ff;
+  --color-on-primary-container: #002022;
+  --color-inverse-primary: #00f0ff;
+  --color-primary-fixed: #7df4ff;
+  --color-primary-fixed-dim: #00dbe9;
+  --color-on-primary-fixed: #002022;
+  --color-on-primary-fixed-variant: #004f54;
+
+  --color-secondary: #571bc1;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #e9ddff;
+  --color-on-secondary-container: #23005c;
+  --color-secondary-fixed: #e9ddff;
+  --color-secondary-fixed-dim: #d0bcff;
+  --color-on-secondary-fixed: #23005c;
+  --color-on-secondary-fixed-variant: #5516be;
+
+  --color-tertiary: #006d4a;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #6ffbbe;
+  --color-on-tertiary-container: #002113;
+  --color-tertiary-fixed: #6ffbbe;
+  --color-tertiary-fixed-dim: #4edea3;
+  --color-on-tertiary-fixed: #002113;
+  --color-on-tertiary-fixed-variant: #005236;
+
+  --color-error: #dc2626;
+  --color-on-error: #ffffff;
+  --color-error-p0: #dc2626;
+  --color-error-container: #fecaca;
+  --color-on-error-container: #7f1d1d;
+
+  --color-warning-p1: #f59e0b;
+
+  --color-system-log: #64748b;
+  --color-novelty-high: #2563eb;
+  --color-saturation-high: #ef4444;
+}
+
 @layer components {
   .font-display-lg {
     font-family: var(--font-display);

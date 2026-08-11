@@ -7,6 +7,7 @@ interface QuickActionsProps {
   onOpenConsole?: () => void;
   consoleDisabled?: boolean;
   consoleTooltip?: string;
+  onOpenMore?: () => void;
 }
 
 interface Action {
@@ -18,7 +19,7 @@ interface Action {
   testId: string;
 }
 
-export default function QuickActions({ onRefresh, refreshing, onOpenPlaza, plazaDisabled, plazaTooltip, onOpenConsole, consoleDisabled, consoleTooltip }: QuickActionsProps) {
+export default function QuickActions({ onRefresh, refreshing, onOpenPlaza, plazaDisabled, plazaTooltip, onOpenConsole, consoleDisabled, consoleTooltip, onOpenMore }: QuickActionsProps) {
   const actions: Action[] = [
     {
       label: "AI 控制台",
@@ -45,8 +46,7 @@ export default function QuickActions({ onRefresh, refreshing, onOpenPlaza, plaza
     {
       label: "更多",
       icon: "more_horiz",
-      disabled: true,
-      tooltip: "即将推出",
+      onClick: onOpenMore,
       testId: "qa-more",
     },
   ];

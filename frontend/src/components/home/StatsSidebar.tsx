@@ -19,6 +19,7 @@ interface StatsSidebarProps {
   onOpenConsole?: () => void;
   consoleDisabled?: boolean;
   consoleTooltip?: string;
+  onOpenMore?: () => void;
 }
 
 export default function StatsSidebar({
@@ -32,6 +33,7 @@ export default function StatsSidebar({
   onOpenConsole,
   consoleDisabled,
   consoleTooltip,
+  onOpenMore,
 }: StatsSidebarProps) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
@@ -111,6 +113,7 @@ export default function StatsSidebar({
               onOpenConsole={onOpenConsole}
               consoleDisabled={consoleDisabled}
               consoleTooltip={consoleTooltip}
+              onOpenMore={onOpenMore}
             />
             {statsLoading && (
               <div className="mt-3 text-[10px] font-label-mono text-system-log/60">
@@ -136,6 +139,7 @@ export default function StatsSidebar({
               onOpenConsole={onOpenConsole}
               consoleDisabled={consoleDisabled}
               consoleTooltip={consoleTooltip}
+              onOpenMore={onOpenMore}
             />
           </div>
         </div>

@@ -7,6 +7,7 @@ import BookShelf from "../components/home/BookShelf";
 import InitWizardModal from "../components/wizard/InitWizardModal";
 import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
 import AIConsoleModal from "../components/aiConsole/AIConsoleModal";
+import MoreActionsModal from "../components/home/MoreActionsModal";
 import { useProjectStats } from "../hooks/useProjectStats";
 
 export default function HomePage() {
@@ -17,6 +18,7 @@ export default function HomePage() {
   const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
   const [plazaOpen, setPlazaOpen] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // v1.8.2: single source of truth for the project list. BookShelf used to
   // fetch /api/project/list on its own, doubling the round-trip on every
@@ -94,6 +96,10 @@ export default function HomePage() {
     setConsoleOpen(true);
   }, []);
 
+  const handleOpenMore = useCallback(() => {
+    setMoreOpen(true);
+  }, []);
+
   return (
     <div className="min-h-screen bg-canvas-bg flex">
       <StatsSidebar
@@ -103,6 +109,7 @@ export default function HomePage() {
         refreshing={refreshing}
         onOpenPlaza={handleOpenPlaza}
         onOpenConsole={handleOpenConsole}
+        onOpenMore={handleOpenMore}
       />
       <main className="flex-1 min-w-0 px-8 py-8 max-w-[1200px] mx-auto">
         <ManifestoHeader />
@@ -127,6 +134,7 @@ export default function HomePage() {
         isOpen={consoleOpen}
         onClose={() => setConsoleOpen(false)}
       />
+      {moreOpen && <MoreActionsModal onClose={() => setMoreOpen(false)} />}
       {wizardProjectId && (
         <InitWizardModal
           projectId={wizardProjectId}

@@ -1,4 +1,4 @@
-import { useState, useMemo, type MouseEvent, type KeyboardEvent } from "react";
+import { useState, useMemo, type KeyboardEvent } from "react";
 import api, { ProjectSummary } from "../../api/client";
 import { isPreWizardStage } from "./stages";
 import { useGenres } from "../../hooks/useGenres";
@@ -284,7 +284,7 @@ function ModalCard({
       <a
         href={href}
         onClick={(e) => e.stopPropagation()}
-        className="font-headline-md text-primary truncate hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container"
+        className="block pr-8 truncate font-headline-md text-primary hover:underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-primary-container"
       >
         {project.title}
       </a>
@@ -302,6 +302,7 @@ function ModalCard({
 }
 
 function CardBody({ project }: { project: ProjectSummary }) {
+  // include all so labels render for any project genre
   const genres = useGenres(false);
   const labelByGenre = Object.fromEntries(genres.map((g) => [g.id, g.label_zh]));
 

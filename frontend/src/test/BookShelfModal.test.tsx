@@ -147,39 +147,6 @@ describe("BookShelfModal default-select mode", () => {
     fireEvent.change(search, { target: { value: "诡眼" } });
     expect(screen.getByText(/已选 2 项/)).toBeInTheDocument();
   });
-});
-
-describe("BookShelfModal 多选 + 批量删除 (moved from BookShelf)", () => {
-  it("renders a '多选' toggle button in the modal header", () => {
-    renderModal();
-    expect(screen.getByRole("button", { name: /多选/ })).toBeInTheDocument();
-  });
-
-  it("clicking 多选 reveals the bulk action bar with '全选可见' / '全不选' / '批量删除'", () => {
-    renderModal();
-    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
-    act(() => {
-      screen.getByRole("button", { name: /多选/ }).click();
-    });
-    expect(screen.getByTestId("bulk-action-bar")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /全选可见/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /全不选/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /批量删除/ })).toBeInTheDocument();
-  });
-
-  it("in select mode, card click toggles selection instead of navigating", () => {
-    renderModal();
-    act(() => {
-      screen.getByRole("button", { name: /多选/ }).click();
-    });
-    const card = screen.getByText("诡眼少年").closest('[data-testid="book-card-modal"]')!;
-    // Card is rendered as a <button> (not an <a>) in select mode.
-    expect(card.tagName).toBe("BUTTON");
-    act(() => {
-      card.click();
-    });
-    expect(screen.getByText(/已选 1 项/)).toBeInTheDocument();
-  });
 
   it("batch-delete confirm calls bulkDeleteProjects and notifies parent via onProjectsDeleted", async () => {
     (api.bulkDeleteProjects as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -187,9 +154,6 @@ describe("BookShelfModal 多选 + 批量删除 (moved from BookShelf)", () => {
     });
     const onProjectsDeleted = vi.fn();
     renderModal({ onProjectsDeleted });
-    act(() => {
-      screen.getByRole("button", { name: /多选/ }).click();
-    });
     const cards = document.querySelectorAll('[data-testid="book-card-modal"]');
     act(() => {
       (cards[0] as HTMLElement).click();
@@ -207,19 +171,5 @@ describe("BookShelfModal 多选 + 批量删除 (moved from BookShelf)", () => {
       expect.arrayContaining(["proj_a", "proj_b"]),
     );
     expect(onProjectsDeleted).toHaveBeenCalledWith(["proj_a", "proj_b"]);
-  });
-
-  it("'退出多选' button hides the bulk action bar and clears selection", () => {
-    renderModal();
-    act(() => {
-      screen.getByRole("button", { name: /多选/ }).click();
-    });
-    const card = screen.getByText("诡眼少年").closest("button, a")!;
-    act(() => { card.click(); });
-    expect(screen.getByText(/已选 1 项/)).toBeInTheDocument();
-    act(() => {
-      screen.getByRole("button", { name: /退出多选/ }).click();
-    });
-    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
   });
 });

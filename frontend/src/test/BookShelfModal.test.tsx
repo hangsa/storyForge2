@@ -93,6 +93,12 @@ describe("BookShelfModal default-select mode", () => {
     expect(screen.queryByRole("button", { name: /退出多选/ })).not.toBeInTheDocument();
   });
 
+  it("全选 and 全不选 are visible in the header by default (not gated by selection)", () => {
+    renderModal();
+    expect(screen.getByRole("button", { name: /^全选$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^全不选$/ })).toBeInTheDocument();
+  });
+
   it("clicking a card body toggles selection and reveals the bulk-action-bar", () => {
     renderModal();
     expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
@@ -113,20 +119,26 @@ describe("BookShelfModal default-select mode", () => {
 
   it("clicking 全选 selects every currently visible (filtered) project", () => {
     renderModal();
-    const cards = document.querySelectorAll('[data-testid="book-card-modal"]');
-    act(() => { (cards[0] as HTMLElement).click(); });
+    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
     act(() => { screen.getByRole("button", { name: /^全选$/ }).click(); });
     expect(screen.getByText(/已选 2 项/)).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-action-bar")).toBeInTheDocument();
   });
 
   it("clicking 全选 after a search filter only selects the filtered projects", () => {
     renderModal();
     const search = screen.getByPlaceholderText("搜索");
     fireEvent.change(search, { target: { value: "诡眼" } });
-    const visibleCards = document.querySelectorAll('[data-testid="book-card-modal"]');
-    act(() => { (visibleCards[0] as HTMLElement).click(); });
     act(() => { screen.getByRole("button", { name: /^全选$/ }).click(); });
     expect(screen.getByText(/已选 1 项/)).toBeInTheDocument();
+  });
+
+  it("clicking 全不选 clears selection and hides the bulk-action-bar", () => {
+    renderModal();
+    act(() => { screen.getByRole("button", { name: /^全选$/ }).click(); });
+    expect(screen.getByText(/已选 2 项/)).toBeInTheDocument();
+    act(() => { screen.getByRole("button", { name: /^全不选$/ }).click(); });
+    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
   });
 
   it("clicking the card title navigates (does NOT toggle selection)", () => {

@@ -123,6 +123,18 @@ export default function BookShelfModal({
               />
             </div>
             <button
+              onClick={() => setSelectedIds(new Set(filtered.map((p) => p.id)))}
+              className="text-sm text-system-log hover:text-primary"
+            >
+              全选
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-sm text-system-log hover:text-primary"
+            >
+              全不选
+            </button>
+            <button
               onClick={onClose}
               aria-label="关闭"
               className="text-system-log hover:text-primary"
@@ -142,18 +154,6 @@ export default function BookShelfModal({
               已选 {selectedIds.size} 项
             </span>
             <div className="flex-1" />
-            <button
-              onClick={() => setSelectedIds(new Set(filtered.map((p) => p.id)))}
-              className="text-sm text-system-log hover:text-primary"
-            >
-              全选
-            </button>
-            <button
-              onClick={() => setSelectedIds(new Set())}
-              className="text-sm text-system-log hover:text-primary"
-            >
-              全不选
-            </button>
             <button
               onClick={() => setShowBulkConfirm(true)}
               data-testid="bulk-delete-button"

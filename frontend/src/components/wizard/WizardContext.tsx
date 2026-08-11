@@ -66,6 +66,14 @@ interface WizardState {
    */
   regenerateHandler: (() => void) | null;
   regenerateDisabled: boolean;
+  /**
+   * The current step's "save without advancing" action. Distinct from
+   * nextHandler: persists current page content to disk but leaves currentStep
+   * alone (uses MARK_STEP_GENERATED instead of STEP_COMPLETED). null when
+   * the step has no data to save (e.g., MapStep placeholder).
+   */
+  saveHandler: (() => void) | null;
+  saveDisabled: boolean;
 }
 
 type WizardAction =
@@ -107,6 +115,11 @@ type WizardAction =
       type: "SET_REGENERATE_HANDLER";
       handler: (() => void) | null;
       disabled: boolean;
+    }
+  | {
+      type: "SET_SAVE_HANDLER";
+      handler: (() => void) | null;
+      disabled: boolean;
     };
 
 const initialState: WizardState = {
@@ -120,6 +133,8 @@ const initialState: WizardState = {
   nextDisabled: false,
   regenerateHandler: null,
   regenerateDisabled: false,
+  saveHandler: null,
+  saveDisabled: false,
 };
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
@@ -220,6 +235,8 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, nextHandler: action.handler, nextDisabled: action.disabled };
     case "SET_REGENERATE_HANDLER":
       return { ...state, regenerateHandler: action.handler, regenerateDisabled: action.disabled };
+    case "SET_SAVE_HANDLER":
+      return { ...state, saveHandler: action.handler, saveDisabled: action.disabled };
     default:
       return state;
   }
@@ -250,6 +267,8 @@ function loadPersisted(projectId: string): WizardState | null {
         nextDisabled: false,
         regenerateHandler: null,
         regenerateDisabled: false,
+        saveHandler: null,
+        saveDisabled: false,
       };
     }
     return null;
@@ -292,6 +311,12 @@ interface WizardContextValue extends WizardState {
    */
   setNextHandler: (handler: (() => void) | null, disabled?: boolean) => void;
   setRegenerateHandler: (handler: (() => void) | null, disabled?: boolean) => void;
+  /**
+   * Register the current step's "save without advancing" action. Like
+   * setNextHandler, the modal footer renders the button when this is
+   * non-null. Use null when the step has nothing to persist (e.g. MapStep).
+   */
+  setSaveHandler: (handler: (() => void) | null, disabled?: boolean) => void;
 }
 
 const WizardContext = createContext<WizardContextValue | null>(null);
@@ -364,6 +389,8 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
       dispatch({ type: "SET_NEXT_HANDLER", handler, disabled }),
     setRegenerateHandler: (handler, disabled = false) =>
       dispatch({ type: "SET_REGENERATE_HANDLER", handler, disabled }),
+    setSaveHandler: (handler, disabled = false) =>
+      dispatch({ type: "SET_SAVE_HANDLER", handler, disabled }),
     reset: () => {
       try {
         sessionStorage.removeItem(getSessionKey(projectId));

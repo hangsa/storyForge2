@@ -9,6 +9,10 @@ vi.mock("../api/client", () => ({
     generateConcept: vi.fn(),
     generateNovelOutline: vi.fn(),
     updateOutline: vi.fn(),
+    updateConcept: vi.fn(),
+    updateWorld: vi.fn(),
+    updateCharacter: vi.fn(),
+    updateNovelOutline: vi.fn(),
     getConcept: vi.fn(),
     getWorld: vi.fn(),
     getCharacter: vi.fn(),
@@ -47,6 +51,14 @@ beforeEach(() => {
   });
   (api.updateOutline as ReturnType<typeof vi.fn>).mockReset();
   (api.updateOutline as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  (api.updateConcept as ReturnType<typeof vi.fn>).mockReset();
+  (api.updateConcept as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  (api.updateWorld as ReturnType<typeof vi.fn>).mockReset();
+  (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  (api.updateCharacter as ReturnType<typeof vi.fn>).mockReset();
+  (api.updateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  (api.updateNovelOutline as ReturnType<typeof vi.fn>).mockReset();
+  (api.updateNovelOutline as ReturnType<typeof vi.fn>).mockImplementation((_p, body) => Promise.resolve(body));
   (api.getConcept as ReturnType<typeof vi.fn>).mockReset();
   (api.getWorld as ReturnType<typeof vi.fn>).mockReset();
   (api.getCharacter as ReturnType<typeof vi.fn>).mockReset();
@@ -702,5 +714,139 @@ describe("InitWizardModal", () => {
         expect.any(String),
       ),
     );
+  });
+});
+
+// ===========================================================================
+// "保存修改" button (footer between 重新生成 and 确认修改并继续). Persists
+// the current page content to disk WITHOUT advancing the wizard. Each step
+// that has data registers a saveHandler; MapStep (step 4) does not.
+//
+// Tests below verify:
+//   1. The button renders for steps with data, in the correct DOM order.
+//   2. The button does NOT render for MapStep (no data to save).
+//   3. Clicking it calls the right api.update* wrapper and stays on the
+//      current step (no advance, no currentStep change).
+// ===========================================================================
+
+describe("InitWizardModal footer 保存修改 button", () => {
+  it("renders the button between 重新生成 and 确认修改并继续 in DOM order (step 1)", async () => {
+    seedFiles({ concept: CONCEPT_FIXTURE });
+    renderModal();
+    await waitFor(() => screen.getByTestId("concept-form"));
+    expect(screen.getByTestId("wizard-regenerate")).toBeInTheDocument();
+    expect(screen.getByTestId("wizard-save")).toBeInTheDocument();
+    expect(screen.getByTestId("wizard-next")).toBeInTheDocument();
+    // DOM order: regenerate precedes save, save precedes next.
+    const regen = screen.getByTestId("wizard-regenerate");
+    const save = screen.getByTestId("wizard-save");
+    const next = screen.getByTestId("wizard-next");
+    expect(
+      regen.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      save.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("does NOT render 保存修改 on step 4 (MapStep — no data to save)", () => {
+    seedStep(4, [1, 2, 3]);
+    renderModal();
+    expect(screen.getByTestId("map-step")).toBeInTheDocument();
+    expect(screen.queryByTestId("wizard-save")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("wizard-regenerate")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("wizard-next")).not.toBeInTheDocument();
+  });
+
+  // --- step 1: ConceptStep ---
+  it("step 1: clicking 保存修改 calls updateConcept + markStepGenerated, no advance", async () => {
+    seedFiles({ concept: CONCEPT_FIXTURE });
+    renderModal();
+    await waitFor(() => screen.getByTestId("concept-form"));
+    const saveBtn = await screen.findByTestId("wizard-save");
+    await act(async () => {
+      saveBtn.click();
+    });
+    await waitFor(() => expect(api.updateConcept).toHaveBeenCalled());
+    // No advance call — 保存修改 stays on the current step.
+    expect(api.advance).not.toHaveBeenCalled();
+    // Still on step 1: ConceptStep remains mounted.
+    expect(screen.getByTestId("concept-step")).toBeInTheDocument();
+  });
+
+  // --- step 2: WorldStep ---
+  it("step 2: clicking 保存修改 calls updateWorld + markStepGenerated, no advance", async () => {
+    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE });
+    seedStep(2, [1]);
+    renderModal();
+    await waitFor(() => screen.getByTestId("world-form"));
+    const saveBtn = await screen.findByTestId("wizard-save");
+    await act(async () => {
+      saveBtn.click();
+    });
+    await waitFor(() => expect(api.updateWorld).toHaveBeenCalled());
+    expect(api.advance).not.toHaveBeenCalled();
+    expect(screen.getByTestId("world-step")).toBeInTheDocument();
+  });
+
+  // --- step 3: CharacterStep ---
+  it("step 3: clicking 保存修改 calls updateCharacter + markStepGenerated, no advance", async () => {
+    const cardId = "c1";
+    const card = buildCharacter(cardId);
+    seedFiles({
+      concept: CONCEPT_FIXTURE,
+      world: WORLD_FIXTURE,
+      character: { characters: [card], current: card },
+    });
+    seedStep(3, [1, 2]);
+    renderModal();
+    await waitFor(() => screen.getByTestId("character-form"));
+    const saveBtn = await screen.findByTestId("wizard-save");
+    await act(async () => {
+      saveBtn.click();
+    });
+    await waitFor(() => expect(api.updateCharacter).toHaveBeenCalled());
+    // CharacterStep's handleNext calls advance(STAGE3); handleSave must NOT.
+    expect(api.advance).not.toHaveBeenCalled();
+    expect(screen.getByTestId("character-step")).toBeInTheDocument();
+  });
+
+  // --- step 5: OutlineStep ---
+  it("step 5: clicking 保存修改 calls updateNovelOutline + markStepGenerated, no advance", async () => {
+    seedFiles({
+      concept: CONCEPT_FIXTURE,
+      world: WORLD_FIXTURE,
+      character: { characters: [{ name: "林峰" }], current: { 林峰: { role: "protagonist" } } },
+      novelOutline: NOVEL_OUTLINE_FIXTURE,
+    });
+    seedStep(5, [1, 2, 3, 4]);
+    renderModal();
+    await waitFor(() => screen.getByTestId("outline-form"));
+    const saveBtn = await screen.findByTestId("wizard-save");
+    await act(async () => {
+      saveBtn.click();
+    });
+    await waitFor(() => expect(api.updateNovelOutline).toHaveBeenCalled());
+    expect(api.advance).not.toHaveBeenCalled();
+    expect(screen.getByTestId("outline-step")).toBeInTheDocument();
+  });
+
+  // --- step 6: ChapterOutlineStep ---
+  it("step 6: clicking 保存修改 calls updateOutline + markStepGenerated, no advance", async () => {
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      chapters: [{ chapter_number: 1, title: "第一章", summary: "x", scene_plan: [] }],
+    });
+    seedStep(6, [1, 2, 3, 4, 5]);
+    renderModal();
+    await waitFor(() => screen.getByTestId("chapter-outline-form"));
+    const saveBtn = await screen.findByTestId("wizard-save");
+    await act(async () => {
+      saveBtn.click();
+    });
+    await waitFor(() => expect(api.updateOutline).toHaveBeenCalled());
+    // handleFinish navigates to /workspace — 保存修改 must NOT.
+    expect(api.advance).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.getByTestId("chapter-outline-step")).toBeInTheDocument();
   });
 });

@@ -103,6 +103,20 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
     }
   };
 
+  const handleSave = async () => {
+    const current = outlineRef.current;
+    if (!current) return;
+    setBusy(true);
+    try {
+      await api.updateOutline(projectId, current);
+      wizard.markStepGenerated(6, { chapter1_outline: current });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "章节大纲保存失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Sync local `outline` state from wizard.data when prefill lands. Only
   // overwrite if local state is still null (no outline yet).
   useEffect(() => {
@@ -131,10 +145,10 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizard.prefillComplete]);
 
-  // 重新生成 moves to the modal footer. 完成 → 进入工作台 stays in the
-  // form per current spec (not part of the 下一步/重新生成 rename). The
-  // regenerate button is enabled for the form, the completed state, and
-  // the error state so the user can recover from a generation failure.
+  // 重新生成 / 保存修改 move to the modal footer. 完成 → 进入工作台 stays
+  // in the form per current spec (not part of the 下一步/重新生成 rename).
+  // The regenerate button is enabled for the form, the completed state,
+  // and the error state so the user can recover from a generation failure.
   useEffect(() => {
     const hasOutline = !!outline && outline.chapters.length > 0;
     const canRegenerate =
@@ -145,8 +159,10 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       canRegenerate ? () => setShowRegenerateModal(true) : null,
       busy,
     );
+    wizard.setSaveHandler(hasOutline ? handleSave : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
+      wizard.setSaveHandler(null, false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!outline, outline?.chapters.length, busy]);

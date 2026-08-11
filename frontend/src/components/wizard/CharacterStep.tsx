@@ -141,6 +141,20 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     }
   };
 
+  const handleSave = async () => {
+    const current = charactersRef.current;
+    if (!current) return;
+    setBusy(true);
+    try {
+      await api.updateCharacter(projectId, current);
+      wizard.markStepGenerated(3, { characters: current });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "角色保存失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleDeleteConfirm = async () => {
     if (!deletingId) return;
     if (busy) return;
@@ -351,8 +365,8 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizard.prefillComplete]);
 
-  // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
-  // just registers the handlers and the current busy state.
+  // 重新生成 / 保存修改 / 确认修改并继续 are rendered by the modal footer;
+  // the step just registers the handlers and the current busy state.
   //
   // wizard.status is in the deps (matching ConceptStep's pattern) so the
   // effect re-runs when the LLM call rejects: status goes
@@ -369,9 +383,11 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       wizard.status === "completed" ||
       wizard.status === "error";
     wizard.setRegenerateHandler(canRegenerate ? requestRegenerate : null, busy);
+    wizard.setSaveHandler(hasChars ? handleSave : null, busy);
     wizard.setNextHandler(hasChars ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
+      wizard.setSaveHandler(null, false);
       wizard.setNextHandler(null, false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

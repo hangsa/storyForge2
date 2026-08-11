@@ -198,10 +198,12 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           )}
         </main>
 
-        {/* Footer: 上一步 on the left; the current step's 重新生成 and
-            确认修改并继续 (registered via setNextHandler / setRegenerateHandler
-            in WizardContext) on the right. ChapterOutlineStep keeps its own
-            "完成 → 进入工作台" inside the form for now. */}
+        {/* Footer: 上一步 on the left; the current step's 重新生成 /
+            保存修改 / 确认修改并继续 (registered via setRegenerateHandler /
+            setSaveHandler / setNextHandler in WizardContext) on the right.
+            保存修改 persists the current page content without advancing;
+            确认修改并继续 persists AND advances. ChapterOutlineStep keeps
+            its own "完成 → 进入工作台" inside the form for now. */}
         <footer className="flex items-center justify-between px-6 py-4 border-t border-outline-variant">
           <button
             data-testid="wizard-prev"
@@ -222,6 +224,17 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
                 className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
               >
                 重新生成
+              </button>
+            )}
+            {wizard.saveHandler && (
+              <button
+                data-testid="wizard-save"
+                type="button"
+                onClick={wizard.saveHandler}
+                disabled={wizard.saveDisabled}
+                className="px-4 py-2 text-sm bg-surface-container text-primary rounded-lg hover:bg-surface-container-low disabled:opacity-40"
+              >
+                保存修改
               </button>
             )}
             {wizard.nextHandler && (

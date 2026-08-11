@@ -55,6 +55,18 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
     }
   };
 
+  const handleSave = async () => {
+    setBusy(true);
+    try {
+      const saved = await api.updateNovelOutline(projectId, outlineRef.current);
+      wizard.markStepGenerated(5, { novel_outline: saved });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "大纲保存失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSectionRegenerate = (
     section: "core_conflict" | "volumes" | "mc_growth" | "key_plot",
   ) => async (mods: string) => {
@@ -108,8 +120,8 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizard.prefillComplete]);
 
-  // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
-  // just registers the handlers and the current busy state.
+  // 重新生成 / 保存修改 / 确认修改并继续 are rendered by the modal footer;
+  // the step just registers the handlers and the current busy state.
   useEffect(() => {
     const canRegenerate =
       !!wizard.data.novel_outline ||
@@ -117,9 +129,11 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       wizard.status === "error";
     const canSave = !!wizard.data.novel_outline || wizard.status === "completed";
     wizard.setRegenerateHandler(canRegenerate ? () => setShowRegenerateModal(true) : null, busy);
+    wizard.setSaveHandler(canSave ? handleSave : null, busy);
     wizard.setNextHandler(canSave ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
+      wizard.setSaveHandler(null, false);
       wizard.setNextHandler(null, false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

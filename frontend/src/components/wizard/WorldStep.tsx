@@ -103,6 +103,18 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     }
   };
 
+  const handleSave = async () => {
+    setBusy(true);
+    try {
+      await api.updateWorld(projectId, worldRef.current);
+      wizard.markStepGenerated(2, { world: worldRef.current });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "世界观保存失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSectionRegenerate = (
     section: "era" | "power_system" | "core_rules" | "factions",
   ) => async (mods: string) => {
@@ -166,8 +178,8 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizard.prefillComplete]);
 
-  // 重新生成 / 确认修改并继续 are rendered by the modal footer; the step
-  // just registers the handlers and the current busy state.
+  // 重新生成 / 保存修改 / 确认修改并继续 are rendered by the modal footer;
+  // the step just registers the handlers and the current busy state.
   useEffect(() => {
     const canRegenerate =
       !!wizard.data.world ||
@@ -175,9 +187,11 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       wizard.status === "error";
     const canSave = !!wizard.data.world || wizard.status === "completed";
     wizard.setRegenerateHandler(canRegenerate ? () => setShowRegenerateModal(true) : null, busy);
+    wizard.setSaveHandler(canSave ? handleSave : null, busy);
     wizard.setNextHandler(canSave ? handleNext : null, busy);
     return () => {
       wizard.setRegenerateHandler(null, false);
+      wizard.setSaveHandler(null, false);
       wizard.setNextHandler(null, false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

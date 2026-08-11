@@ -87,31 +87,35 @@
    dark tokens above. Applied via .light on <html> (set by useTheme hook).
    Default (no .light) keeps dark values. */
 .light {
-  --color-canvas-bg: #f8fafc;
-  --color-canvas-surface: #ffffff;
-  --color-canvas-text-muted: #64748b;
-  --color-canvas-text-secondary: #475569;
-  --color-canvas-accent: #006970;
-  --color-background: #ffffff;
-  --color-on-background: #0f172a;
+  /* Canvas sits a step below the card surfaces so panels read as raised
+     rather than blending into a flat sheet of white. Text tokens are picked
+     for >=7:1 (AAA body) against their own surface, except -muted which is
+     >=4.5:1 and reserved for incidental labels. */
+  --color-canvas-bg: #e7ebf2;
+  --color-canvas-surface: #fbfcfe;
+  --color-canvas-text-muted: #4b5a6e;
+  --color-canvas-text-secondary: #2f3b4d;
+  --color-canvas-accent: #005c63;
+  --color-background: #eef1f6;
+  --color-on-background: #101828;
 
-  --color-surface: #ffffff;
-  --color-surface-dim: #f1f5f9;
-  --color-surface-bright: #f8fafc;
-  --color-surface-panel: #f8fafc;
-  --color-surface-variant: #e2e8f0;
-  --color-surface-container: #f1f5f9;
-  --color-surface-container-low: #f8fafc;
+  --color-surface: #fbfcfe;
+  --color-surface-dim: #e2e7ef;
+  --color-surface-bright: #ffffff;
+  --color-surface-panel: #f4f6fa;
+  --color-surface-variant: #dbe1ea;
+  --color-surface-container: #eef1f6;
+  --color-surface-container-low: #f4f6fa;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-high: #e2e8f0;
-  --color-surface-container-highest: #cbd5e1;
-  --color-on-surface: #0f172a;
-  --color-on-surface-variant: #475569;
-  --color-inverse-surface: #0f172a;
+  --color-surface-container-high: #e2e7ef;
+  --color-surface-container-highest: #d3dae4;
+  --color-on-surface: #101828;
+  --color-on-surface-variant: #3a4658;
+  --color-inverse-surface: #101828;
   --color-inverse-on-surface: #f1f5f9;
-  --color-outline: #94a3b8;
-  --color-outline-variant: #cbd5e1;
-  --color-surface-tint: #006970;
+  --color-outline: #7d8ca1;
+  --color-outline-variant: #c3ccda;
+  --color-surface-tint: #005c63;
 
   --color-primary: #006970;
   --color-on-primary: #ffffff;
@@ -149,8 +153,8 @@
 
   --color-warning-p1: #f59e0b;
 
-  --color-system-log: #64748b;
-  --color-novelty-high: #2563eb;
+  --color-system-log: #4b5a6e;
+  --color-novelty-high: #1d4ed8;
   --color-saturation-high: #ef4444;
 }
 

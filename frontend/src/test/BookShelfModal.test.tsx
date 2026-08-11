@@ -150,6 +150,7 @@ describe("BookShelfModal default-select mode", () => {
 });
 
 describe("BookShelfModal 多选 + 批量删除 (moved from BookShelf)", () => {
+  it("renders a '多选' toggle button in the modal header", () => {
     renderModal();
     expect(screen.getByRole("button", { name: /多选/ })).toBeInTheDocument();
   });

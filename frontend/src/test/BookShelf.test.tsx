@@ -115,6 +115,22 @@ describe("BookShelf", () => {
     expect(await screen.findByText(/还没有项目/)).toBeInTheDocument();
   });
 
+  it("renders '查看全部' even when fewer than DEFAULT_VISIBLE projects fit on the shelf", async () => {
+    // Regression: previously the button was gated on filtered.length > DEFAULT_VISIBLE,
+    // which hid it whenever the user had 1-5 books and left no way to enter the modal.
+    const FEW = SAMPLE.slice(0, 3);
+    renderShelf({ projects: FEW });
+    await screen.findByText("诡眼少年");
+    expect(screen.getByRole("button", { name: /查看全部/ })).toBeInTheDocument();
+  });
+
+  it("does NOT render '查看全部' when there is only 1 project (nothing extra to view)", async () => {
+    const ONE = [SAMPLE[0]];
+    renderShelf({ projects: ONE });
+    await screen.findByText("诡眼少年");
+    expect(screen.queryByRole("button", { name: /查看全部/ })).not.toBeInTheDocument();
+  });
+
   it("renders a '查看全部' button that opens the modal", async () => {
     renderShelf();
     await screen.findByText("诡眼少年");

@@ -117,7 +117,7 @@ export default function BookShelf({ projects, loading, onProjectsDeleted }: Book
               <BookCard key={p.id} project={p} />
             ))}
           </div>
-          {filtered.length > DEFAULT_VISIBLE && (
+          {filtered.length > 1 && (
             <div className="text-center">
               <button
                 onClick={() => setShowModal(true)}

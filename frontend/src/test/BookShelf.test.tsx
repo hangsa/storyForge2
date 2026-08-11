@@ -135,13 +135,16 @@ describe("BookShelf", () => {
     expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
   });
 
-  it("opening the 查看全部 modal surfaces the 多选 button", async () => {
+  it("opening the 查看全部 modal shows the default-select-mode modal (no 多选 toggle)", async () => {
     renderShelf();
     await screen.findByText("诡眼少年");
     await act(async () => {
       screen.getByRole("button", { name: /查看全部/ }).click();
     });
-    expect(await screen.findByRole("button", { name: /多选/ })).toBeInTheDocument();
+    // Modal is open with the multi-select-by-default UI; no 多选 toggle button.
+    expect(await screen.findByTestId("book-shelf-modal")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /多选/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bulk-action-bar")).not.toBeInTheDocument();
   });
 
   it("INIT-stage book click navigates to the wizard deep-link", async () => {

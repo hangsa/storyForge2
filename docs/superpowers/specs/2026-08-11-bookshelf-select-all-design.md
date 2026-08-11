@@ -18,7 +18,7 @@ The bulk-action-bar appears the moment the user has ≥1 item selected, and hide
 
 The current modal requires the user to click "多选" before they can select anything. That's two clicks to do what should be one. Selection is also the modal's only meaningful purpose (every other interaction in the modal leads to selection + bulk-delete), so making it default eliminates the toggle without losing any capability.
 
-The split click-zone is the natural evolution: users who want to *open* a project click the title (its meaning is self-evident); users who want to *manage* a project click the card body, where the check icon in the top-left signals the selectable nature of the area.
+The split click-zone is the natural evolution: users who want to *open* a project click the title (its meaning is self-evident); users who want to *manage* a project click the card body, where the check icon in the top-right corner signals the selectable nature of the area.
 
 ## Scope
 

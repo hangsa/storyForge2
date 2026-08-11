@@ -1,7 +1,7 @@
 tiers:
   tier_1:
     description: 创意核心 — 概念/世界观/角色/地图/大纲/创意引擎/成长讨论
-    default: deepseek-v4-pro
+    default: deepseek-v4-flash
     retry_on_failure: true
     max_retries: 2
     fallback: MiniMax-M3

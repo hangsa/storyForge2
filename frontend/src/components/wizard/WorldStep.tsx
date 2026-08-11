@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import api, { World } from "../../api/client";
+import api, { PowerSystem, World } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
 import { RegenerateModal } from "../shared/RegenerateModal";
@@ -15,7 +15,7 @@ const EMPTY_WORLD: World = {
   geography: "",
   era_social_structure: "",
   era_cultural_history: "",
-  power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+  power_systems: [],
   factions: [],
   core_rules: [],
 };
@@ -31,6 +31,9 @@ const EMPTY_WORLD: World = {
  * The backend now coerces these via World model field_validators, but we
  * keep this as a defensive fallback so the form renders even if a stale
  * world.json slips through (e.g. cached response, in-flight save).
+ *
+ * This is also where the singular `power_system` of pre-multi-system
+ * world.json gets folded into the `power_systems` array.
  */
 function normalizeLegacyWorld(w: World | null): World {
   if (!w) return EMPTY_WORLD;
@@ -48,16 +51,40 @@ function normalizeLegacyWorld(w: World | null): World {
     }
     return [];
   };
-  return {
+  const legacy = (w as World & { power_system?: unknown }).power_system;
+  const raw: unknown[] = Array.isArray(w.power_systems)
+    ? w.power_systems
+    : legacy && typeof legacy === "object"
+      ? [legacy]
+      : [];
+  const power_systems: PowerSystem[] = raw
+    .filter((ps): ps is Record<string, unknown> => !!ps && typeof ps === "object")
+    .map((ps) => ({
+      name: coerceString(ps.name),
+      description: coerceString(ps.description),
+      stages: coerceStages(ps.stages),
+      core_rules: coerceStages(ps.core_rules),
+      ceilings: coerceStages(ps.ceilings),
+      cost_system: coerceString(ps.cost_system),
+    }));
+  const next = {
     ...w,
     era_social_structure: coerceString(w.era_social_structure),
     era_cultural_history: coerceString(w.era_cultural_history),
-    power_system: {
-      ...w.power_system,
-      stages: coerceStages(w.power_system.stages),
-    },
+    power_systems,
   };
+  delete (next as World & { power_system?: unknown }).power_system;
+  return next;
 }
+
+const EMPTY_POWER_SYSTEM: PowerSystem = {
+  name: "",
+  description: "",
+  stages: [],
+  core_rules: [],
+  ceilings: [],
+  cost_system: "",
+};
 
 type FactionField = "name" | "type" | "goal" | "relations";
 
@@ -79,7 +106,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     setBusy(true);
     try {
       const result = await api.generateWorld(projectId, userModifications);
-      const merged = { ...EMPTY_WORLD, ...result };
+      const merged = normalizeLegacyWorld({ ...EMPTY_WORLD, ...result });
       setWorld(merged);
       // v1.8.4: mark generated so step 2 stays reachable in the indicator
       // when the user navigates away before clicking "下一步".
@@ -120,7 +147,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   ) => async (mods: string) => {
     try {
       const result = await api.regenerateWorldSection(projectId, section, mods);
-      const merged = { ...EMPTY_WORLD, ...result };
+      const merged = normalizeLegacyWorld({ ...EMPTY_WORLD, ...result });
       setWorld(merged);
       wizard.markStepGenerated(2, { world: merged });
     } catch (e) {
@@ -128,11 +155,23 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     }
   };
 
-  const setPowerSystemField = <K extends "name" | "description" | "cost_system">(
+  const updatePowerSystem = <K extends keyof PowerSystem>(
+    index: number,
     key: K,
-    value: World["power_system"][K],
+    value: PowerSystem[K],
   ) => {
-    setWorld({ ...world, power_system: { ...world.power_system, [key]: value } });
+    const next = world.power_systems.map((ps, i) =>
+      i === index ? { ...ps, [key]: value } : ps,
+    );
+    setWorld({ ...world, power_systems: next });
+  };
+
+  const addPowerSystem = () => {
+    setWorld({ ...world, power_systems: [...world.power_systems, { ...EMPTY_POWER_SYSTEM }] });
+  };
+
+  const removePowerSystem = (index: number) => {
+    setWorld({ ...world, power_systems: world.power_systems.filter((_, i) => i !== index) });
   };
 
   const updateFaction = (index: number, field: FactionField, value: string) => {
@@ -274,68 +313,107 @@ export default function WorldStep({ projectId }: WorldStepProps) {
           <div className="border border-outline-variant rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">力量体系</div>
-              <SectionRegenerateButton
-                target="力量体系"
-                onRegenerate={handleSectionRegenerate("power_system")}
-                testId="world-power-system-regenerate"
-              />
+              <div className="flex items-center gap-1">
+                <SectionRegenerateButton
+                  target="力量体系"
+                  onRegenerate={handleSectionRegenerate("power_system")}
+                  testId="world-power-system-regenerate"
+                />
+                <button
+                  type="button"
+                  data-testid="world-power-system-add"
+                  onClick={addPowerSystem}
+                  disabled={busy}
+                  className="flex items-center gap-1 px-2 py-1 text-xs border border-dashed
+                             border-system-log/30 rounded text-system-log/60
+                             hover:text-primary-container hover:border-primary-container/50
+                             transition-colors disabled:opacity-30"
+                >
+                  <span className="material-symbols-outlined text-xs">add</span>
+                  添加体系
+                </button>
+              </div>
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">体系名称</label>
-                <input
-                  value={world.power_system.name}
-                  onChange={(e) => setPowerSystemField("name", e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
-                <AutoTextarea
-                  value={world.power_system.description}
-                  onChange={(e) => setPowerSystemField("description", e.target.value)}
-                  rows={2}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-                />
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">阶段划分</label>
-                <div data-testid="world-power-stages">
-                  <TagEditor
-                    items={world.power_system.stages ?? []}
-                    onItemsChange={(items) => setPowerSystemField("stages", items)}
-                    saving={busy}
-                  />
+            <div data-testid="world-power-systems" className="space-y-3">
+              {world.power_systems.length === 0 && (
+                <p className="font-body-ui text-system-log/40 text-xs text-center py-3">暂无力量体系</p>
+              )}
+              {world.power_systems.map((ps, i) => (
+                <div
+                  key={i}
+                  data-testid={`world-power-system-${i}`}
+                  className="border border-outline-variant rounded p-3 space-y-2 relative"
+                >
+                  <button
+                    type="button"
+                    data-testid={`world-power-system-${i}-remove`}
+                    onClick={() => removePowerSystem(i)}
+                    disabled={busy}
+                    aria-label="删除力量体系"
+                    className="absolute top-2 right-2 text-system-log/40 hover:text-error transition-colors disabled:opacity-30"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                  <div className="pr-6">
+                    <label className="block font-label-mono text-system-log mb-1 text-[10px]">体系名称</label>
+                    <input
+                      data-testid={`world-power-system-${i}-name`}
+                      value={ps.name}
+                      onChange={(e) => updatePowerSystem(i, "name", e.target.value)}
+                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-label-mono text-system-log mb-1 text-[10px]">描述</label>
+                    <AutoTextarea
+                      data-testid={`world-power-system-${i}-description`}
+                      value={ps.description}
+                      onChange={(e) => updatePowerSystem(i, "description", e.target.value)}
+                      rows={2}
+                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-label-mono text-system-log mb-1 text-[10px]">阶段划分</label>
+                    <div data-testid={`world-power-system-${i}-stages`}>
+                      <TagEditor
+                        items={ps.stages ?? []}
+                        onItemsChange={(items) => updatePowerSystem(i, "stages", items)}
+                        saving={busy}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-label-mono text-system-log mb-1 text-[10px]">体系规则</label>
+                    <div data-testid={`world-power-system-${i}-rules`}>
+                      <TagEditor
+                        items={ps.core_rules ?? []}
+                        onItemsChange={(items) => updatePowerSystem(i, "core_rules", items)}
+                        saving={busy}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-label-mono text-system-log mb-1 text-[10px]">力量上限</label>
+                    <div data-testid={`world-power-system-${i}-ceilings`}>
+                      <TagEditor
+                        items={ps.ceilings ?? []}
+                        onItemsChange={(items) => updatePowerSystem(i, "ceilings", items)}
+                        saving={busy}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-label-mono text-system-log mb-1 text-[10px]">代价系统</label>
+                    <input
+                      data-testid={`world-power-system-${i}-cost`}
+                      value={ps.cost_system ?? ""}
+                      onChange={(e) => updatePowerSystem(i, "cost_system", e.target.value)}
+                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">体系规则</label>
-                <div data-testid="world-power-rules">
-                  <TagEditor
-                    items={world.power_system.core_rules ?? []}
-                    onItemsChange={(items) => setPowerSystemField("core_rules", items)}
-                    saving={busy}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">力量上限</label>
-                <div data-testid="world-power-ceilings">
-                  <TagEditor
-                    items={world.power_system.ceilings ?? []}
-                    onItemsChange={(items) => setPowerSystemField("ceilings", items)}
-                    saving={busy}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">代价系统</label>
-                <input
-                  value={world.power_system.cost_system ?? ""}
-                  onChange={(e) => setPowerSystemField("cost_system", e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
+              ))}
             </div>
           </div>
 

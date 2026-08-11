@@ -942,95 +942,112 @@ export default function Stage2Page() {
                   </div>
                 </GlassPanel>
 
-                {/* Power System */}
+                {/* Power Systems */}
                 <GlassPanel>
                   <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
                     力量体系
                   </h2>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-label-mono text-system-log text-xs">体系名称</span>
-                        <button onClick={() => handleEditStart("power_system.name", world.power_system.name)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
-                          <span className="material-symbols-outlined text-sm">edit</span>
-                        </button>
-                      </div>
-                      {editingField === "power_system.name" ? (
-                        <div className="flex gap-2 mt-1">
-                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                            className="flex-1 input-underline text-sm" autoFocus
-                            onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
-                          <button onClick={handleWorldEditSave} disabled={saving}
-                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
-                            {saving ? "保存中..." : "保存"}
-                          </button>
+                  <div className="space-y-6">
+                    {(world.power_systems ?? []).length === 0 && (
+                      <p className="font-body-ui text-system-log/40 text-xs">暂无力量体系</p>
+                    )}
+                    {(world.power_systems ?? []).map((ps, i) => (
+                      <div key={i} data-testid={`stage2-power-system-${i}`} className="space-y-4">
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-label-mono text-system-log text-xs">体系名称</span>
+                            <button onClick={() => handleEditStart(`power_systems.${i}.name`, ps.name)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                              <span className="material-symbols-outlined text-sm">edit</span>
+                            </button>
+                          </div>
+                          {editingField === `power_systems.${i}.name` ? (
+                            <div className="flex gap-2 mt-1">
+                              <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                                className="flex-1 input-underline text-sm" autoFocus
+                                onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
+                              <button onClick={handleWorldEditSave} disabled={saving}
+                                className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                                {saving ? "保存中..." : "保存"}
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="font-body-narrative text-primary text-sm mt-1">{ps.name || <span className="text-system-log/40">待填写</span>}</p>
+                          )}
                         </div>
-                      ) : (
-                        <p className="font-body-narrative text-primary text-sm mt-1">{world.power_system.name || <span className="text-system-log/40">待填写</span>}</p>
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-label-mono text-system-log text-xs">描述</span>
-                        <button onClick={() => handleEditStart("power_system.description", world.power_system.description)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
-                          <span className="material-symbols-outlined text-sm">edit</span>
-                        </button>
-                      </div>
-                      {editingField === "power_system.description" ? (
-                        <div className="flex gap-2 mt-1">
-                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                            className="flex-1 input-underline text-sm" autoFocus
-                            onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
-                          <button onClick={handleWorldEditSave} disabled={saving}
-                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
-                            {saving ? "保存中..." : "保存"}
-                          </button>
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-label-mono text-system-log text-xs">描述</span>
+                            <button onClick={() => handleEditStart(`power_systems.${i}.description`, ps.description)} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                              <span className="material-symbols-outlined text-sm">edit</span>
+                            </button>
+                          </div>
+                          {editingField === `power_systems.${i}.description` ? (
+                            <div className="flex gap-2 mt-1">
+                              <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                                className="flex-1 input-underline text-sm" autoFocus
+                                onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
+                              <button onClick={handleWorldEditSave} disabled={saving}
+                                className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                                {saving ? "保存中..." : "保存"}
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="font-body-narrative text-primary text-sm mt-1">{ps.description || <span className="text-system-log/40">待填写</span>}</p>
+                          )}
                         </div>
-                      ) : (
-                        <p className="font-body-narrative text-primary text-sm mt-1">{world.power_system.description || <span className="text-system-log/40">待填写</span>}</p>
-                      )}
-                    </div>
-                    <div className="mt-4">
-                      <span className="font-label-mono text-system-log text-xs">阶段划分</span>
-                      <div className="mt-1">
-                        <TagEditor
-                          items={world.power_system.stages}
-                          onItemsChange={(newItems) => handleArrayChange("power_system.stages", newItems)}
-                          saving={saving}
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <span className="font-label-mono text-system-log text-xs">体系规则</span>
-                      <div className="mt-1">
-                        <TagEditor
-                          items={world.power_system.core_rules || []}
-                          onItemsChange={(newItems) => handleArrayChange("power_system.core_rules", newItems)}
-                          saving={saving}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-label-mono text-system-log text-xs">代价系统</span>
-                        <button onClick={() => handleEditStart("power_system.cost_system", world.power_system.cost_system || "")} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
-                          <span className="material-symbols-outlined text-sm">edit</span>
-                        </button>
-                      </div>
-                      {editingField === "power_system.cost_system" ? (
-                        <div className="flex gap-2 mt-1">
-                          <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                            className="flex-1 input-underline text-sm" autoFocus
-                            onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
-                          <button onClick={handleWorldEditSave} disabled={saving}
-                            className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
-                            {saving ? "保存中..." : "保存"}
-                          </button>
+                        <div className="mt-4">
+                          <span className="font-label-mono text-system-log text-xs">阶段划分</span>
+                          <div className="mt-1">
+                            <TagEditor
+                              items={ps.stages ?? []}
+                              onItemsChange={(newItems) => handleArrayChange(`power_systems.${i}.stages`, newItems)}
+                              saving={saving}
+                            />
+                          </div>
                         </div>
-                      ) : (
-                        <p className="font-body-narrative text-primary text-sm mt-1">{world.power_system.cost_system || <span className="text-system-log/40">待填写</span>}</p>
-                      )}
-                    </div>
+                        <div className="mt-4">
+                          <span className="font-label-mono text-system-log text-xs">体系规则</span>
+                          <div className="mt-1">
+                            <TagEditor
+                              items={ps.core_rules ?? []}
+                              onItemsChange={(newItems) => handleArrayChange(`power_systems.${i}.core_rules`, newItems)}
+                              saving={saving}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-4">
+                          <span className="font-label-mono text-system-log text-xs">力量上限</span>
+                          <div className="mt-1">
+                            <TagEditor
+                              items={ps.ceilings ?? []}
+                              onItemsChange={(newItems) => handleArrayChange(`power_systems.${i}.ceilings`, newItems)}
+                              saving={saving}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-label-mono text-system-log text-xs">代价系统</span>
+                            <button onClick={() => handleEditStart(`power_systems.${i}.cost_system`, ps.cost_system || "")} className="font-body-ui text-xs text-tertiary-container hover:text-primary-container">
+                              <span className="material-symbols-outlined text-sm">edit</span>
+                            </button>
+                          </div>
+                          {editingField === `power_systems.${i}.cost_system` ? (
+                            <div className="flex gap-2 mt-1">
+                              <input value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                                className="flex-1 input-underline text-sm" autoFocus
+                                onKeyDown={(e) => e.key === "Enter" && handleWorldEditSave()} />
+                              <button onClick={handleWorldEditSave} disabled={saving}
+                                className="px-3 py-1.5 bg-primary-container text-surface-container-low rounded text-sm">
+                                {saving ? "保存中..." : "保存"}
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="font-body-narrative text-primary text-sm mt-1">{ps.cost_system || <span className="text-system-log/40">待填写</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </GlassPanel>
 
@@ -1042,18 +1059,6 @@ export default function Stage2Page() {
                   <TagEditor
                     items={world.core_rules}
                     onItemsChange={(newItems) => handleArrayChange("core_rules", newItems)}
-                    saving={saving}
-                  />
-                </GlassPanel>
-
-                {/* Ceilings */}
-                <GlassPanel>
-                  <h2 className="font-label-mono text-system-log uppercase tracking-wider mb-4">
-                    力量上限
-                  </h2>
-                  <TagEditor
-                    items={world.power_system.ceilings}
-                    onItemsChange={(newItems) => handleArrayChange("power_system.ceilings", newItems)}
                     saving={saving}
                   />
                 </GlassPanel>

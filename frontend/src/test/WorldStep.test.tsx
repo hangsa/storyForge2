@@ -63,7 +63,7 @@ describe("WorldStep", () => {
       geography: "中原",
       era_social_structure: "分封制",
       era_cultural_history: "百家争鸣",
-      power_system: { name: "X", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "X", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [],
       core_rules: [],
     });
@@ -78,7 +78,7 @@ describe("WorldStep", () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
-      power_system: { name: "X", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "X", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [],
       core_rules: [],
     });
@@ -94,7 +94,7 @@ describe("WorldStep", () => {
       geography: "中原",
       era_social_structure: "分封制",
       era_cultural_history: "百家争鸣",
-      power_system: { name: "X", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "X", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [],
       core_rules: [],
     });
@@ -114,33 +114,139 @@ describe("WorldStep", () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
-      power_system: {
-        name: "灵力",
-        description: "",
-        stages: ["炼气", "筑基"],
-        core_rules: ["天地灵气有限"],
-        ceilings: ["最高元婴"],
-      },
+      power_systems: [
+        {
+          name: "灵力",
+          description: "",
+          stages: ["炼气", "筑基"],
+          core_rules: ["天地灵气有限"],
+          ceilings: ["最高元婴"],
+        },
+      ],
       factions: [],
       core_rules: ["弱肉强食"],
     });
     setup();
     await screen.findByTestId("world-form");
-    expect(screen.getByTestId("world-power-stages")).toBeInTheDocument();
-    expect(screen.getByTestId("world-power-rules")).toBeInTheDocument();
-    expect(screen.getByTestId("world-power-ceilings")).toBeInTheDocument();
+    expect(screen.getByTestId("world-power-system-0-stages")).toBeInTheDocument();
+    expect(screen.getByTestId("world-power-system-0-rules")).toBeInTheDocument();
+    expect(screen.getByTestId("world-power-system-0-ceilings")).toBeInTheDocument();
     expect(screen.getByTestId("world-core-rules")).toBeInTheDocument();
     // Each TagEditor renders existing items as buttons.
-    expect(screen.getByTestId("world-power-stages").textContent).toContain("炼气");
-    expect(screen.getByTestId("world-power-ceilings").textContent).toContain("最高元婴");
+    expect(screen.getByTestId("world-power-system-0-stages").textContent).toContain("炼气");
+    expect(screen.getByTestId("world-power-system-0-ceilings").textContent).toContain("最高元婴");
     expect(screen.getByTestId("world-core-rules").textContent).toContain("弱肉强食");
+  });
+
+  it("renders every power system as its own card", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [
+        { name: "灵力", description: "", stages: ["炼气"], core_rules: [], ceilings: [] },
+        { name: "武道", description: "", stages: ["锻体"], core_rules: [], ceilings: [] },
+      ],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    expect(screen.getByTestId("world-power-system-0-name")).toHaveValue("灵力");
+    expect(screen.getByTestId("world-power-system-1-name")).toHaveValue("武道");
+    expect(screen.getByTestId("world-power-system-1-stages").textContent).toContain("锻体");
+  });
+
+  it("renders empty-state copy for power systems when none exist", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    expect(screen.getByTestId("world-power-systems").textContent).toContain("暂无力量体系");
+  });
+
+  it("'添加体系' appends an empty power-system card with all 6 fields", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    await act(async () => {
+      screen.getByTestId("world-power-system-add").click();
+    });
+    expect(screen.getByTestId("world-power-system-1")).toBeInTheDocument();
+    for (const field of ["name", "description", "stages", "rules", "ceilings", "cost"]) {
+      expect(screen.getByTestId(`world-power-system-1-${field}`)).toBeInTheDocument();
+    }
+  });
+
+  it("typing into two power-system cards then '确认修改并继续' persists the array", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [],
+      factions: [],
+      core_rules: [],
+    });
+    (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    setup();
+    await screen.findByTestId("world-form");
+    await act(async () => {
+      screen.getByTestId("world-power-system-add").click();
+    });
+    await act(async () => {
+      screen.getByTestId("world-power-system-add").click();
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("world-power-system-0-name"), { target: { value: "灵力" } });
+      fireEvent.change(screen.getByTestId("world-power-system-1-name"), { target: { value: "武道" } });
+      fireEvent.change(screen.getByTestId("world-power-system-1-cost"), { target: { value: "折寿" } });
+    });
+    await act(async () => {
+      screen.getByTestId("wizard-next").click();
+    });
+    await waitFor(() => expect(api.updateWorld).toHaveBeenCalledTimes(1));
+    const call = (api.updateWorld as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[1].power_systems).toHaveLength(2);
+    expect(call[1].power_systems[0].name).toBe("灵力");
+    expect(call[1].power_systems[1].name).toBe("武道");
+    expect(call[1].power_systems[1].cost_system).toBe("折寿");
+  });
+
+  it("power-system remove button drops the card and re-indexes", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [
+        { name: "A", description: "", stages: [], core_rules: [], ceilings: [] },
+        { name: "B", description: "", stages: [], core_rules: [], ceilings: [] },
+      ],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    expect(screen.getByTestId("world-power-system-1")).toBeInTheDocument();
+    await act(async () => {
+      screen.getByTestId("world-power-system-0-remove").click();
+    });
+    expect(screen.queryByTestId("world-power-system-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("world-power-system-0-name")).toHaveValue("B");
   });
 
   it("renders empty-state copy for factions when none exist", async () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [],
       core_rules: [],
     });
@@ -154,7 +260,7 @@ describe("WorldStep", () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [],
       core_rules: [],
     });
@@ -175,7 +281,7 @@ describe("WorldStep", () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [],
       core_rules: [],
     });
@@ -205,7 +311,7 @@ describe("WorldStep", () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [
         { name: "A", type: "", goal: "", relations: "" },
         { name: "B", type: "", goal: "", relations: "" },
@@ -285,10 +391,11 @@ describe("WorldStep", () => {
     const social = screen.getByTestId("world-era-social-structure") as HTMLTextAreaElement;
     expect(social.value).toContain("人类阶层");
     expect(social.value).toContain("军阀");
-    // power_system.stages is flattened — all string values appear in the
-    // TagEditor.
-    const stages = screen.getByTestId("world-power-stages");
+    // power_system is folded into power_systems[0] and its object-shaped
+    // stages flattened — all string values appear in the TagEditor.
+    const stages = screen.getByTestId("world-power-system-0-stages");
     expect(stages.textContent).toContain("养气期");
     expect(stages.textContent).toContain("贯通期");
+    expect(screen.getByTestId("world-power-system-0-name")).toHaveValue("道炁");
   });
 });

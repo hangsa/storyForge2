@@ -42,7 +42,7 @@ function setup() {
       data: {
         concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
         story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
-        world: { era: "e", geography: "g", era_social_structure: "", era_cultural_history: "", power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] }, factions: [], core_rules: [] },
+        world: { era: "e", geography: "g", era_social_structure: "", era_cultural_history: "", power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }], factions: [], core_rules: [] },
         characters: { characters: [{ id: "p" }], current: null },
         novel_outline: null,
         chapter1_outline: null,

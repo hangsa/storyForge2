@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import api, { World } from "../../../api/client";
+import api, { PowerSystem, World } from "../../../api/client";
 import { useAutoHeight } from "../../../hooks/useAutoHeight";
+import { AutoTextarea } from "../../shared/AutoTextarea";
 
 interface BaseEditorProps {
   projectId: string;
@@ -14,14 +15,22 @@ const EMPTY_WORLD: World = {
   geography: "",
   era_social_structure: null,
   era_cultural_history: null,
-  power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [], cost_system: "" },
+  power_systems: [],
   factions: [],
   core_rules: [],
 };
 
 function readWorld(data: unknown): World {
   if (!data || typeof data !== "object") return EMPTY_WORLD;
-  return { ...EMPTY_WORLD, ...(data as Partial<World>) };
+  const raw = data as Partial<World> & { power_system?: PowerSystem };
+  const power_systems = Array.isArray(raw.power_systems)
+    ? raw.power_systems
+    : raw.power_system && typeof raw.power_system === "object"
+      ? [raw.power_system]
+      : [];
+  const next = { ...EMPTY_WORLD, ...raw, power_systems };
+  delete (next as World & { power_system?: unknown }).power_system;
+  return next;
 }
 
 function chipsToString(arr: string[] | undefined): string {
@@ -47,17 +56,16 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
   const worldRef = useRef(world);
   worldRef.current = world;
   const geographyRef = useRef<HTMLTextAreaElement>(null);
-  const powerDescriptionRef = useRef<HTMLTextAreaElement>(null);
   useAutoHeight(geographyRef, [world.geography]);
-  useAutoHeight(powerDescriptionRef, [world.power_system.description]);
 
   useEffect(() => {
     setWorld(readWorld(data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  const setPs = <K extends keyof World["power_system"]>(k: K, v: World["power_system"][K]) => {
-    setWorld({ ...world, power_system: { ...world.power_system, [k]: v } });
+  const setPs = <K extends keyof PowerSystem>(index: number, k: K, v: PowerSystem[K]) => {
+    const next = world.power_systems.map((ps, i) => (i === index ? { ...ps, [k]: v } : ps));
+    setWorld({ ...world, power_systems: next });
   };
 
   const handleSave = async () => {
@@ -77,8 +85,6 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
     setWorld(readWorld(data));
     setError(null);
   };
-
-  const ps = world.power_system;
 
   return (
     <div data-testid="world-editor" className="space-y-3">
@@ -125,62 +131,74 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
       </div>
 
       <div className="border-t border-outline-variant pt-3 space-y-2">
-        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">力量体系</div>
-        <div>
-          <label className="block font-label-mono text-system-log mb-1 text-xs">名称</label>
-          <input
-            data-testid="world-power-name"
-            value={ps.name}
-            onChange={(e) => setPs("name", e.target.value)}
-            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
-          />
+        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+          力量体系 ({world.power_systems.length} 个 — 详细增删请到 Stage2)
         </div>
-        <div>
-          <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
-          <textarea
-            ref={powerDescriptionRef}
-            data-testid="world-power-description"
-            value={ps.description}
-            onChange={(e) => setPs("description", e.target.value)}
-            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
-          />
-        </div>
-        <div>
-          <label className="block font-label-mono text-system-log mb-1 text-xs">阶段 (stages, 、分隔)</label>
-          <input
-            data-testid="world-power-stages"
-            value={chipsToString(ps.stages)}
-            onChange={(e) => setPs("stages", parseChips(e.target.value))}
-            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
-          />
-        </div>
-        <div>
-          <label className="block font-label-mono text-system-log mb-1 text-xs">核心规则 (core_rules, 、分隔)</label>
-          <input
-            data-testid="world-power-rules"
-            value={chipsToString(ps.core_rules)}
-            onChange={(e) => setPs("core_rules", parseChips(e.target.value))}
-            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
-          />
-        </div>
-        <div>
-          <label className="block font-label-mono text-system-log mb-1 text-xs">天花板 (ceilings, 、分隔)</label>
-          <input
-            data-testid="world-power-ceilings"
-            value={chipsToString(ps.ceilings)}
-            onChange={(e) => setPs("ceilings", parseChips(e.target.value))}
-            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
-          />
-        </div>
-        <div>
-          <label className="block font-label-mono text-system-log mb-1 text-xs">代价体系</label>
-          <input
-            data-testid="world-power-cost"
-            value={ps.cost_system ?? ""}
-            onChange={(e) => setPs("cost_system", e.target.value)}
-            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
-          />
-        </div>
+        {world.power_systems.length === 0 && (
+          <p className="font-body-ui text-system-log/60 text-xs">尚未配置力量体系。</p>
+        )}
+        {world.power_systems.map((ps, i) => (
+          <div
+            key={i}
+            data-testid={`world-power-${i}`}
+            className="border border-outline-variant rounded-lg p-2 space-y-2"
+          >
+            <div>
+              <label className="block font-label-mono text-system-log mb-1 text-xs">名称</label>
+              <input
+                data-testid={`world-power-${i}-name`}
+                value={ps.name}
+                onChange={(e) => setPs(i, "name", e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+            <div>
+              <label className="block font-label-mono text-system-log mb-1 text-xs">描述</label>
+              <AutoTextarea
+                data-testid={`world-power-${i}-description`}
+                value={ps.description}
+                onChange={(e) => setPs(i, "description", e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+              />
+            </div>
+            <div>
+              <label className="block font-label-mono text-system-log mb-1 text-xs">阶段 (stages, 、分隔)</label>
+              <input
+                data-testid={`world-power-${i}-stages`}
+                value={chipsToString(ps.stages)}
+                onChange={(e) => setPs(i, "stages", parseChips(e.target.value))}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+            <div>
+              <label className="block font-label-mono text-system-log mb-1 text-xs">核心规则 (core_rules, 、分隔)</label>
+              <input
+                data-testid={`world-power-${i}-rules`}
+                value={chipsToString(ps.core_rules)}
+                onChange={(e) => setPs(i, "core_rules", parseChips(e.target.value))}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+            <div>
+              <label className="block font-label-mono text-system-log mb-1 text-xs">天花板 (ceilings, 、分隔)</label>
+              <input
+                data-testid={`world-power-${i}-ceilings`}
+                value={chipsToString(ps.ceilings)}
+                onChange={(e) => setPs(i, "ceilings", parseChips(e.target.value))}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+            <div>
+              <label className="block font-label-mono text-system-log mb-1 text-xs">代价体系</label>
+              <input
+                data-testid={`world-power-${i}-cost`}
+                value={ps.cost_system ?? ""}
+                onChange={(e) => setPs(i, "cost_system", e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="border-t border-outline-variant pt-3 space-y-2">

@@ -230,13 +230,7 @@ describe("WizardContext", () => {
         world: {
           era: "X",
           geography: "Y",
-          power_system: {
-            name: "",
-            description: "",
-            stages: [],
-            core_rules: [],
-            ceilings: [],
-          },
+          power_systems: [],
           factions: [],
           core_rules: [],
         },
@@ -266,7 +260,7 @@ describe("WizardContext", () => {
     }));
     act(() => result.current.saveStep(2, { world: {
       era: "W", geography: "G",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     }}));
     act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
@@ -291,7 +285,7 @@ describe("WizardContext", () => {
     }));
     act(() => result.current.saveStep(2, { world: {
       era: "W", geography: "G",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     }}));
     act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
@@ -317,7 +311,7 @@ describe("WizardContext", () => {
     }));
     act(() => result.current.saveStep(2, { world: {
       era: "W", geography: "G",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     }}));
     act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
@@ -372,13 +366,7 @@ describe("WizardContext", () => {
         world: {
           era: "Generated",
           geography: "World",
-          power_system: {
-            name: "",
-            description: "",
-            stages: [],
-            core_rules: [],
-            ceilings: [],
-          },
+          power_systems: [],
           factions: [],
           core_rules: [],
         },

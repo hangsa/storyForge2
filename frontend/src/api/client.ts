@@ -164,19 +164,27 @@ export interface WorldRulesSummary {
   core_rules: string[];
 }
 
+export interface PowerSystem {
+  name: string;
+  description: string;
+  stages: string[];
+  core_rules: string[];
+  ceilings: string[];
+  cost_system?: string;
+}
+
 export interface World {
   era: string;
   geography: string;
   era_social_structure?: string | null;   // v1.8 [新增] 社会结构
   era_cultural_history?: string | null;   // v1.8 [新增] 历史文化
-  power_system: {
-    name: string;
-    description: string;
-    stages: string[];
-    core_rules: string[];
-    ceilings: string[];
-    cost_system?: string;
-  };
+  /**
+   * A world can define several coexisting power systems. Was a single
+   * `power_system` object; the backend folds that legacy shape into this
+   * array on read, but world.json written by an older build can still reach
+   * the UI unconverted — normalize before rendering.
+   */
+  power_systems: PowerSystem[];
   factions: Array<{ name: string; type: string; goal: string; relations: string }>;
   core_rules: string[];
 }

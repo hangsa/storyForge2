@@ -75,7 +75,7 @@ beforeEach(() => {
   (api.regenerateWorldSection as ReturnType<typeof vi.fn>).mockReset();
   (api.regenerateWorldSection as ReturnType<typeof vi.fn>).mockResolvedValue({
     era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-    power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+    power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
     factions: [], core_rules: [],
   });
   (api.regenerateCharacterSection as ReturnType<typeof vi.fn>).mockReset();
@@ -132,7 +132,7 @@ const CONCEPT_FIXTURE = {
 
 const WORLD_FIXTURE = {
   era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-  power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+  power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
   factions: [], core_rules: [],
 };
 
@@ -229,7 +229,7 @@ describe("InitWizardModal", () => {
     });
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
-      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [] },
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     });
     // No character/novel/outline files → steps 1, 2 completed; latest saved = 2.

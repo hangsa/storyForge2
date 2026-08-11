@@ -147,15 +147,15 @@ describe("ContextPanel", () => {
       geography: "九州",
       era_social_structure: "宗门林立",
       era_cultural_history: "万年大战",
-      power_system: { name: "灵气", description: "炼气化神", stages: ["炼气", "筑基", "金丹"], core_rules: ["灵根"], ceilings: ["化神"], cost_system: "寿元" },
+      power_systems: [{ name: "灵气", description: "炼气化神", stages: ["炼气", "筑基", "金丹"], core_rules: ["灵根"], ceilings: ["化神"], cost_system: "寿元" }],
       factions: [{ name: "青云宗", type: "正派", goal: "守护苍生", relations: "中立" }],
       core_rules: ["不可逆转光阴"],
     });
     setupActivePanel("/workspace?mode=manual&panel=world");
     expect(await screen.findByTestId("world-editor")).toBeInTheDocument();
     expect((screen.getByTestId("world-era") as HTMLInputElement).value).toBe("修真纪元");
-    expect((screen.getByTestId("world-power-name") as HTMLInputElement).value).toBe("灵气");
-    expect(screen.getByTestId("world-power-stages")).toHaveDisplayValue("炼气、筑基、金丹");
+    expect((screen.getByTestId("world-power-0-name") as HTMLInputElement).value).toBe("灵气");
+    expect(screen.getByTestId("world-power-0-stages")).toHaveDisplayValue("炼气、筑基、金丹");
   });
 
   it("character editor lists each character as a collapsible card", async () => {
@@ -363,7 +363,7 @@ describe("ContextPanel", () => {
       mockedGetWorld.mockResolvedValueOnce({
         era: "x", geography: "九州",
         era_social_structure: null, era_cultural_history: null,
-        power_system: { name: "灵气", description: "x", stages: [], core_rules: [], ceilings: [], cost_system: "" },
+        power_systems: [{ name: "灵气", description: "x", stages: [], core_rules: [], ceilings: [], cost_system: "" }],
         factions: [], core_rules: [],
       });
       setupActivePanel("/workspace?mode=manual&panel=world");

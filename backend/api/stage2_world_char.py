@@ -7,7 +7,7 @@ from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
 from backend.models.character import BehaviorExample, Character as CharacterModel, CharacterPatch
-from backend.models.world import World
+from backend.models.world import World, iter_power_systems
 from backend.services.agent_prompt_stores import (
     project_override_store,
     global_override_store,
@@ -552,11 +552,23 @@ async def regenerate_world_section(
         for key in ERA_BLOCK_KEYS:
             merged[key] = result.get(key, existing.get(key, ""))
     elif payload.section == "power_system":
-        merged["power_system"] = result.get("power_system", existing.get("power_system", {}))
+        # The section literal stays singular (front-end contract), but the
+        # stored shape is the `power_systems` array.
+        merged["power_systems"] = result.get(
+            "power_systems", iter_power_systems(existing)
+        )
     elif payload.section == "core_rules":
         merged["core_rules"] = result.get("core_rules", existing.get("core_rules", []))
     else:  # "factions"
         merged["factions"] = result.get("factions", existing.get("factions", []))
+
+    # Validate before writing so a legacy singular `power_system` in either
+    # `existing` or the LLM result is folded into `power_systems` here rather
+    # than lingering in world.json alongside the new key.
+    try:
+        merged = World.model_validate(merged).model_dump()
+    except Exception:
+        merged.pop("power_system", None)
 
     _file_manager().write_json(project_id, "world.json", merged)
 

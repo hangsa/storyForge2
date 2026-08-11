@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.agents.base_agent import BaseAgent
+from backend.models.world import iter_power_systems
 from backend.utils.json_parser import parse_json_text
 from backend.utils.regex_patterns import (
     SF_LOG_PATTERN,
@@ -248,11 +249,18 @@ class ReviewerAgent(BaseAgent):
     def check_3_world_rules(
         self, draft_text: str, world_rules: dict
     ) -> CheckResult:
-        power_system = world_rules.get("power_system", {})
-        if isinstance(power_system, dict):
-            ceilings = power_system.get("ceilings", [])
-            has_cost = bool(power_system.get("cost_system"))
-        else:
+        # A world may define several power systems. Their ceilings form one
+        # combined constraint space — a scene violates the world's rules if it
+        # breaches any system's ceiling. Likewise, if any system charges a
+        # cost, power use in the scene must declare one.
+        systems = iter_power_systems(world_rules)
+        ceilings: list = []
+        for ps in systems:
+            entry = ps.get("ceilings", [])
+            ceilings.extend(entry if isinstance(entry, list) else [entry])
+        has_cost = any(ps.get("cost_system") for ps in systems)
+        if not systems:
+            # Pre-migration worlds kept these at the top level.
             ceilings = world_rules.get("ceilings", [])
             has_cost = world_rules.get("cost_system") is not None
 

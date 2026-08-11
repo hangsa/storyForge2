@@ -5,6 +5,7 @@ from typing import Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse
 from backend.agents.writer import _resolve_genre_label
+from backend.models.world import iter_power_systems
 
 
 def _resolve_genre_extras(genre: str) -> dict[str, str]:
@@ -373,15 +374,16 @@ class PlannerAgent(BaseAgent):
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
 
-        power_system = world.get("power_system", {})
-        if isinstance(power_system, dict):
-            ps_name = power_system.get("name", "")
-            ps_rules = "\n".join(
-                f"  - {r}" for r in power_system.get("core_rules", [])
-            )
-        else:
-            ps_name = str(power_system)
-            ps_rules = ""
+        # Multiple power systems collapse into the prompt's single name/rules
+        # pair. Each rule is prefixed with its system so the model doesn't
+        # attribute a rule to the wrong system when there are several.
+        systems = iter_power_systems(world)
+        ps_name = "、".join(ps.get("name", "") for ps in systems if ps.get("name"))
+        ps_rules = "\n".join(
+            f"  - 【{ps.get('name', '未命名体系')}】{r}"
+            for ps in systems
+            for r in ps.get("core_rules", [])
+        )
 
         type_labels = {
             "protagonist": "主角",
@@ -450,7 +452,9 @@ class PlannerAgent(BaseAgent):
         world_context = json.dumps(
             {
                 "era": world.get("era", ""),
-                "power_system": world.get("power_system", {}).get("name", ""),
+                "power_systems": [
+                    ps.get("name", "") for ps in iter_power_systems(world)
+                ],
                 "core_rules": world.get("core_rules", []),
             },
             ensure_ascii=False,
@@ -507,7 +511,9 @@ class PlannerAgent(BaseAgent):
         world_context = json.dumps(
             {
                 "era": world.get("era", ""),
-                "power_system": world.get("power_system", {}).get("name", ""),
+                "power_systems": [
+                    ps.get("name", "") for ps in iter_power_systems(world)
+                ],
                 "core_rules": world.get("core_rules", []),
             },
             ensure_ascii=False,

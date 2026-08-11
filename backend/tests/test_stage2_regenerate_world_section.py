@@ -1,7 +1,7 @@
 """Tests for POST /api/stage2/regenerate-world-section.
 
 Sections: era (era + geography + era_social_structure + era_cultural_history),
-power_system (object), factions (array), core_rules (top-level array).
+power_systems (array), factions (array), core_rules (top-level array).
 Other top-level keys stay byte-identical.
 """
 import json
@@ -59,14 +59,24 @@ def _mock_world_payload():
         "geography": "新地理",
         "era_social_structure": "新社会",
         "era_cultural_history": "新历史",
-        "power_system": {
-            "name": "新体系",
-            "description": "新描述",
-            "stages": ["新一阶", "新二阶"],
-            "core_rules": ["新规则"],
-            "ceilings": ["新上限"],
-            "cost_system": "新代价",
-        },
+        "power_systems": [
+            {
+                "name": "新体系",
+                "description": "新描述",
+                "stages": ["新一阶", "新二阶"],
+                "core_rules": ["新规则"],
+                "ceilings": ["新上限"],
+                "cost_system": "新代价",
+            },
+            {
+                "name": "新体系B",
+                "description": "新描述B",
+                "stages": ["乙一阶"],
+                "core_rules": ["乙规则"],
+                "ceilings": ["乙上限"],
+                "cost_system": None,
+            },
+        ],
         "factions": [
             {"name": "新势力A", "type": "宗门", "goal": "新目标A", "relations": "新关系A"},
         ],
@@ -105,8 +115,9 @@ def test_regenerate_era_rewrites_only_era_block(mock_planner, tmp_path):
     assert detail["geography"] == "新地理"
     assert detail["era_social_structure"] == "新社会"
     assert detail["era_cultural_history"] == "新历史"
-    # power_system / factions / core_rules preserved
-    assert detail["power_system"] == _seed_old_world()["power_system"]
+    # power systems / factions / core_rules preserved (legacy key migrated)
+    assert "power_system" not in detail
+    assert detail["power_systems"] == [_seed_old_world()["power_system"]]
     assert detail["factions"] == _seed_old_world()["factions"]
     assert detail["core_rules"] == _seed_old_world()["core_rules"]
 
@@ -120,11 +131,30 @@ def test_regenerate_power_system_rewrites_only_power_system(mock_planner, tmp_pa
     )
     assert resp.status_code == 200
     detail = resp.json()["detail"]
-    assert detail["power_system"]["name"] == "新体系"
-    assert detail["power_system"]["stages"] == ["新一阶", "新二阶"]
+    assert [ps["name"] for ps in detail["power_systems"]] == ["新体系", "新体系B"]
+    assert detail["power_systems"][0]["stages"] == ["新一阶", "新二阶"]
     assert detail["era"] == _seed_old_world()["era"]
     assert detail["factions"] == _seed_old_world()["factions"]
     assert detail["core_rules"] == _seed_old_world()["core_rules"]
+
+
+def test_regenerating_another_section_migrates_a_legacy_world_on_disk(
+    mock_planner, tmp_path
+):
+    """A legacy world.json carries the singular `power_system`. Regenerating
+    an unrelated section must fold it into `power_systems` on write rather
+    than leaving both keys in the file."""
+    _seed_project(tmp_path)
+    _write(tmp_path, "world.json", _seed_old_world())
+    resp = client.post(
+        f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+        json={"section": "factions", "user_modifications": ""},
+    )
+    assert resp.status_code == 200
+
+    on_disk = json.loads((tmp_path / PROJ / "world.json").read_text(encoding="utf-8"))
+    assert "power_system" not in on_disk
+    assert on_disk["power_systems"] == [_seed_old_world()["power_system"]]
 
 
 def test_regenerate_core_rules_rewrites_only_top_level_array(mock_planner, tmp_path):
@@ -138,7 +168,7 @@ def test_regenerate_core_rules_rewrites_only_top_level_array(mock_planner, tmp_p
     detail = resp.json()["detail"]
     assert detail["core_rules"] == ["世界规则新"]
     assert detail["era"] == _seed_old_world()["era"]
-    assert detail["power_system"] == _seed_old_world()["power_system"]
+    assert detail["power_systems"] == [_seed_old_world()["power_system"]]
     assert detail["factions"] == _seed_old_world()["factions"]
 
 
@@ -154,7 +184,7 @@ def test_regenerate_factions_rewrites_only_factions_array(mock_planner, tmp_path
     assert len(detail["factions"]) == 1
     assert detail["factions"][0]["name"] == "新势力A"
     assert detail["era"] == _seed_old_world()["era"]
-    assert detail["power_system"] == _seed_old_world()["power_system"]
+    assert detail["power_systems"] == [_seed_old_world()["power_system"]]
 
 
 def test_regenerate_unknown_section_returns_400(mock_planner, tmp_path):

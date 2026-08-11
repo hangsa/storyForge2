@@ -28,7 +28,7 @@ async def test_write_scene_passes_chapter_outline_context(mock_generate):
     await WriterAgent(project_id="test").write_scene(
         genre="xianxia",
         concept={"story_dna": {"core_contradiction": {}}, "concept": {"premise": ""}},
-        world_rules={"power_system": {}, "core_rules": [], "ceilings": []},
+        world_rules={"power_systems": [], "core_rules": [], "ceilings": []},
         characters=[{"id": "pov", "name": "林峰", "character_type": "protagonist",
                      "personality": {"beliefs": [], "desires": [], "fears": [], "values": [], "core_traits": []},
                      "voice_signature": {"speech_style": "s", "thought_patterns": "t", "taboos": []},
@@ -62,7 +62,7 @@ async def test_write_scene_passes_full_structured_characters_context(mock_genera
     await WriterAgent(project_id="test").write_scene(
         genre="xianxia",
         concept={"story_dna": {"core_contradiction": {}}, "concept": {"premise": ""}},
-        world_rules={"power_system": {}, "core_rules": [], "ceilings": []},
+        world_rules={"power_systems": [], "core_rules": [], "ceilings": []},
         characters=[pov],
         scene_plan={"scene_number": 1, "goal": "苏醒", "conflict": "", "emotional_arc": "",
                     "narrative_role": "setup", "beat_type": "opening",

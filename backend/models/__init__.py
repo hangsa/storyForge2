@@ -2,7 +2,7 @@ from backend.models.project import (
     Project, Concept, StoryDNA, ConceptAndDNA, InitialIntent, StageTransition,
 )
 from backend.models.world import (
-    World, PowerSystem, Faction, WorldRulesSummary,
+    World, PowerSystem, Faction, WorldRulesSummary, iter_power_systems,
 )
 from backend.models.character import (
     Character, CharacterSet, Personality, VoiceSignature, CharacterCurrentState,
@@ -43,7 +43,7 @@ from backend.models.branch_simulation import (
 
 __all__ = [
     "Project", "Concept", "StoryDNA", "ConceptAndDNA", "InitialIntent", "StageTransition",
-    "World", "PowerSystem", "Faction", "WorldRulesSummary",
+    "World", "PowerSystem", "Faction", "WorldRulesSummary", "iter_power_systems",
     "Character", "CharacterSet", "Personality", "VoiceSignature", "CharacterCurrentState",
     "Conflict", "Mystery", "Clue", "Twist", "Goal", "EscalationEvent", "StoryOSSummary",
     "ParsedLog", "SFLogEntry", "FormatError",

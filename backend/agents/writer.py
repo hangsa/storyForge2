@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse, StreamChunk
+from backend.models.world import iter_power_systems
 
 logger = logging.getLogger(__name__)
 
@@ -414,13 +415,16 @@ class WriterAgent(BaseAgent):
         )
         premise = concept.get("concept", {}).get("premise", "")
 
-        power_system = world_rules.get("power_system", {})
-        if isinstance(power_system, dict):
-            ps_name = power_system.get("name", "")
-            ps_desc = power_system.get("description", "")
-        else:
-            ps_name = str(power_system)
-            ps_desc = ""
+        # A world may define several power systems. The prompt keeps a single
+        # pair of variables, so the systems are flattened: names joined for
+        # the one-line label, descriptions stacked as labelled blocks so the
+        # model can tell which rules belong to which system.
+        systems = iter_power_systems(world_rules)
+        ps_name = "、".join(ps.get("name", "") for ps in systems if ps.get("name"))
+        ps_desc = "\n".join(
+            f"【{ps.get('name', '未命名体系')}】{ps.get('description', '')}"
+            for ps in systems
+        )
 
         core_rules = world_rules.get("core_rules", [])
         core_rules_str = (

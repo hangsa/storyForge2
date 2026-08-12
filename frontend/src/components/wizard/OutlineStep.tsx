@@ -144,7 +144,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
-          <p className="font-body-ui text-system-log mt-3 text-sm">正在生成全书大纲…</p>
+          <p className="font-body-ui text-primary-container mt-3 text-sm">正在生成全书大纲…</p>
         </div>
       )}
 
@@ -158,7 +158,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
         <div data-testid="outline-form" className="space-y-4">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <div className="font-label-mono text-system-log text-xs">核心冲突与主题</div>
+              <div className="font-label-mono text-primary-container text-xs">核心冲突与主题</div>
               <SectionRegenerateButton
                 target="核心冲突与主题"
                 onRegenerate={handleSectionRegenerate("core_conflict")}
@@ -176,7 +176,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
           {outline.volumes.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">分卷 / 阶段划分</div>
+                <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">分卷 / 阶段划分</div>
                 <SectionRegenerateButton
                   target="分卷 / 阶段划分"
                   onRegenerate={handleSectionRegenerate("volumes")}
@@ -192,19 +192,19 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <h3 className="font-display text-primary text-sm">{v.name}</h3>
-                      <span className="font-label-mono text-system-log/60 text-xs shrink-0">
+                      <span className="font-label-mono text-primary-container/60 text-xs shrink-0">
                         第 {v.chapter_range} 章
                       </span>
                     </div>
                     {v.summary && (
-                      <p className="font-body-ui text-system-log text-sm mt-1.5 leading-relaxed">{v.summary}</p>
+                      <p className="font-body-ui text-primary-container text-sm mt-1.5 leading-relaxed">{v.summary}</p>
                     )}
                     {v.key_events.length > 0 && (
                       <ul className="mt-2 space-y-1">
                         {v.key_events.map((e, j) => (
                           <li
                             key={j}
-                            className="font-body-ui text-system-log/80 text-xs flex gap-2 leading-relaxed"
+                            className="font-body-ui text-primary-container/80 text-xs flex gap-2 leading-relaxed"
                           >
                             <span className="text-primary-container shrink-0">•</span>
                             <span>{e}</span>
@@ -220,7 +220,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center justify-between border border-outline-variant rounded-lg px-3 py-2">
-              <span className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+              <span className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
                 主角成长节点 · {outline.mc_growth_arc.length}
               </span>
               <SectionRegenerateButton
@@ -230,7 +230,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
               />
             </div>
             <div className="flex items-center justify-between border border-outline-variant rounded-lg px-3 py-2">
-              <span className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+              <span className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
                 关键情节点 · {outline.key_plot_points.length}
               </span>
               <SectionRegenerateButton
@@ -240,7 +240,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
               />
             </div>
           </div>
-          <p className="font-body-ui text-system-log/60 text-xs">
+          <p className="font-body-ui text-primary-container/60 text-xs">
             详细分卷/情节点编辑可在工作台的大纲标签页内进行。
           </p>
           {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}

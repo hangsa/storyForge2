@@ -167,7 +167,7 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
       <div className="bg-surface-container-lowest border border-outline-variant rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
         <header className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
           <h1 className="font-display text-primary text-lg">
-            初始化向导 · <span className="text-system-log">{STEP_TITLES[wizard.currentStep]}</span>
+            初始化向导 · <span className="text-primary-container">{STEP_TITLES[wizard.currentStep]}</span>
           </h1>
           <button
             type="button"

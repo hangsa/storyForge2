@@ -175,7 +175,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
-          <p className="font-body-ui text-system-log mt-3 text-sm">
+          <p className="font-body-ui text-primary-container mt-3 text-sm">
             正在生成章节大纲…
             {progress && (
               <span
@@ -197,7 +197,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
 
       {outline && outline.chapters.length > 0 && (
         <div data-testid="chapter-outline-form" className="space-y-3">
-          <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+          <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
             已生成 {outline.chapters.length} 章 ·{" "}
             {outline.chapters.reduce((acc, ch) => acc + ch.scene_plan.length, 0)} 个场景
             {isPartialProgress && (
@@ -211,7 +211,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
           </div>
           {outline.chapters.map((ch, idx) => (
             <div key={idx} className="border border-outline-variant rounded-lg p-3 space-y-2">
-              <label className="block font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+              <label className="block font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
                 第 {ch.chapter_number} 章标题
               </label>
               <input
@@ -220,12 +220,12 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
                 onChange={(e) => updateChapterTitle(idx, e.target.value)}
                 className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
               />
-              <div className="font-body-ui text-system-log text-xs">
+              <div className="font-body-ui text-primary-container text-xs">
                 {ch.scene_plan.length} 个场景 · 概要字数 {((ch as { summary?: string }).summary?.length ?? 0)}
               </div>
             </div>
           ))}
-          <p className="font-body-ui text-system-log/60 text-xs">
+          <p className="font-body-ui text-primary-container/60 text-xs">
             场景级详情可在工作台的大纲标签页内编辑。
           </p>
           <div className="flex justify-end pt-2">

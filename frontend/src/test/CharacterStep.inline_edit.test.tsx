@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ToastProvider } from "../hooks/useToast";
 
 vi.mock("../api/client", () => ({
   default: {
@@ -68,7 +69,7 @@ beforeEach(() => {
 describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
   it("card has no edit-button — fields are editable directly", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // No more "character-edit-{id}" button. Inline edit only.
     expect(screen.queryByTestId("character-edit-char_alice")).not.toBeInTheDocument();
     expect(screen.queryByTestId("character-edit-form")).not.toBeInTheDocument();
@@ -78,7 +79,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
 
   it("changing the name input updates local state without an API call", async () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const nameInput = screen.getByDisplayValue("Alice");
     await act(async () => {
       fireEvent.change(nameInput, { target: { value: "Alicia" } });
@@ -91,7 +92,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
 
   it("changing a personality tag via TagEditor updates local state", async () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // Scope to Alice's card since Alice and Bob share the same "honor" belief.
     const aliceCard = screen.getByTestId("character-char_alice");
     // The personality section uses TagEditor. To edit an existing tag, click
@@ -115,7 +116,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
 
   it("changing voice_signature.speech_style updates local state", async () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // Scope to Alice's speech-style input — both characters share "calm".
     const speechInput = screen.getByTestId("character-char_alice-speech-style");
     await act(async () => {
@@ -128,7 +129,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
   it("'确认修改并继续' in footer persists all inline edits via updateCharacter", async () => {
     (api.updateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // Edit name + speech_style inline. Scope to Alice's card.
     const aliceCard = screen.getByTestId("character-char_alice");
     const nameInput = within(aliceCard).getByDisplayValue("Alice");
@@ -151,7 +152,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
 
   it("relations editor is always visible (no edit-mode toggle required)", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // Each card has its own relations editor; check Alice's card specifically.
     const aliceCard = screen.getByTestId("character-char_alice");
     expect(within(aliceCard).getByTestId("character-relations-editor")).toBeInTheDocument();
@@ -160,7 +161,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
 
   it("relations editor: adding a relation updates local state without an API call", async () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const aliceCard = screen.getByTestId("character-char_alice");
     await act(async () => {
       within(aliceCard).getByTestId("relations-add-button").click();
@@ -181,7 +182,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
   it("delete button still works (unchanged behavior)", async () => {
     (api.deleteCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({ deleted_id: "char_bob", cascaded_relation_removals: 0 });
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     await act(async () => {
       screen.getByTestId("character-delete-char_bob").click();
     });
@@ -239,7 +240,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
         errorMessage: null,
       }),
     );
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // After prefill completes, the wizard must show all 15 chars — including
     // 石坚 and 林凤娇 from the original generation. The stale 2-char snapshot
     // in sessionStorage must NOT shadow the file.

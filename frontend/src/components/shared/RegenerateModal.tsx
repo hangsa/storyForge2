@@ -6,6 +6,13 @@ interface RegenerateModalProps {
   placeholder?: string;
   onConfirm: (userModifications: string) => void;
   onCancel: () => void;
+  /**
+   * True while the parent is awaiting the regenerate call. The confirm
+   * button shows a spinner and "重新生成中…" to give the user feedback that
+   * the request is in flight (otherwise the modal sits silently for several
+   * seconds while the LLM responds).
+   */
+  busy?: boolean;
 }
 
 const MAX_LEN = 1700;
@@ -16,6 +23,7 @@ export function RegenerateModal({
   placeholder = "例如:让节奏更紧凑 / 主角动机更清晰 / 减少说教感……",
   onConfirm,
   onCancel,
+  busy = false,
 }: RegenerateModalProps) {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -114,7 +122,8 @@ export function RegenerateModal({
               type="button"
               data-testid="regenerate-modal-cancel"
               onClick={onCancel}
-              className="px-4 py-1.5 text-sm border border-system-divider rounded-md hover:bg-surface-container-high text-system-log"
+              disabled={busy}
+              className="px-4 py-1.5 text-sm border border-system-divider rounded-md hover:bg-surface-container-high text-system-log disabled:opacity-40"
             >
               取消
             </button>
@@ -122,9 +131,19 @@ export function RegenerateModal({
               type="button"
               data-testid="regenerate-modal-confirm"
               onClick={handleSubmit}
-              className="px-4 py-1.5 text-sm bg-primary-container text-surface-container-low rounded-md hover:opacity-90"
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm bg-primary-container text-surface-container-low rounded-md hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              重新生成
+              {busy && (
+                <span
+                  data-testid="regenerate-modal-confirm-spinner"
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[14px] animate-spin inline-block"
+                >
+                  progress_activity
+                </span>
+              )}
+              {busy ? "重新生成中…" : "重新生成"}
             </button>
           </div>
         </div>

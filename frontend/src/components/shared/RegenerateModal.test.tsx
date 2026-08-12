@@ -91,7 +91,7 @@ describe("RegenerateModal", () => {
     expect(onConfirm).toHaveBeenCalledWith("");
   });
 
-  it("blocks input past 1000 characters", () => {
+  it("blocks input past 1700 characters", () => {
     render(
       <RegenerateModal
         open
@@ -101,7 +101,38 @@ describe("RegenerateModal", () => {
       />,
     );
     const textarea = screen.getByLabelText("修改意见") as HTMLTextAreaElement;
-    expect(textarea.maxLength).toBe(1000);
+    expect(textarea.maxLength).toBe(1700);
+  });
+
+  it("shows a spinner and '重新生成中…' text while busy", () => {
+    render(
+      <RegenerateModal
+        open
+        target="概念"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+        busy
+      />,
+    );
+    expect(screen.getByTestId("regenerate-modal-confirm-spinner")).toBeInTheDocument();
+    expect(screen.getByText("重新生成中…")).toBeInTheDocument();
+    // The non-busy label must NOT render while busy — otherwise the
+    // accessibility tree reports two competing buttons.
+    expect(screen.queryByText("重新生成")).not.toBeInTheDocument();
+  });
+
+  it("disables cancel and confirm while busy", () => {
+    render(
+      <RegenerateModal
+        open
+        target="概念"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+        busy
+      />,
+    );
+    expect(screen.getByTestId("regenerate-modal-confirm")).toBeDisabled();
+    expect(screen.getByTestId("regenerate-modal-cancel")).toBeDisabled();
   });
 
   it("title contains the target string", () => {

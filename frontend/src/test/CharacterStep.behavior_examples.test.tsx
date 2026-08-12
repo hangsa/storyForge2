@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ToastProvider } from "../hooks/useToast";
 
 vi.mock("../api/client", () => ({
   default: {
@@ -85,7 +86,7 @@ beforeEach(() => {
 describe("CharacterStep behavior examples integration", () => {
   it("renders a BehaviorExamplesSection on every character card", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const aliceCard = screen.getByTestId("character-char_alice");
     const bobCard = screen.getByTestId("character-char_bob");
     expect(within(aliceCard).getByTestId("behavior-examples-section")).toBeInTheDocument();
@@ -94,7 +95,7 @@ describe("CharacterStep behavior examples integration", () => {
 
   it("renders existing examples inside Alice's section", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const aliceCard = screen.getByTestId("character-char_alice");
     // 2 examples × 3 fields each = 6 textareas inside Alice's section.
     expect(within(aliceCard).getByDisplayValue("挚友被陷害")).toBeInTheDocument();
@@ -107,7 +108,7 @@ describe("CharacterStep behavior examples integration", () => {
     const bobNoExamples = { ...BOB, voice_signature: { ...BOB.voice_signature } };
     delete (bobNoExamples.voice_signature as { behavior_examples?: BehaviorExample[] }).behavior_examples;
     setup([aliceNoExamples, bobNoExamples]);
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const aliceCard = screen.getByTestId("character-char_alice");
     // Both cards still render the section so the user can populate it.
     expect(within(aliceCard).getByTestId("behavior-examples-section")).toBeInTheDocument();
@@ -116,7 +117,7 @@ describe("CharacterStep behavior examples integration", () => {
 
   it("inline editing a behavior_example updates local state without an API call", async () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const aliceCard = screen.getByTestId("character-char_alice");
     const situationInput = within(aliceCard).getByDisplayValue("挚友被陷害");
     await act(async () => {
@@ -131,7 +132,7 @@ describe("CharacterStep behavior examples integration", () => {
   it("'确认修改并继续' persists edited behavior_examples through updateCharacter", async () => {
     (api.updateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const aliceCard = screen.getByTestId("character-char_alice");
     const situationInput = within(aliceCard).getByDisplayValue("挚友被陷害");
     await act(async () => {
@@ -166,7 +167,7 @@ describe("CharacterStep behavior examples integration", () => {
     (api.regenerateCharacterExamples as ReturnType<typeof vi.fn>).mockResolvedValue(updatedAlice);
 
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const aliceCard = screen.getByTestId("character-char_alice");
     // Alice has the regenerate button inside her section.
     const aliceRegenerate = within(aliceCard).getByTestId("behavior-example-regenerate");
@@ -210,7 +211,7 @@ describe("CharacterStep behavior examples integration", () => {
     );
 
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     const aliceCard = screen.getByTestId("character-char_alice");
     await act(async () => {
       within(aliceCard).getByTestId("behavior-example-regenerate").click();

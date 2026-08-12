@@ -283,7 +283,10 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
         characters: { characters: list, current: charactersRef.current?.current ?? list[0] },
       });
     } catch (e) {
-      wizard.setStatus("error", e instanceof Error ? e.message : "板块重新生成失败");
+      const msg = e instanceof Error ? e.message : "板块重新生成失败";
+      wizard.setStatus("error", msg);
+      // Re-throw so SectionRegenerateButton can surface the failure toast.
+      throw new Error(msg);
     }
   };
 

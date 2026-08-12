@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ToastProvider } from "../hooks/useToast";
 
 vi.mock("../api/client", () => ({
   default: {
@@ -67,14 +68,14 @@ beforeEach(() => {
 describe("CharacterStep edit + delete", () => {
   it("renders a delete button on each card (no edit-button — fields are inline-editable)", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     expect(screen.getByTestId("character-delete-char_alice")).toBeInTheDocument();
     expect(screen.queryByTestId("character-edit-char_alice")).not.toBeInTheDocument();
   });
 
   it("clicking delete opens a confirmation modal showing cascade count", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     fireEvent.click(screen.getByTestId("character-delete-char_bob"));
     // Alice has a relation TO Bob, so deleting Bob cascades 1 inbound removal.
     const modal = screen.getByTestId("delete-confirm-modal");
@@ -85,7 +86,7 @@ describe("CharacterStep edit + delete", () => {
   it("confirming delete calls deleteCharacter and removes the card", async () => {
     (api.deleteCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({ deleted_id: "char_bob", cascaded_relation_removals: 0 });
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     fireEvent.click(screen.getByTestId("character-delete-char_bob"));
     fireEvent.click(screen.getByTestId("delete-confirm-button"));
     await waitFor(() => {
@@ -98,7 +99,7 @@ describe("CharacterStep edit + delete", () => {
 
   it("cancelling delete does not call deleteCharacter", async () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     fireEvent.click(screen.getByTestId("character-delete-char_bob"));
     fireEvent.click(screen.getByTestId("delete-cancel-button"));
     expect(api.deleteCharacter).not.toHaveBeenCalled();
@@ -107,7 +108,7 @@ describe("CharacterStep edit + delete", () => {
 
   it("deleting alice (with inbound relation from nobody) reports 0 cascade count", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     fireEvent.click(screen.getByTestId("character-delete-char_alice"));
     // Alice has a relation TO bob, but no character has a relation TO alice → 0 cascade
     const modal = screen.getByTestId("delete-confirm-modal");
@@ -116,7 +117,7 @@ describe("CharacterStep edit + delete", () => {
 
   it("regenerate button opens the full-character RegenerateModal", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     fireEvent.click(screen.getByTestId("wizard-regenerate"));
     // v1.9: RegenerateModal replaces the v1.8 destructive-confirm dialog.
     expect(screen.getByTestId("regenerate-modal")).toBeInTheDocument();
@@ -131,7 +132,7 @@ describe("CharacterStep edit + delete", () => {
       callIdx += 1;
       return { characters: [ALICE], current: null };
     });
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     fireEvent.click(screen.getByTestId("wizard-regenerate"));
     fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
     await waitFor(() => {
@@ -141,7 +142,7 @@ describe("CharacterStep edit + delete", () => {
 
   it("regenerate cancellation does not call generateCharacter", () => {
     setup();
-    render(<MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter>);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     fireEvent.click(screen.getByTestId("wizard-regenerate"));
     fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
     expect(api.generateCharacter).not.toHaveBeenCalled();

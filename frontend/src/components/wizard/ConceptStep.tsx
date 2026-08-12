@@ -89,7 +89,12 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
         wizard.markStepGenerated(1, { concept: conceptRef.current, story_dna: result.story_dna });
       }
     } catch (e) {
-      wizard.setStatus("error", e instanceof Error ? e.message : "板块重新生成失败");
+      const msg = e instanceof Error ? e.message : "板块重新生成失败";
+      wizard.setStatus("error", msg);
+      // Re-throw so SectionRegenerateButton can fire the failure toast. The
+      // banner above stays visible because wizard.setStatus already updated
+      // wizard.errorMessage before we throw.
+      throw new Error(msg);
     }
   };
 

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
-import { useWizard, WizardProvider, TOTAL_STEPS, type WizardData } from "./WizardContext";
+import { useWizard, WizardProvider, TOTAL_STEPS, type WizardData, type WizardRegenerateState } from "./WizardContext";
 import WizardSteps from "./WizardSteps";
 import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
@@ -32,6 +32,88 @@ const STEP_TITLES: Record<number, string> = {
   5: "全书大纲",
   6: "章节大纲",
 };
+
+/**
+ * Inline footer badge for the section regenerate status. Three states:
+ *   - busy:    spinner + "正在重新生成 {target}" — sits beside 上一步 so the
+ *               user sees in-flight feedback without their eyes leaving the
+ *               button row. Auto-resolves on success/failure.
+ *   - success: check icon + "{target} 已重新生成" — auto-fades after a few
+ *               seconds, otherwise the badge would compete for attention
+ *               with any subsequent regen.
+ *   - failure: error icon + "重新生成失败: {msg}" — same auto-fade. The
+ *               in-form red banner above is the durable error indicator;
+ *               this badge gives an immediate catch-up signal that the user
+ *               didn't miss anything.
+ *
+ * Auto-clear is owned here (not in WizardContext) so the component controls
+ * its own fade timing and a remount-with-stale-state path won't keep the
+ * badge stuck on screen.
+ */
+function RegenerateStatusBadge({ state }: { state: WizardRegenerateState }) {
+  const clear = useWizard().clearRegenerateState;
+  useEffect(() => {
+    if (state.kind === "idle") return;
+    const ttl = state.kind === "busy" ? 30_000 : 3500;
+    // Long TTL for busy is a safety net — success/failure should always
+    // dispatch within seconds. If somehow stuck in busy, clear after 30s.
+    const t = setTimeout(clear, ttl);
+    return () => clearTimeout(t);
+  }, [state, clear]);
+
+  if (state.kind === "idle") return null;
+
+  if (state.kind === "busy") {
+    return (
+      <div
+        data-testid="wizard-regenerate-status"
+        data-status="busy"
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-container/10 text-primary-container font-body-ui text-xs"
+      >
+        <span
+          data-testid="wizard-regenerate-status-spinner"
+          aria-hidden="true"
+          className="material-symbols-outlined text-[14px] animate-spin inline-block"
+        >
+          progress_activity
+        </span>
+        正在重新生成 {state.target}…
+      </div>
+    );
+  }
+
+  if (state.kind === "success") {
+    return (
+      <div
+        data-testid="wizard-regenerate-status"
+        data-status="success"
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-container/15 text-primary-container font-body-ui text-xs"
+      >
+        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">check</span>
+        {state.target} 已重新生成
+      </div>
+    );
+  }
+
+  // failure
+  return (
+    <div
+      data-testid="wizard-regenerate-status"
+      data-status="failure"
+      role="status"
+      aria-live="assertive"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-error-container/30 text-error font-body-ui text-xs max-w-[40ch] truncate"
+      title={`重新生成失败: ${state.message}`}
+    >
+      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
+      重新生成失败: {state.message}
+    </div>
+  );
+}
 
 function hasContent(v: unknown): boolean {
   if (!v || typeof v !== "object") return false;
@@ -198,22 +280,28 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           )}
         </main>
 
-        {/* Footer: 上一步 on the left; the current step's 重新生成 /
+        {/* Footer: 上一步 on the left + the section-regenerate status badge
+            (before 重新生成 in visual order); the current step's 重新生成 /
             保存修改 / 确认修改并继续 (registered via setRegenerateHandler /
             setSaveHandler / setNextHandler in WizardContext) on the right.
             保存修改 persists the current page content without advancing;
             确认修改并继续 persists AND advances. ChapterOutlineStep keeps
             its own "完成 → 进入工作台" inside the form for now. */}
-        <footer className="flex items-center justify-between px-6 py-4 border-t border-outline-variant">
-          <button
-            data-testid="wizard-prev"
-            type="button"
-            onClick={() => wizard.jumpToStep(Math.max(1, wizard.currentStep - 1))}
-            disabled={wizard.currentStep === 1}
-            className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
-          >
-            上一步
-          </button>
+        <footer className="flex items-center justify-between px-6 py-4 border-t border-outline-variant gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              data-testid="wizard-prev"
+              type="button"
+              onClick={() => wizard.jumpToStep(Math.max(1, wizard.currentStep - 1))}
+              disabled={wizard.currentStep === 1}
+              className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
+            >
+              上一步
+            </button>
+            {wizard.regenerateState.kind !== "idle" && (
+              <RegenerateStatusBadge state={wizard.regenerateState} />
+            )}
+          </div>
           <div className="flex items-center gap-2">
             {wizard.regenerateHandler && (
               <button

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ToastProvider } from "../hooks/useToast";
 
 vi.mock("../api/client", () => ({
   default: {
@@ -51,9 +52,9 @@ function setup() {
     }),
   );
   return render(
-    <MemoryRouter>
+    <ToastProvider><MemoryRouter>
       <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} />
-    </MemoryRouter>,
+    </MemoryRouter></ToastProvider>,
   );
 }
 

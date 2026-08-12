@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ToastProvider } from "../hooks/useToast";
 
 vi.mock("../api/client", () => ({
   default: {
@@ -53,9 +54,9 @@ function Harness({ projectId }: { projectId: string }) {
 // observable side effect (api.advance) rather than on currentStep state.
 function setupInModal() {
   return render(
-    <MemoryRouter>
+    <ToastProvider><MemoryRouter>
       <InitWizardModal projectId="proj_x" onDismiss={vi.fn()} />
-    </MemoryRouter>,
+    </MemoryRouter></ToastProvider>,
   );
 }
 
@@ -66,9 +67,7 @@ describe("ConceptStep", () => {
       story_dna: { core_contradiction: { statement: "C", side_a: "A", side_b: "B" }, value_stack: [] },
     });
     render(
-      <WizardProvider projectId="proj_x">
-        <Harness projectId="proj_x" />
-      </WizardProvider>
+      <ToastProvider><WizardProvider projectId="proj_x"><Harness projectId="proj_x" /></WizardProvider></ToastProvider>
     );
     // ConceptStep now waits for prefill before auto-triggering (v1.8.2 fix
     // for proj_cc4ca4ae). Simulate prefill landing.
@@ -86,9 +85,7 @@ describe("ConceptStep", () => {
       story_dna: { core_contradiction: { statement: "C", side_a: "A", side_b: "B" }, value_stack: [] },
     });
     render(
-      <WizardProvider projectId="proj_x">
-        <Harness projectId="proj_x" />
-      </WizardProvider>
+      <ToastProvider><WizardProvider projectId="proj_x"><Harness projectId="proj_x" /></WizardProvider></ToastProvider>
     );
     await act(async () => {
       screen.getByTestId("mark-prefill").click();
@@ -100,9 +97,9 @@ describe("ConceptStep", () => {
   it("error state shows the error banner with no '重试' button, but footer '重新生成' is enabled", async () => {
     (api.generateConcept as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("LLM 失败"));
     render(
-      <MemoryRouter>
+      <ToastProvider><MemoryRouter>
         <InitWizardModal projectId="proj_x" onDismiss={vi.fn()} />
-      </MemoryRouter>,
+      </MemoryRouter></ToastProvider>,
     );
     expect(await screen.findByTestId("concept-error")).toHaveTextContent("LLM 失败");
     expect(screen.queryByText("重试")).not.toBeInTheDocument();

@@ -151,7 +151,10 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       setWorld(merged);
       wizard.markStepGenerated(2, { world: merged });
     } catch (e) {
-      wizard.setStatus("error", e instanceof Error ? e.message : "板块重新生成失败");
+      const msg = e instanceof Error ? e.message : "板块重新生成失败";
+      wizard.setStatus("error", msg);
+      // Re-throw so SectionRegenerateButton can surface the failure toast.
+      throw new Error(msg);
     }
   };
 
@@ -162,7 +165,10 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       setWorld(merged);
       wizard.markStepGenerated(2, { world: merged });
     } catch (e) {
-      wizard.setStatus("error", e instanceof Error ? e.message : "体系重新生成失败");
+      const msg = e instanceof Error ? e.message : "体系重新生成失败";
+      wizard.setStatus("error", msg);
+      // Re-throw so SectionRegenerateButton can surface the failure toast.
+      throw new Error(msg);
     }
   };
 

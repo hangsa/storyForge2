@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ToastProvider } from "../hooks/useToast";
 
 vi.mock("../api/client", () => ({
   default: {
@@ -106,11 +107,11 @@ beforeEach(() => {
 
 function renderModal(projectId = PROJECT, onDismiss = vi.fn()) {
   return render(
-    <MemoryRouter>
+    <ToastProvider><MemoryRouter>
       <WizardProvider projectId={projectId}>
         <InitWizardModal projectId={projectId} onDismiss={onDismiss} />
       </WizardProvider>
-    </MemoryRouter>
+    </MemoryRouter></ToastProvider>
   );
 }
 
@@ -238,11 +239,11 @@ describe("InitWizardModal", () => {
     (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
     render(
-      <MemoryRouter>
+      <ToastProvider><MemoryRouter>
         <WizardProvider projectId={PROJECT}>
           <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} resume />
         </WizardProvider>
-      </MemoryRouter>
+      </MemoryRouter></ToastProvider>
     );
 
     // Should land on WorldStep (latest saved = 2), NOT CharacterStep.
@@ -469,11 +470,11 @@ describe("InitWizardModal", () => {
     // Mount via the deep-link path with resume=true so the modal jumps to
     // the current step (5) once prefill lands.
     render(
-      <MemoryRouter>
+      <ToastProvider><MemoryRouter>
         <WizardProvider projectId={PROJECT}>
           <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} resume />
         </WizardProvider>
-      </MemoryRouter>
+      </MemoryRouter></ToastProvider>
     );
 
     // Wait for prefill to land.
@@ -517,11 +518,11 @@ describe("InitWizardModal", () => {
     (api.generateOutline as ReturnType<typeof vi.fn>).mockReset();
 
     render(
-      <MemoryRouter>
+      <ToastProvider><MemoryRouter>
         <WizardProvider projectId={PROJECT}>
           <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} resume />
         </WizardProvider>
-      </MemoryRouter>
+      </MemoryRouter></ToastProvider>
     );
 
     // Wait for prefill to land.
@@ -848,5 +849,110 @@ describe("InitWizardModal footer 保存修改 button", () => {
     expect(api.advance).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(screen.getByTestId("chapter-outline-step")).toBeInTheDocument();
+  });
+
+  describe("section regenerate footer status badge", () => {
+    // Helper: hop the modal onto WorldStep (step 2) with concept + world
+    // already populated, so the 时代与地理 card renders with a ↻ button.
+    function renderOnWorld() {
+      sessionStorage.setItem(
+        KEY,
+        JSON.stringify({
+          currentStep: 2,
+          completedSteps: [1],
+          status: "completed",
+          data: {
+            ...buildData(),
+            world: {
+              era: "古代",
+              geography: "中原",
+              era_social_structure: "",
+              era_cultural_history: "",
+              power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+              factions: [],
+              core_rules: [],
+            },
+          },
+          errorMessage: null,
+        }),
+      );
+      return renderModal();
+    }
+
+    it("does NOT render the badge when no regenerate has started", () => {
+      renderOnWorld();
+      expect(screen.queryByTestId("wizard-regenerate-status")).not.toBeInTheDocument();
+    });
+
+    it("renders a busy badge while the regenerate call is in flight (positioned before 重新生成)", async () => {
+      let resolveFn!: () => void;
+      (api.regenerateWorldSection as ReturnType<typeof vi.fn>).mockImplementation(
+        () => new Promise((r) => { resolveFn = r as () => void; }),
+      );
+      renderOnWorld();
+      // The 时代与地理 card ↻ button (id "world-era-regenerate") opens the
+      // modal; click it then confirm to drive onRegenerate into the busy state.
+      await screen.findByTestId("world-form");
+      await act(async () => {
+        screen.getByTestId("world-era-regenerate").click();
+      });
+      await screen.findByTestId("regenerate-modal");
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+      });
+      // The badge appears in the footer area, in DOM order BEFORE the
+      // wizard-regenerate footer button. Verify ordering directly.
+      const badge = await screen.findByTestId("wizard-regenerate-status");
+      expect(badge).toHaveAttribute("data-status", "busy");
+      expect(badge.textContent).toContain("正在重新生成 时代与地理");
+      const regen = screen.getByTestId("wizard-regenerate");
+      // DOM order: badge appears before the regen button so the user always
+      // sees the status immediately to the left of the action button it
+      // describes.
+      expect(
+        badge.compareDocumentPosition(regen) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      // Cleanup so the test doesn't hang on the unresolved promise.
+      await act(async () => {
+        resolveFn();
+      });
+    });
+
+    it("renders a success badge after the call resolves; clears after the TTL", async () => {
+      renderOnWorld();
+      await screen.findByTestId("world-form");
+      await act(async () => {
+        screen.getByTestId("world-era-regenerate").click();
+      });
+      await screen.findByTestId("regenerate-modal");
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+      });
+      await waitFor(() =>
+        expect(screen.queryByTestId("wizard-regenerate-status")?.getAttribute("data-status")).toBe("success"),
+      );
+      expect(screen.getByTestId("wizard-regenerate-status").textContent).toContain("已重新生成");
+    });
+
+    it("renders a failure badge with the error message when the call rejects", async () => {
+      (api.regenerateWorldSection as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error("LLM 拒绝"),
+      );
+      renderOnWorld();
+      await screen.findByTestId("world-form");
+      await act(async () => {
+        screen.getByTestId("world-era-regenerate").click();
+      });
+      await screen.findByTestId("regenerate-modal");
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+      });
+      await waitFor(() =>
+        expect(screen.queryByTestId("wizard-regenerate-status")?.getAttribute("data-status")).toBe("failure"),
+      );
+      const badge = screen.getByTestId("wizard-regenerate-status");
+      expect(badge.textContent).toContain("重新生成失败");
+      expect(badge.textContent).toContain("LLM 拒绝");
+    });
   });
 });

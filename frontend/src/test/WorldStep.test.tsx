@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { ToastProvider } from "../hooks/useToast";
 
 vi.mock("../api/client", () => ({
   default: {
@@ -54,9 +55,9 @@ function setup() {
     }),
   );
   return render(
-    <MemoryRouter>
+    <ToastProvider><MemoryRouter>
       <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} />
-    </MemoryRouter>,
+    </MemoryRouter></ToastProvider>,
   );
 }
 
@@ -384,9 +385,9 @@ describe("WorldStep", () => {
     // populated world.
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(legacyWorld);
     render(
-      <MemoryRouter>
+      <ToastProvider><MemoryRouter>
         <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} />
-      </MemoryRouter>,
+      </MemoryRouter></ToastProvider>,
     );
     // The form renders despite the legacy shape.
     const form = await screen.findByTestId("world-form");

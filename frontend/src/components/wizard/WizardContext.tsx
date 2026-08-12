@@ -7,6 +7,25 @@ export function getSessionKey(projectId: string): string {
 
 export type WizardStatus = "idle" | "generating" | "completed" | "error";
 
+/**
+ * Footer status indicator for the section regenerate flow. Tracked
+ * separately from `status` (the in-form overlay state) because:
+ *   - `status === "generating"` replaces the form with a full-page spinner,
+ *     which is appropriate for the initial generation but jarring for a
+ *     single-section refresh (the user expects to see the section update).
+ *   - The regenerate status needs transient success/failure states with
+ *     auto-clear, which the durable `status` field doesn't support.
+ *
+ * Lives in context (not local to SectionRegenerateButton) because the
+ * indicator renders in the modal footer (rendered by InitWizardModal),
+ * which is a sibling of the step that owns the button.
+ */
+export type WizardRegenerateState =
+  | { kind: "idle" }
+  | { kind: "busy"; target: string; startedAt: number }
+  | { kind: "success"; target: string; at: number }
+  | { kind: "failure"; target: string; message: string; at: number };
+
 export interface WizardData {
   concept: Concept | null;
   story_dna: StoryDNA | null;
@@ -44,6 +63,11 @@ interface WizardState {
   status: WizardStatus;
   data: WizardData;
   errorMessage: string | null;
+  /**
+   * Transient regenerate status, surfaced in the modal footer beside
+   * "重新生成". Distinct from `status` — see WizardRegenerateState doc.
+   */
+  regenerateState: WizardRegenerateState;
   /**
    * True once the file-based prefill useEffect has finished running (whether
    * or not it found any files). Steps with an auto-trigger (OutlineStep,
@@ -92,6 +116,10 @@ type WizardAction =
   | { type: "STEP_SKIPPED"; step: number }
   | { type: "JUMP_TO"; step: number }
   | { type: "STATUS"; status: WizardStatus; errorMessage?: string | null }
+  | { type: "REGENERATE_BUSY"; target: string }
+  | { type: "REGENERATE_SUCCESS"; target: string }
+  | { type: "REGENERATE_FAILURE"; target: string; message: string }
+  | { type: "REGENERATE_CLEAR" }
   | { type: "RESET" }
   | { type: "HYDRATE"; state: WizardState }
   | {
@@ -128,6 +156,7 @@ const initialState: WizardState = {
   status: "idle",
   data: EMPTY_DATA,
   errorMessage: null,
+  regenerateState: { kind: "idle" },
   prefillComplete: false,
   nextHandler: null,
   nextDisabled: false,
@@ -202,6 +231,14 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       };
     case "STATUS":
       return { ...state, status: action.status, errorMessage: action.errorMessage ?? null };
+    case "REGENERATE_BUSY":
+      return { ...state, regenerateState: { kind: "busy", target: action.target, startedAt: Date.now() } };
+    case "REGENERATE_SUCCESS":
+      return { ...state, regenerateState: { kind: "success", target: action.target, at: Date.now() } };
+    case "REGENERATE_FAILURE":
+      return { ...state, regenerateState: { kind: "failure", target: action.target, message: action.message, at: Date.now() } };
+    case "REGENERATE_CLEAR":
+      return { ...state, regenerateState: { kind: "idle" } };
     case "RESET":
       return initialState;
     case "HYDRATE":
@@ -258,6 +295,9 @@ function loadPersisted(projectId: string): WizardState | null {
         status: parsed.status || "idle",
         data: { ...EMPTY_DATA, ...parsed.data },
         errorMessage: parsed.errorMessage || null,
+        // Transient — never persist a regenerate status across sessions.
+        // "已重新生成" from 10 minutes ago would be stale by definition.
+        regenerateState: { kind: "idle" },
         // SessionStorage can be stale (e.g., user closed on step 5 without
         // saving, leaving data.novel_outline=null even though the file exists
         // on disk). Force prefill to run again by setting prefillComplete=false
@@ -317,6 +357,11 @@ interface WizardContextValue extends WizardState {
    * non-null. Use null when the step has nothing to persist (e.g. MapStep).
    */
   setSaveHandler: (handler: (() => void) | null, disabled?: boolean) => void;
+  /** Update the section-regenerate footer status indicator. */
+  setRegenerateBusy: (target: string) => void;
+  setRegenerateSuccess: (target: string) => void;
+  setRegenerateFailure: (target: string, message: string) => void;
+  clearRegenerateState: () => void;
 }
 
 const WizardContext = createContext<WizardContextValue | null>(null);
@@ -391,6 +436,13 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
       dispatch({ type: "SET_REGENERATE_HANDLER", handler, disabled }),
     setSaveHandler: (handler, disabled = false) =>
       dispatch({ type: "SET_SAVE_HANDLER", handler, disabled }),
+    setRegenerateBusy: (target) =>
+      dispatch({ type: "REGENERATE_BUSY", target }),
+    setRegenerateSuccess: (target) =>
+      dispatch({ type: "REGENERATE_SUCCESS", target }),
+    setRegenerateFailure: (target, message) =>
+      dispatch({ type: "REGENERATE_FAILURE", target, message }),
+    clearRegenerateState: () => dispatch({ type: "REGENERATE_CLEAR" }),
     reset: () => {
       try {
         sessionStorage.removeItem(getSessionKey(projectId));

@@ -580,6 +580,88 @@ async def regenerate_world_section(
     }
 
 
+class RegeneratePowerSystemItemPayload(BaseModel):
+    system_index: int = Field(ge=0)
+    user_modifications: str = Field(default="", max_length=1000)
+
+
+@router.post("/regenerate-power-system-item")
+async def regenerate_power_system_item(
+    project_id: str = Query(...),
+    payload: RegeneratePowerSystemItemPayload = None,
+):
+    """Rewrite a single entry of world.power_systems[index] without touching
+    the rest of the array. Other top-level world.json keys preserved
+    byte-identical.
+    """
+    from backend.agents.planner import PlannerAgent
+
+    if not project_id:
+        raise http_error(400, "VALIDATION_ERROR", "project_id 不能为空")
+
+    project = _file_manager().read_json(project_id, "project.json")
+    if project is None:
+        raise http_error(404, "PROJECT_NOT_FOUND", f"项目 {project_id} 不存在")
+
+    existing = _file_manager().read_json(project_id, "world.json") or {}
+    concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
+    genre = project.get("genre", "cool_novel")
+
+    systems = iter_power_systems(existing)
+    if payload.system_index >= len(systems):
+        raise http_error(
+            400,
+            "VALIDATION_ERROR",
+            f"system_index {payload.system_index} 超出范围 (0..{len(systems) - 1})",
+            index=payload.system_index,
+            total=len(systems),
+        )
+
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+        genre=genre,
+    )
+    try:
+        new_system, _resp = await agent.regenerate_power_system(
+            concept=concept_and_dna.get("concept", {}),
+            story_dna=concept_and_dna.get("story_dna", {}),
+            genre=genre,
+            user_modifications=payload.user_modifications,
+            existing_systems=systems,
+            target_index=payload.system_index,
+        )
+    except ValueError as e:
+        raise http_error(503, "LLM_GENERATION_FAILED", str(e))
+
+    merged = dict(existing)
+    next_systems = list(systems)
+    next_systems[payload.system_index] = new_system
+    merged["power_systems"] = next_systems
+
+    # Validate before writing so a legacy singular `power_system` in either
+    # `existing` or the LLM result is folded into `power_systems` here rather
+    # than lingering in world.json alongside the new key.
+    try:
+        merged = World.model_validate(merged).model_dump()
+    except Exception:
+        merged.pop("power_system", None)
+
+    _file_manager().write_json(project_id, "world.json", merged)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"world.power_systems[{payload.system_index}] 已重新生成",
+        "detail": {
+            "system_index": payload.system_index,
+            "power_system": new_system,
+            "world": merged,
+        },
+    }
+
+
 class RegenerateCharacterSectionPayload(BaseModel):
     section: str
     keep_existing: bool = False

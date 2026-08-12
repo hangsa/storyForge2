@@ -155,6 +155,17 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     }
   };
 
+  const handleItemRegenerate = (index: number) => async (mods: string) => {
+    try {
+      const result = await api.regeneratePowerSystemItem(projectId, index, mods);
+      const merged = normalizeLegacyWorld(result.world);
+      setWorld(merged);
+      wizard.markStepGenerated(2, { world: merged });
+    } catch (e) {
+      wizard.setStatus("error", e instanceof Error ? e.message : "体系重新生成失败");
+    }
+  };
+
   const updatePowerSystem = <K extends keyof PowerSystem>(
     index: number,
     key: K,
@@ -344,16 +355,23 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                   data-testid={`world-power-system-${i}`}
                   className="border border-outline-variant rounded p-3 space-y-2 relative"
                 >
-                  <button
-                    type="button"
-                    data-testid={`world-power-system-${i}-remove`}
-                    onClick={() => removePowerSystem(i)}
-                    disabled={busy}
-                    aria-label="删除力量体系"
-                    className="absolute top-2 right-2 text-system-log/40 hover:text-error transition-colors disabled:opacity-30"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
+                  <div className="absolute top-2 right-2 flex items-center gap-1">
+                    <SectionRegenerateButton
+                      target={`力量体系: ${ps.name || `#${i + 1}`}`}
+                      onRegenerate={handleItemRegenerate(i)}
+                      testId={`world-power-system-${i}-regenerate`}
+                    />
+                    <button
+                      type="button"
+                      data-testid={`world-power-system-${i}-remove`}
+                      onClick={() => removePowerSystem(i)}
+                      disabled={busy}
+                      aria-label="删除力量体系"
+                      className="text-system-log/40 hover:text-error transition-colors disabled:opacity-30"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  </div>
                   <div className="pr-6">
                     <label className="block font-label-mono text-system-log mb-1 text-[10px]">体系名称</label>
                     <input

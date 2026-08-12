@@ -862,6 +862,17 @@ export const api = {
       { section, user_modifications: userModifications },
     ),
 
+  regeneratePowerSystemItem: (
+    projectId: string,
+    systemIndex: number,
+    userModifications: string = "",
+  ): Promise<{ system_index: number; power_system: PowerSystem; world: World }> =>
+    request<{ system_index: number; power_system: PowerSystem; world: World }>(
+      "POST",
+      `/stage2/regenerate-power-system-item?project_id=${encodeURIComponent(projectId)}`,
+      { system_index: systemIndex, user_modifications: userModifications },
+    ),
+
   regenerateCharacterSection: (
     projectId: string,
     characterId: string,

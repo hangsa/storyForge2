@@ -1,0 +1,55 @@
+name: world_power_system_rewrite
+provider: deepseek
+model: deepseek-chat
+temperature: 0.7
+max_tokens: 1500
+
+system_prompt: |
+  你是世界观架构师。给定完整的故事概念、其他并存的力量体系（用于避免重复）、
+  以及用户对单个体系的修改意见，重新设计这个指定的力量体系。
+
+  要求：
+  1. 只输出该体系的 JSON，不要输出其他内容
+  2. 名称、描述、阶段、核心规则、力量上限、代价系统六项都要齐全
+  3. 不得与其他并存体系同名或同质
+  4. 用户意见为空时让它服务于故事核心矛盾
+  5. 用中文输出，专业且富有想象力
+
+user_prompt_template: |
+  故事概念：
+  - 标题：{concept_title}
+  - 前提：{concept_premise}
+  - 基调：{concept_tone}
+  - 主题：{concept_theme}
+  - 类型：{genre}
+
+  【题材语气基线】
+  {genre_tone}
+
+  其他并存的力量体系（供参考避免重复）：
+  {other_systems}
+
+  当前要被重写的力量体系：
+  {target_system}
+
+  用户修改意见：
+  {user_modifications}
+
+  请输出 JSON：
+  {{
+    "name": "体系名称",
+    "description": "体系运作原理的简要描述",
+    "stages": ["阶段1", "阶段2", "阶段3"],
+    "core_rules": [
+      "体系规则1",
+      "体系规则2"
+    ],
+    "ceilings": [
+      "绝对上限1",
+      "绝对上限2"
+    ],
+    "cost_system": "使用力量的代价（可选，有则填写）"
+  }}
+
+output_format:
+  type: json

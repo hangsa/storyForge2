@@ -11,6 +11,8 @@ vi.mock("../api/client", () => ({
     getCharacter: vi.fn(),
     getNovelOutline: vi.fn(),
     getOutline: vi.fn(),
+    regenerateWorldSection: vi.fn(),
+    regeneratePowerSystemItem: vi.fn(),
   },
 }));
 
@@ -29,6 +31,8 @@ beforeEach(() => {
   (api.getCharacter as ReturnType<typeof vi.fn>).mockReset();
   (api.getNovelOutline as ReturnType<typeof vi.fn>).mockReset();
   (api.getOutline as ReturnType<typeof vi.fn>).mockReset();
+  (api.regenerateWorldSection as ReturnType<typeof vi.fn>).mockReset();
+  (api.regeneratePowerSystemItem as ReturnType<typeof vi.fn>).mockReset();
   sessionStorage.clear();
 });
 
@@ -397,5 +401,108 @@ describe("WorldStep", () => {
     expect(stages.textContent).toContain("养气期");
     expect(stages.textContent).toContain("贯通期");
     expect(screen.getByTestId("world-power-system-0-name")).toHaveValue("道炁");
+  });
+
+  it("each power-system card renders a regenerate button next to its remove button", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    expect(screen.getByTestId("world-power-system-0-regenerate")).toBeInTheDocument();
+    expect(screen.getByTestId("world-power-system-0-remove")).toBeInTheDocument();
+    // The section-level regenerate button still exists for full-array regen.
+    expect(screen.getByTestId("world-power-system-regenerate")).toBeInTheDocument();
+  });
+
+  it("per-card regenerate calls regeneratePowerSystemItem with the right index and mods", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [
+        { name: "灵力", description: "", stages: ["炼气"], core_rules: [], ceilings: [] },
+        { name: "武道", description: "", stages: ["锻体"], core_rules: [], ceilings: [] },
+      ],
+      factions: [],
+      core_rules: [],
+    });
+    (api.regeneratePowerSystemItem as ReturnType<typeof vi.fn>).mockResolvedValue({
+      system_index: 1,
+      power_system: { name: "武道（新）", description: "新", stages: ["锻体"], core_rules: [], ceilings: [] },
+      world: {
+        era: "古代",
+        geography: "中原",
+        era_social_structure: "",
+        era_cultural_history: "",
+        power_systems: [
+          { name: "灵力", description: "", stages: ["炼气"], core_rules: [], ceilings: [] },
+          { name: "武道（新）", description: "新", stages: ["锻体"], core_rules: [], ceilings: [] },
+        ],
+        factions: [],
+        core_rules: [],
+      },
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    await act(async () => {
+      screen.getByTestId("world-power-system-1-regenerate").click();
+    });
+    // Modal opened by SectionRegenerateButton — type mods and confirm.
+    const textarea = await screen.findByTestId("regenerate-modal") && screen.getByLabelText("修改意见");
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "强调肉身极限" } });
+      screen.getByTestId("regenerate-modal-confirm").click();
+    });
+    await waitFor(() =>
+      expect(api.regeneratePowerSystemItem).toHaveBeenCalledWith(
+        PROJECT,
+        1,
+        "强调肉身极限",
+      ),
+    );
+  });
+
+  it("per-card regenerate updates only the target card and preserves the rest", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [
+        { name: "灵力", description: "", stages: ["炼气"], core_rules: [], ceilings: [] },
+        { name: "武道", description: "", stages: ["锻体"], core_rules: [], ceilings: [] },
+      ],
+      factions: [],
+      core_rules: [],
+    });
+    (api.regeneratePowerSystemItem as ReturnType<typeof vi.fn>).mockResolvedValue({
+      system_index: 0,
+      power_system: { name: "灵力（新）", description: "新", stages: ["炼气"], core_rules: [], ceilings: [] },
+      world: {
+        era: "古代",
+        geography: "中原",
+        era_social_structure: "",
+        era_cultural_history: "",
+        power_systems: [
+          { name: "灵力（新）", description: "新", stages: ["炼气"], core_rules: [], ceilings: [] },
+          { name: "武道", description: "", stages: ["锻体"], core_rules: [], ceilings: [] },
+        ],
+        factions: [],
+        core_rules: [],
+      },
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    await act(async () => {
+      screen.getByTestId("world-power-system-0-regenerate").click();
+    });
+    await act(async () => {
+      screen.getByTestId("regenerate-modal-confirm").click();
+    });
+    await waitFor(() => expect(api.regeneratePowerSystemItem).toHaveBeenCalledTimes(1));
+    expect((screen.getByTestId("world-power-system-0-name") as HTMLInputElement).value).toBe("灵力（新）");
+    expect((screen.getByTestId("world-power-system-1-name") as HTMLInputElement).value).toBe("武道");
   });
 });

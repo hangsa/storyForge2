@@ -362,6 +362,53 @@ class PlannerAgent(BaseAgent):
         self.log_usage("world_generation", response)
         return result, response
 
+    async def regenerate_power_system(
+        self,
+        concept: dict,
+        story_dna: dict,
+        genre: str = "cool_novel",
+        user_modifications: str = "",
+        existing_systems: Optional[list[dict]] = None,
+        target_index: int = 0,
+    ) -> tuple[dict, LLMResponse]:
+        """Rewrite a single power system in isolation. Other systems are passed
+        to the prompt as context so the rewrite doesn't duplicate them.
+        """
+        from backend.agents._injection_helpers import _build_user_modifications_block
+        systems = list(existing_systems or [])
+        others = [
+            ps for i, ps in enumerate(systems) if i != target_index and ps
+        ]
+        other_fragment = (
+            "\n".join(
+                f"- {ps.get('name', '未命名')}: {ps.get('description', '')}"
+                for ps in others
+            )
+            or "（无）"
+        )
+        if 0 <= target_index < len(systems) and systems[target_index]:
+            target_fragment = json.dumps(
+                systems[target_index], ensure_ascii=False, indent=2
+            )
+        else:
+            target_fragment = "（空）"
+
+        extras = _resolve_genre_extras(genre)
+        result, response = await self.generate_from_template(
+            "world_power_system_rewrite",
+            concept_title=concept.get("title", ""),
+            concept_premise=concept.get("premise", ""),
+            concept_tone=concept.get("tone", ""),
+            concept_theme=concept.get("theme", ""),
+            genre=_resolve_genre_label(genre),
+            genre_tone=extras["tone"],
+            other_systems=other_fragment,
+            target_system=target_fragment,
+            user_modifications=_build_user_modifications_block(user_modifications),
+        )
+        self.log_usage("world_power_system_rewrite", response)
+        return result, response
+
     async def generate_character(
         self,
         concept: dict,

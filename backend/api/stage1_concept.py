@@ -67,7 +67,7 @@ async def generate_concept(data: dict):
         genre=project.get("genre", "cool_novel"),
     )
     try:
-        user_modifications = str(data.get("user_modifications", ""))[:1000]
+        user_modifications = str(data.get("user_modifications", ""))[:1700]
         result, response = await agent.generate_concept_and_dna(
             initial_intent=project.get("initial_intent", {}).get("free_text", ""),
             genre=project.get("genre", "cool_novel"),
@@ -127,7 +127,7 @@ async def update_concept(data: dict):
 
 class RegenerateConceptSectionPayload(BaseModel):
     section: str = Field(...)
-    user_modifications: str = Field(default="", max_length=1000)
+    user_modifications: str = Field(default="", max_length=1700)
 
 
 @router.post("/regenerate-section")

@@ -135,7 +135,7 @@ async def generate_world(data: dict):
         genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
-        user_modifications = str(data.get("user_modifications", ""))[:1000]
+        user_modifications = str(data.get("user_modifications", ""))[:1700]
         result, response = await agent.generate_world(
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
@@ -228,7 +228,7 @@ async def generate_character(data: dict):
         genre=genre,
     )
     try:
-        user_modifications = str(data.get("user_modifications", ""))[:1000]
+        user_modifications = str(data.get("user_modifications", ""))[:1700]
         result, response = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),
             world=world,
@@ -458,7 +458,7 @@ async def regenerate_character_examples(
         genre=genre,
     )
     try:
-        user_modifications = str(payload.get("user_modifications", ""))[:1000]
+        user_modifications = str(payload.get("user_modifications", ""))[:1700]
         result, _resp = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),
             world=world,
@@ -500,7 +500,7 @@ async def regenerate_character_examples(
 
 class RegenerateWorldSectionPayload(BaseModel):
     section: str
-    user_modifications: str = Field(default="", max_length=1000)
+    user_modifications: str = Field(default="", max_length=1700)
 
 
 @router.post("/regenerate-world-section")
@@ -582,7 +582,7 @@ async def regenerate_world_section(
 
 class RegeneratePowerSystemItemPayload(BaseModel):
     system_index: int = Field(ge=0)
-    user_modifications: str = Field(default="", max_length=1000)
+    user_modifications: str = Field(default="", max_length=1700)
 
 
 @router.post("/regenerate-power-system-item")
@@ -665,7 +665,7 @@ async def regenerate_power_system_item(
 class RegenerateCharacterSectionPayload(BaseModel):
     section: str
     keep_existing: bool = False
-    user_modifications: str = Field(default="", max_length=1000)
+    user_modifications: str = Field(default="", max_length=1700)
 
 
 @router.post("/regenerate-character-section")

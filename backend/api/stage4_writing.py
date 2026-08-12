@@ -1183,7 +1183,7 @@ async def write_scene(data: dict):
     chapter_number = data.get("chapter_number", 1)
     scene_number = data.get("scene_number", 1)
     custom_style_config = data.get("custom_style_config") or None
-    user_modifications = str(data.get("user_modifications", ""))[:1000]
+    user_modifications = str(data.get("user_modifications", ""))[:1700]
     if not project_id:
         raise HTTPException(
             status_code=400,

@@ -8,7 +8,7 @@ interface RegenerateModalProps {
   onCancel: () => void;
 }
 
-const MAX_LEN = 1000;
+const MAX_LEN = 1700;
 
 export function RegenerateModal({
   open,

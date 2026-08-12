@@ -95,7 +95,7 @@ async def generate_outline(data: dict):
         genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
-        user_modifications = str(data.get("user_modifications", ""))[:1000]
+        user_modifications = str(data.get("user_modifications", ""))[:1700]
         result, response = await agent.generate_outline(
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
@@ -260,7 +260,7 @@ async def generate_novel_outline(data: dict):
         genre=project.get("genre", "cool_novel") if project else "cool_novel",
     )
     try:
-        user_modifications = str(data.get("user_modifications", ""))[:1000]
+        user_modifications = str(data.get("user_modifications", ""))[:1700]
         result, response = await agent.generate_novel_outline(
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
@@ -326,7 +326,7 @@ async def update_novel_outline(data: dict):
 
 class RegenerateNovelOutlineSectionPayload(BaseModel):
     section: str
-    user_modifications: str = Field(default="", max_length=1000)
+    user_modifications: str = Field(default="", max_length=1700)
 
 
 @router.post("/regenerate-novel-outline-section")

@@ -30,6 +30,9 @@ system_prompt: |
   8. 用中文输出，角色要有网文主角的魅力和辨识度
   9. 只输出JSON，不要输出任何其他内容
   10. 为核心角色（protagonist, antagonist）设计成长曲线（growth_curve），包含3-5个阶段
+  11. 若下方用户提示中给出了【用户修改意见】，必须把每一条诉求严格落到 JSON 的
+     具体字段里——性格/能力/出身/人设类落到对应字段；若与默认惯例冲突，以用户意见为准，
+     不得以"符合网文惯例"为由忽略。【用户修改意见】为空时，按上述 1-10 条默认生成。
 
 user_prompt_template: |
   故事概念：
@@ -63,6 +66,8 @@ user_prompt_template: |
   - 每个阶段描述角色在该阶段的内在变化和外在表现
   - target_chapter_range 预估该阶段发生在哪些章节（如 "3-5"）
   - 配角可以不设计完整成长曲线，设为 null
+
+  {user_modifications}
 
   请生成一个{character_type_label}，包含完整的人格层、当前状态、声音签名和行为限制。
 
@@ -121,8 +126,6 @@ user_prompt_template: |
       ]
     }}
   }}
-
-  {user_modifications}
 
 output_format:
   type: json

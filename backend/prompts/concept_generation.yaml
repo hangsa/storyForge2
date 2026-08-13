@@ -15,6 +15,9 @@ system_prompt: |
   5. 用中文输出，保持专业性和创意性
   6. 前提（premise）要一句话说清故事的独特卖点
   7. 只输出JSON，不要输出任何其他内容
+  8. 若下方用户提示中给出了【用户修改意见】，必须把每一条诉求严格落到 JSON 的
+     具体字段里——类型/基调/人设/前作类落到对应字段；若与默认惯例冲突，以用户意见为准，
+     不得以"符合网文惯例"为由忽略。【用户修改意见】为空时，按上述 1-7 条默认生成。
 
 user_prompt_template: |
   作者初始意图：
@@ -30,6 +33,8 @@ user_prompt_template: |
 
   【题材典型套路】
   {genre_trope_patterns}
+
+  {user_modifications}
 
   请生成：
   1. 故事概念（title, genre, premise, tone, theme, target_audience）
@@ -56,8 +61,6 @@ user_prompt_template: |
       ]
     }}
   }}
-
-  {user_modifications}
 
 output_format:
   type: json

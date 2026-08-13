@@ -42,6 +42,11 @@ system_prompt: |
   - 遵守该类型网文的节奏感和爽点密度
   - 用中文创作
 
+  8. 若下方用户提示中给出了【用户修改意见】，必须把每一条诉求严格融入到当前场景
+     的描写中——节奏/视角/风格/侧重点调整；若与默认惯例冲突，以用户意见为准，
+     不得以"符合网文惯例"为由忽略。【用户修改意见】为空时，按上述核心要求与
+     写作风格默认生成。
+
 user_prompt_template: |
   【故事背景】
   - 类型：{genre}
@@ -99,6 +104,8 @@ user_prompt_template: |
   【本场节奏约束】
   {genre_pacing_scene}
 
+  {user_modifications}
+
   请撰写该场景的完整文本。注意：
   1. 文中必须插入所有 "必需的 SF_LOG 标签"
   2. 不要违反任何行为禁忌
@@ -111,8 +118,6 @@ user_prompt_template: |
   {{
     "text": "场景完整文本（含SF_LOG标签）..."
   }}
-
-  {user_modifications}
 
 output_format:
   type: json

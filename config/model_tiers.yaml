@@ -31,6 +31,9 @@ agent_mapping:
     world_generation:
       tier: tier_1
       model: default
+    world_power_system_rewrite:
+      tier: tier_1
+      model: default
     map_system:
       tier: tier_1
       model: default

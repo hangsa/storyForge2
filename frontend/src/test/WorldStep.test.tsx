@@ -182,6 +182,7 @@ describe("WorldStep", () => {
       factions: [],
       core_rules: [],
     });
+    (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
     await screen.findByTestId("world-form");
     await act(async () => {
@@ -191,6 +192,53 @@ describe("WorldStep", () => {
     for (const field of ["name", "description", "stages", "rules", "ceilings", "cost"]) {
       expect(screen.getByTestId(`world-power-system-1-${field}`)).toBeInTheDocument();
     }
+  });
+
+  it("'添加体系' persists the new empty slot to disk so ↻ can address it (regression)", async () => {
+    // 2026-08-12 bug: clicking 添加体系 only mutated local React state. The
+    // user could click ↻ on the new card and the backend rejected with
+    // "system_index 1 超出范围 (0..0)" because world.json on disk still had
+    // the original single slot. Fix: addPowerSystem now also calls
+    // api.updateWorld so the slot is real.
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [],
+      core_rules: [],
+    });
+    (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    setup();
+    await screen.findByTestId("world-form");
+    await act(async () => {
+      screen.getByTestId("world-power-system-add").click();
+    });
+    await waitFor(() => expect(api.updateWorld).toHaveBeenCalled());
+    const call = (api.updateWorld as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[1].power_systems).toHaveLength(2);
+    // The persisted slot is the empty placeholder; existing slot is intact.
+    expect(call[1].power_systems[0].name).toBe("灵力");
+    expect(call[1].power_systems[1].name).toBe("");
+  });
+
+  it("'添加体系' failure: keeps the empty card locally and surfaces an in-form error", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [],
+      core_rules: [],
+    });
+    (api.updateWorld as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("disk full"));
+    setup();
+    await screen.findByTestId("world-form");
+    await act(async () => {
+      screen.getByTestId("world-power-system-add").click();
+    });
+    // Optimistic: card is visible immediately even though the persist failed.
+    expect(screen.getByTestId("world-power-system-1")).toBeInTheDocument();
+    // The in-form error banner surfaces the rejection reason.
+    await waitFor(() => expect(screen.getByText(/disk full|新增力量体系失败/)).toBeInTheDocument());
   });
 
   it("typing into two power-system cards then '确认修改并继续' persists the array", async () => {
@@ -204,6 +252,9 @@ describe("WorldStep", () => {
     (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
     await screen.findByTestId("world-form");
+    // Two 添加体系 clicks — each one now also calls api.updateWorld (regression
+    // 2026-08-12), so updateWorld is invoked 3 times total by the end of this
+    // test: twice for addPowerSystem, once for the final wizard-next save.
     await act(async () => {
       screen.getByTestId("world-power-system-add").click();
     });
@@ -218,12 +269,14 @@ describe("WorldStep", () => {
     await act(async () => {
       screen.getByTestId("wizard-next").click();
     });
-    await waitFor(() => expect(api.updateWorld).toHaveBeenCalledTimes(1));
-    const call = (api.updateWorld as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(call[1].power_systems).toHaveLength(2);
-    expect(call[1].power_systems[0].name).toBe("灵力");
-    expect(call[1].power_systems[1].name).toBe("武道");
-    expect(call[1].power_systems[1].cost_system).toBe("折寿");
+    await waitFor(() => expect(api.updateWorld).toHaveBeenCalledTimes(3));
+    // The final wizard-next call carries the typed values; earlier calls are
+    // the addPowerSystem persists with empty slot(s).
+    const finalCall = (api.updateWorld as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    expect(finalCall[1].power_systems).toHaveLength(2);
+    expect(finalCall[1].power_systems[0].name).toBe("灵力");
+    expect(finalCall[1].power_systems[1].name).toBe("武道");
+    expect(finalCall[1].power_systems[1].cost_system).toBe("折寿");
   });
 
   it("power-system remove button drops the card and re-indexes", async () => {

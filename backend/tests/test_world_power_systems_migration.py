@@ -6,7 +6,7 @@ model folds it forward on validate and `iter_power_systems` tolerates both
 shapes for the code paths that read world.json as a bare dict.
 """
 
-from backend.models.world import World, iter_power_systems
+from backend.models.world import World, iter_power_systems, _raw_power_systems_list
 
 
 LEGACY_PS = {
@@ -94,3 +94,23 @@ def test_iter_power_systems_on_missing_or_blank_input():
 def test_iter_power_systems_tolerates_a_non_dict_legacy_value():
     # Some very old projects stored power_system as a bare string.
     assert iter_power_systems({"power_system": "灵力"}) == [{"name": "灵力"}]
+
+
+def test_raw_power_systems_list_keeps_empty_entries():
+    # Used by the per-item regenerate endpoint so the bounds check matches
+    # the slot count the wizard renders. iter_power_systems filters these
+    # out, which is what we want for prompt construction (writer/reviewer)
+    # but wrong for addressing an arbitrary user-clicked card.
+    world = {
+        "power_systems": [LEGACY_PS, {}, {"name": ""}, {"name": "武道"}],
+    }
+    assert len(_raw_power_systems_list(world)) == 4
+    assert iter_power_systems(world) == [LEGACY_PS, {"name": "武道"}]
+
+
+def test_raw_power_systems_list_drops_non_dict_entries():
+    # Malformed files may have nulls / strings mixed in. Match iter's
+    # behavior of dropping non-dict slots so the index the user clicked
+    # can't be a `null` placeholder.
+    world = {"power_systems": [LEGACY_PS, None, "bad", {"name": "武道"}]}
+    assert _raw_power_systems_list(world) == [LEGACY_PS, {"name": "武道"}]

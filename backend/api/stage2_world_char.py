@@ -7,7 +7,7 @@ from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
 from backend.models.character import BehaviorExample, Character as CharacterModel, CharacterPatch
-from backend.models.world import World, iter_power_systems
+from backend.models.world import World, iter_power_systems, _raw_power_systems_list
 from backend.services.agent_prompt_stores import (
     project_override_store,
     global_override_store,
@@ -607,14 +607,20 @@ async def regenerate_power_system_item(
     concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
     genre = project.get("genre", "cool_novel")
 
-    systems = iter_power_systems(existing)
-    if payload.system_index >= len(systems):
+    # Use the raw disk array — not `iter_power_systems`, which drops entries
+    # whose fields are all blank. The wizard renders those empties as
+    # cards (so the user can fill them in or click ↻ on them), and the
+    # per-item endpoint must accept the index the user clicked. An empty
+    # slot just becomes a `target_system="（空）"` prompt and the LLM
+    # generates a fresh one (planner.py:_build_target_fragment).
+    raw_systems = _raw_power_systems_list(existing)
+    if payload.system_index >= len(raw_systems):
         raise http_error(
             400,
             "VALIDATION_ERROR",
-            f"system_index {payload.system_index} 超出范围 (0..{len(systems) - 1})",
+            f"system_index {payload.system_index} 超出范围 (0..{len(raw_systems) - 1})",
             index=payload.system_index,
-            total=len(systems),
+            total=len(raw_systems),
         )
 
     agent = PlannerAgent(
@@ -629,14 +635,14 @@ async def regenerate_power_system_item(
             story_dna=concept_and_dna.get("story_dna", {}),
             genre=genre,
             user_modifications=payload.user_modifications,
-            existing_systems=systems,
+            existing_systems=raw_systems,
             target_index=payload.system_index,
         )
     except ValueError as e:
         raise http_error(503, "LLM_GENERATION_FAILED", str(e))
 
     merged = dict(existing)
-    next_systems = list(systems)
+    next_systems = list(raw_systems)
     next_systems[payload.system_index] = new_system
     merged["power_systems"] = next_systems
 

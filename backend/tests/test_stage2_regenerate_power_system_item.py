@@ -162,6 +162,32 @@ def test_out_of_range_index_returns_400(mock_planner, tmp_path):
     assert resp.json()["detail"]["detail"]["total"] == 2
 
 
+def test_regenerate_empty_slot_is_accepted_not_out_of_range(mock_planner, tmp_path):
+    # Bug repro (2026-08-12): a world with [filled, {}] on disk. The wizard
+    # renders both slots, so the user clicks ↻ on index 1. iter_power_systems
+    # filters the empty entry out, the bounds check sees len=1 and rejects
+    # index 1 with "system_index 1 超出范围 (0..0)". The endpoint must use
+    # the raw array length, not the filtered count.
+    _seed_project(tmp_path)
+    world = _seed_two_system_world()
+    world["power_systems"] = [world["power_systems"][0], {}]
+    _write(tmp_path, "world.json", world)
+    resp = client.post(
+        f"/api/stage2/regenerate-power-system-item?project_id={PROJ}",
+        json={"system_index": 1, "user_modifications": "从零生成"},
+    )
+    assert resp.status_code == 200, resp.text
+    detail = resp.json()["detail"]
+    assert detail["system_index"] == 1
+    # Slot 1 is now the new system; slot 0 stays byte-identical.
+    assert detail["world"]["power_systems"][0] == world["power_systems"][0]
+    assert detail["world"]["power_systems"][1] == _mock_new_system()
+    # The planner received the full 2-element array (incl. the empty slot)
+    # so its `others` comprehension can exclude the target.
+    kwargs = mock_planner.return_value.regenerate_power_system.call_args.kwargs
+    assert len(kwargs["existing_systems"]) == 2
+
+
 def test_empty_power_systems_returns_400(mock_planner, tmp_path):
     _seed_project(tmp_path)
     _write(tmp_path, "world.json", {

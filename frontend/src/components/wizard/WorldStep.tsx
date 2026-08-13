@@ -183,8 +183,41 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     setWorld({ ...world, power_systems: next });
   };
 
-  const addPowerSystem = () => {
-    setWorld({ ...world, power_systems: [...world.power_systems, { ...EMPTY_POWER_SYSTEM }] });
+  // Add a blank power-system card AND immediately persist the new array to
+  // disk. Without the persist, the user clicks ↻ on the new card and gets
+  // "system_index 1 超出范围 (0..0)" — the backend reads world.json (which
+  // still has only N slots) and rejects the index. Persisting here keeps
+  // the wizard's slot count in lockstep with what the user sees on screen.
+  //
+  // Button text stays "添加体系" — the user-facing affordance didn't change,
+  // only the side-effect.
+  const addPowerSystem = async () => {
+    if (busy) return;
+    const next: World = {
+      ...world,
+      power_systems: [...world.power_systems, { ...EMPTY_POWER_SYSTEM }],
+    };
+    // Optimistic: render the new card right away. The persist round-trip
+    // is short enough not to justify a spinner on the button, and on
+    // failure we keep the local state so the user can remove the card
+    // manually rather than be confused by it vanishing mid-typing.
+    setWorld(next);
+    setBusy(true);
+    try {
+      await api.updateWorld(projectId, next);
+      // Keep wizard.data.world in sync so navigating away and back doesn't
+      // drop the just-added slot from view. updateData deliberately does
+      // NOT mark step 2 "completed" — the user has only added an empty
+      // slot, not generated content.
+      wizard.updateData({ world: next });
+    } catch (e) {
+      wizard.setStatus(
+        "error",
+        e instanceof Error ? e.message : "新增力量体系失败",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const removePowerSystem = (index: number) => {

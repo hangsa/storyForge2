@@ -122,6 +122,7 @@ type WizardAction =
   | { type: "REGENERATE_CLEAR" }
   | { type: "RESET" }
   | { type: "HYDRATE"; state: WizardState }
+  | { type: "UPDATE_DATA"; patch: Partial<WizardData> }
   | {
       type: "HYDRATE_FROM_FILES";
       completedSteps: number[];
@@ -243,6 +244,14 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       return initialState;
     case "HYDRATE":
       return action.state;
+    case "UPDATE_DATA":
+      // Merge a patch into `data` without touching completedSteps /
+      // status / currentStep. Used when a step mutates wizard state in
+      // place (e.g., adding an empty power-system card) and wants the
+      // mutation visible across step navigation, but does NOT want to
+      // mark the step "completed" (which saveStep / markStepGenerated
+      // would do).
+      return { ...state, data: { ...state.data, ...action.patch } };
     case "HYDRATE_FROM_FILES": {
       const mergedCompleted = Array.from(
         new Set([...state.completedSteps, ...action.completedSteps]),
@@ -339,6 +348,13 @@ interface WizardContextValue extends WizardState {
     nextStep: number,
   ) => void;
   /**
+   * Merge a patch into the wizard's data without touching completedSteps,
+   * status, or currentStep. Use when a step has made a local mutation it
+   * wants reflected across step navigation (e.g., adding an empty card),
+   * but does NOT want to mark the step "completed".
+   */
+  updateData: (patch: Partial<WizardData>) => void;
+  /**
    * Signal that the prefill useEffect has finished running. Use this when
    * prefill found no files to hydrate (the hydrate* actions above already
    * mark prefillComplete=true as a side effect).
@@ -429,6 +445,7 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
       dispatch({ type: "HYDRATE_FROM_FILES", completedSteps, data }),
     hydrateFromFilesAndAdvance: (completedSteps, data, nextStep) =>
       dispatch({ type: "HYDRATE_FROM_FILES_AND_ADVANCE", completedSteps, data, nextStep }),
+    updateData: (patch) => dispatch({ type: "UPDATE_DATA", patch }),
     markPrefillComplete: () => dispatch({ type: "PREFLILL_COMPLETE" }),
     setNextHandler: (handler, disabled = false) =>
       dispatch({ type: "SET_NEXT_HANDLER", handler, disabled }),

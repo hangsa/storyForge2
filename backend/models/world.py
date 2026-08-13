@@ -72,26 +72,38 @@ def _dedupe(items) -> list[str]:
     return out
 
 
+def _raw_power_systems_list(world: Optional[dict]) -> list[dict]:
+    """Read the raw power_systems array (or legacy `power_system`) out of
+    a world.json dict, preserving empty entries. Used by the per-item
+    regenerate endpoint, which has to address every slot the user sees
+    in the wizard — including ones that have been added via 新增 but
+    not yet filled in. Other code paths should keep using
+    `iter_power_systems` so they don't iterate placeholder dicts.
+    """
+    if not isinstance(world, dict):
+        return []
+    systems = world.get("power_systems")
+    if isinstance(systems, list):
+        return [ps for ps in systems if isinstance(ps, dict)]
+    legacy = world.get("power_system")
+    if isinstance(legacy, dict):
+        return [legacy]
+    if isinstance(legacy, str) and legacy:
+        # Some very old projects stored the system as a bare name.
+        return [{"name": legacy}]
+    return []
+
+
 def iter_power_systems(world: Optional[dict]) -> list[dict]:
     """Read power systems out of a raw world.json dict.
 
     Tolerates both the current `power_systems` array and the legacy single
     `power_system` object. Stage 3/4 load world.json as a bare dict without
     going through `World.model_validate`, so files that predate the migration
-    are still live on those paths.
+    are still live on those paths. Empty entries are dropped — callers that
+    need to address every slot must use `_raw_power_systems_list` instead.
     """
-    if not isinstance(world, dict):
-        return []
-    systems = world.get("power_systems")
-    if isinstance(systems, list):
-        return [ps for ps in systems if isinstance(ps, dict) and any(ps.values())]
-    legacy = world.get("power_system")
-    if isinstance(legacy, dict):
-        return [legacy] if any(legacy.values()) else []
-    if isinstance(legacy, str) and legacy:
-        # Some very old projects stored the system as a bare name.
-        return [{"name": legacy}]
-    return []
+    return [ps for ps in _raw_power_systems_list(world) if any(ps.values())]
 
 
 class World(BaseModel):

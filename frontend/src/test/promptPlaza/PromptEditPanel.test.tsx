@@ -9,7 +9,6 @@ const DETAIL: PromptDetail = {
     name: "scene_writing",
     system_prompt: "default sys",
     user_prompt_template: "default user {var}",
-    model: "deepseek-chat",
     temperature: 0.9,
     max_tokens: 1000,
     output_format: { type: "json" },
@@ -19,7 +18,6 @@ const DETAIL: PromptDetail = {
     name: "scene_writing",
     system_prompt: "default sys",
     user_prompt_template: "default user {var}",
-    model: "deepseek-chat",
     temperature: 0.9,
     max_tokens: 1000,
     output_format: { type: "json" },
@@ -82,6 +80,16 @@ describe("PromptEditPanel", () => {
     // Open the Advanced section so its body is in the DOM
     fireEvent.click(screen.getByTestId("advanced-toggle"));
     expect(screen.queryByTestId("adv-model")).toBeNull();
+  });
+
+  it("onSave payload does not include a model field", () => {
+    const onSave = vi.fn();
+    render(<PromptEditPanel detail={DETAIL} loading={false} error={null} onSave={onSave} onReset={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("edit-system"), { target: { value: "NEW sys" } });
+    fireEvent.click(screen.getByTestId("save-button"));
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const payload = onSave.mock.calls[0][0];
+    expect(payload).not.toHaveProperty("model");
   });
 
   it("shows loading state", () => {

@@ -10,7 +10,6 @@ interface Props {
   onSave: (payload: {
     system_prompt?: string;
     user_prompt_template?: string;
-    model?: string;
     temperature?: number;
     max_tokens?: number;
     output_format?: Record<string, unknown>;
@@ -32,7 +31,6 @@ function getEffectiveNumber(detail: PromptDetail, key: string, fallback = 0): nu
 export default function PromptEditPanel({ detail, loading, error, onSave, onReset, onClose }: Props) {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [userTemplate, setUserTemplate] = useState("");
-  const [model, setModel] = useState("");
   const [temperature, setTemperature] = useState(0.9);
   const [maxTokens, setMaxTokens] = useState(1000);
   const [outputFormatJson, setOutputFormatJson] = useState("{}");
@@ -47,7 +45,6 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
     if (!detail) return;
     setSystemPrompt(getEffectiveString(detail, "system_prompt"));
     setUserTemplate(getEffectiveString(detail, "user_prompt_template"));
-    setModel(getEffectiveString(detail, "model", ""));
     setTemperature(getEffectiveNumber(detail, "temperature", 0.9));
     setMaxTokens(getEffectiveNumber(detail, "max_tokens", 1000));
     const of = (detail.effective as Record<string, unknown>).output_format;
@@ -58,19 +55,17 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
     if (!detail) return false;
     const baseSystem = getEffectiveString(detail, "system_prompt");
     const baseUser = getEffectiveString(detail, "user_prompt_template");
-    const baseModel = getEffectiveString(detail, "model", "");
     const baseTemp = getEffectiveNumber(detail, "temperature", 0.9);
     const baseMax = getEffectiveNumber(detail, "max_tokens", 1000);
     const baseOf = JSON.stringify((detail.effective as Record<string, unknown>).output_format ?? {});
     return (
       systemPrompt !== baseSystem ||
       userTemplate !== baseUser ||
-      model !== baseModel ||
       temperature !== baseTemp ||
       maxTokens !== baseMax ||
       outputFormatJson !== baseOf
     );
-  }, [detail, systemPrompt, userTemplate, model, temperature, maxTokens, outputFormatJson]);
+  }, [detail, systemPrompt, userTemplate, temperature, maxTokens, outputFormatJson]);
 
   if (loading) {
     return (
@@ -104,7 +99,6 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
     onSave({
       system_prompt: systemPrompt,
       user_prompt_template: userTemplate,
-      model,
       temperature,
       max_tokens: maxTokens,
       output_format: parsed,
@@ -163,11 +157,9 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
           />
         </div>
         <AdvancedSection
-          model={model}
           temperature={temperature}
           maxTokens={maxTokens}
           outputFormatJson={outputFormatJson}
-          onModelChange={setModel}
           onTemperatureChange={setTemperature}
           onMaxTokensChange={setMaxTokens}
           onOutputFormatChange={setOutputFormatJson}

@@ -17,6 +17,7 @@ from backend.conductor.autopilot_runner_async import (
     find_latest_completed_chapter,
     regenerate_chapter,
     reset_chapter_progress,
+    sync_checkpoint_for_chapter,
 )
 from backend.utils.file_manager import FileManager
 
@@ -353,3 +354,51 @@ class TestRegenerateChapterOrchestrator:
         # 3. queue: ch5 ids removed, then 3 fresh ch5 ids added
         new_ids = [item.id for item in added if item.id.startswith("write-5-")]
         assert sorted(new_ids) == ["write-5-1", "write-5-2", "write-5-3"]
+
+
+class TestSyncCheckpointForChapter:
+    def test_removes_checkpoint_when_chapter_matches(self, tmp_path):
+        proj = tmp_path / "p_ckpt"
+        proj.mkdir()
+        (proj / "project.json").write_text(json.dumps({"id": "p_ckpt"}))
+        checkpoint = {
+            "project_id": "p_ckpt",
+            "pipeline_stage": "scene_review",
+            "current_chapter": 5,
+            "current_scene": 3,
+            "l0_snapshot": {},
+            "registry_snapshots": {},
+            "character_states": [],
+            "timestamp": "2026-08-19T00:00:00Z",
+        }
+        (proj / ".storyforge_checkpoint.json").write_text(json.dumps(checkpoint))
+
+        sync_checkpoint_for_chapter("p_ckpt", 5, tmp_path)
+
+        # After sync: file deleted (chapter is being regenerated; no useful state)
+        assert not (proj / ".storyforge_checkpoint.json").exists()
+
+    def test_deletes_only_matching_chapter_when_different(self, tmp_path):
+        proj = tmp_path / "p_ckpt2"
+        proj.mkdir()
+        (proj / "project.json").write_text(json.dumps({"id": "p_ckpt2"}))
+        # Checkpoint for chapter 9, not 5
+        checkpoint = {
+            "project_id": "p_ckpt2",
+            "current_chapter": 9,
+            "current_scene": 2,
+            "pipeline_stage": "scene_review",
+        }
+        (proj / ".storyforge_checkpoint.json").write_text(json.dumps(checkpoint))
+
+        sync_checkpoint_for_chapter("p_ckpt2", 5, tmp_path)
+
+        # File should still exist (chapter mismatch → no action)
+        assert (proj / ".storyforge_checkpoint.json").exists()
+
+    def test_no_op_when_checkpoint_missing(self, tmp_path):
+        proj = tmp_path / "p_ckpt3"
+        proj.mkdir()
+        # No checkpoint file
+        sync_checkpoint_for_chapter("p_ckpt3", 5, tmp_path)
+        # No exception

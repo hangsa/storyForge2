@@ -282,6 +282,29 @@ def regenerate_chapter(fm: FileManager,
     enqueue_chapter_scenes(mgr, chapter_number, scene_plan)
 
 
+def sync_checkpoint_for_chapter(project_id: str, chapter_number: int,
+                                  projects_dir: Path) -> None:
+    """Remove the .storyforge_checkpoint.json when its current_chapter
+    matches the chapter being regenerated.
+
+    Rationale: the checkpoint snapshot reflects completed work that the
+    regeneration will overwrite. Leaving it in place creates a stale
+    snapshot that the runner's recover() path would later read. The
+    runner rebuilds the checkpoint naturally on the next checkpoint tick,
+    so deleting is preferable to mutating in place.
+    """
+    path = projects_dir / project_id / ".storyforge_checkpoint.json"
+    if not path.exists():
+        return
+    try:
+        ckpt = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        # Corrupt checkpoint — safe to leave; recover() handles it.
+        return
+    if ckpt.get("current_chapter") == chapter_number:
+        path.unlink()
+
+
 def repair_stuck_chapters(progress: dict, outline: dict) -> list:
     """Flip chapters stuck at status='in_progress' despite all outline scenes
     being terminal to status='completed'. Mutates `progress` in place;

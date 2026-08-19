@@ -19,9 +19,6 @@ logger = logging.getLogger(__name__)
 
 class PromptTemplate:
     def __init__(self, data: dict):
-        self.name: str = data.get("name", "")
-        self.provider: str = data.get("provider", settings.llm_provider)
-        self.model: str = data.get("model", settings.llm_model)
         self.temperature: float = data.get("temperature", settings.llm_temperature)
         self.max_tokens: int = data.get("max_tokens", settings.llm_max_tokens)
         self.system_prompt: str = data.get("system_prompt", "")

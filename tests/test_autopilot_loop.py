@@ -272,10 +272,14 @@ class TestEnsureReturnContract:
         await svc.cancel("p1")
 
     @pytest.mark.asyncio
-    async def test_ensure_returns_no_work_to_do_when_all_complete(self, projects_dir):
+    async def test_ensure_returns_no_work_to_do_when_scope_has_no_chapters(self, projects_dir):
+        """v2.1: scope=range with no matching chapters (range past outline end)
+        is a genuine no-work-to-do. The next_chapter auto-fallback is gone,
+        so a scope with zero chapters does NOT silently widen."""
         from backend.conductor.autopilot_session import AutopilotSessionManager
         from backend.models.autopilot_session import ManagedStartConfig, SessionState
-        # Outline + progress where every scene is already completed.
+        # Outline has only ch1, but the requested range [5, 10] doesn't
+        # overlap — this is the only path that returns no_work_to_do now.
         (projects_dir / "p1" / "outline.json").write_text(
             json.dumps({
                 "chapters": [{
@@ -298,12 +302,13 @@ class TestEnsureReturnContract:
         )
         svc = AutopilotLoopService()
         mgr = AutopilotSessionManager(projects_dir, "p1")
-        mgr.start(ManagedStartConfig())
+        cfg = ManagedStartConfig(scope="range", start_chapter=5, end_chapter=10)
+        mgr.start(cfg)
 
         class StubExec:
             async def execute(self, item, project_id):
                 return {"status": "ok"}
-        result = await svc.ensure("p1", mgr, StubExec(), ManagedStartConfig())
+        result = await svc.ensure("p1", mgr, StubExec(), cfg)
         assert result.outcome == "no_work_to_do"
         assert result.seed_result.enqueued == 0
         assert result.repaired_chapters == []
@@ -320,13 +325,19 @@ class TestEnsureReturnContract:
         in progress.json but every scene was 'completed'. ensure() must
         auto-repair those before seeding so seed_queue sees the corrected
         state. Repaired chapters are returned in the result so the API can
-        surface them in the no_work_to_do toast / response."""
+        surface them in the no_work_to_do toast / response.
+
+        v2.1: a chapter that's repaired to status='completed' is ALSO
+        considered done and will be regenerated (reset to pending, scenes
+        re-enqueued) — same path as any other completed chapter. So after
+        ensure(), ch2 lands back at status='pending' but the queue holds
+        write-2-1 and write-2-2."""
         from backend.conductor.autopilot_session import AutopilotSessionManager
         from backend.models.autopilot_session import ManagedStartConfig
         # Outline says ch2 has 2 scenes; progress says ch2 is in_progress
-        # with both scenes completed → repair should flip it. ch3 is
-        # genuinely unfinished, so seed_queue enqueues it (and ch2 is
-        # already correct post-repair, so no scene there).
+        # with both scenes completed → repair should flip it, then regen
+        # resets it again so scenes get re-enqueued. ch3 is genuinely
+        # unfinished, so its scene is also enqueued.
         (projects_dir / "p1" / "outline.json").write_text(json.dumps({
             "chapters": [
                 {"chapter_number": 2, "scene_plan": [
@@ -360,20 +371,29 @@ class TestEnsureReturnContract:
         result = await svc.ensure("p1", mgr, StubExec(), ManagedStartConfig())
         assert result.outcome == "started"
         assert result.repaired_chapters == [2]
-        # The repair is persisted to disk so subsequent reads see it.
+        # The repair is persisted to disk first, then regeneration resets
+        # the now-completed ch2 back to pending. The end state on disk
+        # reflects the regen pass.
         from pathlib import Path
         persisted = json.loads(
             (Path(projects_dir) / "p1" / "progress.json").read_text()
         )
         ch2 = next(c for c in persisted["chapters"] if c["chapter_number"] == 2)
-        assert ch2["status"] == "completed"
+        assert ch2["status"] == "pending"
+        # Queue holds ch2 scenes (from regen) + ch3 scene (from in-progress).
+        ids = {q.id for q in mgr.load().queue if q.kind == "write_scene"}
+        assert ids == {"write-2-1", "write-2-2", "write-3-1"}
         await svc.cancel("p1")
 
     @pytest.mark.asyncio
-    async def test_ensure_returns_seed_result_with_fallback_info(self, projects_dir):
-        """When seed_queue auto-fallbacks from next_chapter to all_planned,
-        the API needs to know so it can show the user a clear message
-        instead of 'all done'."""
+    async def test_ensure_returns_seed_result_with_scope_info(self, projects_dir):
+        """v2.1: the API needs the scope_used + matched fields so it can
+        surface scope decisions honestly to the user (e.g., "scope [2,2]
+        had no work" rather than silently widening to all_planned).
+
+        Range [2,2] overlaps with the completed ch2, so v2.1 regenerates
+        ch2 (1 scene) → outcome='started' with scope_used='range' and
+        ch3 (out of scope) untouched."""
         from backend.conductor.autopilot_session import AutopilotSessionManager
         from backend.models.autopilot_session import ManagedStartConfig
         (projects_dir / "p1" / "outline.json").write_text(json.dumps({
@@ -383,8 +403,6 @@ class TestEnsureReturnContract:
                 {"chapter_number": 3, "scene_plan": [{"scene_number": 1}]},
             ],
         }), encoding="utf-8")
-        # current_chapter=2 with ch2's scene already done → fallback should
-        # widen scope to all_planned and enqueue ch3.
         (projects_dir / "p1" / "progress.json").write_text(json.dumps({
             "current_chapter": 2,
             "chapters": [
@@ -398,19 +416,24 @@ class TestEnsureReturnContract:
         }), encoding="utf-8")
         svc = AutopilotLoopService()
         mgr = AutopilotSessionManager(projects_dir, "p1")
-        mgr.start(ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2))
+        cfg = ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2)
+        mgr.start(cfg)
 
         class StubExec:
             async def execute(self, item, project_id):
                 return {"status": "ok"}
 
-        result = await svc.ensure(
-            "p1", mgr, StubExec(), ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
-        )
+        result = await svc.ensure("p1", mgr, StubExec(), cfg)
+        # v2.1: scope [2,2] regenerates ch2 (1 scene) → 'started', scope
+        # reported honestly, no fallback. ch3 (out of scope) untouched.
         assert result.outcome == "started"
-        assert result.seed_result.fallback_applied is True
-        assert result.seed_result.scope_used == "all_planned"
+        assert result.seed_result.fallback_applied is False
+        assert result.seed_result.scope_used == "range"
+        assert result.seed_result.matched == 1  # ch2's scene (regenerated)
         assert result.seed_result.enqueued == 1
+        ids = {q.id for q in mgr.load().queue if q.kind == "write_scene"}
+        assert ids == {"write-2-1"}
+        assert "write-3-1" not in ids  # out of scope
         await svc.cancel("p1")
 
     @pytest.mark.asyncio

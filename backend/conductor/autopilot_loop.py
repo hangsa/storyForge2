@@ -149,7 +149,8 @@ class AutopilotLoopService:
                         project_id, repaired, exc_info=True,
                     )
 
-            seed_result = seed_queue(mgr, outline, progress, novel_outline, cfg)
+            seed_result = seed_queue(mgr, outline, progress, novel_outline, cfg,
+                                     projects_dir=projects_dir)
             # Use queue length, not seed_result.enqueued, to decide no-work.
             # seed_queue is idempotent: a re-start whose target scenes are
             # already in mgr.queue returns enqueued=0 but the queue itself

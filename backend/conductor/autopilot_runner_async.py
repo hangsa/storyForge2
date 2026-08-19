@@ -351,30 +351,31 @@ def seed_queue(
     progress: Optional[dict],
     novel_outline: Optional[dict],
     cfg: ManagedStartConfig,
+    projects_dir: Optional[Path] = None,
 ) -> SeedResult:
     """Translate (outline, progress, novel_outline, cfg) into QueueItems
     appended to mgr.queue. Returns a SeedResult describing what was enqueued.
 
-    Idempotent: items with deterministic ids (`write-{ch}-{scene}`,
-    `archive-{ch}`) already present in mgr.queue are skipped, so a restart
-    that re-runs seed_queue against a non-empty queue grows the queue by
-    zero. Without this, every restart doubled or tripled the queue and
-    history ballooned with thousands of `queue_add` events (bug 2026-07-17
-    proj_cc4ca4ae: queue grew 10 → 20 → 30 across three restarts).
+    Scope handling:
+      - "all_planned": every chapter in outline.
+      - "range": chapters whose chapter_number is in
+        [cfg.start_chapter, cfg.end_chapter] inclusive.
 
-    Auto-fallback: when cfg.scope == "next_chapter" but the scoped chapter
-    has zero unfinished scenes in progress.json (so the first pass enqueues
-    0), retry with target=all_chapters. This protects against stale
-    "next_chapter" intent sitting in session.json from a previous run —
-    without the fallback the UI shows a misleading "project complete" toast
-    (bug 2026-07-17 on proj_cc4ca4ae: ch21 was already done but ch31-33 had
-    no progress at all, so a meaningful plan existed below the scoped
-    chapter). The fallback decision uses `matched` (total unfinished scenes
-    in the requested scope), not `enqueued` (newly added), so a re-start
-    whose work is already queued doesn't silently widen scope.
+    When `projects_dir` is provided, every chapter in scope whose status is
+    in DONE_STATUSES is regenerated (progress reset, drafts cleared, queue
+    items dropped + re-enqueued, checkpoint cleared). Without projects_dir,
+    callers (mostly unit tests) get the no-regeneration path.
+
+    Idempotent on QueueItem ids: items with deterministic ids already in
+    mgr.queue are skipped, so a restart that re-runs seed_queue against a
+    non-empty queue grows the queue by zero. The `next_chapter` auto-
+    fallback that was removed in v2.1 left no replacement; out-of-scope
+    work stays out of scope.
 
     Pure-ish: the only side effect is `mgr.add_queue(...)` (which writes
-    session.json). No HTTP, no LLM, no executor.
+    session.json) + the optional regenerate_chapter / clear_checkpoint_for_chapter
+    helpers (which write progress.json + remove checkpoint files). No HTTP,
+    no LLM, no executor.
     """
     if not outline or not outline.get("chapters"):
         return SeedResult(enqueued=0, scope_used=cfg.scope, fallback_applied=False)
@@ -383,59 +384,81 @@ def seed_queue(
     progress_by_chapter = {
         ch.get("chapter_number"): ch for ch in chapters
     }
-    current_chapter = progress.get("current_chapter", 1)
-
     all_chapters = outline["chapters"]
 
-    # First pass with the requested scope.
-    first_seeded, first_matched = _enqueue_for_scope(
-        mgr, all_chapters, progress_by_chapter, cfg.scope, current_chapter,
+    # Determine target chapter list from cfg.scope.
+    if cfg.scope == "range":
+        target_chapters = [
+            ch for ch in all_chapters
+            if cfg.start_chapter <= ch.get("chapter_number", 0) <= cfg.end_chapter
+        ]
+    else:  # "all_planned"
+        target_chapters = list(all_chapters)
+
+    # Regenerate any chapters in scope whose status is terminal.
+    # Must run BEFORE _enqueue_for_scope so the freshly-reset progress
+    # (status='pending' for every scene) is reflected in the enqueue pass
+    # — otherwise regenerated chapters' scenes would still be skipped as
+    # 'done'. projects_dir is the projects ROOT; the project directory is
+    # projects_dir / project_id.
+    regenerated_scenes = 0
+    if projects_dir is not None:
+        from backend.utils.file_manager import FileManager
+        fm = FileManager(projects_dir)
+        for ch in target_chapters:
+            ch_num = ch.get("chapter_number")
+            ch_progress = progress_by_chapter.get(ch_num, {})
+            planned = ch.get("scene_plan", []) or []
+            if not planned:
+                continue
+            if is_chapter_complete(ch_progress.get("scenes", []) or [], planned):
+                regenerate_chapter(
+                    fm, mgr.project_id, mgr, ch_num, planned,
+                    projects_dir / mgr.project_id,
+                )
+                clear_checkpoint_for_chapter(
+                    mgr.project_id, ch_num, projects_dir,
+                )
+                regenerated_scenes += len(planned)
+                # Reflect the reset locally so the enqueue pass sees the
+                # post-regen state (don't trust stale in-memory progress).
+                progress_by_chapter[ch_num] = {
+                    "chapter_number": ch_num,
+                    "status": "pending",
+                    "scenes": [{"scene_number": s.get("scene_number"),
+                                "status": "pending"}
+                               for s in planned],
+                }
+
+    seeded, matched = _enqueue_for_scope(
+        mgr, target_chapters, progress_by_chapter,
     )
 
-    # Fallback: next_chapter's scope produced ZERO candidates (the chapter
-    # is genuinely complete), but later chapters may still have unfinished
-    # scenes. Use matched (not enqueued) so a re-start whose work is
-    # already queued doesn't trigger fallback.
-    if first_matched == 0 and cfg.scope == "next_chapter":
-        second_seeded, _ = _enqueue_for_scope(
-            mgr, all_chapters, progress_by_chapter,
-            target_scope="all_planned", current_chapter=current_chapter,
-        )
-        if second_seeded > 0:
-            return SeedResult(
-                enqueued=second_seeded, scope_used="all_planned",
-                fallback_applied=True, matched=first_matched,
-            )
-
+    # `enqueued` reports total queue growth attributable to this call:
+    # scenes enqueued via _enqueue_for_scope PLUS scenes enqueued via
+    # regenerate_chapter earlier in this call (those land in the queue
+    # before dedup runs, so seeded alone under-counts them).
     return SeedResult(
-        enqueued=first_seeded, scope_used=cfg.scope, fallback_applied=False,
-        matched=first_matched,
+        enqueued=seeded + regenerated_scenes,
+        scope_used=cfg.scope, fallback_applied=False,
+        matched=matched,
     )
 
 
 def _enqueue_for_scope(
     mgr: "AutopilotSessionManager",
-    all_chapters: list,
+    target_chapters: list,
     progress_by_chapter: dict,
-    target_scope: str,
-    current_chapter: int,
 ) -> tuple[int, int]:
-    """Enqueue unfinished scenes for chapters matching `target_scope`.
-    Returns `(seeded, matched)`:
+    """Enqueue unfinished scenes for the given chapters. Returns
+    `(seeded, matched)`:
       - `seeded`: number of NEW queue items added (excludes items already
         in mgr.queue with the same deterministic id).
       - `matched`: total number of unfinished scenes in scope (including
-        those already queued — needed by the caller to decide fallback).
+        those already queued).
 
-    Pure-ish (only side effect is via mgr.add_queue)."""
-    if target_scope == "next_chapter":
-        target_chapters = [
-            ch for ch in all_chapters
-            if ch.get("chapter_number") == current_chapter
-        ]
-    else:  # "all_planned"
-        target_chapters = list(all_chapters)
-
+    Pure-ish (only side effect is via mgr.add_queue).
+    """
     # Snapshot existing queue ids once. Reading mgr.queue inside the loop
     # would force a session.json load per scene; this keeps dedup O(n).
     # mgr.load() can return None if the session file doesn't exist yet

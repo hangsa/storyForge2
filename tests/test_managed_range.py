@@ -18,8 +18,10 @@ from backend.conductor.autopilot_runner_async import (
     find_latest_completed_chapter,
     regenerate_chapter,
     reset_chapter_progress,
+    seed_queue,
 )
 from backend.utils.file_manager import FileManager
+from backend.config import settings as _settings
 
 
 class TestManagedStartConfigRange:
@@ -411,3 +413,128 @@ class TestClearCheckpointForChapter:
         # Should not raise; should leave the corrupt file alone
         clear_checkpoint_for_chapter("p_ckpt_corrupt", 5, tmp_path)
         assert (proj / ".storyforge_checkpoint.json").exists()
+
+
+@pytest.fixture
+def regen_projects_dir(tmp_path, monkeypatch):
+    """Project layout with outline + progress for range integration tests."""
+    proj = tmp_path / "p_range"
+    proj.mkdir()
+    (proj / "project.json").write_text(json.dumps({"id": "p_range"}))
+    # Outline: 12 chapters, 3 scenes each
+    outline = {
+        "chapters": [
+            {"chapter_number": n, "scene_plan": [{"scene_number": s} for s in (1, 2, 3)]}
+            for n in range(1, 13)
+        ]
+    }
+    (proj / "outline.json").write_text(json.dumps(outline))
+    # Progress: ch1-3 completed, ch4-6 in_progress, ch7+ nothing
+    progress = {
+        "current_chapter": 7,
+        "chapters": [],
+    }
+    for n in range(1, 4):
+        progress["chapters"].append({
+            "chapter_number": n, "status": "completed",
+            "scenes": [{"scene_number": s, "status": "completed"} for s in (1, 2, 3)],
+        })
+    for n in range(4, 7):
+        progress["chapters"].append({
+            "chapter_number": n, "status": "in_progress",
+            "scenes": [{"scene_number": s, "status": "pending"} for s in (1, 2, 3)],
+        })
+    (proj / "progress.json").write_text(json.dumps(progress))
+    monkeypatch.setattr(_settings, "projects_dir", tmp_path)
+    return tmp_path
+
+
+class TestSeedQueueRange:
+    def test_scope_range_no_overlap_with_completed(self, regen_projects_dir):
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        mgr.start(ManagedStartConfig(scope="range", start_chapter=7, end_chapter=10))
+        outline = json.loads((regen_projects_dir / "p_range" / "outline.json").read_text())
+        progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
+        result = seed_queue(mgr, outline, progress, None,
+                            ManagedStartConfig(scope="range", start_chapter=7, end_chapter=10),
+                            projects_dir=regen_projects_dir)
+        # 4 chapters × 3 scenes = 12 items
+        assert result.enqueued == 12
+        assert result.scope_used == "range"
+        assert result.fallback_applied is False
+
+    def test_scope_range_includes_completed_chapters(self, regen_projects_dir):
+        """Range [2, 5] overlaps with completed ch1-3 AND in-progress ch4-6.
+        Regeneration should reset ch2, ch3 (completed) and queue everything."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=2, end_chapter=5)
+        mgr.start(cfg)
+        outline = json.loads((regen_projects_dir / "p_range" / "outline.json").read_text())
+        progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
+        result = seed_queue(mgr, outline, progress, None, cfg,
+                            projects_dir=regen_projects_dir)
+        # 4 chapters × 3 scenes = 12 items enqueued
+        assert result.enqueued == 12
+        # ch2 and ch3 should be reset to pending
+        progress_after = json.loads(
+            (regen_projects_dir / "p_range" / "progress.json").read_text()
+        )
+        for ch_num in [2, 3]:
+            ch = next(c for c in progress_after["chapters"] if c["chapter_number"] == ch_num)
+            assert ch["status"] == "pending", f"ch{ch_num} should be reset"
+        # ch1 (outside range) should be untouched
+        ch1 = next(c for c in progress_after["chapters"] if c["chapter_number"] == 1)
+        assert ch1["status"] == "completed"
+
+    def test_scope_all_planned_also_regenerates_completed(self, regen_projects_dir):
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="all_planned")
+        mgr.start(cfg)
+        outline = json.loads((regen_projects_dir / "p_range" / "outline.json").read_text())
+        progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
+        result = seed_queue(mgr, outline, progress, None, cfg,
+                            projects_dir=regen_projects_dir)
+        # all_planned regenerates ch1-3 + enqueues ch4-12 = 12 chapters × 3 = 36
+        assert result.enqueued == 36
+        # ch1, ch2, ch3 all reset
+        progress_after = json.loads(
+            (regen_projects_dir / "p_range" / "progress.json").read_text()
+        )
+        for ch_num in [1, 2, 3]:
+            ch = next(c for c in progress_after["chapters"] if c["chapter_number"] == ch_num)
+            assert ch["status"] == "pending", f"ch{ch_num} should be reset"
+        # ch4-6 untouched (in_progress, not completed)
+        for ch_num in [4, 5, 6]:
+            ch = next(c for c in progress_after["chapters"] if c["chapter_number"] == ch_num)
+            assert ch["status"] == "in_progress"
+
+    def test_empty_outline_returns_zero(self, regen_projects_dir):
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=1, end_chapter=10)
+        mgr.start(cfg)
+        # Empty outline
+        result = seed_queue(mgr, {"chapters": []}, None, None, cfg,
+                            projects_dir=regen_projects_dir)
+        assert result.enqueued == 0
+        assert result.scope_used == "range"
+        assert result.fallback_applied is False
+
+    def test_next_chapter_branch_removed(self, regen_projects_dir):
+        """seed_queue no longer auto-widens when scope has no work. With range
+        [100, 110] against a 12-chapter outline, no chapters match and no
+        fallback runs."""
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=100, end_chapter=110)
+        mgr.start(cfg)
+        outline = json.loads((regen_projects_dir / "p_range" / "outline.json").read_text())
+        progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
+        result = seed_queue(mgr, outline, progress, None, cfg,
+                            projects_dir=regen_projects_dir)
+        # No chapters in [100, 110]; no fallback (we removed next_chapter fallback).
+        assert result.enqueued == 0
+        assert result.fallback_applied is False

@@ -54,6 +54,14 @@ class AutopilotSessionManager:
     def session_path(self) -> Path:
         return self._session_file
 
+    @property
+    def project_id(self) -> str:
+        return self._project_id
+
+    @property
+    def projects_dir(self) -> Path:
+        return self._projects_dir
+
     def _ensure_dir(self) -> None:
         self._session_dir.mkdir(parents=True, exist_ok=True)
 

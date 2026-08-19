@@ -172,16 +172,8 @@ class TestSeedQueue:
         nums = [q.payload["scene_number"] for q in mgr.load().queue]
         assert nums == [2, 3]
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "Block on Task 5 (seed_queue range filtering). Until the runner "
-            "honors cfg.start_chapter/end_chapter, scope='range' falls "
-            "through to the all_chapters path. Will turn green once Task 5 "
-            "lands."
-        ),
-    )
     def test_next_chapter_scope_only_enqueues_current(self, mgr):
+        """scope='range' [2,2] enqueues only chapter 2's unfinished scene."""
         n = seed_queue(
             mgr,
             outline={"chapters": [
@@ -317,44 +309,10 @@ class TestSeedQueue:
         assert nums == [1, 2, 3]  # no duplicate
 
 
-class TestSeedQueueNextChapterFallback:
-    """Bug 2026-07-17 proj_cc4ca4ae: scope=next_chapter with current_chapter
-    already complete returned 0 and triggered a misleading 'all 33 chapters
-    done' toast, even though ch31-33 had no progress at all. seed_queue must
-    auto-fallback to all_planned when next_chapter produces zero items but
-    later chapters still have unfinished scenes."""
-
-    def test_fallback_when_next_chapter_complete_but_later_chapters_unfinished(self, mgr):
-        from backend.conductor.autopilot_runner_async import seed_queue
-        from backend.models.autopilot_session import ManagedStartConfig
-        # current_chapter=2, ch2's scene is completed (the only scene in ch2's
-        # plan). ch3 has 2 unfinished scenes.
-        result = seed_queue(
-            mgr,
-            outline={"chapters": [
-                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
-                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
-                {"chapter_number": 3, "scene_plan": [
-                    {"scene_number": 1}, {"scene_number": 2},
-                ]},
-            ]},
-            progress={"current_chapter": 2, "chapters": [
-                {"chapter_number": 1, "scenes": [
-                    {"scene_number": 1, "status": "completed"},
-                ]},
-                {"chapter_number": 2, "scenes": [
-                    {"scene_number": 1, "status": "completed"},
-                ]},
-            ]},
-            novel_outline=None,
-            cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
-        )
-        assert result.enqueued == 2
-        assert result.scope_used == "all_planned"
-        assert result.fallback_applied is True
-        # The ch3 scenes are in the queue.
-        chapters = sorted({q.chapter_number for q in mgr.load().queue})
-        assert chapters == [3]
+class TestSeedQueueNoFallback:
+    """v2.1 removed the scope=next_chapter auto-fallback to all_planned.
+    Out-of-scope chapters must stay out of scope; the UI surfaces "scope
+    had no work" honestly rather than silently widening."""
 
     def test_no_fallback_when_next_chapter_has_work(self, mgr):
         """Sanity: when the scoped chapter itself has unfinished scenes, no
@@ -380,8 +338,8 @@ class TestSeedQueueNextChapterFallback:
         assert result.fallback_applied is False
 
     def test_no_fallback_when_all_planned_scope_used(self, mgr):
-        """Sanity: all_planned is the natural scope for fallback targets;
-        calling it explicitly never reports a fallback."""
+        """Sanity: all_planned scope never reports a fallback (no
+        auto-widening happens in v2.1)."""
         from backend.conductor.autopilot_runner_async import seed_queue
         from backend.models.autopilot_session import ManagedStartConfig
         result = seed_queue(
@@ -418,15 +376,9 @@ class TestSeedQueueNextChapterFallback:
         assert result.fallback_applied is False
 
     def test_no_fallback_when_next_chapter_work_already_queued(self, mgr):
-        """Dedup interaction: with idempotent seeding, scope=next_chapter
-        may return enqueued=0 because its scene is already in the queue
-        (e.g., a previous start seeded it). The fallback decision must be
-        based on whether the requested scope has any candidates (matched>0),
-        not on whether we just added new items (enqueued==0). Otherwise
-        every restart would silently widen the scope to all_planned and
-        the UI would mysteriously churn through chapters the user didn't
-        ask for. Bug 2026-07-17 proj_cc4ca4ae: this exact interaction
-        combined with the 30-item queue growth."""
+        """Dedup interaction: with idempotent seeding, the scope's scene may
+        already be in the queue from a prior seed_queue call. seed_queue
+        must not silently add more scenes outside the requested range."""
         from backend.conductor.autopilot_runner_async import seed_queue
         from backend.models.autopilot_session import ManagedStartConfig
         # current_chapter=2, ch2's scene is unfinished, but already in queue
@@ -452,8 +404,7 @@ class TestSeedQueueNextChapterFallback:
             cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
         )
         # ch2 has work (matched>0), and even though we added 0 new items
-        # (dedup), we must NOT fall back to all_planned and silently
-        # enqueue ch3.
+        # (dedup), we must NOT silently enqueue ch3.
         assert result.enqueued == 0
         assert result.matched == 1  # the scope has one candidate
         assert result.scope_used == "range"
@@ -462,38 +413,6 @@ class TestSeedQueueNextChapterFallback:
         ids = {q.id for q in mgr.load().queue}
         assert "write-3-1" not in ids
         assert ids == {"write-2-1"}
-
-    def test_fallback_fires_when_next_chapter_has_zero_candidates(self, mgr):
-        """The companion case: when the requested scope has zero candidates
-        (the chapter is genuinely done in progress.json) and later chapters
-        have unfinished scenes, fall back to all_planned. matched==0 here
-        (ch2's scene is already a DONE_STATUS in progress.json)."""
-        from backend.conductor.autopilot_runner_async import seed_queue
-        from backend.models.autopilot_session import ManagedStartConfig
-        result = seed_queue(
-            mgr,
-            outline={"chapters": [
-                {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
-                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
-                {"chapter_number": 3, "scene_plan": [
-                    {"scene_number": 1}, {"scene_number": 2},
-                ]},
-            ]},
-            progress={"current_chapter": 2, "chapters": [
-                {"chapter_number": 1, "scenes": [
-                    {"scene_number": 1, "status": "completed"},
-                ]},
-                {"chapter_number": 2, "scenes": [
-                    {"scene_number": 1, "status": "completed"},
-                ]},
-            ]},
-            novel_outline=None,
-            cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
-        )
-        assert result.matched == 0  # ch2 has no candidates
-        assert result.enqueued == 2  # fallback enqueued ch3's two scenes
-        assert result.scope_used == "all_planned"
-        assert result.fallback_applied is True
 
 
 class TestRowMajorPriority:

@@ -183,6 +183,14 @@ class TestPutOverride:
         )
         assert resp.status_code == 404
 
+    def test_put_rejects_model_field_with_422(self, client, project_id):
+        """The `model` field is a dead UI artifact — backend must reject it."""
+        resp = client.put(
+            f"/api/projects/{project_id}/prompts/scene_writing",
+            json={"system_prompt": "x", "model": "MiniMax-M3"},
+        )
+        assert resp.status_code == 422
+
 
 class TestDeleteOverride:
     def test_removes_override_and_returns_200(self, client, real_projects_dir, project_id):

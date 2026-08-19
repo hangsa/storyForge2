@@ -28,7 +28,6 @@ class PromptOverridePayload(BaseModel):
 
     system_prompt: Optional[str] = None
     user_prompt_template: Optional[str] = None
-    model: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     output_format: Optional[Dict[str, Any]] = None

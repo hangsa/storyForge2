@@ -547,14 +547,6 @@ class TestRangePreviewEndpoint:
     def client(self, regen_projects_dir):
         return TestClient(app)
 
-    def test_returns_outline_max_and_defaults(self, client):
-        resp = client.get(
-            "/api/v1/projects/p_range/autopilot/projects/p_range/managed/range-preview",
-            params={"start": 5, "end": 15},
-        )
-        # Wrong path; should 404 OR — if path is right — 200. Let's fix the path:
-        assert resp.status_code in (200, 404)
-
     def test_returns_valid_with_no_regen(self, client):
         resp = client.get(
             "/api/v1/projects/p_range/autopilot/managed/range-preview",
@@ -623,3 +615,48 @@ class TestRangePreviewEndpoint:
         body = resp.json()
         assert body["valid"] is False
         assert "大纲" in body["error"] or "outline" in body["error"].lower()
+
+    def test_scope_all_planned_overrides_start_end(self, client):
+        """scope='all_planned' should make start=1, end=outline_max
+        regardless of query params."""
+        resp = client.get(
+            "/api/v1/projects/p_range/autopilot/managed/range-preview",
+            params={"start": 5, "end": 15, "scope": "all_planned"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["valid"] is True
+        # all_planned means full range: regenerate ch1-3 (the completed ones)
+        assert sorted(body["regenerate_chapters"]) == [1, 2, 3]
+        assert body["defaults"]["start_chapter"] == 4
+        assert body["defaults"]["end_chapter"] == 12
+
+    def test_returns_valid_for_malformed_progress(self, client, tmp_path,
+                                                    monkeypatch):
+        """A corrupt progress.json should NOT block the endpoint — fall
+        back to empty progress and report defaults based on no completions."""
+        proj = tmp_path / "p_corrupt"
+        proj.mkdir()
+        (proj / "project.json").write_text(json.dumps({"id": "p_corrupt"}))
+        # Write outline (12 chapters like the fixture)
+        outline = {
+            "chapters": [
+                {"chapter_number": n, "scene_plan": [{"scene_number": s} for s in (1, 2, 3)]}
+                for n in range(1, 13)
+            ]
+        }
+        (proj / "outline.json").write_text(json.dumps(outline))
+        # Corrupt progress.json
+        (proj / "progress.json").write_text("{not valid json")
+        monkeypatch.setattr(_settings, "projects_dir", tmp_path)
+        resp = client.get(
+            "/api/v1/projects/p_corrupt/autopilot/managed/range-preview",
+            params={"start": 1, "end": 5},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # With empty progress, defaults start at 1 and end at min(11, 12) = 11
+        assert body["valid"] is True
+        assert body["regenerate_chapters"] == []
+        assert body["defaults"]["start_chapter"] == 1
+        assert body["defaults"]["end_chapter"] == 11

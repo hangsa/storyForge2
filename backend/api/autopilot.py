@@ -83,16 +83,17 @@ def range_preview(
     ignored and the range is derived as [1, outline_max] server-side.
     This lets the modal show regen warnings for all_planned without
     the client needing to know outline_max.
+
+    Note: this endpoint intentionally returns a flat dict instead of the
+    `_envelope()` wrapper used by most other endpoints. The preview
+    response always carries a `valid` flag and a per-field error message,
+    so the modal can render the same banner template for both happy
+    and validation-error cases (the frontend doesn't need to special-case
+    HTTP status codes).
     """
     err = _ensure_project_exists(project_id)
     if err is not None:
-        return {
-            "outline_max": 0,
-            "valid": False,
-            "error": f"项目 {project_id} 不存在",
-            "regenerate_chapters": [],
-            "defaults": None,
-        }
+        return err  # 404 JSONResponse from _ensure_project_exists
 
     project_dir = settings.projects_dir / project_id
     outline_path = project_dir / "outline.json"
@@ -119,7 +120,7 @@ def range_preview(
     if progress_path.exists():
         try:
             progress = json.loads(progress_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             progress = {}
 
     # scope=all_planned overrides start/end with the full outline range.

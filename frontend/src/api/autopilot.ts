@@ -170,6 +170,23 @@ export async function getAutopilotHistory(projectId: string, cursor?: string): P
   return api.getAutopilotHistory(projectId, cursor);
 }
 
+export interface ManagedRangePreview {
+  outline_max: number;
+  valid: boolean;
+  error: string | null;
+  regenerate_chapters: number[];
+  defaults: { start_chapter: number; end_chapter: number } | null;
+}
+
+export async function rangePreview(
+  projectId: string,
+  start: number,
+  end: number,
+  scope?: "all_planned" | "range",
+): Promise<ManagedRangePreview> {
+  return api.rangePreview(projectId, start, end, scope) as Promise<ManagedRangePreview>;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Chapter stream — v1.10 Direction B (real-time writing stream)              */
 /* -------------------------------------------------------------------------- */

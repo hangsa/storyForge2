@@ -1213,6 +1213,12 @@ export const api = {
       `/v1/projects/${encodeURIComponent(projectId)}/autopilot/session/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`
     ),
 
+  rangePreview: (projectId: string, start: number, end: number, scope?: "all_planned" | "range") =>
+    request<unknown>(
+      "GET",
+      `/v1/projects/${encodeURIComponent(projectId)}/autopilot/managed/range-preview?start=${start}&end=${end}${scope ? `&scope=${scope}` : ""}`
+    ),
+
   getLLMConfig: () =>
     request<ModelTiersConfig>("GET", "/settings/llm-config"),
 

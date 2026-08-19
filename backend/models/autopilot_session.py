@@ -11,9 +11,9 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class SessionState(str, Enum):
@@ -44,10 +44,24 @@ class ManagedStartConfig(BaseModel):
     """Mirror of frontend/src/components/workspace/ManagedStartModal.tsx ManagedStartConfig.
     Field names and literal unions MUST stay in sync (Stage 2 contract test).
     """
-    scope: str = "all_planned"     # "all_planned" | "next_chapter"
-    cadence: str = "balanced"      # "fast" | "balanced" | "careful"
-    policy: str = "auto"           # "auto" | "ask"
-    notify: str = "milestones"     # "all" | "milestones"
+    scope: Literal["all_planned", "range"] = "all_planned"
+    start_chapter: Optional[int] = None
+    end_chapter: Optional[int] = None
+    cadence: Literal["fast", "balanced", "careful"] = "balanced"
+    policy: Literal["auto", "ask"] = "auto"
+    notify: Literal["all", "milestones"] = "milestones"
+
+    @model_validator(mode="after")
+    def _validate_range(self):
+        if self.scope != "range":
+            return self
+        if self.start_chapter is None or self.end_chapter is None:
+            raise ValueError("scope='range' requires both start_chapter and end_chapter")
+        if self.start_chapter < 1:
+            raise ValueError("start_chapter must be >= 1")
+        if self.end_chapter < self.start_chapter:
+            raise ValueError("end_chapter must be >= start_chapter")
+        return self
 
 
 @dataclass

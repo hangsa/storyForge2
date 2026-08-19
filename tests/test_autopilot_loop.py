@@ -398,14 +398,14 @@ class TestEnsureReturnContract:
         }), encoding="utf-8")
         svc = AutopilotLoopService()
         mgr = AutopilotSessionManager(projects_dir, "p1")
-        mgr.start(ManagedStartConfig(scope="next_chapter"))
+        mgr.start(ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2))
 
         class StubExec:
             async def execute(self, item, project_id):
                 return {"status": "ok"}
 
         result = await svc.ensure(
-            "p1", mgr, StubExec(), ManagedStartConfig(scope="next_chapter"),
+            "p1", mgr, StubExec(), ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
         )
         assert result.outcome == "started"
         assert result.seed_result.fallback_applied is True

@@ -182,7 +182,7 @@ class TestSeedQueue:
             ]},
             progress={"current_chapter": 2, "chapters": []},
             novel_outline=None,
-            cfg=ManagedStartConfig(scope="next_chapter"),
+            cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
         )
         assert n.enqueued == 1
         assert mgr.load().queue[0].chapter_number == 2
@@ -338,7 +338,7 @@ class TestSeedQueueNextChapterFallback:
                 ]},
             ]},
             novel_outline=None,
-            cfg=ManagedStartConfig(scope="next_chapter"),
+            cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
         )
         assert result.enqueued == 2
         assert result.scope_used == "all_planned"
@@ -364,7 +364,7 @@ class TestSeedQueueNextChapterFallback:
                 ]},
             ]},
             novel_outline=None,
-            cfg=ManagedStartConfig(scope="next_chapter"),
+            cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
         )
         assert result.enqueued == 1
         assert result.scope_used == "next_chapter"
@@ -403,7 +403,7 @@ class TestSeedQueueNextChapterFallback:
                 ]},
             ]},
             novel_outline=None,
-            cfg=ManagedStartConfig(scope="next_chapter"),
+            cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
         )
         assert result.enqueued == 0
         assert result.fallback_applied is False
@@ -440,7 +440,7 @@ class TestSeedQueueNextChapterFallback:
                 ]},
             ]},
             novel_outline=None,
-            cfg=ManagedStartConfig(scope="next_chapter"),
+            cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
         )
         # ch2 has work (matched>0), and even though we added 0 new items
         # (dedup), we must NOT fall back to all_planned and silently
@@ -479,7 +479,7 @@ class TestSeedQueueNextChapterFallback:
                 ]},
             ]},
             novel_outline=None,
-            cfg=ManagedStartConfig(scope="next_chapter"),
+            cfg=ManagedStartConfig(scope="range", start_chapter=2, end_chapter=2),
         )
         assert result.matched == 0  # ch2 has no candidates
         assert result.enqueued == 2  # fallback enqueued ch3's two scenes

@@ -84,7 +84,8 @@ class TestStartTransition:
         assert s2.history[-1].type == "task_start"
 
     def test_start_from_stopped_reuses_existing_config(self):
-        cfg = ManagedStartConfig(scope="next_chapter", cadence="careful", policy="ask", notify="all")
+        cfg = ManagedStartConfig(scope="range", start_chapter=1, end_chapter=1,
+                                cadence="careful", policy="ask", notify="all")
         s = make_session(SessionState.STOPPED, config=cfg)
         s2 = transition(s, "start")
         assert s2.config.scope == cfg.scope  # spec L261: 沿用旧 config

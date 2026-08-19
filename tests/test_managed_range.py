@@ -1,13 +1,22 @@
 """Tests for managed mode chapter range config and helpers."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from unittest.mock import MagicMock
+
 import pytest
 from pydantic import ValidationError
 
 from backend.models.autopilot_session import ManagedStartConfig
 from backend.conductor.autopilot_runner_async import (
+    clear_chapter_drafts,
     compute_range_defaults,
+    drop_chapter_queue_items,
+    enqueue_chapter_scenes,
     find_latest_completed_chapter,
+    regenerate_chapter,
+    reset_chapter_progress,
 )
 
 
@@ -164,3 +173,179 @@ class TestFindLatestCompletedChapter:
             "chapters": [_chapter_outline(1) | {"chapter_number": 1}]
         }
         assert find_latest_completed_chapter(progress, outline) == 1
+
+
+@pytest.fixture
+def project_layout(tmp_path: Path):
+    """Build a minimal project layout with progress.json + chapters/ + session queue."""
+    proj = tmp_path / "p_regen"
+    proj.mkdir()
+    (proj / "project.json").write_text(json.dumps({"id": "p_regen"}))
+    # progress.json with ch5 having 3 scenes all completed
+    progress = {
+        "current_chapter": 8,
+        "chapters": [
+            {
+                "chapter_number": 5,
+                "status": "completed",
+                "scenes": [
+                    {"scene_number": 1, "status": "completed", "retry_count": 2,
+                     "coherence_score": 90},
+                    {"scene_number": 2, "status": "completed", "retry_count": 0,
+                     "coherence_score": 85},
+                    {"scene_number": 3, "status": "completed", "retry_count": 0,
+                     "coherence_score": 95},
+                ],
+            },
+            {
+                "chapter_number": 6,
+                "status": "completed",
+                "scenes": [
+                    {"scene_number": 1, "status": "completed", "retry_count": 0,
+                     "coherence_score": 80},
+                ],
+            },
+        ],
+    }
+    (proj / "progress.json").write_text(json.dumps(progress))
+    # chapters/ directory with ch05 + ch06 drafts (and a draft for another chapter
+    # that should NOT be touched)
+    chapters_dir = proj / "chapters"
+    chapters_dir.mkdir()
+    (chapters_dir / "ch05_scene_001_draft.md").write_text("draft 1")
+    (chapters_dir / "ch05_scene_002_draft.md").write_text("draft 2")
+    (chapters_dir / "ch05_scene_003_draft.md").write_text("draft 3")
+    (chapters_dir / "ch06_scene_001_draft.md").write_text("ch6 draft")
+    (chapters_dir / "ch07_scene_001_draft.md").write_text("ch7 draft (untouched)")
+    return proj
+
+
+class TestResetChapterProgress:
+    def test_resets_status_and_clears_metadata(self, project_layout):
+        reset_chapter_progress("p_regen", 5, project_layout)
+        progress = json.loads((project_layout / "progress.json").read_text())
+        ch5 = next(c for c in progress["chapters"] if c["chapter_number"] == 5)
+        assert ch5["status"] == "pending"
+        for s in ch5["scenes"]:
+            assert s["status"] == "pending"
+            assert s["retry_count"] == 0
+            assert s["coherence_score"] is None
+
+    def test_does_not_touch_other_chapters(self, project_layout):
+        reset_chapter_progress("p_regen", 5, project_layout)
+        progress = json.loads((project_layout / "progress.json").read_text())
+        ch6 = next(c for c in progress["chapters"] if c["chapter_number"] == 6)
+        assert ch6["status"] == "completed"
+        assert ch6["scenes"][0]["status"] == "completed"
+
+
+class TestClearChapterDrafts:
+    def test_deletes_only_target_chapter_drafts(self, project_layout):
+        clear_chapter_drafts("p_regen", 5, project_layout)
+        chapters_dir = project_layout / "chapters"
+        # ch05 drafts gone
+        remaining = sorted(p.name for p in chapters_dir.iterdir())
+        assert "ch05_scene_001_draft.md" not in remaining
+        assert "ch05_scene_002_draft.md" not in remaining
+        assert "ch05_scene_003_draft.md" not in remaining
+        # ch06 + ch07 drafts untouched
+        assert "ch06_scene_001_draft.md" in remaining
+        assert "ch07_scene_001_draft.md" in remaining
+
+    def test_no_op_when_chapter_dir_missing(self, project_layout):
+        """Defensive: clear_chapter_drafts on a chapter that has no drafts
+        must not raise."""
+        clear_chapter_drafts("p_regen", 99, project_layout)
+        # No exception; other files still there
+        assert (project_layout / "chapters" / "ch07_scene_001_draft.md").exists()
+
+
+class TestDropChapterQueueItems:
+    def test_drops_matching_items_keeps_others(self, project_layout):
+        mgr = MagicMock()
+        # Snapshot returns queue with items from ch5, ch6, ch7
+        snapshot = MagicMock()
+        snapshot.queue = [
+            MagicMock(id="write-5-1"),
+            MagicMock(id="write-5-2"),
+            MagicMock(id="write-5-3"),
+            MagicMock(id="write-6-1"),
+            MagicMock(id="write-7-1"),
+        ]
+        mgr.load.return_value = snapshot
+        # Track added QueueItems
+        added: list = []
+        def fake_add(item):
+            added.append(item)
+            return mgr
+        mgr.add_queue.side_effect = fake_add
+        # We only need to drop; nothing added in this test
+        drop_chapter_queue_items(mgr, 5)
+        # mgr.add_queue should have been called 3 times — once for each removed item,
+        # restoring the queue without ch5 entries.
+        # The exact mechanism is implementation detail; what matters: ch5 ids are gone.
+        # Verify by checking which ids are present in the final queue snapshot.
+        final_queue_ids = {item.id for item in snapshot.queue if item.id not in added}
+        # ch5 ids should be absent
+        assert "write-5-1" not in final_queue_ids
+        assert "write-5-2" not in final_queue_ids
+        assert "write-5-3" not in final_queue_ids
+        # ch6, ch7 ids preserved
+        assert "write-6-1" in final_queue_ids
+        assert "write-7-1" in final_queue_ids
+
+
+class TestEnqueueChapterScenes:
+    def test_enqueues_one_item_per_scene_in_plan(self, project_layout):
+        mgr = MagicMock()
+        added: list = []
+        def fake_add(item):
+            added.append(item)
+            return mgr
+        mgr.add_queue.side_effect = fake_add
+        scene_plan = [{"scene_number": n} for n in [1, 2, 3]]
+        enqueue_chapter_scenes(mgr, 5, scene_plan)
+        ids = sorted(item.id for item in added)
+        assert ids == ["write-5-1", "write-5-2", "write-5-3"]
+        # Priorities follow row-major
+        priorities = [item.priority for item in added]
+        assert priorities == [5001, 5002, 5003]  # 5*1000+scene
+
+
+class TestRegenerateChapterOrchestrator:
+    def test_full_pipeline_resets_clears_drops_reenqueues(self, project_layout):
+        """The orchestrator wires all four steps together."""
+        mgr = MagicMock()
+        added: list = []
+        snapshot = MagicMock()
+        # queue has 3 ch5 items + 1 ch6 item (untouched) + 1 ch7 item (untouched)
+        snapshot.queue = [
+            MagicMock(id="write-5-1"),
+            MagicMock(id="write-5-2"),
+            MagicMock(id="write-5-3"),
+            MagicMock(id="write-6-1"),
+            MagicMock(id="write-7-1"),
+        ]
+        mgr.load.return_value = snapshot
+        def fake_add(item):
+            added.append(item)
+            return mgr
+        mgr.add_queue.side_effect = fake_add
+
+        scene_plan = [{"scene_number": n} for n in [1, 2, 3]]
+        regenerate_chapter("p_regen", mgr, 5, scene_plan, project_layout)
+
+        # 1. progress reset
+        progress = json.loads((project_layout / "progress.json").read_text())
+        ch5 = next(c for c in progress["chapters"] if c["chapter_number"] == 5)
+        assert ch5["status"] == "pending"
+        # 2. drafts cleared
+        chapters_dir = project_layout / "chapters"
+        remaining = {p.name for p in chapters_dir.iterdir()}
+        assert "ch05_scene_001_draft.md" not in remaining
+        assert "ch05_scene_002_draft.md" not in remaining
+        assert "ch05_scene_003_draft.md" not in remaining
+        assert "ch07_scene_001_draft.md" in remaining  # untouched
+        # 3. queue: ch5 ids removed, then 3 fresh ch5 ids added
+        new_ids = [item.id for item in added if item.id.startswith("write-5-")]
+        assert sorted(new_ids) == ["write-5-1", "write-5-2", "write-5-3"]

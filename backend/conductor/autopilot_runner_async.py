@@ -8,8 +8,10 @@ and the loop-bookkeeping in `backend/conductor/autopilot_loop.py`.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Protocol
 
 from backend.models.autopilot_session import (
@@ -170,6 +172,115 @@ def compute_range_defaults(
     start = (latest_completed or 0) + 1
     end = min(start + 10, outline_max)
     return start, end
+
+
+def reset_chapter_progress(project_id: str, chapter_number: int,
+                            projects_dir: Path) -> None:
+    """Set chapter + all scenes to status='pending', clear retry/coherence.
+    Mutates progress.json in place. Other chapters untouched.
+
+    `projects_dir` is the project directory (the folder containing
+    progress.json), not the projects-root parent. Callers typically pass
+    `settings.projects_dir / project_id` so the path here stays a single
+    `progress.json` join. `project_id` is accepted for signature symmetry
+    with the other helpers and is reserved for future use.
+    """
+    progress_path = projects_dir / "progress.json"
+    if not progress_path.exists():
+        return
+    progress = json.loads(progress_path.read_text(encoding="utf-8"))
+    for ch in progress.get("chapters", []):
+        if ch.get("chapter_number") != chapter_number:
+            continue
+        ch["status"] = "pending"
+        for s in ch.get("scenes", []):
+            s["status"] = "pending"
+            s["retry_count"] = 0
+            s["coherence_score"] = None
+    progress_path.write_text(
+        json.dumps(progress, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def clear_chapter_drafts(project_id: str, chapter_number: int,
+                          projects_dir: Path) -> None:
+    """Delete drafts for the given chapter: chapters/ch{NN}_*.md.
+
+    Format matches the layout produced by stage4 writers: ch{NN}_scene_{NNN}_draft.md.
+    Defensive: missing directories or no matching files are no-ops.
+
+    `projects_dir` is the project directory (folder containing chapters/),
+    not the projects-root parent.
+    """
+    import re
+    chapters_dir = projects_dir / "chapters"
+    if not chapters_dir.exists():
+        return
+    # Match ch01_, ch1_, ch001_ etc. — zero-padded or not. The filename
+    # must start with the literal "ch" then the chapter_number digits
+    # then "_"; any padding (or none) is allowed.
+    pattern = re.compile(rf"^ch0*{chapter_number}_")
+    for f in chapters_dir.iterdir():
+        if f.is_file() and pattern.match(f.name):
+            f.unlink()
+
+
+def drop_chapter_queue_items(mgr: "AutopilotSessionManager",
+                              chapter_number: int) -> None:
+    """Remove all queue items with id like 'write-{chapter_number}-{scene}'.
+
+    Persists via mgr.save after the in-memory mutation.
+    """
+    snapshot = mgr.load()
+    if snapshot is None:
+        return
+    prefix = f"write-{chapter_number}-"
+    new_queue = [q for q in snapshot.queue if not q.id.startswith(prefix)]
+    if len(new_queue) == len(snapshot.queue):
+        return
+    snapshot.queue = new_queue
+    mgr.save(snapshot)
+
+
+def enqueue_chapter_scenes(mgr: "AutopilotSessionManager",
+                            chapter_number: int,
+                            scene_plan: list) -> None:
+    """Enqueue one write-{ch}-{scene} item per scene in the plan, with
+    row-major priority (matches existing _enqueue_for_scope scheme)."""
+    for s in scene_plan:
+        n = s.get("scene_number")
+        if n is None:
+            continue
+        item = QueueItem(
+            id=f"write-{chapter_number}-{n}",
+            kind="write_scene",
+            chapter_number=chapter_number,
+            scheduled_at=None,
+            priority=scene_priority(chapter_number, n),
+            payload={"scene_number": n},
+        )
+        mgr.add_queue(item)
+
+
+def regenerate_chapter(project_id: str,
+                        mgr: "AutopilotSessionManager",
+                        chapter_number: int,
+                        scene_plan: list,
+                        projects_dir: Path) -> None:
+    """Orchestrate regeneration: reset progress, clear drafts, drop queue
+    items, re-enqueue scenes. Checkpoint sync is the caller's responsibility
+    (separate helper, see sync_checkpoint_for_chapter).
+
+    The helpers are called in this order: reset progress → clear drafts →
+    drop queue items → re-enqueue. Reset-then-clear ensures the next write
+    doesn't see stale scene status; drop-then-enqueue prevents duplicate
+    ids in the queue (matching the existing dedup logic).
+    """
+    reset_chapter_progress(project_id, chapter_number, projects_dir)
+    clear_chapter_drafts(project_id, chapter_number, projects_dir)
+    drop_chapter_queue_items(mgr, chapter_number)
+    enqueue_chapter_scenes(mgr, chapter_number, scene_plan)
 
 
 def repair_stuck_chapters(progress: dict, outline: dict) -> list:

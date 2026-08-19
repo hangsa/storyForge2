@@ -134,6 +134,44 @@ def is_chapter_complete(
     return True
 
 
+def find_latest_completed_chapter(progress: dict, outline: dict) -> Optional[int]:
+    """Return the highest chapter_number whose every scene in the outline's
+    scene_plan is in DONE_STATUSES. None if no chapter is fully done.
+
+    Reuses is_chapter_complete so the "done" definition stays in one place.
+    """
+    outline_by_num = {
+        c.get("chapter_number"): c for c in (outline.get("chapters") or [])
+    }
+    progress_by_num = {
+        ch.get("chapter_number"): ch for ch in (progress.get("chapters") or [])
+    }
+    completed: list[int] = []
+    for ch_num, outline_ch in outline_by_num.items():
+        ch_progress = progress_by_num.get(ch_num, {})
+        planned = outline_ch.get("scene_plan", []) or []
+        if not planned:
+            continue
+        if is_chapter_complete(ch_progress.get("scenes", []) or [], planned):
+            completed.append(ch_num)
+    return max(completed) if completed else None
+
+
+def compute_range_defaults(
+    outline_max: int, latest_completed: Optional[int],
+) -> tuple[int, int]:
+    """Default range for ManagedStartConfig(scope='range').
+
+    start = (latest_completed or 0) + 1  →  1 if nothing completed yet.
+    end   = min(start + 10, outline_max).
+
+    Caller is responsible for surfacing "invalid" when start > outline_max.
+    """
+    start = (latest_completed or 0) + 1
+    end = min(start + 10, outline_max)
+    return start, end
+
+
 def repair_stuck_chapters(progress: dict, outline: dict) -> list:
     """Flip chapters stuck at status='in_progress' despite all outline scenes
     being terminal to status='completed'. Mutates `progress` in place;

@@ -5,6 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from backend.models.autopilot_session import ManagedStartConfig
+from backend.conductor.autopilot_runner_async import (
+    compute_range_defaults,
+    find_latest_completed_chapter,
+)
 
 
 class TestManagedStartConfigRange:
@@ -51,3 +55,112 @@ class TestManagedStartConfigRange:
         assert cfg.cadence == "fast"
         assert cfg.policy == "ask"
         assert cfg.notify == "all"
+
+
+def _chapter_progress(*scene_statuses: tuple[int, str]) -> list[dict]:
+    return [
+        {"scene_number": n, "status": s} for n, s in scene_statuses
+    ]
+
+
+def _chapter_outline(*scene_numbers: int) -> dict:
+    return {
+        "chapter_number": 0,  # overwritten by caller
+        "scene_plan": [{"scene_number": n, "goal": "", "conflict": ""} for n in scene_numbers],
+    }
+
+
+class TestComputeRangeDefaults:
+    def test_no_completed_chapters(self):
+        start, end = compute_range_defaults(outline_max=20, latest_completed=None)
+        assert (start, end) == (1, 11)  # 1+10
+
+    def test_with_completed_chapters(self):
+        start, end = compute_range_defaults(outline_max=20, latest_completed=7)
+        assert (start, end) == (8, 18)
+
+    def test_outline_smaller_than_default_span(self):
+        start, end = compute_range_defaults(outline_max=5, latest_completed=None)
+        assert (start, end) == (1, 5)  # end clamped to outline_max
+
+    def test_completed_at_outline_max(self):
+        start, end = compute_range_defaults(outline_max=10, latest_completed=10)
+        # start=11 > outline_max=10 → caller will surface "all done" error
+        assert (start, end) == (11, 10)  # end clamped to outline_max=10
+
+    def test_latest_completed_zero(self):
+        """Defensive: latest_completed=0 is treated as 'nothing done'."""
+        start, end = compute_range_defaults(outline_max=15, latest_completed=0)
+        assert (start, end) == (1, 11)
+
+
+class TestFindLatestCompletedChapter:
+    def test_returns_max_when_chapters_complete(self):
+        progress = {
+            "chapters": [
+                {"chapter_number": n, "status": "completed",
+                 "scenes": _chapter_progress((1, "completed"), (2, "completed"))}
+                for n in [1, 2, 3, 4, 5]
+            ]
+        }
+        outline = {
+            "chapters": [
+                _chapter_outline(1, 2) | {"chapter_number": n}
+                for n in [1, 2, 3, 4, 5]
+            ]
+        }
+        assert find_latest_completed_chapter(progress, outline) == 5
+
+    def test_returns_none_when_no_chapter_complete(self):
+        progress = {"chapters": []}
+        outline = {"chapters": [_chapter_outline(1, 2) | {"chapter_number": 1}]}
+        assert find_latest_completed_chapter(progress, outline) is None
+
+    def test_ignores_partial_chapters(self):
+        progress = {
+            "chapters": [
+                {"chapter_number": 1, "status": "completed",
+                 "scenes": _chapter_progress((1, "completed"), (2, "completed"))},
+                {"chapter_number": 2, "status": "in_progress",
+                 "scenes": _chapter_progress((1, "completed"), (2, "in_progress"))},
+                {"chapter_number": 3, "status": "completed",
+                 "scenes": _chapter_progress((1, "completed"), (2, "completed"))},
+            ]
+        }
+        outline = {
+            "chapters": [
+                _chapter_outline(1, 2) | {"chapter_number": n}
+                for n in [1, 2, 3]
+            ]
+        }
+        assert find_latest_completed_chapter(progress, outline) == 3
+
+    def test_handles_gaps(self):
+        """ch2 not in progress at all — should not block ch3 from being the max."""
+        progress = {
+            "chapters": [
+                {"chapter_number": 1, "status": "completed",
+                 "scenes": _chapter_progress((1, "completed"))},
+                {"chapter_number": 3, "status": "completed",
+                 "scenes": _chapter_progress((1, "completed"))},
+            ]
+        }
+        outline = {
+            "chapters": [
+                _chapter_outline(1) | {"chapter_number": n}
+                for n in [1, 2, 3]
+            ]
+        }
+        assert find_latest_completed_chapter(progress, outline) == 3
+
+    def test_force_passed_counts_as_done(self):
+        progress = {
+            "chapters": [
+                {"chapter_number": 1, "status": "completed",
+                 "scenes": _chapter_progress((1, "force_passed"))}
+            ]
+        }
+        outline = {
+            "chapters": [_chapter_outline(1) | {"chapter_number": 1}]
+        }
+        assert find_latest_completed_chapter(progress, outline) == 1

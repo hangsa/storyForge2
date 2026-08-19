@@ -15,6 +15,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.config import settings
 from backend.conductor.autopilot_loop import AutopilotLoopService
+from backend.conductor.autopilot_runner_async import (
+    compute_range_defaults, find_latest_completed_chapter, is_chapter_complete,
+)
 from backend.conductor.autopilot_session import (
     AutopilotSessionManager, _session_to_dict,
 )
@@ -59,6 +62,128 @@ def _ensure_project_exists(project_id: str):
 
 def _envelope(detail: dict, message: str = "") -> dict:
     return {"error": False, "code": "OK", "message": message, "detail": detail}
+
+
+# --- GET /managed/range-preview ---
+
+@router.get("/managed/range-preview")
+def range_preview(
+    project_id: str,
+    start: int = Query(...),
+    end: int = Query(...),
+    scope: Optional[str] = Query(None),
+) -> dict:
+    """Read-only preview used by the start modal's live warning.
+
+    Returns the outline's max chapter, the chapters in [start, end]
+    that are currently completed (and would be regenerated), the
+    sensible default range, and a validation flag.
+
+    When `scope="all_planned"` is passed, the start/end values are
+    ignored and the range is derived as [1, outline_max] server-side.
+    This lets the modal show regen warnings for all_planned without
+    the client needing to know outline_max.
+    """
+    err = _ensure_project_exists(project_id)
+    if err is not None:
+        return {
+            "outline_max": 0,
+            "valid": False,
+            "error": f"项目 {project_id} 不存在",
+            "regenerate_chapters": [],
+            "defaults": None,
+        }
+
+    project_dir = settings.projects_dir / project_id
+    outline_path = project_dir / "outline.json"
+    progress_path = project_dir / "progress.json"
+
+    if not outline_path.exists():
+        return {
+            "outline_max": 0,
+            "valid": False,
+            "error": "项目缺少 outline.json，无法配置章节范围",
+            "regenerate_chapters": [],
+            "defaults": None,
+        }
+
+    outline = json.loads(outline_path.read_text(encoding="utf-8"))
+    outline_chapters = outline.get("chapters", []) or []
+    outline_max = max(
+        (c.get("chapter_number") for c in outline_chapters
+         if c.get("chapter_number") is not None),
+        default=0,
+    )
+
+    progress: dict = {}
+    if progress_path.exists():
+        try:
+            progress = json.loads(progress_path.read_text(encoding="utf-8"))
+        except Exception:
+            progress = {}
+
+    # scope=all_planned overrides start/end with the full outline range.
+    if scope == "all_planned":
+        start = 1
+        end = outline_max
+
+    # Validation
+    if outline_max == 0:
+        return _range_preview_invalid("大纲为空，无法配置章节范围", 0)
+    if start < 1:
+        return _range_preview_invalid("开始章节必须 ≥ 1", outline_max)
+    if end < start:
+        return _range_preview_invalid("结束章节不能小于开始章节", outline_max)
+    if start > outline_max:
+        return _range_preview_invalid(
+            f"开始章节超出最大章节数 ({outline_max})", outline_max,
+        )
+    if end > outline_max:
+        return _range_preview_invalid(
+            f"结束章节超出最大章节数 ({outline_max})", outline_max,
+        )
+
+    # Compute defaults and regen list
+    latest = find_latest_completed_chapter(progress, outline)
+    default_start, default_end = compute_range_defaults(outline_max, latest)
+
+    progress_by_chapter = {
+        ch.get("chapter_number"): ch
+        for ch in (progress.get("chapters", []) or [])
+    }
+    regenerate_chapters: list[int] = []
+    for ch in outline_chapters:
+        ch_num = ch.get("chapter_number", 0)
+        if not (start <= ch_num <= end):
+            continue
+        planned = ch.get("scene_plan", []) or []
+        if not planned:
+            continue
+        ch_progress = progress_by_chapter.get(ch_num, {})
+        if is_chapter_complete(ch_progress.get("scenes", []) or [], planned):
+            regenerate_chapters.append(ch_num)
+    regenerate_chapters.sort()
+
+    return {
+        "outline_max": outline_max,
+        "valid": True,
+        "error": None,
+        "regenerate_chapters": regenerate_chapters,
+        "defaults": {
+            "start_chapter": default_start,
+            "end_chapter": default_end,
+        },
+    }
+
+
+def _range_preview_invalid(error: str, outline_max: int) -> dict:
+    return {
+        "outline_max": outline_max,
+        "valid": False,
+        "error": error,
+        "regenerate_chapters": [],
+        "defaults": None,
+    }
 
 
 # --- GET /session ---

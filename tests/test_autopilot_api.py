@@ -278,24 +278,26 @@ class TestStartNoWorkFlag:
         assert body["detail"]["fallback_applied"] is False
         assert body["detail"]["repaired_chapters"] == []
 
-    def test_start_message_distinguishes_fallback_from_all_done(
+    def test_start_message_when_range_scope_has_no_work(
         self, projects_dir, client, monkeypatch,
     ):
-        """When scope was widened (fallback_applied), the API message must
-        reflect that — otherwise the user sees the same misleading 'all
-        done' toast as before."""
+        """v2.1: scope=range with no work in [start, end] now surfaces the
+        'range had no work' message honestly — fallback was removed, so
+        scope_used stays 'range' and the message says '已全部写完' for
+        the scoped range (out-of-scope chapters are out of scope)."""
         from backend.conductor.autopilot_loop import EnsureResult
         from backend.conductor.autopilot_runner_async import SeedResult
 
-        proj = "p_fallback"
+        proj = "p_range_empty"
         (projects_dir / proj).mkdir(parents=True, exist_ok=True)
         (projects_dir / proj / "project.json").write_text(
-            json.dumps({"id": proj, "title": "fb", "current_stage": "STAGE4"}),
+            json.dumps({"id": proj, "title": "re", "current_stage": "STAGE4"}),
             encoding="utf-8",
         )
         (projects_dir / proj / "outline.json").write_text(
             json.dumps({"chapters": [
                 {"chapter_number": 1, "scene_plan": [{"scene_number": 1}]},
+                {"chapter_number": 2, "scene_plan": [{"scene_number": 1}]},
             ]}), encoding="utf-8",
         )
 
@@ -303,7 +305,7 @@ class TestStartNoWorkFlag:
             return EnsureResult(
                 outcome="no_work_to_do",
                 seed_result=SeedResult(
-                    enqueued=0, scope_used="all_planned", fallback_applied=True,
+                    enqueued=0, scope_used="range", fallback_applied=False,
                 ),
                 repaired_chapters=[],
             )
@@ -318,12 +320,14 @@ class TestStartNoWorkFlag:
         body = resp.json()
         assert body["detail"]["no_work_to_do"] is True
         assert body["detail"]["requested_scope"] == "range"
-        assert body["detail"]["scope_used"] == "all_planned"
-        assert body["detail"]["fallback_applied"] is True
-        # Message must mention the auto-widened scope so the user
-        # understands why 'all_planned' produced nothing.
+        assert body["detail"]["scope_used"] == "range"
+        assert body["detail"]["fallback_applied"] is False
         msg = body["message"]
-        assert "next_chapter" in msg or "扩展" in msg or "widened" in msg.lower()
+        # Message must say "all done" (the scoped range had nothing) —
+        # not mention the removed "next_chapter" auto-widening.
+        assert "全部写完" in msg
+        assert "next_chapter" not in msg.lower()
+        assert "widened" not in msg.lower()
 
     def test_start_message_says_all_done_when_no_fallback(
         self, projects_dir, client, monkeypatch,

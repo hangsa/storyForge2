@@ -205,14 +205,18 @@ describe("useAutopilotSession", () => {
     await waitFor(() => expect(result.current.session).not.toBeNull());
     await act(async () => {
       await result.current.start({
-        scope: "next_chapter",
+        scope: "range",
+        start_chapter: 1,
+        end_chapter: 5,
         cadence: "fast",
         policy: "ask",
         notify: "all",
       });
     });
     expect(api.startAutopilotSession).toHaveBeenCalledWith("p", {
-      scope: "next_chapter",
+      scope: "range",
+      start_chapter: 1,
+      end_chapter: 5,
       cadence: "fast",
       policy: "ask",
       notify: "all",

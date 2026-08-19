@@ -21,7 +21,7 @@ const STATE_BADGE: Record<"stopped" | "running" | "paused", { label: string; cls
 
 const SCOPE_LABEL: Record<ManagedStartConfig["scope"], string> = {
   all_planned: "所有已规划章节",
-  next_chapter: "仅下一章",
+  range: "指定章节范围",
 };
 const CADENCE_LABEL: Record<ManagedStartConfig["cadence"], string> = {
   fast: "快",

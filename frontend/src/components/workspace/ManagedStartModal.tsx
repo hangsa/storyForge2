@@ -1,8 +1,14 @@
+import { useEffect, useState } from "react";
 import { useAutopilotConfig } from "../../hooks/useAutopilotConfig";
 import { useToast } from "../../hooks/useToast";
+import type { ManagedRangePreview } from "../../api/autopilot";
+import { rangePreview } from "../../api/autopilot";
+import ManagedStartConfirmDialog from "./ManagedStartConfirmDialog";
 
 export interface ManagedStartConfig {
-  scope: "all_planned" | "next_chapter";
+  scope: "all_planned" | "range";
+  start_chapter: number | null;
+  end_chapter: number | null;
   cadence: "fast" | "balanced" | "careful";
   policy: "auto" | "ask";
   notify: "all" | "milestones";
@@ -21,12 +27,84 @@ export default function ManagedStartModal({
   const { config, setConfig, loaded, submitting, submit } =
     useAutopilotConfig(projectId);
   const { show } = useToast();
+  const [preview, setPreview] = useState<ManagedRangePreview | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Debounced preview call when inputs change. Also fires once on open to
+  // receive server-side defaults; if start/end are still empty we use 1/1
+  // as fallbacks so the response can populate `preview.defaults`.
+  useEffect(() => {
+    if (!open || !loaded) return;
+    const handle = setTimeout(() => {
+      const opts: { start: number; end: number; scope?: "all_planned" | "range" } =
+        config.scope === "range"
+          ? {
+              start: config.start_chapter ?? 1,
+              end: config.end_chapter ?? 1,
+              scope: "range",
+            }
+          : { start: 1, end: 1, scope: "all_planned" };
+      rangePreview(projectId, opts.start, opts.end, opts.scope)
+        .then(setPreview)
+        .catch(() => setPreview(null));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [open, loaded, config.scope, config.start_chapter, config.end_chapter, projectId]);
+
+  // Auto-populate start/end inputs from server-supplied defaults when they
+  // are still empty. Without this, scope=range renders inputs with no values
+  // and the user has to guess which chapters to enter.
+  useEffect(() => {
+    if (!open || !loaded) return;
+    if (config.scope !== "range") return;
+    if (config.start_chapter != null && config.end_chapter != null) return;
+    if (!preview?.defaults) return;
+    setConfig({
+      ...config,
+      start_chapter: config.start_chapter ?? preview.defaults.start_chapter,
+      end_chapter: config.end_chapter ?? preview.defaults.end_chapter,
+    });
+    // We intentionally depend only on `preview` so we don't reset the user's
+    // edits on every keystroke. The user can still override these values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview]);
 
   if (!open || !loaded) return null;
 
   const setField = <K extends keyof ManagedStartConfig>(
     key: K, value: ManagedStartConfig[K],
   ) => setConfig({ ...config, [key]: value });
+
+  const actuallySubmit = async () => {
+    try {
+      const result = await submit();
+      const resp = result as {
+        no_work_to_do?: boolean;
+        outline_max?: number;
+        fallback_applied?: boolean;
+        repaired_chapters?: number[];
+        message?: string;
+      } | null;
+      if (resp?.no_work_to_do) {
+        const lines: string[] = [];
+        if (resp.message) {
+          lines.push(resp.message);
+        } else {
+          lines.push(`项目已全部写完（共 ${resp.outline_max ?? 0} 章），无新任务可推进。`);
+        }
+        if (resp.repaired_chapters && resp.repaired_chapters.length > 0) {
+          lines.push(
+            `已自动修复 ${resp.repaired_chapters.length} 个卡死章节：${resp.repaired_chapters.join(", ")}`,
+          );
+        }
+        show(lines.join("\n"));
+      }
+      onStarted();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      show(`启动失败：${msg}`);
+    }
+  };
 
   return (
     <div
@@ -40,9 +118,32 @@ export default function ManagedStartModal({
         </p>
 
         <Field label="推进范围">
+          <Radio name="scope" value="range" current={config.scope} onChange={(v) => setField("scope", v as any)} label="指定章节范围" />
           <Radio name="scope" value="all_planned" current={config.scope} onChange={(v) => setField("scope", v as any)} label="所有已规划章节" />
-          <Radio name="scope" value="next_chapter" current={config.scope} onChange={(v) => setField("scope", v as any)} label="仅下一章" />
         </Field>
+        {config.scope === "range" && (
+          <Field label="章节范围">
+            <input
+              type="number"
+              data-testid="range-start"
+              min={1}
+              value={config.start_chapter ?? ""}
+              onChange={(e) => setField("start_chapter", e.target.value ? Number(e.target.value) : null)}
+              className="w-24 px-2 py-1 text-sm rounded border border-outline-variant bg-surface text-on-surface"
+              placeholder="开始"
+            />
+            <span className="text-system-log text-sm">—</span>
+            <input
+              type="number"
+              data-testid="range-end"
+              min={1}
+              value={config.end_chapter ?? ""}
+              onChange={(e) => setField("end_chapter", e.target.value ? Number(e.target.value) : null)}
+              className="w-24 px-2 py-1 text-sm rounded border border-outline-variant bg-surface text-on-surface"
+              placeholder="结束"
+            />
+          </Field>
+        )}
         <Field label="推进节奏">
           <Radio name="cadence" value="fast" current={config.cadence} onChange={(v) => setField("cadence", v as any)} label="快" />
           <Radio name="cadence" value="balanced" current={config.cadence} onChange={(v) => setField("cadence", v as any)} label="均衡" />
@@ -56,6 +157,23 @@ export default function ManagedStartModal({
           <Radio name="notify" value="all" current={config.notify} onChange={(v) => setField("notify", v as any)} label="每次事件" />
           <Radio name="notify" value="milestones" current={config.notify} onChange={(v) => setField("notify", v as any)} label="仅里程碑" />
         </Field>
+
+        {preview && !preview.valid && (
+          <p
+            data-testid="preview-error"
+            className="font-body-ui text-sm text-error bg-error-container/10 border border-error/30 rounded p-2"
+          >
+            {preview.error}
+          </p>
+        )}
+        {preview && preview.valid && preview.regenerate_chapters.length > 0 && (
+          <p
+            data-testid="regen-warning"
+            className="font-body-ui text-sm text-on-surface bg-warning-container/30 border border-warning/40 rounded p-2"
+          >
+            ⚠ 将重新生成第 {preview.regenerate_chapters.join(", ")} 章（{preview.regenerate_chapters.length} 章已完成）
+          </p>
+        )}
 
         <div className="flex justify-end gap-2 pt-2">
           <button
@@ -71,40 +189,11 @@ export default function ManagedStartModal({
             data-testid="start-submit"
             disabled={submitting}
             onClick={async () => {
-              try {
-                const result = await submit();
-                // Backend flags this when seed_queue found zero work to do
-                // (every chapter already complete). Without the toast the user
-                // just sees a "运行中" flash → "已停止" with no explanation,
-                // looking like the button is broken.
-                const resp = result as {
-                  no_work_to_do?: boolean;
-                  outline_max?: number;
-                  fallback_applied?: boolean;
-                  repaired_chapters?: number[];
-                  message?: string;
-                } | null;
-                // eslint-disable-next-line no-console
-                console.log("[managed-start] response:", resp);
-                if (resp?.no_work_to_do) {
-                  const lines: string[] = [];
-                  if (resp.message) {
-                    lines.push(resp.message);
-                  } else {
-                    lines.push(`项目已全部写完（共 ${resp.outline_max ?? 0} 章），无新任务可推进。`);
-                  }
-                  if (resp.repaired_chapters && resp.repaired_chapters.length > 0) {
-                    lines.push(
-                      `已自动修复 ${resp.repaired_chapters.length} 个卡死章节：${resp.repaired_chapters.join(", ")}`,
-                    );
-                  }
-                  show(lines.join("\n"));
-                }
-                onStarted();
-              } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                show(`启动失败：${msg}`);
+              if (preview && preview.regenerate_chapters.length > 0) {
+                setConfirmOpen(true);
+                return;
               }
+              await actuallySubmit();
             }}
             className="px-4 py-2 text-sm rounded-lg bg-tertiary-container text-surface-container-low hover:opacity-90 disabled:opacity-50"
           >
@@ -112,6 +201,15 @@ export default function ManagedStartModal({
           </button>
         </div>
       </div>
+      <ManagedStartConfirmDialog
+        open={confirmOpen}
+        chapterNumbers={preview?.regenerate_chapters ?? []}
+        onConfirm={async () => {
+          setConfirmOpen(false);
+          await actuallySubmit();
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

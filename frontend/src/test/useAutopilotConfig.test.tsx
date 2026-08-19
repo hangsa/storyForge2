@@ -4,7 +4,9 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import * as api from "../api/autopilot";
 
 const defaults = {
-  scope: "all_planned" as const,
+  scope: "range" as const,
+  start_chapter: null,
+  end_chapter: null,
   cadence: "balanced" as const,
   policy: "auto" as const,
   notify: "milestones" as const,
@@ -40,11 +42,11 @@ describe("useAutopilotConfig", () => {
       current_task: null,
       queue: [],
       history: [],
-      config: { scope: "next_chapter", cadence: "fast", policy: "ask", notify: "all" },
+      config: { scope: "all_planned", cadence: "fast", policy: "ask", notify: "all" },
     } as any);
     const { result } = renderHook(() => useAutopilotConfig("p"));
     await waitFor(() => expect(result.current.loaded).toBe(true));
-    expect(result.current.config?.scope).toBe("next_chapter");
+    expect(result.current.config?.scope).toBe("all_planned");
     expect(result.current.config?.cadence).toBe("fast");
   });
 

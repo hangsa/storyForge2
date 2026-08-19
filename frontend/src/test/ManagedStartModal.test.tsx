@@ -114,12 +114,12 @@ describe("ManagedStartModal no_work_to_do flow", () => {
       no_work_to_do: true,
       outline_max: 33,
       current_chapter: 21,
-      requested_scope: "next_chapter",
+      requested_scope: "all_planned",
       scope_used: "all_planned",
       fallback_applied: true,
       repaired_chapters: [],
       message:
-        "scope=next_chapter 当前章节已完成；已自动扩展至 all_planned，但大纲共 33 章内亦无新章节可推进。",
+        "已自动扩展推进范围，但大纲共 33 章内亦无新章节可推进。",
     });
     renderModal({ projectId: "p", open: true, onCancel: () => {}, onStarted: () => {} });
     await waitFor(() => expect(screen.getByTestId("managed-start-modal")).toBeInTheDocument());

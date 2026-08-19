@@ -6,7 +6,9 @@ import {
 } from "../api/autopilot";
 
 export const MANAGED_START_DEFAULTS: ManagedStartConfig = {
-  scope: "all_planned",
+  scope: "range",
+  start_chapter: null,
+  end_chapter: null,
   cadence: "balanced",
   policy: "auto",
   notify: "milestones",

@@ -88,7 +88,7 @@ class ReaderOS:
                 continue
             completed = sum(1 for s in scenes if s.get("status") in ("completed", "force_passed"))
             completion_rate = completed / len(scenes) if scenes else 0
-            avg_coherence = sum(s.get("coherence_score", 0) for s in scenes) / len(scenes)
+            avg_coherence = sum((s.get("coherence_score") or 0) for s in scenes) / len(scenes)
             total_score += completion_rate * 50 + (avg_coherence / 100) * 50
 
         return round(min(100, total_score / len(recent)), 1)

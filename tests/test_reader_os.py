@@ -223,6 +223,22 @@ class TestSatisfaction:
         # 0.333*50 + 0.267*50 = 30.0
         assert score == 30.0
 
+    def test_none_coherence_score_handled(self, reader, projects_dir):
+        """Bug 2026-08-19 (proj_1a7d7fcf): reset_chapter_progress writes
+        coherence_score=null for pending scenes. ReaderOS calc must not
+        crash on None; treat as 0."""
+        _write_json(projects_dir, "proj_test", "progress.json", _make_progress([
+            {"chapter_number": 1, "status": "pending", "scenes": [
+                {"scene_number": 1, "status": "pending", "coherence_score": None},
+                {"scene_number": 2, "status": "pending", "coherence_score": None},
+                {"scene_number": 3, "status": "pending", "coherence_score": None},
+            ]},
+        ]))
+        progress = reader._fm.read_json("proj_test", "progress.json") or {}
+        score = reader._calc_satisfaction(1, progress)
+        # 0/3 completed, avg_coherence=0 → 0*50 + 0*50 = 0
+        assert score == 0.0
+
 
 # ── cliffhanger tests ────────────────────────────────────────────
 

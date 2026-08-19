@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { rangePreview } from "../autopilot";
+import { rangePreview } from "../api/autopilot";
 
-vi.mock("../client", () => ({
+vi.mock("../api/client", () => ({
   default: {
     rangePreview: vi.fn(),
   },
 }));
 
-import api from "../client";
+import api from "../api/client";
 
 describe("rangePreview", () => {
   beforeEach(() => {
@@ -58,5 +58,10 @@ describe("rangePreview", () => {
     expect(result.error).toBe("项目缺少 outline.json");
     expect(result.regenerate_chapters).toEqual([]);
     expect(result.defaults).toBeNull();
+  });
+
+  it("rejects on 404 (project missing)", async () => {
+    vi.mocked(api.rangePreview).mockRejectedValue(new Error("HTTP 404"));
+    await expect(rangePreview("p_missing", 1, 5)).rejects.toThrow();
   });
 });

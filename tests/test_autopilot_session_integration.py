@@ -59,8 +59,8 @@ def test_full_session_lifecycle_through_api_and_runner(client, projects_dir):
     # 1. Start the session via the REST API
     r = client.post(
         f"/api/v1/projects/{pid}/autopilot/session/start",
-        json={"scope": "next_chapter", "cadence": "balanced",
-              "policy": "auto", "notify": "milestones"},
+        json={"scope": "range", "start_chapter": 1, "end_chapter": 1,
+              "cadence": "balanced", "policy": "auto", "notify": "milestones"},
     )
     assert r.status_code == 200
     assert r.json()["detail"]["state"] == "running"
@@ -105,7 +105,7 @@ def test_full_session_lifecycle_through_api_and_runner(client, projects_dir):
     r = client.get(f"/api/v1/projects/{pid}/autopilot/session")
     body = r.json()["detail"]
     assert body["state"] == "running"
-    assert body["config"]["scope"] == "next_chapter"
+    assert body["config"]["scope"] == "range"
 
     # 9. File persistence: session.json on disk matches in-memory state
     session_path = projects_dir / "p1" / "autopilot" / "session.json"
@@ -119,7 +119,7 @@ def test_full_session_lifecycle_through_api_and_runner(client, projects_dir):
     fresh = AutopilotSessionManager(projects_dir, pid).load()
     assert fresh is not None
     assert fresh.state.value == "running"
-    assert fresh.config.scope == "next_chapter"
+    assert fresh.config.scope == "range"
     assert [e.type for e in fresh.history] == [e.type for e in s.history]
     assert [e.id for e in fresh.history] == [e.id for e in s.history]
 
@@ -147,7 +147,8 @@ def test_full_chapter_pipeline_via_runner_loop(client, projects_dir):
     """
     # 1. Start the session via the API
     client.post("/api/v1/projects/p1/autopilot/session/start",
-                json={"scope": "next_chapter", "cadence": "balanced"})
+                json={"scope": "range", "start_chapter": 1, "end_chapter": 1,
+                      "cadence": "balanced"})
 
     # 2. Queue a chapter workflow — added out-of-order so we can verify the
     #    runner picks by priority (not insertion order).
@@ -234,6 +235,6 @@ def test_full_chapter_pipeline_via_runner_loop(client, projects_dir):
     fresh = AutopilotSessionManager(projects_dir, "p1").load()
     assert fresh.state.value == "running"
     assert fresh.queue == []
-    assert fresh.config.scope == "next_chapter"
+    assert fresh.config.scope == "range"
     assert [e.type for e in fresh.history] == [e.type for e in s.history]
     assert [e.id for e in fresh.history] == [e.id for e in s.history]

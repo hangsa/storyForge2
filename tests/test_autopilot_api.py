@@ -311,13 +311,13 @@ class TestStartNoWorkFlag:
 
         resp = client.post(
             f"/api/v1/projects/{proj}/autopilot/session/start",
-            json={"scope": "next_chapter", "cadence": "balanced",
-                  "policy": "auto", "notify": "milestones"},
+            json={"scope": "range", "start_chapter": 1, "end_chapter": 1,
+                  "cadence": "balanced", "policy": "auto", "notify": "milestones"},
         )
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["detail"]["no_work_to_do"] is True
-        assert body["detail"]["requested_scope"] == "next_chapter"
+        assert body["detail"]["requested_scope"] == "range"
         assert body["detail"]["scope_used"] == "all_planned"
         assert body["detail"]["fallback_applied"] is True
         # Message must mention the auto-widened scope so the user

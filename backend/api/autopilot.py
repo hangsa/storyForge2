@@ -85,6 +85,8 @@ async def start_session(project_id: str, data: dict, request: Request):
         return err
     cfg = ManagedStartConfig(
         scope=data.get("scope", "all_planned"),
+        start_chapter=data.get("start_chapter"),
+        end_chapter=data.get("end_chapter"),
         cadence=data.get("cadence", "balanced"),
         policy=data.get("policy", "auto"),
         notify=data.get("notify", "milestones"),

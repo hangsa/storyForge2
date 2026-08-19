@@ -175,17 +175,17 @@ def compute_range_defaults(
 
 
 def reset_chapter_progress(project_id: str, chapter_number: int,
-                            projects_dir: Path) -> None:
+                            project_dir: Path) -> None:
     """Set chapter + all scenes to status='pending', clear retry/coherence.
     Mutates progress.json in place. Other chapters untouched.
 
-    `projects_dir` is the project directory (the folder containing
+    `project_dir` is the project directory (the folder containing
     progress.json), not the projects-root parent. Callers typically pass
     `settings.projects_dir / project_id` so the path here stays a single
     `progress.json` join. `project_id` is accepted for signature symmetry
     with the other helpers and is reserved for future use.
     """
-    progress_path = projects_dir / "progress.json"
+    progress_path = project_dir / "progress.json"
     if not progress_path.exists():
         return
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
@@ -204,17 +204,17 @@ def reset_chapter_progress(project_id: str, chapter_number: int,
 
 
 def clear_chapter_drafts(project_id: str, chapter_number: int,
-                          projects_dir: Path) -> None:
+                          project_dir: Path) -> None:
     """Delete drafts for the given chapter: chapters/ch{NN}_*.md.
 
     Format matches the layout produced by stage4 writers: ch{NN}_scene_{NNN}_draft.md.
     Defensive: missing directories or no matching files are no-ops.
 
-    `projects_dir` is the project directory (folder containing chapters/),
+    `project_dir` is the project directory (folder containing chapters/),
     not the projects-root parent.
     """
     import re
-    chapters_dir = projects_dir / "chapters"
+    chapters_dir = project_dir / "chapters"
     if not chapters_dir.exists():
         return
     # Match ch01_, ch1_, ch001_ etc. — zero-padded or not. The filename
@@ -267,7 +267,7 @@ def regenerate_chapter(project_id: str,
                         mgr: "AutopilotSessionManager",
                         chapter_number: int,
                         scene_plan: list,
-                        projects_dir: Path) -> None:
+                        project_dir: Path) -> None:
     """Orchestrate regeneration: reset progress, clear drafts, drop queue
     items, re-enqueue scenes. Checkpoint sync is the caller's responsibility
     (separate helper, see sync_checkpoint_for_chapter).
@@ -277,8 +277,8 @@ def regenerate_chapter(project_id: str,
     doesn't see stale scene status; drop-then-enqueue prevents duplicate
     ids in the queue (matching the existing dedup logic).
     """
-    reset_chapter_progress(project_id, chapter_number, projects_dir)
-    clear_chapter_drafts(project_id, chapter_number, projects_dir)
+    reset_chapter_progress(project_id, chapter_number, project_dir)
+    clear_chapter_drafts(project_id, chapter_number, project_dir)
     drop_chapter_queue_items(mgr, chapter_number)
     enqueue_chapter_scenes(mgr, chapter_number, scene_plan)
 

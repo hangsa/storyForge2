@@ -83,12 +83,27 @@ class SeedResult:
     proj_cc4ca4ae saw a misleading "all 33 chapters done" toast when in
     reality the user's stale scope=next_chapter was the blocker).
 
-    `enqueued` is the number of NEW queue items added by this call. `matched`
-    is the total number of unfinished scenes in the requested scope
-    (including scenes already in the queue from a previous call). The two
-    diverge once seed_queue becomes idempotent: a restart against a queue
-    that already holds its target scenes returns enqueued=0 but matched>0,
-    which means "nothing new, but there's still work — keep running."
+    `enqueued` is the TOTAL number of NEW queue items added by this call,
+    summed across both code paths:
+      - `seeded`: scenes added by `_enqueue_for_scope` (the standard
+        enqueue path; uses deterministic ids for idempotent dedup).
+      - `regenerated_scenes`: scenes re-enqueued for completed chapters
+        in scope (the regeneration path; drops old queue items first then
+        re-adds via `regenerate_chapter`).
+    The two diverge when regeneration kicks in: a fresh start against an
+    outline with completed chapters in scope gets `seeded=0` for those
+    chapters (regen already added them) but `enqueued>0` once regenerated
+    scenes are added.
+
+    `matched` is the total number of unfinished scenes in the requested
+    scope (including scenes already in the queue from a previous call).
+    The two diverge once seed_queue becomes idempotent: a restart against
+    a queue that already holds its target scenes returns enqueued=0 but
+    matched>0, which means "nothing new, but there's still work — keep
+    running."
+
+    `enqueued` is telemetry-only — the caller's no-work decision uses
+    queue length, not enqueued count (see autopilot_loop.py:152).
     """
     enqueued: int
     scope_used: str

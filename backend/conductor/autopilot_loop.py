@@ -157,6 +157,9 @@ class AutopilotLoopService:
             # still has work. If we treated enqueued==0 as "nothing to do",
             # every restart would stop the session and orphan the queued
             # items (bug 2026-07-17 proj_cc4ca4ae).
+            # Regeneration also writes to enqueued (sums seeded + regenerated
+            # scenes), but queue length remains the single source of truth
+            # for "is there anything to do?".
             post_snapshot = mgr.load()
             queue_len = len(post_snapshot.queue) if post_snapshot else 0
             if queue_len == 0:

@@ -314,7 +314,7 @@ class TestSeedQueueNoFallback:
     Out-of-scope chapters must stay out of scope; the UI surfaces "scope
     had no work" honestly rather than silently widening."""
 
-    def test_no_fallback_when_next_chapter_has_work(self, mgr):
+    def test_no_fallback_when_range_scope_has_work(self, mgr):
         """Sanity: when the scoped chapter itself has unfinished scenes, no
         fallback should occur and only that chapter's scenes are enqueued."""
         from backend.conductor.autopilot_runner_async import seed_queue
@@ -375,7 +375,7 @@ class TestSeedQueueNoFallback:
         assert result.enqueued == 0
         assert result.fallback_applied is False
 
-    def test_no_fallback_when_next_chapter_work_already_queued(self, mgr):
+    def test_no_fallback_when_range_work_already_queued(self, mgr):
         """Dedup interaction: with idempotent seeding, the scope's scene may
         already be in the queue from a prior seed_queue call. seed_queue
         must not silently add more scenes outside the requested range."""

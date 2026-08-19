@@ -1,19 +1,17 @@
 import { useState } from "react";
 
 interface Props {
-  model: string;
   temperature: number;
   maxTokens: number;
   outputFormatJson: string;
-  onModelChange: (v: string) => void;
   onTemperatureChange: (v: number) => void;
   onMaxTokensChange: (v: number) => void;
   onOutputFormatChange: (v: string) => void;
 }
 
 export default function AdvancedSection({
-  model, temperature, maxTokens, outputFormatJson,
-  onModelChange, onTemperatureChange, onMaxTokensChange, onOutputFormatChange,
+  temperature, maxTokens, outputFormatJson,
+  onTemperatureChange, onMaxTokensChange, onOutputFormatChange,
 }: Props) {
   const [open, setOpen] = useState(false);
   return (
@@ -31,16 +29,6 @@ export default function AdvancedSection({
       </button>
       {open && (
         <div className="px-3 pb-3 space-y-3" data-testid="advanced-body">
-          <div>
-            <label className="block text-xs font-label-mono text-system-log mb-1">model</label>
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => onModelChange(e.target.value)}
-              data-testid="adv-model"
-              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-sm"
-            />
-          </div>
           <div>
             <label className="block text-xs font-label-mono text-system-log mb-1">
               temperature: {temperature.toFixed(2)}

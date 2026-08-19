@@ -77,6 +77,13 @@ describe("PromptEditPanel", () => {
     expect(onReset).toHaveBeenCalled();
   });
 
+  it("does not render a model input in the Advanced section", () => {
+    render(<PromptEditPanel detail={DETAIL} loading={false} error={null} onSave={vi.fn()} onReset={vi.fn()} onClose={vi.fn()} />);
+    // Open the Advanced section so its body is in the DOM
+    fireEvent.click(screen.getByTestId("advanced-toggle"));
+    expect(screen.queryByTestId("adv-model")).toBeNull();
+  });
+
   it("shows loading state", () => {
     render(<PromptEditPanel detail={null} loading={true} error={null} onSave={vi.fn()} onReset={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByText(/加载中/)).toBeInTheDocument();

@@ -11,13 +11,13 @@ from pydantic import ValidationError
 from backend.models.autopilot_session import ManagedStartConfig
 from backend.conductor.autopilot_runner_async import (
     clear_chapter_drafts,
+    clear_checkpoint_for_chapter,
     compute_range_defaults,
     drop_chapter_queue_items,
     enqueue_chapter_scenes,
     find_latest_completed_chapter,
     regenerate_chapter,
     reset_chapter_progress,
-    sync_checkpoint_for_chapter,
 )
 from backend.utils.file_manager import FileManager
 
@@ -356,7 +356,7 @@ class TestRegenerateChapterOrchestrator:
         assert sorted(new_ids) == ["write-5-1", "write-5-2", "write-5-3"]
 
 
-class TestSyncCheckpointForChapter:
+class TestClearCheckpointForChapter:
     def test_removes_checkpoint_when_chapter_matches(self, tmp_path):
         proj = tmp_path / "p_ckpt"
         proj.mkdir()
@@ -373,7 +373,7 @@ class TestSyncCheckpointForChapter:
         }
         (proj / ".storyforge_checkpoint.json").write_text(json.dumps(checkpoint))
 
-        sync_checkpoint_for_chapter("p_ckpt", 5, tmp_path)
+        clear_checkpoint_for_chapter("p_ckpt", 5, tmp_path)
 
         # After sync: file deleted (chapter is being regenerated; no useful state)
         assert not (proj / ".storyforge_checkpoint.json").exists()
@@ -391,7 +391,7 @@ class TestSyncCheckpointForChapter:
         }
         (proj / ".storyforge_checkpoint.json").write_text(json.dumps(checkpoint))
 
-        sync_checkpoint_for_chapter("p_ckpt2", 5, tmp_path)
+        clear_checkpoint_for_chapter("p_ckpt2", 5, tmp_path)
 
         # File should still exist (chapter mismatch → no action)
         assert (proj / ".storyforge_checkpoint.json").exists()
@@ -400,5 +400,14 @@ class TestSyncCheckpointForChapter:
         proj = tmp_path / "p_ckpt3"
         proj.mkdir()
         # No checkpoint file
-        sync_checkpoint_for_chapter("p_ckpt3", 5, tmp_path)
+        clear_checkpoint_for_chapter("p_ckpt3", 5, tmp_path)
         # No exception
+
+    def test_no_op_on_corrupt_json(self, tmp_path):
+        proj = tmp_path / "p_ckpt_corrupt"
+        proj.mkdir()
+        # Invalid JSON in checkpoint file
+        (proj / ".storyforge_checkpoint.json").write_text("{not valid json")
+        # Should not raise; should leave the corrupt file alone
+        clear_checkpoint_for_chapter("p_ckpt_corrupt", 5, tmp_path)
+        assert (proj / ".storyforge_checkpoint.json").exists()

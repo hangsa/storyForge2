@@ -265,7 +265,7 @@ def regenerate_chapter(fm: FileManager,
                         project_dir: Path) -> None:
     """Orchestrate regeneration: reset progress, clear drafts, drop queue
     items, re-enqueue scenes. Checkpoint sync is the caller's responsibility
-    (separate helper, see sync_checkpoint_for_chapter).
+    (separate helper, see clear_checkpoint_for_chapter).
 
     `fm` is used for the atomic progress.json write; `project_dir` is still
     passed for the unlink loop in clear_chapter_drafts (file deletes are
@@ -282,9 +282,9 @@ def regenerate_chapter(fm: FileManager,
     enqueue_chapter_scenes(mgr, chapter_number, scene_plan)
 
 
-def sync_checkpoint_for_chapter(project_id: str, chapter_number: int,
+def clear_checkpoint_for_chapter(project_id: str, chapter_number: int,
                                   projects_dir: Path) -> None:
-    """Remove the .storyforge_checkpoint.json when its current_chapter
+    """Clear the .storyforge_checkpoint.json when its current_chapter
     matches the chapter being regenerated.
 
     Rationale: the checkpoint snapshot reflects completed work that the
@@ -297,12 +297,14 @@ def sync_checkpoint_for_chapter(project_id: str, chapter_number: int,
     if not path.exists():
         return
     try:
-        ckpt = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        # Corrupt checkpoint — safe to leave; recover() handles it.
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        # Corrupt or unreadable checkpoint — safe to leave; recover() handles it.
         return
-    if ckpt.get("current_chapter") == chapter_number:
+    if data.get("current_chapter") == chapter_number:
         path.unlink()
+        logger.info("checkpoint cleared for chapter=%s project=%s",
+                    chapter_number, project_id)
 
 
 def repair_stuck_chapters(progress: dict, outline: dict) -> list:

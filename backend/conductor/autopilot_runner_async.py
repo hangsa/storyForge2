@@ -17,6 +17,7 @@ from typing import Optional, Protocol
 from backend.models.autopilot_session import (
     CurrentTask, ManagedStartConfig, QueueItem, SessionState,
 )
+from backend.utils.file_manager import FileManager
 
 
 logger = logging.getLogger(__name__)
@@ -174,18 +175,14 @@ def compute_range_defaults(
     return start, end
 
 
-def reset_chapter_progress(project_id: str, chapter_number: int,
-                            project_dir: Path) -> None:
+def reset_chapter_progress(fm: FileManager, project_id: str,
+                            chapter_number: int) -> None:
     """Set chapter + all scenes to status='pending', clear retry/coherence.
-    Mutates progress.json in place. Other chapters untouched.
-
-    `project_dir` is the project directory (the folder containing
-    progress.json), not the projects-root parent. Callers typically pass
-    `settings.projects_dir / project_id` so the path here stays a single
-    `progress.json` join. `project_id` is accepted for signature symmetry
-    with the other helpers and is reserved for future use.
+    Mutates progress.json in place via FileManager.write_json (atomic .tmp
+    + replace) so a process crash mid-regeneration cannot corrupt the very
+    file regeneration is meant to repair. Other chapters untouched.
     """
-    progress_path = project_dir / "progress.json"
+    progress_path = fm.project_path(project_id, "progress.json")
     if not progress_path.exists():
         return
     progress = json.loads(progress_path.read_text(encoding="utf-8"))
@@ -197,10 +194,7 @@ def reset_chapter_progress(project_id: str, chapter_number: int,
             s["status"] = "pending"
             s["retry_count"] = 0
             s["coherence_score"] = None
-    progress_path.write_text(
-        json.dumps(progress, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    fm.write_json(project_id, "progress.json", progress)
 
 
 def clear_chapter_drafts(project_id: str, chapter_number: int,
@@ -263,7 +257,8 @@ def enqueue_chapter_scenes(mgr: "AutopilotSessionManager",
         mgr.add_queue(item)
 
 
-def regenerate_chapter(project_id: str,
+def regenerate_chapter(fm: FileManager,
+                        project_id: str,
                         mgr: "AutopilotSessionManager",
                         chapter_number: int,
                         scene_plan: list,
@@ -272,12 +267,16 @@ def regenerate_chapter(project_id: str,
     items, re-enqueue scenes. Checkpoint sync is the caller's responsibility
     (separate helper, see sync_checkpoint_for_chapter).
 
+    `fm` is used for the atomic progress.json write; `project_dir` is still
+    passed for the unlink loop in clear_chapter_drafts (file deletes are
+    inherently atomic, no need for FileManager).
+
     The helpers are called in this order: reset progress → clear drafts →
     drop queue items → re-enqueue. Reset-then-clear ensures the next write
     doesn't see stale scene status; drop-then-enqueue prevents duplicate
     ids in the queue (matching the existing dedup logic).
     """
-    reset_chapter_progress(project_id, chapter_number, project_dir)
+    reset_chapter_progress(fm, project_id, chapter_number)
     clear_chapter_drafts(project_id, chapter_number, project_dir)
     drop_chapter_queue_items(mgr, chapter_number)
     enqueue_chapter_scenes(mgr, chapter_number, scene_plan)

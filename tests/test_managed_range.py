@@ -18,6 +18,7 @@ from backend.conductor.autopilot_runner_async import (
     regenerate_chapter,
     reset_chapter_progress,
 )
+from backend.utils.file_manager import FileManager
 
 
 class TestManagedStartConfigRange:
@@ -221,8 +222,9 @@ def project_layout(tmp_path: Path):
 
 
 class TestResetChapterProgress:
-    def test_resets_status_and_clears_metadata(self, project_layout):
-        reset_chapter_progress("p_regen", 5, project_layout)
+    def test_resets_status_and_clears_metadata(self, project_layout, tmp_path):
+        fm = FileManager(tmp_path)
+        reset_chapter_progress(fm, "p_regen", 5)
         progress = json.loads((project_layout / "progress.json").read_text())
         ch5 = next(c for c in progress["chapters"] if c["chapter_number"] == 5)
         assert ch5["status"] == "pending"
@@ -231,8 +233,9 @@ class TestResetChapterProgress:
             assert s["retry_count"] == 0
             assert s["coherence_score"] is None
 
-    def test_does_not_touch_other_chapters(self, project_layout):
-        reset_chapter_progress("p_regen", 5, project_layout)
+    def test_does_not_touch_other_chapters(self, project_layout, tmp_path):
+        fm = FileManager(tmp_path)
+        reset_chapter_progress(fm, "p_regen", 5)
         progress = json.loads((project_layout / "progress.json").read_text())
         ch6 = next(c for c in progress["chapters"] if c["chapter_number"] == 6)
         assert ch6["status"] == "completed"
@@ -313,7 +316,7 @@ class TestEnqueueChapterScenes:
 
 
 class TestRegenerateChapterOrchestrator:
-    def test_full_pipeline_resets_clears_drops_reenqueues(self, project_layout):
+    def test_full_pipeline_resets_clears_drops_reenqueues(self, project_layout, tmp_path):
         """The orchestrator wires all four steps together."""
         mgr = MagicMock()
         added: list = []
@@ -333,7 +336,8 @@ class TestRegenerateChapterOrchestrator:
         mgr.add_queue.side_effect = fake_add
 
         scene_plan = [{"scene_number": n} for n in [1, 2, 3]]
-        regenerate_chapter("p_regen", mgr, 5, scene_plan, project_layout)
+        fm = FileManager(tmp_path)
+        regenerate_chapter(fm, "p_regen", mgr, 5, scene_plan, project_layout)
 
         # 1. progress reset
         progress = json.loads((project_layout / "progress.json").read_text())

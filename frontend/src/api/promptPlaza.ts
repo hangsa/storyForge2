@@ -23,7 +23,6 @@ export interface PromptDetail {
 export interface PromptOverridePayload {
   system_prompt?: string;
   user_prompt_template?: string;
-  model?: string;
   temperature?: number;
   max_tokens?: number;
   output_format?: Record<string, unknown>;

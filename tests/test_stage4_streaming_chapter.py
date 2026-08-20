@@ -361,3 +361,161 @@ def test_normalize_extracts_text_from_invalid_json_wrapper_with_unescaped_quotes
     assert cleaned == '电话挂断了。\n\n"沈哥，是你吗？"他没应声。\n\n夜色如墨。'
     assert not cleaned.startswith("{")
     assert "\\n" not in cleaned
+
+
+# --- _normalize_scene_text: scene-inside-think-block recovery -----------
+# MiniMax-M3 reasoning mode sometimes does all of plan → draft → self-review
+# inside the <think>...</think> block, then emits `\n\n` or a truncated JSON
+# wrapper after. The original normalizer stripped the think block and ended
+# up with empty/short text, which made _write_scene_chapter_stream yield
+# "LLM 返回了空文本" and pause the autopilot after 3 retries.
+# Reproduced on proj_1a7d7fcf ch1 scene 1 on 2026-08-20 — paused with
+# reason=scene_write_failed:write-1-1:LLM 返回了空文本.
+# Fix: try _extract_scene_from_think_block FIRST (CJK-density + length
+# scoring of sections inside the think block); only fall through to the
+# legacy "strip think + extract JSON wrapper" path if that returns empty.
+
+
+def _make_scene_in_think_text(scene_section: str) -> str:
+    """Build a representative raw LLM response where the entire scene is
+    inside the think block. The model 'thinks' (planning English), drafts
+    (Chinese prose), self-reviews (English checks), all wrapped in
+    <think>...</think>, then emits nothing useful after."""
+    return (
+        "<think>Let me carefully analyze this scene.\n\n"
+        "Requirements:\n"
+        "- POV: limited to 高阳\n"
+        "- Sensory balance\n"
+        "- No emotional labels\n\n"
+        "--- DRAFT ---\n\n"
+        f"{scene_section}\n\n"
+        "--- REVIEW ---\n\n"
+        "Checking:\n"
+        "1. ✓ POV strict\n"
+        "2. ✓ No emotional labels\n"
+        "3. ✓ Metaphor count within range\n"
+        "4. ✓ No explanatory narration\n\n"
+        "Verifying constraints met. Looks good.\n"
+        "</think>\n\n"
+    )
+
+
+def test_normalize_recovers_scene_inside_think_block_when_post_think_empty():
+    """The whole scene is inside the think block; the post-</think> content
+    is just whitespace. Without the fallback, _normalize_scene_text returns
+    "" and _write_scene_chapter_stream yields failed="LLM 返回了空文本"."""
+    scene = "风不是风。\n\n高阳蜷起身体，左臂烧灼得厉害。<!-- SF_LOG character_physical_change char=\"高阳\" change=\"左臂灼痕\" -->"
+    raw = _make_scene_in_think_text(scene)
+    cleaned = sw._normalize_scene_text(raw)
+    assert cleaned, "normalizer must not return empty when scene is inside think block"
+    assert "风不是风" in cleaned
+    assert "高阳" in cleaned
+    assert "<!-- SF_LOG character_physical_change" in cleaned
+    # Must NOT leak review text into draft.
+    assert "Checking:" not in cleaned
+    assert "Verifying constraints met" not in cleaned
+
+
+def test_normalize_recovers_best_section_from_multiple_drafts_in_think_block():
+    """Model produces multiple draft attempts (Draft 1 / Draft 2 / Final
+    draft) inside the think block, then a review section. The normalizer
+    must pick the longest / most-final one, not the shortest first draft."""
+    final_scene = (
+        "Final draft:\n\n"
+        "声音没了。\n\n"
+        "不是变小。是消失。彻底地、干净地消失。\n\n"
+        "高阳张嘴，没有听见自己呼吸。\n\n"
+        "<!-- SF_LOG character_location_change char=\"高阳\" from=\"乱流\" to=\"地面\" -->"
+    )
+    raw = (
+        "<think>OK, let me write the scene.\n\n"
+        "--- Draft 1 ---\n\n"
+        "高阳醒来。\n\n"  # short draft, should NOT be picked
+        "--- Draft 2 ---\n\n"
+        "风像刀子。\n\n"  # medium draft
+        "--- Final draft ---\n\n"
+        "声音没了。\n\n"
+        "不是变小。是消失。彻底地、干净地消失。\n\n"
+        "高阳张嘴，没有听见自己呼吸。\n\n"
+        "<!-- SF_LOG character_location_change char=\"高阳\" from=\"乱流\" to=\"地面\" -->\n\n"
+        "--- REVIEW ---\n\n"
+        "Word count: ~1500 chars. Looks good. ✓\n"
+        "</think>\n\n"
+    )
+    cleaned = sw._normalize_scene_text(raw)
+    assert "声音没了" in cleaned, "must extract the final scene content"
+    assert "<!-- SF_LOG character_location_change" in cleaned
+    assert "Word count" not in cleaned, "review text must NOT leak into draft"
+    assert "Draft 1" not in cleaned, "short first draft must not be picked"
+    assert "Draft 2" not in cleaned, "medium draft must not be picked"
+    # The picked section is the final draft (longest + has SF_LOG tag +
+    # "Final" label hint). Not the short Draft 1 or Draft 2.
+
+
+def test_normalize_recovers_scene_when_post_think_has_truncated_json():
+    """Edge case (proj_1a7d7fcf sample 1, 2026-08-20): the model wrote the
+    scene inside the think block, AND started a JSON wrapper after, but the
+    stream was truncated mid-JSON. The post-<think> content is just
+    `{"text": "<!-- SF_LOG ... scene-so-far` with no closing brace. The
+    partial-JSON recovery would only return a few hundred chars; the
+    think-block recovery returns the full scene. Order matters:
+    think-block extraction runs first."""
+    full_scene = (
+        "<!-- SF_LOG character_location_change char=\"高阳\" "
+        "from=\"时空乱流·坠落中\" to=\"建木边境·荒废村庄地面\" -->\n\n"
+        "声音没了。\n\n"
+        "不是安静——是所有频率挤在一起，拧成一根白刺，扎进他耳道。\n\n"
+        "他睁不开眼。\n\n"
+        "眼皮上有东西压着，比铅重，又比铅烫。左臂更烫。"
+    )
+    raw = (
+        "<think>Let me plan this scene carefully. Many constraints to check.\n\n"
+        "--- DRAFT ---\n\n"
+        f"{full_scene}\n\n"
+        "--- REVIEW ---\n\n"
+        "Word count: ~1500 chars. Looks good. ✓\n"
+        "</think>\n\n"
+        "```json\n"
+        '{"text": "' + full_scene[:50]  # truncated mid-JSON, ~155 chars total
+    )
+    cleaned = sw._normalize_scene_text(raw)
+    # Must be the FULL scene from inside the think block, not the truncated
+    # partial-JSON snippet (~50 chars after "{"text": "" prefix).
+    assert cleaned == full_scene, (
+        "must extract the full scene from inside the think block, not the "
+        "truncated partial-JSON snippet"
+    )
+
+
+def test_normalize_returns_empty_when_think_block_has_no_scene():
+    """Defensive case: think block contains only planning/review, no
+    scene-like section, and post-think content is empty. Result must be
+    empty (the caller will emit the 'LLM 返回了空文本' failed event —
+    that's the correct signal when the LLM truly returned nothing
+    usable)."""
+    raw = (
+        "<think>I cannot write this scene because the prompt is unclear.\n"
+        "Let me try anyway... no, I refuse. Stopping.</think>\n\n"
+    )
+    cleaned = sw._normalize_scene_text(raw)
+    assert cleaned == ""
+
+
+def test_normalize_legacy_think_plus_json_fence_still_works():
+    """Regression: the proj_cc4ca4ae ch28+ shape (think + json fence +
+    complete JSON wrapper) must still unwrap via the legacy path. This
+    covers the case where the scene is OUTSIDE the think block (think block
+    contains only planning)."""
+    raw = (
+        "<think>planning only</think>\n"
+        "```json\n"
+        '{"text": "正文。\\n\\n内容。\\n\\n'
+        '<!-- SF_LOG mystery_clue id=\\"x\\" clue=\\"线索\\" -->"}\n'
+        "```"
+    )
+    cleaned = sw._normalize_scene_text(raw)
+    assert "正文" in cleaned
+    assert "内容" in cleaned
+    assert "<!-- SF_LOG mystery_clue" in cleaned
+    assert not cleaned.startswith("{")
+    assert "```" not in cleaned

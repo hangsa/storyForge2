@@ -41,6 +41,153 @@ _JSON_TEXT_WRAPPER_RE = re.compile(r'^\{\s*"text"\s*:\s*"(.*)"\s*\}$', re.DOTALL
 _JSON_ESCAPE_RE = re.compile(r"\\(.)")
 _JSON_ESCAPE_MAP = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/"}
 
+def _try_extract_json_text(text: str) -> Optional[str]:
+    """If `text` is a `{"text":"..."}` JSON object (or a near-match with
+    unescaped inner quotes), return the unwrapped text value. Otherwise None.
+
+    Pulled out of `_normalize_scene_text` so the scene-inside-think-block
+    fallback can reuse it on the inner content of a <think>...</think> block.
+
+    Handles three shapes:
+      1. Complete valid JSON: {"text": "..."} → json.loads
+      2. Complete wrapper with unescaped inner quotes (json.loads fails):
+         {"text": "..."} → greedy regex with manual escape unescape
+      3. Partial wrapper from stream truncation: {"text": "scene so far...
+         (no closing brace) → greedy regex up to end of input, strip trailing
+         artifacts. Observed 2026-08-20 on proj_1a7d7fcf sample 1 where the
+         stream was cut off mid-JSON after the think block.
+    """
+    stripped = text.strip()
+    if not stripped.startswith("{"):
+        return None
+
+    # Shape 1: complete valid JSON (well-escaped inner quotes).
+    if stripped.endswith("}"):
+        try:
+            parsed = json.loads(stripped)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, dict):
+            value = parsed.get("text")
+            if isinstance(value, str):
+                return value
+        # Shape 2: greedy regex for unescaped inner quotes.
+        m = _JSON_TEXT_WRAPPER_RE.match(stripped)
+        if m:
+            return _JSON_ESCAPE_RE.sub(
+                lambda mm: _JSON_ESCAPE_MAP.get(mm.group(1), mm.group(1)),
+                m.group(1),
+            )
+
+    # Shape 3: partial wrapper from stream truncation — extract everything
+    # after `{"text": "` to end of input. Strip a stray trailing `\` if the
+    # truncation happened mid-escape-sequence (e.g. \" got cut).
+    m = re.match(r'^\{\s*"text"\s*:\s*"(.*)$', stripped, re.DOTALL)
+    if m:
+        body = m.group(1)
+        # Strip a trailing backslash left by mid-escape truncation.
+        body = body.rstrip().rstrip("\\")
+        return _JSON_ESCAPE_RE.sub(
+            lambda mm: _JSON_ESCAPE_MAP.get(mm.group(1), mm.group(1)),
+            body,
+        )
+    return None
+
+
+def _extract_scene_from_think_block(text: str) -> str:
+    """When the model puts the entire scene INSIDE the think block (a new
+    MiniMax-M3 reasoning failure mode observed 2026-08-20 on proj_1a7d7fcf
+    ch1 scene 1), recover the actual scene by scoring sections inside the
+    think block.
+
+    Pattern observed: the model does plan → draft (often multiple times,
+    separated by `---`) → self-review → final draft, all inside the think
+    block, then emits `\n\n` (or nothing) after `</think>`. The previous
+    normalizer stripped the think block and got nothing back, yielding
+    "LLM 返回了空文本" and pausing the autopilot after 3 retries.
+
+    Heuristic: split the inside-think content by `---`, score each section
+    by (CJK density + length + SF_LOG presence + Final-label hint - review
+    markers), pick the highest-scoring section. Then trim trailing review
+    text (English-heavy lines) so we don't leak "✓ POV strict" into
+    draft.md. CJK density is the primary signal: scene prose is >70% CJK,
+    planning/review is <30% CJK.
+    """
+    inside_match = re.search(r"<think>(.*?)</think>", text, re.DOTALL | re.IGNORECASE)
+    if not inside_match:
+        return ""
+    inside = inside_match.group(1)
+
+    # First: maybe the scene is JSON-wrapped inside the think block.
+    json_extracted = _try_extract_json_text(inside)
+    if json_extracted and json_extracted.strip():
+        return json_extracted.strip()
+
+    # Otherwise: score sections separated by `---`. The model uses either
+    # bare `---` on its own line or `--- label ---` for labelled section
+    # breaks — both shapes are captured by the regex.
+    sections = re.split(r"\n\s*-{3,}[^\n]*\n", inside)
+    if not sections:
+        return ""
+
+    def section_score(section: str) -> float:
+        """Higher = more scene-like. Used to rank candidate sections inside a
+        think block. No hard threshold — we rank everything and pick the
+        highest, then sanity-check the winner below. Hard thresholding
+        caused false negatives when the chosen section's CJK ratio dipped
+        below the threshold because of inline SF_LOG tags (ASCII brackets
+        + Chinese params) pulling the density down."""
+        s = section.strip()
+        if not s:
+            return 0.0
+        cjk = len(re.findall(r"[一-鿿]", s))
+        ascii_alpha = len(re.findall(r"[a-zA-Z]", s))
+        cjk_pct = cjk / max(cjk + ascii_alpha, 1)
+        length_bonus = len(s) / 300.0
+        sf_log_bonus = 3.0 if "<!-- SF_LOG" in s else 0.0
+        final_hint = 1.0 if re.match(r"^(Final|FINAL|最终|Draft\s+\d+:|\[Final)", s) else 0.0
+        review_penalty = sum(
+            3.0 for m in
+            ["✓", "✅", "verify", "Let me check", "Let me also",
+             "Metaphor count", "word count", "Word count"]
+            if m in s
+        )
+        # Section must have SOME Chinese characters to be a scene candidate.
+        # Pure-English planning/review sections will score ~0 here (length +
+        # SF_LOG + final_hint won't compensate for the negative review_penalty).
+        if cjk == 0:
+            return 0.0
+        return cjk_pct + length_bonus + sf_log_bonus + final_hint - review_penalty
+
+    candidates = [
+        (section_score(s), idx, s)
+        for idx, s in enumerate(sections)
+    ]
+    candidates = [c for c in candidates if c[0] > 0.0 and len(c[2].strip()) >= 30]
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    best = candidates[0][2].strip()
+
+    # Trim trailing English-heavy lines (review text) from the chosen section
+    # so we don't leak "✓ POV strict" or numbered checklists into draft.md.
+    # Skip SF_LOG tag lines (their params are mostly ASCII but they're part
+    # of the scene, not review text).
+    lines = best.split("\n")
+    for i in range(len(lines) - 1, max(0, len(lines) - 30), -1):
+        line = lines[i].strip()
+        if not line:
+            continue
+        if "<!-- SF_LOG" in line or "-->" in line:
+            continue
+        cjk = len(re.findall(r"[一-鿿]", line))
+        ascii_alpha = len(re.findall(r"[a-zA-Z]", line))
+        if ascii_alpha > 3 * cjk and ascii_alpha > 20:
+            lines = lines[:i]
+            break
+    return "\n".join(lines).strip()
+
+
 def _normalize_scene_text(text: str) -> str:
     """Strip reasoning-model artifacts from raw LLM scene output before it is
     fact-guarded and persisted to draft.md.
@@ -65,11 +212,20 @@ def _normalize_scene_text(text: str) -> str:
          live stream -- observed 2026-07-17 on proj_cc4ca4ae ch28-ch30 (the
          ch28 draft opens with a think-block followed by ` ```json ` and
          a 14 KB JSON object whose text value contains literal \\n\\n). Fix
-         sequence:
+        sequence:
            - strip markdown ```json / ``` fences
            - if the result parses as a JSON object with a string `text` field,
              use that field (json.loads already unescapes \\n / \" / \\t)
            - then apply the existing think-strip + quote-unescape passes
+      4. (2026-08-20, proj_1a7d7fcf) The model sometimes puts the entire scene
+         INSIDE the think block — plan → draft → review all inside
+         `<think>...</think>`, then emits `\n\n` (or a truncated JSON
+         wrapper) after. The existing think-strip pass removes the whole
+         scene; the post-think content is too short to recover a full scene.
+         `_extract_scene_from_think_block` recovers the scene by scoring
+         sections inside the think block on CJK density + length +
+         SF_LOG-presence. It runs first because the think-block extraction
+         is more reliable than the partial-JSON recovery for full scenes.
 
     Backslash-quote sequences (and bare think markers) never occur
     intentionally in Chinese web-novel prose, so the unescape is safe to
@@ -78,52 +234,24 @@ def _normalize_scene_text(text: str) -> str:
     if not text:
         return text
 
-    cleaned = text
+    # 1. Try scene-inside-think-block extraction first. This recovers full
+    #    scenes when the model put everything inside <think>...</think>.
+    #    For the legacy "scene outside think block" case (think block contains
+    #    only planning), this returns empty and we fall through to step 2.
+    recovered = _extract_scene_from_think_block(text)
+    if recovered:
+        return recovered.replace('\\"', '"')
 
-    # 1. Strip think-block chain-of-thought first so the JSON-extraction
-    #    pass below sees bare JSON without a leading prose preamble (real
-    #    runs on proj_cc4ca4ae ch28+ emit think-block + json fence in that
-    #    order -- the think-block must be removed before trying to parse).
+    # 2. Legacy path: strip the think block, then extract the scene body from
+    #    whatever came after (JSON wrapper, markdown fence, plain prose).
+    cleaned = text
     cleaned = _THINK_BLOCK_RE.sub("", cleaned)
     if "<think>" in cleaned.lower():
         cleaned = _DANGLING_THINK_RE.sub("", cleaned)
-
-    # 2. Strip a leading/trailing markdown code fence (` ```json ` or ` ``` `).
     cleaned = _FENCE_RE.sub("", cleaned)
 
-    # 3. If the (de-fenced) content is a single JSON object with a string
-    #    `text` field, use that field. json.loads also unescapes the JSON
-    #    escape sequences (\n / \" / \t) so we do not need a manual
-    #    replacement after this point.
-    extracted = None
-    stripped = cleaned.strip()
-    if stripped.startswith("{") and stripped.endswith("}"):
-        try:
-            parsed = json.loads(stripped)
-        except Exception:
-            parsed = None
-        if isinstance(parsed, dict):
-            value = parsed.get("text")
-            if isinstance(value, str):
-                extracted = value
-
-        # Fallback: the model frequently emits a {"text":"..."} wrapper whose
-        # prose contains UNESCAPED ASCII double quotes (Chinese dialogue like
-        # `"沈哥"`), which makes json.loads fail ("Expecting ',' delimiter").
-        # Without this, the literal wrapper — braces, `"text":`, and
-        # ASCII-escaped \\n\\n — lands in draft.md verbatim (proj_cc4ca4ae
-        # ch31_scene_001, 2026-07-17). Pull the text body out with a greedy
-        # regex and manually unescape the JSON escapes json.loads would have
-        # handled. `\\(.)` matches each escape atomically left-to-right so a
-        # literal `\\\\` is consumed as one unit.
-        if extracted is None:
-            m = _JSON_TEXT_WRAPPER_RE.match(stripped)
-            if m:
-                extracted = _JSON_ESCAPE_RE.sub(
-                    lambda mm: _JSON_ESCAPE_MAP.get(mm.group(1), mm.group(1)),
-                    m.group(1),
-                )
-
+    # 3. JSON wrapper extraction (handles complete and partial wrappers).
+    extracted = _try_extract_json_text(cleaned)
     if extracted is not None:
         cleaned = extracted
 
@@ -874,6 +1002,9 @@ async def _write_scene_chapter_stream(
     buffer = ""
     last_flush = time.time()
     assembled_text = ""
+    # DIAGNOSTIC (2026-08-20): track how many flushes produced chunks so we
+    # can distinguish "model returned nothing" from "normalizer stripped it".
+    buffer_flush_count = 0
 
     async def try_flush(force: bool = False):
         """Return a 'chunk' event dict if a flush happened, else None.
@@ -883,7 +1014,7 @@ async def _write_scene_chapter_stream(
         broadcaster-side coupling; this function is content-only). This
         keeps the streaming layer testable in isolation.
         """
-        nonlocal buffer, last_flush, assembled_text
+        nonlocal buffer, last_flush, assembled_text, buffer_flush_count
         if not (force or
                 len(buffer) >= chunk_flush_chars or
                 (time.time() - last_flush) * 1000 >= chunk_flush_ms):
@@ -892,6 +1023,7 @@ async def _write_scene_chapter_stream(
         assembled_text += buffer
         buffer = ""
         last_flush = time.time()
+        buffer_flush_count += 1
         return ev
 
     # ---- stream from writer ---------------------------------------------
@@ -934,13 +1066,27 @@ async def _write_scene_chapter_stream(
         # streamed to the cockpit may still contain the raw <think> preamble;
         # only the persisted draft and the deterministic parsers see the
         # cleaned form.
-        assembled_text = _normalize_scene_text(assembled_text)
-
-        if not assembled_text.strip():
+        # DIAGNOSTIC (2026-08-20): log raw vs normalized length on empty so
+        # we can see whether the model returned 0 chunks or _normalize_scene_text
+        # stripped everything. proj_1a7d7fcf runner path keeps hitting this
+        # empty branch while direct repro succeeds with 9KB+ of assembled_text.
+        raw_len = len(assembled_text)
+        normalized = _normalize_scene_text(assembled_text)
+        norm_len = len(normalized)
+        if not normalized.strip():
+            logger.warning(
+                "[stage4:diag] write-%s-%s assembled_text empty after normalize "
+                "(raw_len=%d, norm_len=%d, chunks=%d, sample=%r)",
+                chapter_number, scene_number, raw_len, norm_len,
+                buffer_flush_count,
+                assembled_text[:200] if assembled_text else "",
+            )
+            assembled_text = normalized
             yield {"event": "failed",
                    "error": "LLM 返回了空文本",
                    "partial_text": assembled_text}
             return
+        assembled_text = normalized
 
         # ---- Fact Guard + breaker (single pass — no rewrite loop) ---------
         precheck_result = await _run_semantic_precheck(

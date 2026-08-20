@@ -243,4 +243,128 @@ describe("ChapterOutlineEditor", () => {
     expect(goal1.value).toBe("新goal1");
     expect(goal2.value).toBe("原goal2");
   });
+
+  it("B-fields accordion is hidden by default", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            {
+              chapter_number: 1, title: "第一章", theme: "觉醒",
+              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }],
+            },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
+    expect(screen.queryByTestId("scene-1-b-accordion")).not.toBeInTheDocument();
+  });
+
+  it("expanding B-fields accordion reveals registry_changes.created rows + add button", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            {
+              chapter_number: 1, title: "第一章", theme: "觉醒",
+              scene_plan: [
+                {
+                  scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "",
+                  registry_changes: {
+                    created: [{ type: "conflict", id_pattern: "cf_001", description: "主角与师父起冲突" }],
+                    updated: [],
+                  },
+                  required_logs: ["character_relation_change"],
+                },
+              ],
+            },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
+    fireEvent.click(screen.getByTestId("scene-1-b-toggle"));
+    expect(screen.getByTestId("scene-1-b-accordion")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-1-registry-created-0-type")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-1-registry-created-0-id-pattern")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-1-registry-created-0-description")).toBeInTheDocument();
+    expect(screen.getByTestId("scene-1-registry-created-add")).toBeInTheDocument();
+  });
+
+  it("clicking + 新增 button appends an empty registry_changes.created row", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            {
+              chapter_number: 1, title: "第一章", theme: "觉醒",
+              scene_plan: [
+                { scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] },
+              ],
+            },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
+    fireEvent.click(screen.getByTestId("scene-1-b-toggle"));
+    fireEvent.click(screen.getByTestId("scene-1-registry-created-add"));
+    expect(screen.getByTestId("scene-1-registry-created-0-type")).toBeInTheDocument();
+  });
+
+  it("required_logs renders chips and an add input", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            {
+              chapter_number: 1, title: "第一章", theme: "觉醒",
+              scene_plan: [
+                { scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: ["character_relation_change", "knowledge_gain"] },
+              ],
+            },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
+    fireEvent.click(screen.getByTestId("scene-1-b-toggle"));
+    expect(screen.getByTestId("scene-1-required-log-0")).toHaveTextContent("character_relation_change");
+    expect(screen.getByTestId("scene-1-required-log-1")).toHaveTextContent("knowledge_gain");
+    expect(screen.getByTestId("scene-1-required-log-add")).toBeInTheDocument();
+  });
+
+  it("typing a new required_log tag and pressing Enter appends it", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            {
+              chapter_number: 1, title: "第一章", theme: "觉醒",
+              scene_plan: [
+                { scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] },
+              ],
+            },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
+    fireEvent.click(screen.getByTestId("scene-1-b-toggle"));
+    const input = screen.getByTestId("scene-1-required-log-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "twist_reveal" } });
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+    expect(screen.getByTestId("scene-1-required-log-0")).toHaveTextContent("twist_reveal");
+  });
 });

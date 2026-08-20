@@ -96,11 +96,17 @@ def _try_extract_json_text(text: str) -> Optional[str]:
 
 _THINK_SECTION_SEP_RE = re.compile(
     r"(?m)^"
-    r"(?:\s*-{3,}[^\n]*"  # --- / --- DRAFT ---
-    r"|Draft\s*\d*\s*:"   # Draft: / Draft 2:
-    r"|\[?Final(?:[ \t]*draft)?\]?\s*:?"  # Final: / [Final draft] / Final draft:
-    r"|Final\s*\d+\s*:"   # Final 2:
-    r"|#+\s+[^\n]+"      # ## Heading
+    r"(?:\s*-{3,}[^\n]*"                # --- / --- DRAFT ---
+    r"|Draft\s*\d*\s*:"                 # Draft: / Draft 2:
+    r"|Revised(?:\s+(?:text|draft|version))?\s*:"  # Revised: / Revised text:
+    r"|Final(?:\s+(?:text|draft|version))?\s*:"    # Final: / Final draft:
+    r"|\[?Final(?:\s+(?:text|draft|version))?\]?\s*:?"  # [Final]
+    r"|Final\s*\d+\s*:"                 # Final 2:
+    r"|(?:Here'?s|Here\s+is)\s+the\s+(?:final\s+)?(?:text|draft|scene)\s*:?"  # Here's the scene:
+    r"|(?:Let'?s|Let\s+us)\s+(?:write|do)\s+(?:the\s+)?(?:final\s+)?(?:text|draft|scene|another\s+pass|revision)\s*:?"  # Let's write the scene:
+    r"|(?:Let\s+me|I\s+will|Now\s+I\s+will|I'?ll)\s+(?:write|do|rewrite|revise|take|cut|try|revisit|redo|fix|check|count|apply|focus|remove|drop|add|also|now)[^\n]*?:?"  # Let me [verb] ... :
+    r"|(?:Now\s+)?(?:the\s+)?(?:final|complete)\s+(?:text|draft|scene|version)\s*:?"  # Now the final text:
+    r"|#+\s+[^\n]+"                     # ## Heading
     r")\s*$"
 )
 _THINK_REVIEW_MARKERS = (
@@ -242,13 +248,50 @@ def _extract_scene_from_think_block(text: str) -> str:
         return line_ascii > 30 and line_cjk == 0
 
     lines = best.split("\n")
-    # Trim from end.
+
+    def is_review_or_label_line(s: str) -> bool:
+        """Return True if `s` looks like an English review/planning line or a
+        leftover separator label, not a scene prose line."""
+        stripped = s.strip()
+        if not stripped:
+            return False  # blank lines are normal separators, drop them
+        if "<!-- SF_LOG" in stripped or "-->" in stripped:
+            return False
+        # Common separator labels that the model leaves as headings.
+        if re.match(
+            r"^(?:Final|Revised|Draft|Here'?s|Let'?s|Let\s+me|Now\s+the|Now\s+I|"
+            r"The\s+final|I\s+will|FINAL|Final\s+text|Final\s+draft|Final\s+version|"
+            r"Revised\s+text|Revised\s+draft|Here'?s\s+the\s+scene|Final\s+scene|"
+            r"Here'?s\s+the\s+final|final\s+text|Scene\s+\d+|Scene\s+:)"
+            r"\s*:?\s*$",
+            stripped, re.IGNORECASE,
+        ):
+            return True
+        line_cjk = len(re.findall(r"[一-鿿]", stripped))
+        line_ascii = len(re.findall(r"[a-zA-Z]", stripped))
+        # Pure ASCII line with substantial length and any review marker →
+        # review/planning.
+        if line_cjk == 0 and line_ascii >= 20:
+            return any(m in stripped for m in _THINK_REVIEW_MARKERS) or stripped.startswith(
+                ("1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "-", "*", "•")
+            )
+        # Mixed line where ASCII dominates: review-style sentence with quoted
+        # Chinese fragments. If CJK is <25% of (CJK + ASCII) and the line is
+        # long enough, treat it as review.
+        total = line_cjk + line_ascii
+        if total >= 30 and line_cjk / total < 0.25:
+            return True
+        return False
+
+    # Trim from end: drop English review bullets that came after the prose.
     end = len(lines)
-    while end > 0 and is_trim_english(lines[end - 1]):
+    while end > 0 and is_review_or_label_line(lines[end - 1]):
         end -= 1
-    # Trim from start.
+    # Trim from start: drop English review/planning bullets that came before
+    # the prose. The first kept line should be scene prose or a separator
+    # label (which is_review_or_label_line handles).
     start = 0
-    while start < end and is_trim_english(lines[start]):
+    while start < end and is_review_or_label_line(lines[start]):
         start += 1
     return "\n".join(lines[start:end]).strip()
 

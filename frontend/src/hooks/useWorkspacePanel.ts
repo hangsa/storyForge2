@@ -6,6 +6,7 @@ export type WorkspacePanel =
   | "world"
   | "character"
   | "outline"
+  | "chapter-outline"
   | "diagnosis"
   | "export";
 
@@ -14,6 +15,7 @@ const VALID: WorkspacePanel[] = [
   "world",
   "character",
   "outline",
+  "chapter-outline",
   "diagnosis",
   "export",
 ];

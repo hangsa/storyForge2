@@ -4,7 +4,7 @@ import api, { NovelOutline } from "../api/client";
 import { useWorkspaceMode } from "../hooks/useWorkspaceMode";
 import { useWorkspacePanel } from "../hooks/useWorkspacePanel";
 import { useToast } from "../hooks/useToast";
-import { computePlannedTotal } from "../utils/outline";
+import { computePlannedTotal, parseVolumes, groupChaptersByVolume } from "../utils/outline";
 import WorkspaceTopBar from "../components/workspace/WorkspaceTopBar";
 import WorkspaceLayout from "../components/workspace/WorkspaceLayout";
 import ChapterTreePanel, {
@@ -36,73 +36,6 @@ function mapProgressStatus(s: string): ChapterStatus {
   if (s === "in_progress") return "writing";
   if (s === "pending") return "planned";
   return "pending";
-}
-
-// Issue 3 (v1.9 follow-up): group chapters by volume using novel_outline's
-// `volumes[].chapter_range` strings. Mirrors the parser in
-// computePlannedTotal (frontend/src/utils/outline.ts) — same regex, same
-// semantics. Chapters that don't fall into any volume (no novel_outline,
-// or chapter_number above the last volume) end up in a single "未分组"
-// tail group so the panel can still render them rather than hiding them.
-const VOLUME_RANGE_RE = /^\s*(\d+)\s*-\s*(\d+)\s*$/;
-
-interface ParsedVolume {
-  name: string;
-  chapter_range: string;
-  summary?: string;
-  start: number;
-  end: number;
-}
-
-function parseVolumes(novelOutline: NovelOutline | null): ParsedVolume[] {
-  if (!novelOutline?.volumes?.length) return [];
-  const out: ParsedVolume[] = [];
-  for (const v of novelOutline.volumes) {
-    const m = VOLUME_RANGE_RE.exec(v.chapter_range ?? "");
-    if (!m) continue;
-    const start = +m[1];
-    const end = +m[2];
-    if (start < 1 || end < start) continue;
-    out.push({ name: v.name, chapter_range: v.chapter_range, summary: v.summary, start, end });
-  }
-  return out;
-}
-
-function groupChaptersByVolume(
-  chapters: WorkspaceChapterNode[],
-  novelOutline: NovelOutline | null,
-): WorkspaceVolumeGroup[] {
-  const parsed = parseVolumes(novelOutline);
-  if (parsed.length === 0) {
-    // No novel_outline or no parseable volumes — fall back to a single
-    // ungrouped bucket so the tree is still navigable.
-    return chapters.length === 0
-      ? []
-      : [{ name: "未分组", chapter_range: "", summary: undefined, chapters }];
-  }
-  const buckets: WorkspaceVolumeGroup[] = parsed.map((v) => ({
-    name: v.name,
-    chapter_range: v.chapter_range,
-    summary: v.summary,
-    chapters: [],
-  }));
-  const ungrouped: WorkspaceChapterNode[] = [];
-  for (const ch of chapters) {
-    const idx = parsed.findIndex((v) => ch.chapter_number >= v.start && ch.chapter_number <= v.end);
-    if (idx === -1) {
-      ungrouped.push(ch);
-    } else {
-      buckets[idx].chapters.push(ch);
-    }
-  }
-  if (ungrouped.length > 0) {
-    buckets.push({ name: "未分组", chapter_range: "", summary: undefined, chapters: ungrouped });
-  }
-  // Drop empty buckets — a volume with no chapters yet is still shown if
-  // novel_outline declared it (so the user can see the planned range).
-  // But ungrouped-by-range with 0 chapters is suppressed (we already
-  // returned early for the no-outline case).
-  return buckets.filter((b) => b.chapters.length > 0 || b.name !== "未分组");
 }
 
 export default function WorkspacePage({ projectId: projectIdProp }: { projectId?: string } = {}) {
@@ -161,9 +94,13 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const plannedTotal = useMemo(() => computePlannedTotal(novelOutline), [novelOutline]);
   // Issue 3: derive volume groups for ChapterTreePanel from manualChapters
   // + novel_outline. Recomputes when either input changes; falls back to a
-  // single "未分组" group when novel_outline is missing.
+  // single "未分组" group when novel_outline is missing. Cast is safe: the
+  // outline.ts type widens `scenes` to `unknown[]` so the helper can be
+  // reused by the upcoming ChapterOutlineEditor; the runtime payload is the
+  // ChapterTreePanel-typed scene array (manualChapters is built from
+  // ChapterTreePanel's WorkspaceChapterNode type above).
   const volumeGroups = useMemo(
-    () => groupChaptersByVolume(manualChapters, novelOutline),
+    () => groupChaptersByVolume(manualChapters, novelOutline) as WorkspaceVolumeGroup[],
     [manualChapters, novelOutline],
   );
 

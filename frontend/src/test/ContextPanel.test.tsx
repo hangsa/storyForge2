@@ -91,7 +91,7 @@ beforeEach(() => {
 
 describe("ContextPanel", () => {
   it.each([
-    "concept", "world", "character", "outline", "diagnosis", "export",
+    "concept", "world", "character", "outline", "chapter-outline", "diagnosis", "export",
   ] as const)("renders %s tab active when ?panel=%s", async (panel) => {
     setupActivePanel(`/workspace?mode=manual&panel=${panel}`);
     expect(await screen.findByTestId(`context-tab-${panel}-active`)).toBeInTheDocument();
@@ -221,6 +221,39 @@ describe("ContextPanel", () => {
     await waitFor(() => expect(mockedUpdateNovelOutline).toHaveBeenCalledTimes(1));
     const [, novelArg] = mockedUpdateNovelOutline.mock.calls[0];
     expect(novelArg.core_conflict_theme).toBe("新主题");
+  });
+
+  it("chapter-outline tab mounts ChapterOutlineEditor and pre-fills from getOutline", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "第一章", theme: "觉醒",
+          scene_plan: [{ scene_number: 1, goal: "g", conflict: "c", emotional_arc: "a", narrative_role: "setup", beat_type: "inciting", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+        { chapter_number: 2, title: "第二章", theme: "磨炼",
+          scene_plan: [{ scene_number: 1, goal: "g", conflict: "c", emotional_arc: "a", narrative_role: "mini_payoff", beat_type: "rising", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+      ],
+    });
+    setupActivePanel("/workspace?mode=manual&panel=chapter-outline");
+    expect(await screen.findByTestId("chapter-outline-editor")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-row-1")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-row-2")).toBeInTheDocument();
+    expect((screen.getByTestId("chapter-1-title") as HTMLInputElement).value).toBe("第一章");
+  });
+
+  it("chapter-outline tab save calls api.updateOutline with the edited outline", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [
+        { chapter_number: 1, title: "原标题", theme: "原主题",
+          scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+      ],
+    });
+    setupActivePanel("/workspace?mode=manual&panel=chapter-outline");
+    const titleInput = (await screen.findByTestId("chapter-1-title")) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "新标题" } });
+    fireEvent.click(screen.getByTestId("chapter-outline-editor-save"));
+    await waitFor(() => expect(mockedUpdateOutline).toHaveBeenCalledTimes(1));
+    const [projectIdArg, outlineArg] = mockedUpdateOutline.mock.calls[0];
+    expect(projectIdArg).toBe("p1");
+    expect(outlineArg.chapters[0].title).toBe("新标题");
   });
 
   it("diagnosis tab shows project context + '运行诊断' button + Stage5 link when no report exists", async () => {

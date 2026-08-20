@@ -5,6 +5,7 @@ import ConceptEditor from "./editors/ConceptEditor";
 import WorldEditor from "./editors/WorldEditor";
 import CharacterEditor from "./editors/CharacterEditor";
 import NovelOutlineEditor from "./editors/NovelOutlineEditor";
+import ChapterOutlineEditor from "./editors/ChapterOutlineEditor";
 import DiagnosisSummary from "./DiagnosisSummary";
 import ExportSummary from "./ExportSummary";
 
@@ -31,6 +32,7 @@ const TAB_LABEL: Record<WorkspacePanel, string> = {
   world: "世界观",
   character: "角色",
   outline: "大纲",
+  "chapter-outline": "章节大纲",
   diagnosis: "诊断",
   export: "导出",
 };
@@ -40,6 +42,7 @@ const FETCHER: Record<WorkspacePanel, (id: string) => Promise<unknown>> = {
   world: (id) => api.getWorld(id),
   character: (id) => api.getCharacter(id),
   outline: (id) => api.getNovelOutline(id),
+  "chapter-outline": (id) => api.getOutline(id),
   diagnosis: async () => ({}),
   export: async () => ({}),
 };
@@ -90,7 +93,7 @@ export default function ContextPanel({ projectId, readOnly, readOnlyReason }: Pr
         </div>
       )}
       <div className="flex-1 p-4 overflow-y-auto text-sm font-body-narrative text-system-log space-y-3">
-        {panel === "concept" || panel === "world" || panel === "character" || panel === "outline" ? (
+        {panel === "concept" || panel === "world" || panel === "character" || panel === "outline" || panel === "chapter-outline" ? (
           loading ? (
             <p data-testid={`context-loading-${panel}`} className="font-body-ui text-system-log text-sm">加载中…</p>
           ) : (
@@ -108,9 +111,10 @@ export default function ContextPanel({ projectId, readOnly, readOnlyReason }: Pr
 
 function EditorForPanel({
   panel, projectId, data, onSaved, readOnly,
-}: { panel: "concept" | "world" | "character" | "outline" } & BaseEditorProps) {
+}: { panel: "concept" | "world" | "character" | "outline" | "chapter-outline" } & BaseEditorProps) {
   if (panel === "concept") return <ConceptEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
   if (panel === "world") return <WorldEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
   if (panel === "character") return <CharacterEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
-  return <NovelOutlineEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
+  if (panel === "outline") return <NovelOutlineEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
+  return <ChapterOutlineEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
 }

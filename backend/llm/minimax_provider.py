@@ -9,6 +9,7 @@ from backend.llm.base_provider import (
     ProbeResult,
     StreamChunk,
     _normalize_openai_probe_error,
+    make_no_proxy_async_client,
 )
 
 
@@ -18,6 +19,7 @@ class MiniMaxProvider(BaseLLMProvider):
         self.client = AsyncOpenAI(
             api_key=self.api_key,
             base_url=config.base_url or "https://api.minimax.chat/v1",
+            http_client=make_no_proxy_async_client(),
         )
 
     async def probe(self) -> ProbeResult:

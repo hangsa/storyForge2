@@ -10,13 +10,14 @@ from backend.llm.base_provider import (
     ProbeResult,
     StreamChunk,
     _normalize_anthropic_probe_error,
+    make_no_proxy_async_client,
 )
 
 
 class AnthropicProvider(BaseLLMProvider):
     def __init__(self, config: LLMConfig):
         super().__init__(config)
-        client_kwargs = {"api_key": self.api_key}
+        client_kwargs = {"api_key": self.api_key, "http_client": make_no_proxy_async_client()}
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
         self.client = AsyncAnthropic(**client_kwargs)
@@ -53,7 +54,7 @@ class AnthropicProvider(BaseLLMProvider):
                 "x-api-key": self.api_key,
                 "anthropic-version": "2023-06-01",
             }
-            async with httpx.AsyncClient(timeout=10) as http:
+            async with httpx.AsyncClient(timeout=10, trust_env=False) as http:
                 resp = await http.get(f"{base}/v1/models", headers=headers)
                 if resp.status_code != 200:
                     return []

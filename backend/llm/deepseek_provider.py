@@ -1,7 +1,7 @@
 from typing import AsyncIterator
 
 from openai import AsyncOpenAI
-from backend.llm.base_provider import BaseLLMProvider, LLMResponse, LLMConfig, StreamChunk
+from backend.llm.base_provider import BaseLLMProvider, LLMResponse, LLMConfig, StreamChunk, make_no_proxy_async_client
 
 
 class DeepSeekProvider(BaseLLMProvider):
@@ -10,6 +10,7 @@ class DeepSeekProvider(BaseLLMProvider):
         self.client = AsyncOpenAI(
             api_key=self.api_key,
             base_url=config.base_url or "https://api.deepseek.com/v1",
+            http_client=make_no_proxy_async_client(),
         )
 
     async def generate(

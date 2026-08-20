@@ -9,6 +9,7 @@ from backend.llm.base_provider import (
     ProbeResult,
     StreamChunk,
     _normalize_openai_probe_error,
+    make_no_proxy_async_client,
 )
 
 
@@ -25,7 +26,11 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 "OpenAICompatibleProvider requires a non-empty base_url"
             )
         super().__init__(config)
-        self.client = AsyncOpenAI(api_key=self.api_key, base_url=config.base_url)
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=config.base_url,
+            http_client=make_no_proxy_async_client(),
+        )
 
     async def probe(self) -> ProbeResult:
         """Probe via client.models.list() — doubles as connection check and

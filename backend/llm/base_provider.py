@@ -3,6 +3,23 @@ from dataclasses import dataclass
 import time
 from typing import AsyncIterator, Optional
 
+import httpx
+
+
+def make_no_proxy_async_client(timeout: float = 60.0) -> httpx.AsyncClient:
+    """Return an httpx.AsyncClient that ignores the system/HTTPS_PROXY
+    environment. Use this for outbound LLM API calls so a stale OS-level
+    proxy setting (e.g. macOS pointing at a dead Clash on 127.0.0.1:7897)
+    cannot break the request path — the SDK's default trust_env=True would
+    route through that proxy and fail every call with ConnectError.
+
+    NOTE: this still respects NO_PROXY/NO_PROXY_DIRECT semantics? No — it
+    doesn't, because that's the whole point. If you intentionally need a
+    proxy for outbound LLM traffic, set http_proxy/https_proxy env vars
+    and pass trust_env=True explicitly elsewhere.
+    """
+    return httpx.AsyncClient(timeout=timeout, trust_env=False)
+
 
 @dataclass
 class LLMResponse:

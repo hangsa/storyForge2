@@ -1,38 +1,14 @@
 import { useEffect, useState } from "react";
 import type { ChapterStatus } from "../../types/chapter";
+import {
+  type WorkspaceChapterNode,
+  type WorkspaceVolumeGroup,
+} from "../../utils/outline";
 
-export interface WorkspaceSceneNode {
-  scene_id: string;
-  title: string;
-  goal?: string;
-  conflict?: string;
-  emotional_arc?: string;
-  narrative_role?: string;
-  beat_type?: string;
-}
-export interface WorkspaceChapterNode {
-  chapter_number: number;
-  title: string;
-  theme?: string;
-  scenes: WorkspaceSceneNode[];
-}
+export type { WorkspaceChapterNode, WorkspaceVolumeGroup, WorkspaceSceneNode } from "../../utils/outline";
 
 /** Status info for the current chapter's scenes. Keyed by scene_id (e.g. "1-2"). */
 export type SceneStatusMap = Record<string, boolean>;
-
-/** A pre-computed volume group, derived from novel_outline.json in the
- *  parent. Pass a single "ungrouped" volume when there's no novel_outline
- *  (so the panel can still render a single header instead of a flat list). */
-export interface WorkspaceVolumeGroup {
-  /** Volume name, e.g. "第一卷" or "未分组" when no novel_outline. */
-  name: string;
-  /** Volume chapter range, e.g. "1-30". Empty string for ungrouped. */
-  chapter_range: string;
-  /** Volume summary (optional). */
-  summary?: string;
-  /** Chapters in this volume. */
-  chapters: WorkspaceChapterNode[];
-}
 
 interface Props {
   volumes: WorkspaceVolumeGroup[];

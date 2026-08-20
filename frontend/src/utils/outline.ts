@@ -37,10 +37,21 @@ export function computeFirstVolumeEnd(novelOutline: NovelOutline | null): number
   return end;
 }
 
+export interface WorkspaceSceneNode {
+  scene_id: string;
+  title: string;
+  goal?: string;
+  conflict?: string;
+  emotional_arc?: string;
+  narrative_role?: string;
+  beat_type?: string;
+}
+
 export interface WorkspaceChapterNode {
   chapter_number: number;
   title: string;
-  scenes: unknown[];
+  theme?: string;
+  scenes: WorkspaceSceneNode[];
 }
 
 export interface WorkspaceVolumeGroup {

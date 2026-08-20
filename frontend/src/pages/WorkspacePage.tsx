@@ -9,7 +9,6 @@ import WorkspaceTopBar from "../components/workspace/WorkspaceTopBar";
 import WorkspaceLayout from "../components/workspace/WorkspaceLayout";
 import ChapterTreePanel, {
   type WorkspaceChapterNode,
-  type WorkspaceVolumeGroup,
 } from "../components/workspace/ChapterTreePanel";
 import type { ChapterStatus } from "../types/chapter";
 import WritingArea from "../components/workspace/WritingArea";
@@ -94,13 +93,12 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const plannedTotal = useMemo(() => computePlannedTotal(novelOutline), [novelOutline]);
   // Issue 3: derive volume groups for ChapterTreePanel from manualChapters
   // + novel_outline. Recomputes when either input changes; falls back to a
-  // single "未分组" group when novel_outline is missing. Cast is safe: the
-  // outline.ts type widens `scenes` to `unknown[]` so the helper can be
-  // reused by the upcoming ChapterOutlineEditor; the runtime payload is the
-  // ChapterTreePanel-typed scene array (manualChapters is built from
-  // ChapterTreePanel's WorkspaceChapterNode type above).
+  // single "未分组" group when novel_outline is missing. WorkspaceChapterNode
+  // and WorkspaceVolumeGroup now live in utils/outline.ts (single source of
+  // truth, shared with ChapterTreePanel via re-export) so the return type
+  // matches ChapterTreePanel's prop without any cast.
   const volumeGroups = useMemo(
-    () => groupChaptersByVolume(manualChapters, novelOutline) as WorkspaceVolumeGroup[],
+    () => groupChaptersByVolume(manualChapters, novelOutline),
     [manualChapters, novelOutline],
   );
 

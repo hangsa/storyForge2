@@ -94,98 +94,163 @@ def _try_extract_json_text(text: str) -> Optional[str]:
     return None
 
 
+_THINK_SECTION_SEP_RE = re.compile(
+    r"(?m)^"
+    r"(?:\s*-{3,}[^\n]*"  # --- / --- DRAFT ---
+    r"|Draft\s*\d*\s*:"   # Draft: / Draft 2:
+    r"|\[?Final(?:[ \t]*draft)?\]?\s*:?"  # Final: / [Final draft] / Final draft:
+    r"|Final\s*\d+\s*:"   # Final 2:
+    r"|#+\s+[^\n]+"      # ## Heading
+    r")\s*$"
+)
+_THINK_REVIEW_MARKERS = (
+    "✓", "✅", "verify", "Let me check", "Let me also",
+    "Metaphor count", "Word count", "word count",
+    "Checking again", "Let me carefully", "carefully analyze",
+    "Let me think about", "Wait,", "Actually,",
+)
+
+
+def _cjk_pct(s: str) -> float:
+    cjk = len(re.findall(r"[一-鿿]", s))
+    ascii_alpha = len(re.findall(r"[a-zA-Z]", s))
+    return cjk / max(cjk + ascii_alpha, 1)
+
+
 def _extract_scene_from_think_block(text: str) -> str:
     """When the model puts the entire scene INSIDE the think block (a new
     MiniMax-M3 reasoning failure mode observed 2026-08-20 on proj_1a7d7fcf
     ch1 scene 1), recover the actual scene by scoring sections inside the
     think block.
 
-    Pattern observed: the model does plan → draft (often multiple times,
-    separated by `---`) → self-review → final draft, all inside the think
-    block, then emits `\n\n` (or nothing) after `</think>`. The previous
-    normalizer stripped the think block and got nothing back, yielding
-    "LLM 返回了空文本" and pausing the autopilot after 3 retries.
+    Pattern observed: the model does plan → draft (sometimes multiple
+    iterations) → self-review, all inside <think>...</think>, then emits
+    `\n\n` (or nothing) after. Section boundaries inside think vary across
+    runs: `---` separators on some runs, `Draft:` / `[Final draft]:` /
+    `## Heading` markers on others. Without good section splitting + a
+    CJK-density filter, planning/review text leaks into draft.md (run
+    2026-08-20 ch1s1 v2: returned "Let me write this scene..." block).
 
-    Heuristic: split the inside-think content by `---`, score each section
-    by (CJK density + length + SF_LOG presence + Final-label hint - review
-    markers), pick the highest-scoring section. Then trim trailing review
-    text (English-heavy lines) so we don't leak "✓ POV strict" into
-    draft.md. CJK density is the primary signal: scene prose is >70% CJK,
-    planning/review is <30% CJK.
+    Heuristic (final, 2026-08-20):
+      1. JSON-wrap fast path (unchanged).
+      2. Split the think-block content by `---` / `Draft:` / `Final:`
+         / `##` markers. Keep the fragment after the LAST boundary if any
+         markers exist (the model almost always puts the final draft last).
+         This avoids splitting a single section into a planning fragment and
+         a draft fragment that then re-merge into "best by length".
+      3. Among resulting sections, require cjk_pct >= 0.55 as a HARD
+         filter. This is the load-bearing signal: prose is >70% CJK;
+         planning/review is <30% CJK. A long planning section with a single
+         quoted SF_LOG tag can score higher than a short CJK-dense scene
+         if you let length dominate, but the density filter excludes it
+         cleanly.
+      4. Among CJK-dominant sections, rank by (sf_log_bonus + final_hint
+         + length). Pick top.
+      5. Trim trailing/leading English-heavy lines so stragglers from a
+         neighbouring planning section don't leak.
+
+    Returns "" if no CJK-dominant section is found. Better to fail loud
+    than to write model meta-commentary into draft.md.
     """
     inside_match = re.search(r"<think>(.*?)</think>", text, re.DOTALL | re.IGNORECASE)
     if not inside_match:
         return ""
     inside = inside_match.group(1)
 
-    # First: maybe the scene is JSON-wrapped inside the think block.
     json_extracted = _try_extract_json_text(inside)
     if json_extracted and json_extracted.strip():
         return json_extracted.strip()
 
-    # Otherwise: score sections separated by `---`. The model uses either
-    # bare `---` on its own line or `--- label ---` for labelled section
-    # breaks — both shapes are captured by the regex.
-    sections = re.split(r"\n\s*-{3,}[^\n]*\n", inside)
-    if not sections:
+    # Split on any of: ---/--- DRAFT ---/, Draft:/Draft 2:/[Final draft]:
+    # /Final:/Final 2:/## Heading. The "post-marker content" is the more
+    # likely candidate, so we anchor our search to content AFTER the last
+    # marker rather than walking the whole list.
+    parts = _THINK_SECTION_SEP_RE.split(inside)
+    if not parts:
         return ""
 
-    def section_score(section: str) -> float:
-        """Higher = more scene-like. Used to rank candidate sections inside a
-        think block. No hard threshold — we rank everything and pick the
-        highest, then sanity-check the winner below. Hard thresholding
-        caused false negatives when the chosen section's CJK ratio dipped
-        below the threshold because of inline SF_LOG tags (ASCII brackets
-        + Chinese params) pulling the density down."""
-        s = section.strip()
+    # Anchor on the LAST section: the model's reasoning pattern is
+    # plan → draft → review → final draft. Even when there is no `---`,
+    # there is usually at least one `Draft:` or `Final:` marker, and the
+    # chunk after it is the actual scene. We still walk all sections for
+    # the rare case where the model reverses the order.
+    sf_log_re = re.compile(r"<!-- SF_LOG.*?-->", re.DOTALL)
+    candidates = []
+    for idx, raw in enumerate(parts):
+        s = raw.strip()
         if not s:
-            return 0.0
-        cjk = len(re.findall(r"[一-鿿]", s))
-        ascii_alpha = len(re.findall(r"[a-zA-Z]", s))
-        cjk_pct = cjk / max(cjk + ascii_alpha, 1)
-        length_bonus = len(s) / 300.0
-        sf_log_bonus = 3.0 if "<!-- SF_LOG" in s else 0.0
-        final_hint = 1.0 if re.match(r"^(Final|FINAL|最终|Draft\s+\d+:|\[Final)", s) else 0.0
-        review_penalty = sum(
-            3.0 for m in
-            ["✓", "✅", "verify", "Let me check", "Let me also",
-             "Metaphor count", "word count", "Word count"]
-            if m in s
-        )
-        # Section must have SOME Chinese characters to be a scene candidate.
-        # Pure-English planning/review sections will score ~0 here (length +
-        # SF_LOG + final_hint won't compensate for the negative review_penalty).
+            continue
+        # Score CJK density over the prose only — strip SF_LOG tags first
+        # because their ASCII brackets + param names drag the density
+        # down even on a perfectly legit scene. SF_LOG bonus below still
+        # rewards the presence of the tag.
+        s_no_log = sf_log_re.sub("", s)
+        cjk = len(re.findall(r"[一-鿿]", s_no_log))
+        ascii_alpha = len(re.findall(r"[a-zA-Z]", s_no_log))
         if cjk == 0:
-            return 0.0
-        return cjk_pct + length_bonus + sf_log_bonus + final_hint - review_penalty
+            continue
+        cjk_density = cjk / max(cjk + ascii_alpha, 1)
+        if cjk_density < 0.45:
+            # CJK-thin section is planning/review, not prose. Hard filter
+            # so a long English planning block with one embedded SF_LOG
+            # tag can't outscore a 1500-char Chinese scene. Threshold 0.45
+            # (vs 0.70 for full prose) tolerates single-line summaries that
+            # happen to lead with an English header.
+            continue
+        if cjk < 12:
+            # Section needs at least 12 Chinese characters to count as
+            # scene prose. Pure-label fragments ("Draft 2:") fail, but
+            # even short dialogue-only test fixtures pass. Captured
+            # failure samples (proj_1a7d7fcf 2026-08-20) always had
+            # hundreds of CJK chars per real scene section, so this
+            # threshold is comfortably below real-world but well above
+            # any planning/review section.
+            continue
+        sf_log_bonus = 3.0 if "<!-- SF_LOG" in s else 0.0
+        # Bonus for sections that come AFTER a Final-style label (i.e. the
+        # model explicitly marked them as the chosen draft).
+        marker_bonus = 1.5 if idx > 0 and re.match(
+            r"^\s*-{3,}|Draft\s*\d*\s*:|\[?Final(?:[ \t]*draft)?\]?\s*:?",
+            parts[idx - 1] or "",
+        ) else 0.0
+        # Mild length preference: prefer longer scenes among density ties,
+        # but cap so a 5000-char section doesn't dominate a 1500-char one.
+        length_score = min(len(s) / 500.0, 4.0)
+        score = sf_log_bonus + marker_bonus + length_score
+        candidates.append((score, idx, s))
 
-    candidates = [
-        (section_score(s), idx, s)
-        for idx, s in enumerate(sections)
-    ]
-    candidates = [c for c in candidates if c[0] > 0.0 and len(c[2].strip()) >= 30]
     if not candidates:
         return ""
-    candidates.sort(key=lambda x: x[0], reverse=True)
-    best = candidates[0][2].strip()
 
-    # Trim trailing English-heavy lines (review text) from the chosen section
-    # so we don't leak "✓ POV strict" or numbered checklists into draft.md.
-    # Skip SF_LOG tag lines (their params are mostly ASCII but they're part
-    # of the scene, not review text).
+    # Prefer the LAST high-scoring section (final-draft bias) when scores tie
+    # within 0.5; otherwise take the top scorer.
+    candidates.sort(key=lambda x: (-x[0], -x[1]))
+    best = candidates[0][2]
+
+    # Trim both ends so neighbouring planning/review text from the source
+    # section doesn't leak. Skip SF_LOG tag lines (their params are ASCII
+    # but they're part of the scene).
+    def is_trim_english(line: str) -> bool:
+        s = line.strip()
+        if not s or "<!-- SF_LOG" in s or "-->" in s:
+            return False
+        line_cjk = len(re.findall(r"[一-鿿]", s))
+        line_ascii = len(re.findall(r"[a-zA-Z]", s))
+        if line_cjk == 0 and any(m in s for m in _THINK_REVIEW_MARKERS):
+            return True
+        # Pure ASCII review-sentence line with >30 Latin chars.
+        return line_ascii > 30 and line_cjk == 0
+
     lines = best.split("\n")
-    for i in range(len(lines) - 1, max(0, len(lines) - 30), -1):
-        line = lines[i].strip()
-        if not line:
-            continue
-        if "<!-- SF_LOG" in line or "-->" in line:
-            continue
-        cjk = len(re.findall(r"[一-鿿]", line))
-        ascii_alpha = len(re.findall(r"[a-zA-Z]", line))
-        if ascii_alpha > 3 * cjk and ascii_alpha > 20:
-            lines = lines[:i]
-            break
-    return "\n".join(lines).strip()
+    # Trim from end.
+    end = len(lines)
+    while end > 0 and is_trim_english(lines[end - 1]):
+        end -= 1
+    # Trim from start.
+    start = 0
+    while start < end and is_trim_english(lines[start]):
+        start += 1
+    return "\n".join(lines[start:end]).strip()
 
 
 def _normalize_scene_text(text: str) -> str:

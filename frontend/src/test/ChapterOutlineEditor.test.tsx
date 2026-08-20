@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import ChapterOutlineEditor from "../components/workspace/editors/ChapterOutlineEditor";
 
 vi.mock("../api/client", () => ({
@@ -42,5 +42,68 @@ describe("ChapterOutlineEditor", () => {
     );
     expect(screen.getByTestId("chapter-outline-editor")).toBeInTheDocument();
     expect(screen.getByTestId("chapter-outline-empty")).toHaveTextContent("尚未生成");
+  });
+
+  it("renders one chapter row per outline.chapter", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            {
+              chapter_number: 1, title: "第一章", theme: "觉醒",
+              scene_plan: [{ scene_number: 1, goal: "x", conflict: "y", emotional_arc: "z", narrative_role: "setup", beat_type: "inciting", registry_changes: { created: [], updated: [] }, required_logs: [] }],
+            },
+            {
+              chapter_number: 2, title: "第二章", theme: "磨炼",
+              scene_plan: [{ scene_number: 1, goal: "x", conflict: "y", emotional_arc: "z", narrative_role: "mini_payoff", beat_type: "rising", registry_changes: { created: [], updated: [] }, required_logs: [] }],
+            },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("chapter-row-1")).toBeInTheDocument();
+    expect(screen.getByTestId("chapter-row-2")).toBeInTheDocument();
+  });
+
+  it("chapter title input updates local state", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            {
+              chapter_number: 1, title: "原标题", theme: "原主题",
+              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }],
+            },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    const titleInput = screen.getByTestId("chapter-1-title") as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "新标题" } });
+    expect(titleInput.value).toBe("新标题");
+  });
+
+  it("chapter theme textarea updates local state", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            {
+              chapter_number: 1, title: "第一章", theme: "原主题",
+              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }],
+            },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    const themeArea = screen.getByTestId("chapter-1-theme") as HTMLTextAreaElement;
+    fireEvent.change(themeArea, { target: { value: "新主题" } });
+    expect(themeArea.value).toBe("新主题");
   });
 });

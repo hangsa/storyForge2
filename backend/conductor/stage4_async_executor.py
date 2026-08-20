@@ -143,13 +143,34 @@ def _write_scene_progress(
          if s.get("scene_number") == scene_number),
         None,
     )
+    new_status = "completed" if breaker_result == "passed" else breaker_result
     if scene_progress is None:
         chapter_progress.setdefault("scenes", []).append({
             "scene_number": scene_number,
-            "status": "completed" if breaker_result == "passed" else breaker_result,
+            "status": new_status,
             "retry_count": attempt - 1,
             "coherence_score": coherence_score,
         })
+    else:
+        # Upsert: when the executor reruns a scene that was previously
+        # marked pending (i.e. progress.json was seeded before the runner
+        # ever observed a successful write), the existing entry would have
+        # stayed "pending" forever without this branch. After a successful
+        # stream write + draft.md on disk, the scene MUST flip to
+        # completed/force_passed so `is_chapter_complete()` and the queue
+        # dedup guard treat it as done. Found on proj_1a7d7fcf 2026-08-20 —
+        # all 5 ch1 drafts were on disk but progress.json still showed
+        # "pending", so seed_queue() re-added them and the runner paid
+        # full LLM cost a second time. Promote through the status ladder:
+        # pending → in_progress → completed/force_passed. We never demote
+        # a successful scene back to pending.
+        existing_status = scene_progress.get("status")
+        PROMOTION = {"pending": 0, "in_progress": 1, "force_passed": 2, "completed": 3}
+        if existing_status is None or PROMOTION.get(existing_status, 0) < PROMOTION.get(new_status, 0):
+            scene_progress["status"] = new_status
+        scene_progress["retry_count"] = attempt - 1
+        if coherence_score is not None:
+            scene_progress["coherence_score"] = coherence_score
     fm.write_json(project_id, "progress.json", progress)
 
 

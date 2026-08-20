@@ -59,12 +59,12 @@ export default function ChapterOutlineEditor({ projectId: _projectId, data, onSa
           key={ch.chapter_number}
           chapter={ch}
           onUpdate={(patch) => updateChapter(ch.chapter_number, patch)}
-          onSceneUpdate={(_sn, patch) => {
+          onSceneUpdate={(sn, patch) => {
             setOutline((prev) => ({
               ...prev,
               chapters: prev.chapters.map((c) =>
                 c.chapter_number === ch.chapter_number
-                  ? { ...c, scene_plan: c.scene_plan.map((s) => ({ ...s, ...patch })) }
+                  ? { ...c, scene_plan: c.scene_plan.map((s) => (s.scene_number === sn ? { ...s, ...patch } : s)) }
                   : c,
               ),
             }));
@@ -77,7 +77,7 @@ export default function ChapterOutlineEditor({ projectId: _projectId, data, onSa
 }
 
 function ChapterRow({
-  chapter, onUpdate, onSceneUpdate: _onSceneUpdate, readOnly,
+  chapter, onUpdate, onSceneUpdate, readOnly,
 }: {
   chapter: Outline["chapters"][number];
   onUpdate: (patch: Partial<Outline["chapters"][number]>) => void;
@@ -127,7 +127,7 @@ function ChapterRow({
               <SceneRow
                 key={scene.scene_number}
                 scene={scene}
-                onUpdate={(patch) => _onSceneUpdate(scene.scene_number, patch)}
+                onUpdate={(patch) => onSceneUpdate(scene.scene_number, patch)}
                 readOnly={readOnly}
               />
             ))
@@ -137,6 +137,8 @@ function ChapterRow({
     </div>
   );
 }
+
+const NARRATIVE_ROLES = ["setup", "mini_payoff", "cliffhanger", "major_reveal"] as const;
 
 function SceneRow({
   scene, onUpdate, readOnly,
@@ -155,15 +157,61 @@ function SceneRow({
         className="text-xs text-system-log hover:text-primary"
       >场景 {scene.scene_number} · {open ? "收起" : "展开"}</button>
       {open && (
-        <div className="space-y-1">
-          <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">goal</label>
-          <textarea
-            data-testid={`scene-${scene.scene_number}-goal`}
-            value={scene.goal}
-            onChange={(e) => onUpdate({ goal: e.target.value })}
-            disabled={readOnly}
-            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
-          />
+        <div className="space-y-2">
+          <div>
+            <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">goal</label>
+            <textarea
+              data-testid={`scene-${scene.scene_number}-goal`}
+              value={scene.goal}
+              onChange={(e) => onUpdate({ goal: e.target.value })}
+              disabled={readOnly}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+            />
+          </div>
+          <div>
+            <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">conflict</label>
+            <textarea
+              data-testid={`scene-${scene.scene_number}-conflict`}
+              value={scene.conflict}
+              onChange={(e) => onUpdate({ conflict: e.target.value })}
+              disabled={readOnly}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+            />
+          </div>
+          <div>
+            <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">emotional_arc</label>
+            <textarea
+              data-testid={`scene-${scene.scene_number}-emotional-arc`}
+              value={scene.emotional_arc}
+              onChange={(e) => onUpdate({ emotional_arc: e.target.value })}
+              disabled={readOnly}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+            />
+          </div>
+          <div>
+            <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">narrative_role</label>
+            <select
+              data-testid={`scene-${scene.scene_number}-narrative-role`}
+              value={scene.narrative_role}
+              onChange={(e) => onUpdate({ narrative_role: e.target.value as ScenePlan["narrative_role"] })}
+              disabled={readOnly}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+            >
+              {NARRATIVE_ROLES.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">beat_type</label>
+            <input
+              data-testid={`scene-${scene.scene_number}-beat-type`}
+              value={scene.beat_type}
+              onChange={(e) => onUpdate({ beat_type: e.target.value })}
+              disabled={readOnly}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+            />
+          </div>
         </div>
       )}
     </div>

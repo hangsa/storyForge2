@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api, { type Outline, type ScenePlan } from "../../../api/client";
+import { useAutoHeight } from "../../../hooks/useAutoHeight";
 
 interface BaseEditorProps {
   projectId: string;
@@ -139,6 +140,8 @@ function ChapterRow({
   readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(true);
+  const themeRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(themeRef, [chapter.theme ?? ""]);
   return (
     <div data-testid={`chapter-row-${chapter.chapter_number}`} className="border border-outline-variant rounded-lg p-2 space-y-2">
       <div className="flex items-center justify-between">
@@ -165,11 +168,12 @@ function ChapterRow({
       <div>
         <label className="block font-label-mono text-system-log mb-1 text-xs">本章主题</label>
         <textarea
+          ref={themeRef}
           data-testid={`chapter-${chapter.chapter_number}-theme`}
           value={chapter.theme ?? ""}
           onChange={(e) => onUpdate({ theme: e.target.value })}
           disabled={readOnly}
-          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
         />
       </div>
       {open && (
@@ -203,6 +207,12 @@ function SceneRow({
 }) {
   const [open, setOpen] = useState(false);
   const [showB, setShowB] = useState(false);
+  const goalRef = useRef<HTMLTextAreaElement>(null);
+  const conflictRef = useRef<HTMLTextAreaElement>(null);
+  const arcRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(goalRef, [scene.goal]);
+  useAutoHeight(conflictRef, [scene.conflict]);
+  useAutoHeight(arcRef, [scene.emotional_arc]);
   return (
     <div data-testid={`scene-row-${scene.scene_number}`} className="border border-outline-variant rounded p-2 space-y-1">
       <button
@@ -216,31 +226,34 @@ function SceneRow({
           <div>
             <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">goal</label>
             <textarea
+              ref={goalRef}
               data-testid={`scene-${scene.scene_number}-goal`}
               value={scene.goal}
               onChange={(e) => onUpdate({ goal: e.target.value })}
               disabled={readOnly}
-              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
             />
           </div>
           <div>
             <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">conflict</label>
             <textarea
+              ref={conflictRef}
               data-testid={`scene-${scene.scene_number}-conflict`}
               value={scene.conflict}
               onChange={(e) => onUpdate({ conflict: e.target.value })}
               disabled={readOnly}
-              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
             />
           </div>
           <div>
             <label className="block font-label-mono text-system-log mb-1 text-[10px] uppercase tracking-wider">emotional_arc</label>
             <textarea
+              ref={arcRef}
               data-testid={`scene-${scene.scene_number}-emotional-arc`}
               value={scene.emotional_arc}
               onChange={(e) => onUpdate({ emotional_arc: e.target.value })}
               disabled={readOnly}
-              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
             />
           </div>
           <div>

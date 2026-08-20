@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { type Outline, type ScenePlan } from "../../../api/client";
+import { useEffect, useRef, useState } from "react";
+import api, { type Outline, type ScenePlan } from "../../../api/client";
 
 interface BaseEditorProps {
   projectId: string;
@@ -17,15 +17,44 @@ function readOutline(data: unknown): Outline | null {
   return { chapters: Array.isArray(raw.chapters) ? raw.chapters : [] };
 }
 
-export default function ChapterOutlineEditor({ projectId: _projectId, data, onSaved: _onSaved, readOnly }: BaseEditorProps) {
+export default function ChapterOutlineEditor({ projectId, data, onSaved, readOnly }: BaseEditorProps) {
   const initial = readOutline(data);
   const [outline, setOutline] = useState<Outline>(() => initial ?? EMPTY);
+  const [lastSavedOutline, setLastSavedOutline] = useState<Outline>(() => initial ?? EMPTY);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const outlineRef = useRef(outline);
+  outlineRef.current = outline;
 
   useEffect(() => {
     const next = readOutline(data);
-    if (next !== null) setOutline(next);
+    if (next !== null) {
+      setOutline(next);
+      setLastSavedOutline(next);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
+
+  const handleSave = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateOutline(projectId, outlineRef.current);
+      setLastSavedOutline(outlineRef.current);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setOutline(lastSavedOutline);
+    setError(null);
+  };
+
+  const dirty = JSON.stringify(outline) !== JSON.stringify(lastSavedOutline);
 
   if (initial === null) {
     return (
@@ -72,6 +101,31 @@ export default function ChapterOutlineEditor({ projectId: _projectId, data, onSa
           readOnly={readOnly}
         />
       ))}
+      {error && (
+        <div data-testid="chapter-outline-editor-error" className="p-2 bg-error-container/20 border border-error rounded text-error font-body-ui text-xs">
+          {error}
+        </div>
+      )}
+      <footer className="flex items-center justify-end gap-2 pt-2">
+        {dirty && (
+          <span data-testid="chapter-outline-editor-dirty" className="text-xs text-system-log mr-auto">未保存修改</span>
+        )}
+        <button
+          type="button"
+          data-testid="chapter-outline-editor-cancel"
+          onClick={handleCancel}
+          disabled={busy || !dirty}
+          className="px-3 py-1 text-xs bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
+        >取消</button>
+        <button
+          type="button"
+          data-testid="chapter-outline-editor-save"
+          onClick={handleSave}
+          disabled={busy || readOnly || !dirty}
+          title={readOnly ? "托管运行中,元数据已锁定" : undefined}
+          className="px-4 py-1 text-xs bg-tertiary-container text-surface-container-low rounded-lg hover:opacity-90 disabled:opacity-40"
+        >{busy ? "保存中…" : "保存"}</button>
+      </footer>
     </div>
   );
 }

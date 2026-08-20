@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ChapterOutlineEditor from "../components/workspace/editors/ChapterOutlineEditor";
 
 vi.mock("../api/client", () => ({
@@ -366,5 +366,108 @@ describe("ChapterOutlineEditor", () => {
     fireEvent.change(input, { target: { value: "twist_reveal" } });
     fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
     expect(screen.getByTestId("scene-1-required-log-0")).toHaveTextContent("twist_reveal");
+  });
+
+  it("save calls api.updateOutline once with the edited outline + calls onSaved", async () => {
+    const onSaved = vi.fn();
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            { chapter_number: 1, title: "原标题", theme: "原主题",
+              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+          ],
+        }}
+        onSaved={onSaved}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("chapter-1-title"), { target: { value: "新标题" } });
+    fireEvent.click(screen.getByTestId("chapter-outline-editor-save"));
+    await waitFor(() => expect(mockedUpdateOutline).toHaveBeenCalledTimes(1));
+    const [projectIdArg, outlineArg] = mockedUpdateOutline.mock.calls[0];
+    expect(projectIdArg).toBe("p1");
+    expect(outlineArg.chapters[0].title).toBe("新标题");
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it("save error shows banner and preserves local state", async () => {
+    mockedUpdateOutline.mockRejectedValueOnce(new Error("网络超时"));
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            { chapter_number: 1, title: "原标题", theme: "原主题",
+              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("chapter-1-title"), { target: { value: "新标题" } });
+    fireEvent.click(screen.getByTestId("chapter-outline-editor-save"));
+    await waitFor(() => screen.getByTestId("chapter-outline-editor-error"));
+    expect(screen.getByTestId("chapter-outline-editor-error")).toHaveTextContent("网络超时");
+    expect((screen.getByTestId("chapter-1-title") as HTMLInputElement).value).toBe("新标题");
+  });
+
+  it("cancel reverts local state to the data prop", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            { chapter_number: 1, title: "原标题", theme: "原主题",
+              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    const titleInput = screen.getByTestId("chapter-1-title") as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "临时修改" } });
+    expect(titleInput.value).toBe("临时修改");
+    fireEvent.click(screen.getByTestId("chapter-outline-editor-cancel"));
+    expect(titleInput.value).toBe("原标题");
+  });
+
+  it("readOnly disables every input and the save button", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            { chapter_number: 1, title: "原标题", theme: "原主题",
+              scene_plan: [{ scene_number: 1, goal: "原goal", conflict: "原conflict", emotional_arc: "原arc", narrative_role: "setup", beat_type: "inciting", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+          ],
+        }}
+        onSaved={() => {}}
+        readOnly
+      />,
+    );
+    expect((screen.getByTestId("chapter-1-title") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
+    expect((screen.getByTestId("scene-1-goal") as HTMLTextAreaElement).disabled).toBe(true);
+    expect((screen.getByTestId("scene-1-narrative-role") as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByTestId("chapter-outline-editor-save")).toBeDisabled();
+  });
+
+  it("'未保存修改' indicator appears after editing", () => {
+    render(
+      <ChapterOutlineEditor
+        projectId="p1"
+        data={{
+          chapters: [
+            { chapter_number: 1, title: "原标题", theme: "原主题",
+              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+          ],
+        }}
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId("chapter-outline-editor-dirty")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("chapter-1-title"), { target: { value: "新标题" } });
+    expect(screen.getByTestId("chapter-outline-editor-dirty")).toHaveTextContent("未保存修改");
   });
 });

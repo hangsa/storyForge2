@@ -170,6 +170,38 @@ async def reset_preview(project_id: str):
     }
 
 
+@router.post("/{project_id}/reset")
+async def reset_to_init(project_id: str):
+    """原子地清空章节草稿 + 运行时状态，并将 current_stage 写回 INIT。
+
+    保留：concept/world/character/novel_outline/outline 等 init 阶段产物
+    + stage_history（向后追溯能力）。
+
+    不实现严格事务回滚：中途失败时已删除的文件不回滚，由前端 toast 报错
+    并由用户重试。regress_to_init 幂等（已删除文件跳过）。
+    """
+    from backend.conductor.state_machine import StageStateMachine
+
+    sm = StageStateMachine(settings.projects_dir)
+    result = sm.regress_to_init(project_id)
+    if not result.allowed:
+        raise HTTPException(
+            status_code=404 if "不存在" in result.message else 500,
+            detail={
+                "error": True,
+                "code": "RESET_FAILED",
+                "message": result.message,
+                "detail": {},
+            },
+        )
+    return {
+        "error": False,
+        "code": "OK",
+        "message": "项目已重置到初始化",
+        "detail": {"project_id": project_id},
+    }
+
+
 @router.post("/bulk-delete")
 async def bulk_delete_projects(data: dict):
     ids = data.get("project_ids")

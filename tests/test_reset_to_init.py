@@ -257,3 +257,71 @@ def test_reset_preview_handles_no_chapters_dir(client, projects_dir):
     resp = client.get(f"/api/project/{pid}/reset-preview")
     assert resp.status_code == 200
     assert resp.json()["draft_count"] == 0
+
+
+# === /reset endpoint tests ===
+
+def test_reset_endpoint_clears_state(client, projects_dir):
+    pid = "proj_test"
+    proj = projects_dir / pid
+    proj.mkdir(parents=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": pid, "current_stage": "STAGE4"}),
+        encoding="utf-8",
+    )
+    chapters = proj / "chapters"
+    chapters.mkdir()
+    (chapters / "ch01_scene_001_draft.md").write_text("body")
+    (proj / "progress.json").write_text('{"chapters":[]}', encoding="utf-8")
+    (proj / ".storyforge_checkpoint.json").write_text("{}", encoding="utf-8")
+
+    resp = client.post(f"/api/project/{pid}/reset")
+    assert resp.status_code == 200
+    assert resp.json()["error"] is False
+
+    assert list((proj / "chapters").glob("ch*_scene_*_draft.md")) == []
+    assert not (proj / "progress.json").exists()
+    assert not (proj / ".storyforge_checkpoint.json").exists()
+    assert json.loads((proj / "project.json").read_text(encoding="utf-8"))["current_stage"] == "INIT"
+
+
+def test_reset_endpoint_preserves_init_artifacts(client, projects_dir):
+    pid = "proj_test"
+    proj = projects_dir / pid
+    proj.mkdir(parents=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": pid, "current_stage": "STAGE4"}),
+        encoding="utf-8",
+    )
+    for fn in ("outline.json", "characters.json", "world.json",
+               "novel_outline.json", "concept_and_dna.json"):
+        (proj / fn).write_text(f'{{"file":"{fn}"}}', encoding="utf-8")
+
+    resp = client.post(f"/api/project/{pid}/reset")
+    assert resp.status_code == 200
+
+    for fn in ("outline.json", "characters.json", "world.json",
+               "novel_outline.json", "concept_and_dna.json"):
+        assert (proj / fn).exists()
+
+
+def test_reset_endpoint_404_for_missing_project(client):
+    resp = client.post("/api/project/proj_nonexistent/reset")
+    assert resp.status_code == 404
+
+
+def test_reset_endpoint_is_idempotent(client, projects_dir):
+    """第二次 POST 也返回 200（regress_to_init 幂等）。"""
+    pid = "proj_test"
+    proj = projects_dir / pid
+    proj.mkdir(parents=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": pid, "current_stage": "STAGE4"}),
+        encoding="utf-8",
+    )
+
+    r1 = client.post(f"/api/project/{pid}/reset")
+    r2 = client.post(f"/api/project/{pid}/reset")
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200

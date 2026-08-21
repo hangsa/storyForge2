@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.api._errors import http_error
@@ -431,7 +431,7 @@ class RegenerateChapterOutlinePayload(BaseModel):
 @router.post("/regenerate-chapter-outline")
 async def regenerate_chapter_outline(
     project_id: str = Query(...),
-    payload: RegenerateChapterOutlinePayload = None,
+    payload: RegenerateChapterOutlinePayload = Body(...),
 ):
     """重生成 outline.json 中 chapter_start..chapter_end 区间内的章节大纲。
     其他章节 byte-identical 保留。

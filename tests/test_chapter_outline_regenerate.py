@@ -365,6 +365,23 @@ class TestRegenerateChapterOutline:
         assert ch3["title"] == "ch3-old"
         assert ch3["theme"] == "theme-3"
 
+    def test_regenerate_missing_body_returns_422(
+        self, client, projects_dir, monkeypatch
+    ):
+        """POST without a JSON body must 422 (Pydantic validation), not 500."""
+        _patch_fm_and_settings(monkeypatch, projects_dir)
+        proj_id = "proj_no_body"
+        _seed(projects_dir, proj_id, planned_total=5)
+
+        with patch("backend.agents.planner.PlannerAgent") as MockAgent:
+            instance = MockAgent.return_value
+            instance.generate_outline = AsyncMock()
+
+            resp = client.post(_regenerate_url(proj_id))
+
+        assert resp.status_code == 422
+        instance.generate_outline.assert_not_called()
+
 
 @pytest.fixture
 def projects_dir(tmp_path):

@@ -135,6 +135,40 @@ async def delete_project(project_id: str):
     }
 
 
+@router.get("/{project_id}/reset-preview")
+async def reset_preview(project_id: str):
+    """列出 /reset 将删除的文件与计数，用于前端 ConfirmDialog 文案。
+
+    返回 draft_count（chapters/ 下 ch*_scene_*_draft.md 文件数）、
+    has_progress / has_checkpoint / has_chunks 布尔值。文件不存在的
+    项目返回全零（不会 404，由调用方判断项目存在性）。
+    """
+    project_dir = settings.projects_dir / project_id
+    if not project_dir.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": True,
+                "code": "PROJECT_NOT_FOUND",
+                "message": f"项目 {project_id} 不存在",
+                "detail": {},
+            },
+        )
+    chapters_dir = project_dir / "chapters"
+    draft_count = (
+        sum(1 for f in chapters_dir.glob("ch*_scene_*_draft.md") if f.is_file())
+        if chapters_dir.exists() else 0
+    )
+    chunks_dir = project_dir / "autopilot" / "chunks"
+    has_chunks = chunks_dir.exists() and any(chunks_dir.glob("*.jsonl"))
+    return {
+        "draft_count": draft_count,
+        "has_progress": (project_dir / "progress.json").exists(),
+        "has_checkpoint": (project_dir / ".storyforge_checkpoint.json").exists(),
+        "has_chunks": has_chunks,
+    }
+
+
 @router.post("/bulk-delete")
 async def bulk_delete_projects(data: dict):
     ids = data.get("project_ids")

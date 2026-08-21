@@ -174,3 +174,86 @@ def test_regress_reports_actual_from_stage(sm, projects_dir):
     assert result.from_stage == Stage.STAGE5
     assert result.to_stage == Stage.INIT
     assert "STAGE5" in result.message and "INIT" in result.message
+
+
+# === /reset-preview endpoint tests ===
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture
+def client(projects_dir, monkeypatch):
+    from backend import config as _config
+    from backend.api.project import router
+    monkeypatch.setattr(_config.settings, "projects_dir", projects_dir)
+    # Force the module-level `fm` to use the patched projects_dir too.
+    from backend.api import project as _project_mod
+    monkeypatch.setattr(_project_mod, "fm", _project_mod.FileManager(projects_dir))
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_reset_preview_returns_draft_count(client, projects_dir):
+    pid = "proj_test"
+    proj = projects_dir / pid
+    proj.mkdir(parents=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": pid, "current_stage": "STAGE4"}),
+        encoding="utf-8",
+    )
+    chapters = proj / "chapters"
+    chapters.mkdir()
+    for n in (1, 2, 3):
+        (chapters / f"ch{n:02d}_scene_001_draft.md").write_text("body")
+
+    resp = client.get(f"/api/project/{pid}/reset-preview")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "draft_count": 3,
+        "has_progress": False,
+        "has_checkpoint": False,
+        "has_chunks": False,
+    }
+
+
+def test_reset_preview_detects_runtime_state(client, projects_dir):
+    pid = "proj_test"
+    proj = projects_dir / pid
+    proj.mkdir(parents=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": pid, "current_stage": "STAGE4"}),
+        encoding="utf-8",
+    )
+    (proj / "progress.json").write_text('{"chapters":[]}', encoding="utf-8")
+    (proj / ".storyforge_checkpoint.json").write_text("{}", encoding="utf-8")
+    chunks = proj / "autopilot" / "chunks"
+    chunks.mkdir(parents=True)
+    (chunks / "ch01_scene_001.jsonl").write_text('{"seq":1}')
+
+    resp = client.get(f"/api/project/{pid}/reset-preview")
+    body = resp.json()
+    assert body["has_progress"] is True
+    assert body["has_checkpoint"] is True
+    assert body["has_chunks"] is True
+
+
+def test_reset_preview_404_for_missing_project(client):
+    resp = client.get("/api/project/proj_nonexistent/reset-preview")
+    assert resp.status_code == 404
+
+
+def test_reset_preview_handles_no_chapters_dir(client, projects_dir):
+    """Project exists but never wrote any chapter drafts → all zeros."""
+    pid = "proj_test"
+    proj = projects_dir / pid
+    proj.mkdir(parents=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": pid, "current_stage": "INIT"}),
+        encoding="utf-8",
+    )
+
+    resp = client.get(f"/api/project/{pid}/reset-preview")
+    assert resp.status_code == 200
+    assert resp.json()["draft_count"] == 0

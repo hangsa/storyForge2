@@ -158,3 +158,19 @@ def test_regress_is_idempotent(sm, projects_dir):
     assert r2.allowed is True
     data = json.loads((proj / "project.json").read_text(encoding="utf-8"))
     assert data["current_stage"] == "INIT"
+
+
+def test_regress_reports_actual_from_stage(sm, projects_dir):
+    """from_stage should reflect the project's actual current_stage before reset,
+    not be hardcoded to Stage.INIT."""
+    pid = "proj_test"
+    proj = projects_dir / pid
+    _seed_project(projects_dir, pid, stage="STAGE5")
+    (proj / "progress.json").write_text('{}', encoding="utf-8")
+
+    result = sm.regress_to_init(pid)
+
+    assert result.allowed is True
+    assert result.from_stage == Stage.STAGE5
+    assert result.to_stage == Stage.INIT
+    assert "STAGE5" in result.message and "INIT" in result.message

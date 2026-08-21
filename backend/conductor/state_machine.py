@@ -283,6 +283,11 @@ class StageStateMachine:
                 message=f"项目 {project_id} 不存在",
             )
 
+        # Capture the actual current stage BEFORE mutating project.json, so
+        # the returned TransitionResult.from_stage honestly reports where we
+        # came from (e.g. STAGE4 → INIT, not INIT → INIT).
+        current_stage = self.get_current_stage(project_id)
+
         # 1. 删除章节草稿（idempotent：glob miss 是 no-op）
         chapters_dir = project_dir / "chapters"
         if chapters_dir.exists():
@@ -312,7 +317,7 @@ class StageStateMachine:
 
         return TransitionResult(
             allowed=True,
-            from_stage=Stage.INIT,
+            from_stage=current_stage,
             to_stage=Stage.INIT,
-            message="已重置到 INIT",
+            message=f"{current_stage.value} → INIT 已重置",
         )

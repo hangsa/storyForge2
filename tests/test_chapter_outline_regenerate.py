@@ -185,7 +185,7 @@ class TestRegenerateChapterOutline:
 
         with patch("backend.agents.planner.PlannerAgent") as MockAgent:
             instance = MockAgent.return_value
-            instance.generate_outline = fake_generate_outline
+            instance.generate_outline = AsyncMock(side_effect=fake_generate_outline)
 
             resp = client.post(_regenerate_url(proj_id), json={
                 "chapter_start": 2,
@@ -209,9 +209,10 @@ class TestRegenerateChapterOutline:
         # Sorted by chapter_number.
         assert [c["chapter_number"] for c in chapters] == [1, 2, 3, 4, 5]
 
-        # user_modifications passed through verbatim.
-        second_kwargs = instance.generate_outline.__name__  # sanity
-        last_call_kwargs = MockAgent.return_value.generate_outline.__call__  # unused
+        # user_modifications passed through verbatim on every call.
+        assert instance.generate_outline.await_count == 3
+        for call in instance.generate_outline.await_args_list:
+            assert call.kwargs["user_modifications"] == "让节奏更紧凑"
 
     def test_regenerate_end_before_start_returns_400(
         self, client, projects_dir, monkeypatch
@@ -322,6 +323,47 @@ class TestRegenerateChapterOutline:
         # progress.json byte-identical — total_chapters not refreshed.
         assert post_progress == pre_progress
         assert post_progress["total_chapters"] == 5
+
+    def test_regenerate_partial_failure_returns_503_without_disk_write(
+        self, client, projects_dir, monkeypatch
+    ):
+        """range 中途失败 → 503 LLM_GENERATION_FAILED，磁盘 outline.json 不变。
+
+        区间 [3, 4] 中，ch3 成功但仅存在于内存（循环外才写盘），
+        ch4 raise ValueError → 整批不写盘，磁盘保留旧 outline.json。
+        """
+        _patch_fm_and_settings(monkeypatch, projects_dir)
+        proj_id = "proj_partial_fail"
+        _seed(projects_dir, proj_id, planned_total=5)
+
+        async def fake_generate_outline(*args, chapter_number: int = 0, **kwargs):
+            if chapter_number == 3:
+                return (
+                    {"chapter_number": 3, "title": "ch3-NEW", "theme": "fresh"},
+                    None,
+                )
+            raise ValueError("LLM failed on ch4")
+
+        with patch("backend.agents.planner.PlannerAgent") as MockAgent:
+            instance = MockAgent.return_value
+            instance.generate_outline = fake_generate_outline
+
+            resp = client.post(_regenerate_url(proj_id), json={
+                "chapter_start": 3,
+                "chapter_end": 4,
+                "user_modifications": "",
+            })
+
+        assert resp.status_code == 503
+        body = resp.json()["detail"]
+        assert body["code"] == "LLM_GENERATION_FAILED"
+        assert "ch4" in body["message"]
+
+        # 磁盘 outline.json 未变 —— ch3 仍为 "ch3-old"，没有 ch3-NEW 残留。
+        on_disk = json.loads((projects_dir / proj_id / "outline.json").read_text())
+        ch3 = next(c for c in on_disk["chapters"] if c["chapter_number"] == 3)
+        assert ch3["title"] == "ch3-old"
+        assert ch3["theme"] == "theme-3"
 
 
 @pytest.fixture

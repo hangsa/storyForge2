@@ -26,6 +26,8 @@ interface Props {
   onChapterClick: (chapter_number: number, status: ChapterStatus) => void;
   onSelectScene?: (chapter_number: number, scene_id: string) => void;
   onRefresh: () => void;
+  /** v2.1: 透传到 ChapterTreePanel。 */
+  onInit?: () => void;
 }
 
 export default function ManagedDashboard({
@@ -38,6 +40,7 @@ export default function ManagedDashboard({
   onChapterClick,
   onSelectScene,
   onRefresh,
+  onInit,
 }: Props) {
   return (
     <div data-testid="managed-dashboard" className="h-full">
@@ -55,6 +58,7 @@ export default function ManagedDashboard({
         // Deliberately undefined — managed mode has no manual add-chapter
         // workflow, so ChapterTreePanel hides the button when this is omitted.
         onRefresh={onRefresh}
+        onInit={onInit}
       />
     </div>
   );

@@ -103,6 +103,13 @@ class TransitionResult:
     message: str = ""
 
 
+class ProjectNotFoundError(Exception):
+    """Raised by state machine operations when the project directory
+    does not exist. Lets the API layer map to HTTP 404 without coupling
+    to error-message string content."""
+    pass
+
+
 class StageStateMachine:
     def __init__(self, projects_dir: Path):
         self.projects_dir = Path(projects_dir)
@@ -271,17 +278,14 @@ class StageStateMachine:
 
         保留：concept_and_dna / world / characters / novel_outline / outline
         （init 阶段产物） + stage_history（向前追溯记录）。
+
+        项目目录不存在时抛 ProjectNotFoundError（由 API 层映射为 HTTP 404）。
         """
         import json as _json
 
         project_dir = self._project_dir(project_id)
         if not project_dir.exists():
-            return TransitionResult(
-                allowed=False,
-                from_stage=Stage.INIT,
-                to_stage=Stage.INIT,
-                message=f"项目 {project_id} 不存在",
-            )
+            raise ProjectNotFoundError(f"项目 {project_id} 不存在")
 
         # Capture the actual current stage BEFORE mutating project.json, so
         # the returned TransitionResult.from_stage honestly reports where we

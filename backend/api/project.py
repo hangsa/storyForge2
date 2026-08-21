@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
+from backend.conductor.state_machine import ProjectNotFoundError, StageStateMachine
 from backend.models.project import Project, InitialIntent
 from backend.utils.file_manager import FileManager
 
@@ -179,18 +180,19 @@ async def reset_to_init(project_id: str):
 
     不实现严格事务回滚：中途失败时已删除的文件不回滚，由前端 toast 报错
     并由用户重试。regress_to_init 幂等（已删除文件跳过）。
-    """
-    from backend.conductor.state_machine import StageStateMachine
 
+    错误：ProjectNotFoundError → 404；其他 OSError → 500（FastAPI 默认）。
+    """
     sm = StageStateMachine(settings.projects_dir)
-    result = sm.regress_to_init(project_id)
-    if not result.allowed:
+    try:
+        sm.regress_to_init(project_id)
+    except ProjectNotFoundError as e:
         raise HTTPException(
-            status_code=404 if "不存在" in result.message else 500,
+            status_code=404,
             detail={
                 "error": True,
-                "code": "RESET_FAILED",
-                "message": result.message,
+                "code": "PROJECT_NOT_FOUND",
+                "message": str(e),
                 "detail": {},
             },
         )

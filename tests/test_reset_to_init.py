@@ -138,10 +138,10 @@ def test_regress_preserves_init_artifacts(sm, projects_dir):
         assert (proj / fn).exists(), f"{fn} should be preserved"
 
 
-def test_regress_returns_not_allowed_when_project_missing(sm):
-    result = sm.regress_to_init("proj_nonexistent")
-    assert result.allowed is False
-    assert "不存在" in result.message
+def test_regress_raises_project_not_found_when_project_missing(sm):
+    from backend.conductor.state_machine import ProjectNotFoundError
+    with pytest.raises(ProjectNotFoundError, match="不存在"):
+        sm.regress_to_init("proj_nonexistent")
 
 
 def test_regress_is_idempotent(sm, projects_dir):
@@ -277,7 +277,12 @@ def test_reset_endpoint_clears_state(client, projects_dir):
 
     resp = client.post(f"/api/project/{pid}/reset")
     assert resp.status_code == 200
-    assert resp.json()["error"] is False
+    assert resp.json() == {
+        "error": False,
+        "code": "OK",
+        "message": "项目已重置到初始化",
+        "detail": {"project_id": pid},
+    }
 
     assert list((proj / "chapters").glob("ch*_scene_*_draft.md")) == []
     assert not (proj / "progress.json").exists()
@@ -299,6 +304,8 @@ def test_reset_endpoint_preserves_init_artifacts(client, projects_dir):
 
     resp = client.post(f"/api/project/{pid}/reset")
     assert resp.status_code == 200
+    assert resp.json()["code"] == "OK"
+    assert resp.json()["detail"] == {"project_id": pid}
 
     for fn in ("outline.json", "characters.json", "world.json",
                "novel_outline.json", "concept_and_dna.json"):
@@ -325,3 +332,58 @@ def test_reset_endpoint_is_idempotent(client, projects_dir):
 
     assert r1.status_code == 200
     assert r2.status_code == 200
+    assert r1.json()["code"] == "OK"
+    assert r2.json()["code"] == "OK"
+
+
+def test_reset_endpoint_handles_oserror_mid_execution(projects_dir, monkeypatch):
+    """中途 IO 失败 → 500 + 结构化错误信息。验证 partial-write 的故障传播路径。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend import config as _config
+    from backend.api.project import router
+
+    pid = "proj_test"
+    proj = projects_dir / pid
+    proj.mkdir(parents=True)
+    (proj / "project.json").write_text(
+        json.dumps({"id": pid, "current_stage": "STAGE4"}),
+        encoding="utf-8",
+    )
+    chapters = proj / "chapters"
+    chapters.mkdir()
+    (chapters / "ch01_scene_001_draft.md").write_text("body")
+    (proj / "progress.json").write_text('{}', encoding="utf-8")
+
+    # Monkeypatch Path.unlink to raise OSError mid-loop. This simulates a
+    # permission denied or disk-full error after some files have been deleted.
+    from backend.conductor import state_machine as sm_module
+    real_unlink = sm_module.Path.unlink
+
+    def unlink_with_failure(self, *args, **kwargs):
+        # Fail on the second unlink to simulate partial completion.
+        if self.name == "progress.json":
+            raise OSError("simulated disk full")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(sm_module.Path, "unlink", unlink_with_failure)
+
+    monkeypatch.setattr(_config.settings, "projects_dir", projects_dir)
+    from backend.api import project as _project_mod
+    monkeypatch.setattr(_project_mod, "fm", _project_mod.FileManager(projects_dir))
+
+    app = FastAPI()
+    app.include_router(router)
+    # FastAPI's default exception handler returns 500 for uncaught OSError;
+    # raise_server_exceptions=False makes TestClient return it instead of
+    # re-raising so we can assert on the HTTP status code.
+    no_raise_client = TestClient(app, raise_server_exceptions=False)
+
+    resp = no_raise_client.post(f"/api/project/{pid}/reset")
+    assert resp.status_code == 500
+    # The draft.md was deleted before progress.json failed; the project
+    # state is partial but the endpoint correctly surfaces the failure.
+    assert not (chapters / "ch01_scene_001_draft.md").exists()
+    # project.json stage was NOT yet rewritten when the error fired.
+    assert json.loads((proj / "project.json").read_text(encoding="utf-8"))["current_stage"] == "STAGE4"

@@ -28,14 +28,14 @@
 ### 边界场景
 
 - **项目刚初始化、还没写任何章节**：preview 显示 0 个草稿，弹窗文案降级为"项目目前无草稿可清理，仅将状态改回 INIT"，仍可执行（幂等）
-- **managed 模式下点击**：弹窗文案追加"建议先暂停 autopilot 再执行，否则运行中的 scene 可能产生新草稿冲突"
+- **managed 模式下点击**：执行后 autopilot 自动状态被清空（progress.json 没了）；下次启动 managed 会重新 seed_queue，按 progress 缺失视为全新开始。不在弹窗文案中显示 autopilot 警告（避免复杂的状态查询联动；managed 用户通常已在 UI 上暂停 autopilot）
 - **用户在弹窗打开时切换章节**：弹窗保持打开，不冲突
 
 ## 非目标
 
 - **不删除** `concept_and_dna.json` / `world.json` / `characters.json` / `novel_outline.json` / `outline.json` 等 init 阶段产物（用户已输入的内容保留）
 - **不修改** `stage_history`（保留向前追溯记录）
-- **不暂停** autopilot（弹窗内仅文字警告，不强制联动）
+- **不暂停** autopilot（不联动状态查询；用户自行决定何时点）
 - **不导出备份**（破坏性操作无备份，依赖 git/projects 备份策略）
 
 ## 设计
@@ -328,7 +328,7 @@ function buildInitMessage(p?: {
 }
 ```
 
-**注意**：`ConfirmDialog` 当前接口（`components/shared/ConfirmDialog.tsx`）需要扩展 `busy` prop 以在 reset 过程中禁用按钮。如不扩展，需在 WorkspacePage 内自管 disabled 状态（通过临时改造确认按钮）。实施计划阶段决定具体方式。
+**注意**：`ConfirmDialog` 当前接口（`components/shared/ConfirmDialog.tsx`）**不包含** `busy` prop。本设计**决定扩展 ConfirmDialog** 新增 `busy?: boolean` prop（默认 false）：true 时禁用确认按钮并显示 `progress_activity` spinner；这是受现有 ConfirmDialog 测试覆盖的最小扩展。如未来需要更复杂的禁用状态，可考虑独立 busy hook；本次不在范围。
 
 ### 数据流
 
@@ -372,13 +372,12 @@ useEffect hydrate：发现 concept/world/character/novel_outline/outline.json �
 | 失败点 | 行为 |
 |---|---|
 | `GET /reset-preview` 失败 | ConfirmDialog 不打开；toast 显示错误；停留在 workspace |
-| `POST /reset` 失败 | toast 显示错误；停留在 workspace；不修改任何状态（接口本身是部分写入，需评估是否回滚） |
+| `POST /reset` 失败 | toast 显示错误；停留在 workspace；可能已部分删除（见"原子性评估"），用户可重试 |
 | `reset-preview` 与 `reset` 之间文件被外部修改 | 用户可重新打开弹窗重取 preview；reset 接口幂等（已删除的文件跳过） |
 | 用户取消弹窗 | 不做任何修改 |
 | 用户在弹窗打开期间点击别的章节 | 弹窗保持打开（不冲突） |
-| 项目处于 autopilot 写作中 | **警告**：弹窗文案追加"建议先暂停 autopilot 再执行"；不强制检查 autopilot 状态 |
 
-**原子性评估**：当前 `regress_to_init` 失败时已删除的文件不回滚（chapters/*.md 可能部分删除）。这是当前设计的权衡：v2.1 范围内不引入完整事务保护，由用户重试时幂等性补足。如果未来需要严格原子性，可引入"先备份到 tmp/ 再 rename"的两步提交模式。
+**原子性评估（明确）**：`regress_to_init` **不实现严格回滚**。若在多次 unlink 中途发生异常（OSError 等），已删除的文件不会自动恢复，前端会收到错误 toast 并停留在 workspace。补救：用户重试 reset —— `regress_to_init` 是幂等的（已删除文件跳过；project.json 改 stage 也是覆盖写）。这是 v2.1 范围内的**明确权衡**：不引入两阶段提交（备份 tmp/ 再 rename）的复杂度，把"幂等重试"作为故障恢复路径。如果未来需要严格原子性，可引入"先备份到 `.reset_backup/` 再原子提交"的两步提交模式；本次不在范围。
 
 ## 测试
 

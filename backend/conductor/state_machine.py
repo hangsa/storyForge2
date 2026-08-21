@@ -260,3 +260,59 @@ class StageStateMachine:
         tmp_file.replace(project_file)
 
         return result
+
+    def regress_to_init(self, project_id: str) -> TransitionResult:
+        """反向推进到 INIT：清空 stage4 运行时产物 + current_stage=INIT。
+
+        原子性范围（v2.1 明确权衡）：任何文件 IO 失败都抛 OSError，不回滚。
+        补救路径：用户重试。regress_to_init 是幂等的（已删除文件跳过、
+        project.json stage 字段是覆盖写）。若未来需要严格原子性，
+        可引入"先备份 .reset_backup/ 再原子提交"两步提交模式。
+
+        保留：concept_and_dna / world / characters / novel_outline / outline
+        （init 阶段产物） + stage_history（向前追溯记录）。
+        """
+        import json as _json
+
+        project_dir = self._project_dir(project_id)
+        if not project_dir.exists():
+            return TransitionResult(
+                allowed=False,
+                from_stage=Stage.INIT,
+                to_stage=Stage.INIT,
+                message=f"项目 {project_id} 不存在",
+            )
+
+        # 1. 删除章节草稿（idempotent：glob miss 是 no-op）
+        chapters_dir = project_dir / "chapters"
+        if chapters_dir.exists():
+            for f in chapters_dir.glob("ch*_scene_*_draft.md"):
+                f.unlink()
+
+        # 2. 删除运行时状态文件
+        for rel in ("progress.json", ".storyforge_checkpoint.json"):
+            p = project_dir / rel
+            if p.exists():
+                p.unlink()
+
+        # 3. 清 autopilot 流式 chunk 缓冲（保留父目录方便 SceneChunkStore 复用）
+        chunks_dir = project_dir / "autopilot" / "chunks"
+        if chunks_dir.exists():
+            for f in chunks_dir.glob("*.jsonl"):
+                f.unlink()
+
+        # 4. 改 project.json current_stage=INIT（原子写：tmp + replace）
+        project_file = project_dir / "project.json"
+        data = self._read_json(project_id, "project.json") or {}
+        data["current_stage"] = Stage.INIT.value
+        tmp_file = project_file.with_suffix(".tmp")
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            _json.dump(data, f, ensure_ascii=False, indent=2)
+        tmp_file.replace(project_file)
+
+        return TransitionResult(
+            allowed=True,
+            from_stage=Stage.INIT,
+            to_stage=Stage.INIT,
+            message="已重置到 INIT",
+        )

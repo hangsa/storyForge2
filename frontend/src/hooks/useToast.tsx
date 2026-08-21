@@ -18,7 +18,7 @@ interface ToastContextValue {
   dismiss: (id: string) => void;
 }
 
-export const ToastContext = createContext<ToastContextValue | null>(null);
+const ToastContext = createContext<ToastContextValue | null>(null);
 
 let idCounter = 0;
 function nextId(): string {

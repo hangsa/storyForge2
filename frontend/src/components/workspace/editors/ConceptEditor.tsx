@@ -1,8 +1,8 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { Concept, ConceptResponse, StoryDNA } from "../../../api/client";
 import { useAutoHeight } from "../../../hooks/useAutoHeight";
 import { SectionRegenerateButton } from "../../shared/SectionRegenerateButton";
-import { ToastContext } from "../../../hooks/useToast";
+import { useToast } from "../../../hooks/useToast";
 
 interface BaseEditorProps {
   projectId: string;
@@ -29,17 +29,6 @@ function readPayload(data: unknown): { concept: Concept; storyDna: StoryDNA } {
 }
 
 /**
- * Returns the active Toast context or a no-op stand-in when no provider is
- * mounted (e.g. ContextPanel test fixtures wrap just the editor, not the
- * ToastProvider). Keeping the fallback local avoids breaking the production
- * invariant that useToast() inside an unwrapped tree is a programmer error.
- */
-function useToastSafe() {
-  const ctx = useContext(ToastContext);
-  return ctx ?? { toasts: [], show: () => "", dismiss: () => {} };
-}
-
-/**
  * In-place editor for Stage1 Concept + Story DNA. v1.8 Bug 3 fix: replaces
  * the old preview-only truncation in ContextPanel with a full editable form.
  * Save → api.updateConcept. Cancel reverts to the last-saved snapshot.
@@ -50,10 +39,7 @@ export default function ConceptEditor({ projectId, data, onSaved, readOnly }: Ba
   const [dna, setDna] = useState<StoryDNA>(seed.storyDna);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // useToast throws outside ToastProvider; workspace contexts (e.g. ContextPanel tests)
-  // may not wrap, so fall back to a no-op show so the editor doesn't crash.
-  const toastCtx = useToastSafe();
-  const { show } = toastCtx;
+  const { show } = useToast();
   const conceptRef = useRef(concept);
   conceptRef.current = concept;
   const dnaRef = useRef(dna);

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import api, { Character, CharacterSet } from "../../../api/client";
 import { useAutoHeight } from "../../../hooks/useAutoHeight";
+import { SectionRegenerateButton } from "../../shared/SectionRegenerateButton";
+import { useToast } from "../../../hooks/useToast";
 
 interface BaseEditorProps {
   projectId: string;
@@ -68,6 +70,11 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { show } = useToast();
+  const reportRegen = (target: string) => ({
+    onSuccess: (t: string) => show(`${t} 已重新生成`),
+    onError: (t: string, m: string) => show(`重新生成 ${t} 失败：${m}`),
+  });
   const setRef = useRef(set);
   setRef.current = set;
 
@@ -207,14 +214,103 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
               </div>
             </div>
 
-            <ChipFields
+            <PersonalityFields
               character={c}
+              idx={idx}
+              showRegen={!readOnly}
+              statusReporter={reportRegen("性格")}
               onChipsChange={(field, chips) => setChipsField(idx, field, chips)}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateCharacterSection(
+                  projectId,
+                  c.id,
+                  "personality",
+                  { keepExisting: false, userModifications: mods },
+                );
+                updateChar(idx, result);
+              }}
             />
             <VoiceFields
               character={c}
+              idx={idx}
+              showRegen={!readOnly}
+              statusReporter={reportRegen("声音特征")}
+              onChipsChange={(field, chips) => setChipsField(idx, field, chips)}
               onSpeechChange={(v) => updateChar(idx, setField(c, "voice_signature.speech_style", v))}
               onThoughtChange={(v) => updateChar(idx, setField(c, "voice_signature.thought_patterns", v))}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateCharacterSection(
+                  projectId,
+                  c.id,
+                  "voice_signature",
+                  { keepExisting: false, userModifications: mods },
+                );
+                updateChar(idx, result);
+              }}
+            />
+            <SectionPlaceholder
+              idx={idx}
+              label="当前状态"
+              section="current_state"
+              showRegen={!readOnly}
+              statusReporter={reportRegen("当前状态")}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateCharacterSection(
+                  projectId,
+                  c.id,
+                  "current_state",
+                  { keepExisting: false, userModifications: mods },
+                );
+                updateChar(idx, result);
+              }}
+            />
+            <SectionPlaceholder
+              idx={idx}
+              label="角色未知"
+              section="unknown"
+              showRegen={!readOnly}
+              statusReporter={reportRegen("角色未知")}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateCharacterSection(
+                  projectId,
+                  c.id,
+                  "unknown",
+                  { keepExisting: false, userModifications: mods },
+                );
+                updateChar(idx, result);
+              }}
+            />
+            <SectionPlaceholder
+              idx={idx}
+              label="人物关系"
+              section="relations"
+              showRegen={!readOnly}
+              statusReporter={reportRegen("人物关系")}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateCharacterSection(
+                  projectId,
+                  c.id,
+                  "relations",
+                  { keepExisting: false, userModifications: mods },
+                );
+                updateChar(idx, result);
+              }}
+            />
+            <SectionPlaceholder
+              idx={idx}
+              label="行为示例"
+              section="behavior_examples"
+              showRegen={!readOnly}
+              statusReporter={reportRegen("行为示例")}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateCharacterExamples(
+                  projectId,
+                  c.id,
+                  false,
+                  mods,
+                );
+                updateChar(idx, result);
+              }}
             />
           </div>
         </details>
@@ -276,39 +372,62 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
   );
 }
 
-/** Sub-component for the six chip-style fields of ONE character
- *  (core_traits / beliefs / desires / fears / values / taboos). Split out
+/** Sub-component for the five chip-style personality fields of ONE
+ *  character (core_traits / beliefs / desires / fears / values). Split out
  *  so `useAutoHeight` can be called per-textarea inside the Rules of Hooks
  *  (it's illegal to call hooks inside `.map()`). Each field round-trips
- *  string[] via "、"-join on render and parseChips on save. */
-function ChipFields({
+ *  string[] via "、"-join on render and parseChips on save.
+ *
+ *  v2.1.6: split personality (5 fields) from voice_signature.taboos so each
+ *  section can host its own SectionRegenerateButton with a unique label. */
+function PersonalityFields({
   character,
+  idx,
+  showRegen,
+  statusReporter,
   onChipsChange,
+  onRegenerate,
 }: {
   character: Character;
+  idx: number;
+  showRegen: boolean;
+  statusReporter: {
+    onSuccess: (target: string) => void;
+    onError: (target: string, message: string) => void;
+  };
   onChipsChange: (field: string, chips: string[]) => void;
+  onRegenerate: (userModifications: string) => Promise<void>;
 }) {
   const traitsRef = useRef<HTMLTextAreaElement>(null);
   const beliefsRef = useRef<HTMLTextAreaElement>(null);
   const desiresRef = useRef<HTMLTextAreaElement>(null);
   const fearsRef = useRef<HTMLTextAreaElement>(null);
   const valuesRef = useRef<HTMLTextAreaElement>(null);
-  const taboosRef = useRef<HTMLTextAreaElement>(null);
   useAutoHeight(traitsRef, [chipsToString(character.personality.core_traits)]);
   useAutoHeight(beliefsRef, [chipsToString(character.personality.beliefs)]);
   useAutoHeight(desiresRef, [chipsToString(character.personality.desires)]);
   useAutoHeight(fearsRef, [chipsToString(character.personality.fears)]);
   useAutoHeight(valuesRef, [chipsToString(character.personality.values)]);
-  useAutoHeight(taboosRef, [chipsToString(character.voice_signature.taboos)]);
   return (
-    <>
+    <div className="border-t border-outline-variant pt-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">性格</div>
+        {showRegen && (
+          <SectionRegenerateButton
+            target={`性格-${idx}`}
+            testId={`section-regenerate-性格-${idx}`}
+            statusReporter={statusReporter}
+            onRegenerate={onRegenerate}
+          />
+        )}
+      </div>
       <div>
         <label className="block font-label-mono text-system-log mb-1 text-xs">
           核心特质 (core_traits, 、分隔)
         </label>
         <textarea
           ref={traitsRef}
-          data-testid="character-0-core-traits"
+          data-testid={`character-${idx}-core-traits`}
           value={chipsToString(character.personality.core_traits)}
           onChange={(e) => onChipsChange("personality.core_traits", parseChips(e.target.value))}
           className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
@@ -319,7 +438,7 @@ function ChipFields({
           <label className="block font-label-mono text-system-log mb-1 text-xs">信念 (beliefs, 、)</label>
           <textarea
             ref={beliefsRef}
-            data-testid="character-0-beliefs"
+            data-testid={`character-${idx}-beliefs`}
             value={chipsToString(character.personality.beliefs)}
             onChange={(e) => onChipsChange("personality.beliefs", parseChips(e.target.value))}
             className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
@@ -329,7 +448,7 @@ function ChipFields({
           <label className="block font-label-mono text-system-log mb-1 text-xs">欲望 (desires, 、)</label>
           <textarea
             ref={desiresRef}
-            data-testid="character-0-desires"
+            data-testid={`character-${idx}-desires`}
             value={chipsToString(character.personality.desires)}
             onChange={(e) => onChipsChange("personality.desires", parseChips(e.target.value))}
             className="bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
@@ -341,7 +460,7 @@ function ChipFields({
           <label className="block font-label-mono text-system-log mb-1 text-xs">恐惧 (fears, 、)</label>
           <textarea
             ref={fearsRef}
-            data-testid="character-0-fears"
+            data-testid={`character-${idx}-fears`}
             value={chipsToString(character.personality.fears)}
             onChange={(e) => onChipsChange("personality.fears", parseChips(e.target.value))}
             className="bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
@@ -351,45 +470,62 @@ function ChipFields({
           <label className="block font-label-mono text-system-log mb-1 text-xs">价值观 (values, 、)</label>
           <textarea
             ref={valuesRef}
-            data-testid="character-0-values"
+            data-testid={`character-${idx}-values`}
             value={chipsToString(character.personality.values)}
             onChange={(e) => onChipsChange("personality.values", parseChips(e.target.value))}
             className="bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
           />
         </div>
       </div>
-      <div>
-        <label className="block font-label-mono text-system-log mb-1 text-xs">禁忌 (taboos, 、)</label>
-        <textarea
-          ref={taboosRef}
-          data-testid="character-0-taboos"
-          value={chipsToString(character.voice_signature.taboos)}
-          onChange={(e) => onChipsChange("voice_signature.taboos", parseChips(e.target.value))}
-          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
-        />
-      </div>
-    </>
+    </div>
   );
 }
 
-/** Sub-component for the two free-form voice_signature textareas of ONE
- *  character. Split out so `useAutoHeight` can be called per-textarea
- *  inside the Rules of Hooks (it's illegal to call hooks inside .map()). */
+/** Sub-component for the voice_signature fields of ONE character
+ *  (taboos + speech_style + thought_patterns). v2.1.6: taboos moved here
+ *  from the old ChipFields so all voice_signature fields share one section
+ *  header + SectionRegenerateButton. */
 function VoiceFields({
   character,
+  idx,
+  showRegen,
+  statusReporter,
+  onChipsChange,
   onSpeechChange,
   onThoughtChange,
+  onRegenerate,
 }: {
   character: Character;
+  idx: number;
+  showRegen: boolean;
+  statusReporter: {
+    onSuccess: (target: string) => void;
+    onError: (target: string, message: string) => void;
+  };
+  onChipsChange: (field: string, chips: string[]) => void;
   onSpeechChange: (v: string) => void;
   onThoughtChange: (v: string) => void;
+  onRegenerate: (userModifications: string) => Promise<void>;
 }) {
   const speechRef = useRef<HTMLTextAreaElement>(null);
   const thoughtRef = useRef<HTMLTextAreaElement>(null);
+  const taboosRef = useRef<HTMLTextAreaElement>(null);
   useAutoHeight(speechRef, [character.voice_signature.speech_style]);
   useAutoHeight(thoughtRef, [character.voice_signature.thought_patterns]);
+  useAutoHeight(taboosRef, [chipsToString(character.voice_signature.taboos)]);
   return (
-    <>
+    <div className="border-t border-outline-variant pt-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">声音特征</div>
+        {showRegen && (
+          <SectionRegenerateButton
+            target={`声音特征-${idx}`}
+            testId={`section-regenerate-声音特征-${idx}`}
+            statusReporter={statusReporter}
+            onRegenerate={onRegenerate}
+          />
+        )}
+      </div>
       <div>
         <label className="block font-label-mono text-system-log mb-1 text-xs">说话风格</label>
         <textarea
@@ -408,6 +544,59 @@ function VoiceFields({
           className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
         />
       </div>
-    </>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">禁忌 (taboos, 、)</label>
+        <textarea
+          ref={taboosRef}
+          data-testid={`character-${idx}-taboos`}
+          value={chipsToString(character.voice_signature.taboos)}
+          onChange={(e) => onChipsChange("voice_signature.taboos", parseChips(e.target.value))}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Sub-component for a section that has no inline editing widgets in the
+ *  workspace (current_state / unknown / relations / behavior_examples).
+ *  Renders just a section header with a ↻ button. The wizard (Stage2)
+ *  remains the canonical place to edit these in detail; workspace offers
+ *  AI regenerate as a quick refresh. */
+function SectionPlaceholder({
+  idx,
+  label,
+  section: _section,
+  showRegen,
+  statusReporter,
+  onRegenerate,
+}: {
+  idx: number;
+  label: string;
+  section: string;
+  showRegen: boolean;
+  statusReporter: {
+    onSuccess: (target: string) => void;
+    onError: (target: string, message: string) => void;
+  };
+  onRegenerate: (userModifications: string) => Promise<void>;
+}) {
+  return (
+    <div className="border-t border-outline-variant pt-2 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">{label}</div>
+        {showRegen && (
+          <SectionRegenerateButton
+            target={`${label}-${idx}`}
+            testId={`section-regenerate-${label}-${idx}`}
+            statusReporter={statusReporter}
+            onRegenerate={onRegenerate}
+          />
+        )}
+      </div>
+      <p className="font-body-ui text-system-log/60 text-xs">
+        详细编辑请到 Stage2 向导。本区域支持 AI 重新生成。
+      </p>
+    </div>
   );
 }

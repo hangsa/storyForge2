@@ -180,21 +180,32 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   }, [projectId, navigate]);
 
   // Read ?chapter=N&scene=M from URL on mount (and after the chapter tree
-  // loads — `manualChapters` starts empty until getOutline resolves). Falls
-  // back to current state if values are out-of-range or invalid (spec §
-  // Error Handling).
+  // loads — `manualChapters` starts empty until getOutline resolves). When
+  // the URL has no chapter param (the bookshelf entry path), or the chapter
+  // param isn't in the loaded list, default to the first scene of
+  // `currentChapter` so the writing area doesn't sit on the
+  // "本章节尚未生成大纲" empty state.
   useEffect(() => {
+    if (manualChapters.length === 0) return;
     const chParam = Number(searchParams.get("chapter"));
     const scParam = searchParams.get("scene");
-    if (!Number.isFinite(chParam) || chParam < 1) return;
-    const ch = manualChapters.find((c) => c.chapter_number === chParam);
-    if (!ch) return;
-    setCurrentChapter(chParam);
-    if (scParam && ch.scenes.some((s) => s.scene_id === scParam)) {
-      setCurrentScene(scParam);
-    } else {
-      setCurrentScene(ch.scenes[0]?.scene_id ?? null);
+    if (Number.isFinite(chParam) && chParam >= 1) {
+      const ch = manualChapters.find((c) => c.chapter_number === chParam);
+      if (ch) {
+        setCurrentChapter(chParam);
+        if (scParam && ch.scenes.some((s) => s.scene_id === scParam)) {
+          setCurrentScene(scParam);
+        } else {
+          setCurrentScene(ch.scenes[0]?.scene_id ?? null);
+        }
+        return;
+      }
+      // chapter param points to a chapter that's not in the loaded outline
+      // — fall through to the default branch so we still surface content.
     }
+    const ch = manualChapters.find((c) => c.chapter_number === currentChapter);
+    if (!ch) return;
+    setCurrentScene(ch.scenes[0]?.scene_id ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualChapters]);
 

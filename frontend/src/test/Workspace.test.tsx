@@ -264,6 +264,20 @@ describe("Workspace integration", () => {
     expect(screen.getByTestId("context-panel")).toBeInTheDocument();
   });
 
+  // Bug fix: bookshelf navigation goes to /workspace without ?chapter=/
+  // ?scene= params. WorkspacePage should default to chapter 1 + scene 1-1
+  // after getOutline resolves, instead of rendering the empty state and
+  // forcing the user to click into the chapter tree.
+  it("no URL params: defaults to chapter 1 + scene 1-1 after outline loads", async () => {
+    mockedGetOutline.mockResolvedValueOnce({
+      chapters: [{ chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] }],
+    });
+    setup("/project/p1/workspace");
+    expect(await screen.findByTestId("writing-area")).toBeInTheDocument();
+    expect(screen.queryByTestId("writing-empty")).not.toBeInTheDocument();
+    expect(screen.getByTestId("writing-chapter-title")).toHaveTextContent("第一章");
+  });
+
   // v1.9.1: managed-mode left column (ManagedDashboard) no longer renders
   // its own autopilot start/stop toggle — the cockpit tab in the middle
   // AutopilotMiddlePanel owns all session controls. Session still defaults

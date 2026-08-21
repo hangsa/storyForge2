@@ -220,7 +220,7 @@ class TestPromptWiring:
                 concept={"title": "测试"},
                 story_dna={},
                 world={},
-                character={"name": "x"},
+                characters=[{"name": "x"}],
                 chapter_number=5,
                 min_words=2000,
                 outline_text="打脸场景：对手嘲讽主角",

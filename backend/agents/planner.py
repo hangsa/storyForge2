@@ -5,7 +5,13 @@ from typing import Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse
 from backend.agents.writer import _resolve_genre_label
+from backend.growth_curve.context import compute_character_growth_context
 from backend.models.world import iter_power_systems
+from backend.outline_context.builder import (
+    build_recent_chapters_context,
+    build_volume_context,
+)
+from backend.outline_context.volumes import locate_volume, parse_volumes
 
 
 def _resolve_genre_extras(genre: str) -> dict[str, str]:
@@ -485,10 +491,11 @@ class PlannerAgent(BaseAgent):
         concept: dict,
         story_dna: dict,
         world: dict,
-        character: dict,
+        characters: list[dict],
         chapter_number: int = 1,
         min_words: int = 4000,
         novel_outline: Optional[dict] = None,
+        outline: Optional[dict] = None,
         outline_text: str = "",
         genre: str = "cool_novel",
         user_modifications: str = "",
@@ -508,17 +515,24 @@ class PlannerAgent(BaseAgent):
             indent=2,
         )
 
-        char_summary = {
-            "name": character.get("name", ""),
-            "personality": character.get("personality", {}),
-            "current_state": character.get("current_state", {}),
-        }
-        character_context = json.dumps(char_summary, ensure_ascii=False, indent=2)
+        # v2.1: the chapter outline used to see only characters[0], leaving
+        # antagonists and mentors invisible at planning time. Reuse the same
+        # cast the novel outline was designed against.
+        character_context = json.dumps(
+            pick_outline_cast(characters), ensure_ascii=False, indent=2
+        )
 
-        novel_outline_context = (
-            json.dumps(novel_outline, ensure_ascii=False, indent=2)
-            if novel_outline
-            else "（暂无全书大纲 — 章节生成时按故事 DNA 和概念自主设计）"
+        # v2.1: slice the novel outline to the owning volume instead of dumping
+        # the whole book. The slot name is unchanged on purpose — Prompt Plaza
+        # overrides store full template text, so renaming would break them.
+        novel_outline_context = build_volume_context(novel_outline, chapter_number)
+        volume = locate_volume(chapter_number, parse_volumes(novel_outline))
+        recent_chapters_context = build_recent_chapters_context(
+            outline, chapter_number, volume
+        )
+        character_growth_context = (
+            compute_character_growth_context(characters, chapter_number)
+            or "（暂无角色成长曲线）"
         )
 
         from backend.agents._injection_helpers import _build_user_modifications_block
@@ -531,6 +545,8 @@ class PlannerAgent(BaseAgent):
             chapter_number=chapter_number,
             min_words=min_words,
             novel_outline_context=novel_outline_context,
+            recent_chapters_context=recent_chapters_context,
+            character_growth_context=character_growth_context,
             genre_beat_patterns=_resolve_genre_beat_patterns(genre, outline_text),
             genre_focus_vocabulary=_resolve_genre_focus_vocabulary(),
             genre_pacing=_resolve_genre_pacing(genre),

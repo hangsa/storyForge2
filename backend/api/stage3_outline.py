@@ -421,6 +421,102 @@ async def regenerate_novel_outline_section(
         "detail": merged,
     }
 
+
+class RegenerateChapterOutlinePayload(BaseModel):
+    chapter_start: int = Field(ge=1)
+    chapter_end: int = Field(ge=1)
+    user_modifications: str = Field(default="", max_length=1700)
+
+
+@router.post("/regenerate-chapter-outline")
+async def regenerate_chapter_outline(
+    project_id: str = Query(...),
+    payload: RegenerateChapterOutlinePayload = None,
+):
+    """重生成 outline.json 中 chapter_start..chapter_end 区间内的章节大纲。
+    其他章节 byte-identical 保留。
+
+    与 /stage3/generate 共用 PlannerAgent.generate_outline，无 STAGE_ORDER
+    检查。专门服务于工作区场景，已写章节不被扰动。
+    """
+    # Re-resolve at call time so test mocks patch correctly.
+    from backend.agents.planner import PlannerAgent
+
+    if not project_id:
+        raise http_error(400, "VALIDATION_ERROR", "project_id 不能为空")
+
+    if payload.chapter_end < payload.chapter_start:
+        raise http_error(
+            400, "VALIDATION_ERROR",
+            f"chapter_end ({payload.chapter_end}) 必须 >= chapter_start ({payload.chapter_start})",
+        )
+
+    project = fm.read_json(project_id, "project.json")
+    if project is None:
+        raise http_error(404, "PROJECT_NOT_FOUND", f"项目 {project_id} 不存在")
+
+    existing = fm.read_json(project_id, "outline.json") or {}
+    chapters = list(existing.get("chapters", []))
+    if not chapters:
+        raise http_error(400, "PRECONDITION_FAILED", "outline.json 为空，无可重新生成的章节")
+
+    novel_outline = fm.read_json(project_id, "novel_outline.json") or {}
+    novel_total = planned_total(novel_outline) if novel_outline else 0
+    if novel_total and payload.chapter_end > novel_total:
+        raise http_error(
+            400, "VALIDATION_ERROR",
+            f"chapter_end ({payload.chapter_end}) 超出 planned_total ({novel_total})",
+        )
+
+    concept_and_dna = fm.read_json(project_id, "concept_and_dna.json") or {}
+    world = fm.read_json(project_id, "world.json") or {}
+    characters_data = fm.read_json(project_id, "characters.json") or {}
+    characters = characters_data.get("characters", [])
+    genre = project.get("genre", "cool_novel")
+
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+        genre=genre,
+    )
+
+    # preceding chapters 上下文累积：同一区间内当前生成的章节被加入 outline_for_prompt。
+    outline_for_prompt = existing
+
+    for ch_num in range(payload.chapter_start, payload.chapter_end + 1):
+        try:
+            result, _resp = await agent.generate_outline(
+                concept=concept_and_dna.get("concept", {}),
+                story_dna=concept_and_dna.get("story_dna", {}),
+                world=world,
+                characters=characters,
+                chapter_number=ch_num,
+                min_words=project.get("min_words", 4000),
+                novel_outline=novel_outline,
+                outline=outline_for_prompt,
+                user_modifications=payload.user_modifications,
+            )
+        except ValueError as e:
+            raise http_error(503, "LLM_GENERATION_FAILED", str(e))
+
+        # 替换 chapters 数组里同 chapter_number 的条目；不在区间内的保留。
+        chapters = [ch for ch in chapters if ch.get("chapter_number") != ch_num]
+        chapters.append(result)
+        outline_for_prompt = dict(outline_for_prompt)
+        outline_for_prompt["chapters"] = chapters
+
+    chapters.sort(key=lambda ch: ch.get("chapter_number", 0))
+    merged_outline = {"chapters": chapters}
+    fm.write_json(project_id, "outline.json", merged_outline)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"第 {payload.chapter_start}-{payload.chapter_end} 章已重新生成",
+        "detail": merged_outline,
+    }
+
 branch_router = APIRouter(
     prefix="/api/v1/projects/{project_id}/branches",
     tags=["branches"],

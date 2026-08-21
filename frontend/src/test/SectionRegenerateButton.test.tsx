@@ -193,4 +193,63 @@ describe("SectionRegenerateButton", () => {
     );
     expect(screen.getByTestId("section-regenerate-力量体系")).toBeInTheDocument();
   });
+
+  it("does NOT call useWizard when statusReporter is provided", () => {
+    // Sanity check: when statusReporter is passed, the button must not
+    // require a WizardProvider wrapper. We render WITHOUT one and verify
+    // no "useWizard must be used within WizardProvider" error is thrown.
+    const onSuccess = vi.fn();
+    renderWithToast(
+      <SectionRegenerateButton
+        target="概念"
+        onRegenerate={async () => {}}
+        statusReporter={{ onSuccess }}
+      />,
+    );
+    expect(screen.getByTestId("section-regenerate-概念")).toBeInTheDocument();
+  });
+});
+
+describe("SectionRegenerateButton with statusReporter (workspace path)", () => {
+  it("calls onSuccess of statusReporter when onRegenerate resolves", async () => {
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+    const onBusy = vi.fn();
+
+    renderWithToast(
+      <SectionRegenerateButton
+        target="概念"
+        onRegenerate={async () => {}}
+        statusReporter={{ onSuccess, onError, onBusy }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("section-regenerate-概念"));
+    fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("概念"));
+    expect(onError).not.toHaveBeenCalled();
+    expect(onBusy).toHaveBeenCalledWith("概念");
+  });
+
+  it("calls onError of statusReporter when onRegenerate rejects", async () => {
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+
+    renderWithToast(
+      <SectionRegenerateButton
+        target="力量体系"
+        onRegenerate={async () => { throw new Error("boom"); }}
+        statusReporter={{ onSuccess, onError }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("section-regenerate-力量体系"));
+    fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith("力量体系", expect.stringContaining("boom")),
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
 });

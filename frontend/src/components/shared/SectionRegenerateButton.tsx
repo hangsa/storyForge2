@@ -16,6 +16,15 @@ interface SectionRegenerateButtonProps {
   disabled?: boolean;
   /** Test id; default `section-regenerate-${target}`. */
   testId?: string;
+  /**
+   * 工作区使用：传入自定义 reporter（通常用 useToast 包装）。
+   * 不传则 fallback useWizard()，保持现有 wizard 行为不变。
+   */
+  statusReporter?: {
+    onBusy?: (target: string) => void;
+    onSuccess?: (target: string) => void;
+    onError?: (target: string, message: string) => void;
+  };
 }
 
 export function SectionRegenerateButton({
@@ -23,6 +32,7 @@ export function SectionRegenerateButton({
   onRegenerate,
   disabled = false,
   testId,
+  statusReporter,
 }: SectionRegenerateButtonProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -30,18 +40,32 @@ export function SectionRegenerateButton({
   // inline status badge in the wizard footer (positioned before "重新生成"),
   // instead of the previous global toast at viewport bottom-right which
   // overlapped the footer buttons when the modal was short.
-  const wizard = useWizard();
+  // 当 statusReporter 存在时跳过 wizard（向后兼容：wizard 路径不传 prop）。
+  const wizard = statusReporter ? null : useWizard();
+
+  const reportBusy = (t: string) => {
+    if (statusReporter?.onBusy) statusReporter.onBusy(t);
+    else wizard?.setRegenerateBusy(t);
+  };
+  const reportSuccess = (t: string) => {
+    if (statusReporter?.onSuccess) statusReporter.onSuccess(t);
+    else wizard?.setRegenerateSuccess(t);
+  };
+  const reportError = (t: string, m: string) => {
+    if (statusReporter?.onError) statusReporter.onError(t, m);
+    else wizard?.setRegenerateFailure(t, m);
+  };
 
   const handleConfirm = async (text: string) => {
     setBusy(true);
-    wizard.setRegenerateBusy(target);
+    reportBusy(target);
     try {
       await onRegenerate(text);
-      wizard.setRegenerateSuccess(target);
+      reportSuccess(target);
       setOpen(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      wizard.setRegenerateFailure(target, msg);
+      reportError(target, msg);
       setOpen(false);
     } finally {
       setBusy(false);

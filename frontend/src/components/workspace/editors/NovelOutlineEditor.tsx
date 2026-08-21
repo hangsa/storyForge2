@@ -186,7 +186,9 @@ function VolumeCard({
   idx, volume, onUpdate,
 }: { idx: number; volume: VolumeDivision; onUpdate: (v: VolumeDivision) => void }) {
   const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const eventsRef = useRef<HTMLTextAreaElement>(null);
   useAutoHeight(summaryRef, [volume.summary]);
+  useAutoHeight(eventsRef, [(volume.key_events ?? []).join("、")]);
   return (
     <div className="p-2 border border-outline-variant rounded-lg space-y-1">
       <div className="grid grid-cols-2 gap-2">
@@ -223,14 +225,15 @@ function VolumeCard({
         <label className="block font-label-mono text-system-log mb-1 text-xs">
           关键事件（、分隔）
         </label>
-        <input
+        <textarea
+          ref={eventsRef}
           data-testid={`novel-outline-volume-${idx}-events`}
           value={(volume.key_events ?? []).join("、")}
           onChange={(e) => onUpdate({
             ...volume,
             key_events: e.target.value.split(/[、,]/).map((x) => x.trim()).filter(Boolean),
           })}
-          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
         />
       </div>
     </div>

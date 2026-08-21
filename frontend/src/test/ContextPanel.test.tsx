@@ -537,5 +537,26 @@ describe("ContextPanel", () => {
       expect(summary.style.height).toBe("72px");
       expect(summary.className).toContain("overflow-hidden");
     });
+
+    it("volume key_events chip-textarea auto-grows and renders array joined by 、", async () => {
+      // Bug: novel-outline-volume-{i}-events used to render as <input>
+      // (single-line), which clipped multi-line chip content. It is now
+      // an auto-grow textarea that still joins the string[] with "、".
+      mockedGetNovelOutline.mockResolvedValueOnce({
+        core_conflict_theme: "x",
+        volumes: [{ name: "v1", chapter_range: "1-30", summary: "s", key_events: ["入门", "初试", "对决"] }],
+        mc_growth_arc: [], key_plot_points: [],
+        generated_at: "", updated_at: "",
+      });
+      setupActivePanel("/workspace?mode=manual&panel=outline");
+      const events = (await screen.findByTestId("novel-outline-volume-0-events")) as HTMLTextAreaElement;
+      expect(events.tagName).toBe("TEXTAREA");
+      expect(events.getAttribute("rows")).toBeNull();
+      expect(events.className).toContain("overflow-hidden");
+      expect(events.value).toBe("入门、初试、对决");
+      stubLayout(events, 60);
+      fireEvent.change(events, { target: { value: events.value + "、反转" } });
+      expect(events.style.height).toBe("60px");
+    });
   });
 });

@@ -140,8 +140,9 @@ async def reset_preview(project_id: str):
     """列出 /reset 将删除的文件与计数，用于前端 ConfirmDialog 文案。
 
     返回 draft_count（chapters/ 下 ch*_scene_*_draft.md 文件数）、
-    has_progress / has_checkpoint / has_chunks 布尔值。文件不存在的
-    项目返回全零（不会 404，由调用方判断项目存在性）。
+    has_progress / has_checkpoint / has_chunks 布尔值。项目目录不存在时
+    返回 404，与 `delete_project` 一致；chapters / autopilot 子目录缺失则
+    按零计数返回（与 /reset 的幂等行为一致）。
     """
     project_dir = settings.projects_dir / project_id
     if not project_dir.exists():

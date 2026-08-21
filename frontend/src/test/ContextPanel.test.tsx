@@ -153,9 +153,83 @@ describe("ContextPanel", () => {
     });
     setupActivePanel("/workspace?mode=manual&panel=world");
     expect(await screen.findByTestId("world-editor")).toBeInTheDocument();
-    expect((screen.getByTestId("world-era") as HTMLInputElement).value).toBe("修真纪元");
+    expect((screen.getByTestId("world-era") as HTMLTextAreaElement).value).toBe("修真纪元");
     expect((screen.getByTestId("world-power-0-name") as HTMLInputElement).value).toBe("灵气");
     expect(screen.getByTestId("world-power-0-stages")).toHaveDisplayValue("炼气、筑基、金丹");
+  });
+
+  it("world editor — long-text fields are auto-grow textareas (no fixed rows, overflow-hidden)", async () => {
+    // Bug: era / era_social_structure / era_cultural_history / power_systems[i].stages /
+    // core_rules / ceilings / cost_system / world.core_rules / factions[i].goal /
+    // factions[i].relations used to render as <input> (single-line), which clipped
+    // multi-line content. They are now textareas with useAutoHeight.
+    mockedGetWorld.mockResolvedValueOnce({
+      era: "修真纪元",
+      geography: "九州",
+      era_social_structure: "宗门林立，凡人王朝依附于大宗门",
+      era_cultural_history: "万年前灵气潮汐退潮后，修行界经历数次大战",
+      power_systems: [{
+        name: "灵气",
+        description: "炼气化神",
+        stages: ["炼气", "筑基", "金丹", "元婴"],
+        core_rules: ["灵根唯一", "不可逆转光阴"],
+        ceilings: ["化神"],
+        cost_system: "寿元消耗",
+      }],
+      factions: [
+        { name: "青云宗", type: "正派", goal: "守护苍生，抵御魔道", relations: "与正派交好，与魔道对立" },
+      ],
+      core_rules: ["不可逆转光阴", "天劫不可避"],
+    });
+    setupActivePanel("/workspace?mode=manual&panel=world");
+    await screen.findByTestId("world-editor");
+
+    const autoGrowIds = [
+      "world-era",
+      "world-social",
+      "world-cultural",
+      "world-power-0-stages",
+      "world-power-0-rules",
+      "world-power-0-ceilings",
+      "world-power-0-cost",
+      "world-core-rules",
+      "world-faction-0-goal",
+      "world-faction-0-relations",
+    ];
+    for (const id of autoGrowIds) {
+      const ta = screen.queryByTestId(id) as HTMLTextAreaElement | null;
+      expect(ta, `${id} should be a textarea, not an input`).not.toBeNull();
+      expect(ta.tagName, `${id} tag should be TEXTAREA`).toBe("TEXTAREA");
+      expect(ta.getAttribute("rows"), `${id} should not have a fixed rows attribute`).toBeNull();
+      expect(ta.className, `${id} should have overflow-hidden`).toContain("overflow-hidden");
+    }
+    // Sanity — geography was already a textarea; still here.
+    expect((screen.getByTestId("world-geography") as HTMLTextAreaElement).value).toBe("九州");
+    // Sanity — short identifier fields stay as inputs.
+    expect((screen.getByTestId("world-power-0-name") as HTMLInputElement).tagName).toBe("INPUT");
+    expect(screen.queryByTestId("world-faction-0-name").tagName).toBe("INPUT");
+  });
+
+  it("world editor — chip-style textareas render array values joined by 、", async () => {
+    // The string[] fields (stages / core_rules / ceilings / world.core_rules) are
+    // joined with "、" on render and re-split on save. Switching them to
+    // <textarea> must preserve that round-trip display.
+    mockedGetWorld.mockResolvedValueOnce({
+      era: "x", geography: "x",
+      era_social_structure: null, era_cultural_history: null,
+      power_systems: [{
+        name: "灵气", description: "x",
+        stages: ["炼气", "筑基"], core_rules: ["规则一"], ceilings: ["化神"],
+        cost_system: "x",
+      }],
+      factions: [],
+      core_rules: ["规则A", "规则B"],
+    });
+    setupActivePanel("/workspace?mode=manual&panel=world");
+    const stages = (await screen.findByTestId("world-power-0-stages")) as HTMLTextAreaElement;
+    expect(stages.value).toBe("炼气、筑基");
+    const coreRules = (await screen.findByTestId("world-core-rules")) as HTMLTextAreaElement;
+    expect(coreRules.value).toBe("规则A、规则B");
   });
 
   it("character editor lists each character as a collapsible card", async () => {

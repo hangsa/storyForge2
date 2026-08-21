@@ -64,7 +64,6 @@ user_prompt_template: |
     irreversible_loss（不可逆损失）, moral_awakening（道德觉醒）,
     accumulated_evidence（证据累积）, relationship_transformation（关系转变）
   - 每个阶段描述角色在该阶段的内在变化和外在表现
-  - target_chapter_range 预估该阶段发生在哪些章节（如 "3-5"）
   - 配角可以不设计完整成长曲线，设为 null
 
   {user_modifications}
@@ -120,8 +119,7 @@ user_prompt_template: |
           "stage_name": "阶段名称（中文，如：少年意气、坠入深渊、觉醒重生）",
           "trigger_event_type": "world_truth_revealed",
           "trigger_event_description": "触发该阶段的具体事件描述",
-          "character_change": "角色在此阶段的内在信念/价值观/性格转变",
-          "target_chapter_range": "1-3"
+          "character_change": "角色在此阶段的内在信念/价值观/性格转变"
         }}
       ]
     }}

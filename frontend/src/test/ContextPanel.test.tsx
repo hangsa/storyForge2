@@ -51,11 +51,13 @@ vi.mock("../api/client", () => ({
 
 function setupActivePanel(initialPath: string) {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <Routes>
-        <Route path="*" element={<ContextPanel projectId="p1" />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route path="*" element={<ContextPanel projectId="p1" />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   );
 }
 

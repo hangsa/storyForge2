@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import api, { Concept, ConceptResponse, StoryDNA } from "../../../api/client";
 import { useAutoHeight } from "../../../hooks/useAutoHeight";
+import { SectionRegenerateButton } from "../../shared/SectionRegenerateButton";
+import { ToastContext } from "../../../hooks/useToast";
 
 interface BaseEditorProps {
   projectId: string;
@@ -27,6 +29,17 @@ function readPayload(data: unknown): { concept: Concept; storyDna: StoryDNA } {
 }
 
 /**
+ * Returns the active Toast context or a no-op stand-in when no provider is
+ * mounted (e.g. ContextPanel test fixtures wrap just the editor, not the
+ * ToastProvider). Keeping the fallback local avoids breaking the production
+ * invariant that useToast() inside an unwrapped tree is a programmer error.
+ */
+function useToastSafe() {
+  const ctx = useContext(ToastContext);
+  return ctx ?? { toasts: [], show: () => "", dismiss: () => {} };
+}
+
+/**
  * In-place editor for Stage1 Concept + Story DNA. v1.8 Bug 3 fix: replaces
  * the old preview-only truncation in ContextPanel with a full editable form.
  * Save → api.updateConcept. Cancel reverts to the last-saved snapshot.
@@ -37,6 +50,10 @@ export default function ConceptEditor({ projectId, data, onSaved, readOnly }: Ba
   const [dna, setDna] = useState<StoryDNA>(seed.storyDna);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // useToast throws outside ToastProvider; workspace contexts (e.g. ContextPanel tests)
+  // may not wrap, so fall back to a no-op show so the editor doesn't crash.
+  const toastCtx = useToastSafe();
+  const { show } = toastCtx;
   const conceptRef = useRef(concept);
   conceptRef.current = concept;
   const dnaRef = useRef(dna);
@@ -81,7 +98,22 @@ export default function ConceptEditor({ projectId, data, onSaved, readOnly }: Ba
 
   return (
     <div data-testid="concept-editor" className="space-y-3">
-      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">概念</div>
+      <div className="flex items-center justify-between">
+        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">概念</div>
+        {!readOnly && (
+          <SectionRegenerateButton
+            target="概念"
+            statusReporter={{
+              onSuccess: (t) => show(`${t} 已重新生成`),
+              onError: (t, m) => show(`重新生成 ${t} 失败：${m}`),
+            }}
+            onRegenerate={async (mods) => {
+              const result = await api.regenerateConceptSection(projectId, "concept", mods);
+              setConcept(result.concept);
+            }}
+          />
+        )}
+      </div>
 
       <div>
         <label className="block font-label-mono text-system-log mb-1 text-xs">标题</label>
@@ -151,7 +183,22 @@ export default function ConceptEditor({ projectId, data, onSaved, readOnly }: Ba
       </div>
 
       <div className="border-t border-outline-variant pt-3 space-y-2">
-        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">核心矛盾 (Story DNA)</div>
+        <div className="flex items-center justify-between">
+          <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">核心矛盾 (Story DNA)</div>
+          {!readOnly && (
+            <SectionRegenerateButton
+              target="Story DNA"
+              statusReporter={{
+                onSuccess: (t) => show(`${t} 已重新生成`),
+                onError: (t, m) => show(`重新生成 ${t} 失败：${m}`),
+              }}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateConceptSection(projectId, "dna", mods);
+                setDna(result.story_dna);
+              }}
+            />
+          )}
+        </div>
         <textarea
           ref={statementRef}
           data-testid="concept-statement"

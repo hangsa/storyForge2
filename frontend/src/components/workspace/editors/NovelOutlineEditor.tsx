@@ -6,6 +6,8 @@ import api, {
   KeyPlotPoint,
 } from "../../../api/client";
 import { useAutoHeight } from "../../../hooks/useAutoHeight";
+import { useToast } from "../../../hooks/useToast";
+import { SectionRegenerateButton } from "../../shared/SectionRegenerateButton";
 
 interface BaseEditorProps {
   projectId: string;
@@ -44,6 +46,11 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
   const [novel, setNovel] = useState<NovelOutline>(() => readNovel(data));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { show } = useToast();
+  const reportRegen = (label: string) => ({
+    onSuccess: (t: string) => show(`${t} 已重新生成`),
+    onError: (t: string, m: string) => show(`重新生成 ${t} 失败：${m}`),
+  });
   const novelRef = useRef(novel);
   novelRef.current = novel;
   const themeRef = useRef<HTMLTextAreaElement>(null);
@@ -72,6 +79,33 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
     setError(null);
   };
 
+  /**
+   * The regenerate endpoint returns the FULL NovelOutline, but we only merge
+   * the field(s) owned by the requested section — otherwise an unsaved edit in
+   * another section would be silently reverted by a regenerate elsewhere.
+   */
+  const regenerateSection = async (
+    section: "core_conflict" | "volumes" | "mc_growth" | "key_plot",
+    mods: string,
+  ) => {
+    const result = await api.regenerateNovelOutlineSection(projectId, section, mods);
+    const merged = readNovel(result);
+    setNovel((prev) => {
+      switch (section) {
+        case "core_conflict":
+          return { ...prev, core_conflict_theme: merged.core_conflict_theme };
+        case "volumes":
+          return { ...prev, volumes: merged.volumes };
+        case "mc_growth":
+          return { ...prev, mc_growth_arc: merged.mc_growth_arc };
+        case "key_plot":
+          return { ...prev, key_plot_points: merged.key_plot_points };
+        default:
+          return prev;
+      }
+    });
+  };
+
   const isEmpty =
     !novel.core_conflict_theme?.trim() &&
     novel.volumes.length === 0 &&
@@ -91,7 +125,17 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
   return (
     <div data-testid="novel-outline-editor" className="space-y-3">
       <div>
-        <label className="block font-label-mono text-system-log mb-1 text-xs">核心冲突 / 主题</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="font-label-mono text-system-log text-xs">核心冲突 / 主题</label>
+          {!readOnly && (
+            <SectionRegenerateButton
+              target="核心冲突 / 主题"
+              testId="section-regenerate-core_conflict"
+              statusReporter={reportRegen("核心冲突 / 主题")}
+              onRegenerate={(mods) => regenerateSection("core_conflict", mods)}
+            />
+          )}
+        </div>
         <textarea
           ref={themeRef}
           data-testid="novel-outline-theme"
@@ -101,7 +145,19 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
         />
       </div>
 
-      <Section title={`全卷划分（${novel.volumes.length} 卷）`}>
+      <Section
+        title={`全卷划分（${novel.volumes.length} 卷）`}
+        action={
+          !readOnly && (
+            <SectionRegenerateButton
+              target="全卷划分"
+              testId="section-regenerate-volumes"
+              statusReporter={reportRegen("全卷划分")}
+              onRegenerate={(mods) => regenerateSection("volumes", mods)}
+            />
+          )
+        }
+      >
         {novel.volumes.map((v, idx) => (
           <VolumeCard
             key={idx}
@@ -116,7 +172,19 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
         ))}
       </Section>
 
-      <Section title={`主角成长弧线（${novel.mc_growth_arc.length} 阶段）`}>
+      <Section
+        title={`主角成长弧线（${novel.mc_growth_arc.length} 阶段）`}
+        action={
+          !readOnly && (
+            <SectionRegenerateButton
+              target="主角成长弧线"
+              testId="section-regenerate-mc_growth"
+              statusReporter={reportRegen("主角成长弧线")}
+              onRegenerate={(mods) => regenerateSection("mc_growth", mods)}
+            />
+          )
+        }
+      >
         {novel.mc_growth_arc.map((m, idx) => (
           <GrowthMilestoneCard
             key={idx}
@@ -131,7 +199,19 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
         ))}
       </Section>
 
-      <Section title={`必出场关键剧情点（${novel.key_plot_points.length} 个）`}>
+      <Section
+        title={`必出场关键剧情点（${novel.key_plot_points.length} 个）`}
+        action={
+          !readOnly && (
+            <SectionRegenerateButton
+              target="必出场关键剧情点"
+              testId="section-regenerate-key_plot"
+              statusReporter={reportRegen("必出场关键剧情点")}
+              onRegenerate={(mods) => regenerateSection("key_plot", mods)}
+            />
+          )
+        }
+      >
         {novel.key_plot_points.map((p, idx) => (
           <PlotPointCard
             key={idx}
@@ -173,10 +253,13 @@ export default function NovelOutlineEditor({ projectId, data, onSaved, readOnly 
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">{title}</div>
+      <div className="flex items-center justify-between">
+        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">{title}</div>
+        {action}
+      </div>
       <div className="space-y-2">{children}</div>
     </div>
   );

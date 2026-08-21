@@ -23,11 +23,13 @@ interface Props {
   /** Pass undefined to hide the "+ 新章节" button (managed mode has no manual chapter-adding workflow). */
   onAddChapter?: () => void;
   onRefresh: () => void;
+  /** v2.1: 初始化按钮回调。省略则不渲染该按钮。 */
+  onInit?: () => void;
 }
 
 export default function ChapterTreePanel({
   volumes, currentChapter, currentScene, chapterStatus, sceneStatus,
-  onSelectChapter, onSelectScene, onAddChapter, onRefresh,
+  onSelectChapter, onSelectScene, onAddChapter, onRefresh, onInit,
 }: Props) {
   // Track which volumes are open. The useState initializer runs only on
   // first mount — when the workspace's async load later populates `volumes`,
@@ -94,6 +96,14 @@ export default function ChapterTreePanel({
       <div className="sticky top-0 z-10 bg-canvas-bg border-b border-outline-variant -mx-3 px-3 pt-3 pb-2 flex items-center justify-between">
         <span className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">章节</span>
         <div className="flex gap-1">
+          {onInit && (
+            <button
+              type="button"
+              data-testid="init-project"
+              onClick={onInit}
+              className="px-2 py-0.5 rounded text-xs bg-surface-container text-system-log hover:text-primary"
+            >初始化</button>
+          )}
           <button
             type="button"
             data-testid="refresh"

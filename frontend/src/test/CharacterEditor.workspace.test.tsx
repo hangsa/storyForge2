@@ -97,3 +97,63 @@ describe("CharacterEditor workspace add/delete", () => {
     });
   });
 });
+
+describe("CharacterEditor auto-grow chip textareas", () => {
+  const ALICE_CHIPS = {
+    id: "char_alice",
+    name: "Alice",
+    personality: {
+      beliefs: ["义"],
+      desires: ["回家"],
+      fears: ["孤独"],
+      values: ["侠"],
+      core_traits: ["机敏", "执着"],
+    },
+    voice_signature: { speech_style: "", thought_patterns: "", taboos: [] },
+    current_state: { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] },
+    unknown_to_character: [],
+    is_core_character: true,
+    character_type: "protagonist",
+    relations: {},
+  };
+
+  it("personality chip fields are auto-grow textareas (no fixed rows, overflow-hidden)", () => {
+    // Bug: core_traits / beliefs / desires / fears / values (and taboos)
+    // used to render as <input> (single-line), which clipped multi-line
+    // chip content. They are now textareas with useAutoHeight.
+    render(
+      <MemoryRouter>
+        <CharacterEditor projectId="p1" data={{ characters: [ALICE_CHIPS] }} onSaved={() => {}} />
+      </MemoryRouter>,
+    );
+    const autoGrowIds = [
+      "character-0-core-traits",
+      "character-0-beliefs",
+      "character-0-desires",
+      "character-0-fears",
+      "character-0-values",
+      "character-0-taboos",
+    ];
+    for (const id of autoGrowIds) {
+      const ta = screen.queryByTestId(id) as HTMLTextAreaElement | null;
+      expect(ta, `${id} should be a textarea, not an input`).not.toBeNull();
+      expect(ta.tagName, `${id} tag should be TEXTAREA`).toBe("TEXTAREA");
+      expect(ta.getAttribute("rows"), `${id} should not have a fixed rows attribute`).toBeNull();
+      expect(ta.className, `${id} should have overflow-hidden`).toContain("overflow-hidden");
+    }
+    // Sanity — short identifier fields stay as inputs.
+    expect((screen.getByTestId("character-0-name") as HTMLInputElement).tagName).toBe("INPUT");
+  });
+
+  it("chip-style textareas render array values joined by 、", () => {
+    render(
+      <MemoryRouter>
+        <CharacterEditor projectId="p1" data={{ characters: [ALICE_CHIPS] }} onSaved={() => {}} />
+      </MemoryRouter>,
+    );
+    const core = (screen.getByTestId("character-0-core-traits")) as HTMLTextAreaElement;
+    expect(core.value).toBe("机敏、执着");
+    const beliefs = (screen.getByTestId("character-0-beliefs")) as HTMLTextAreaElement;
+    expect(beliefs.value).toBe("义");
+  });
+});

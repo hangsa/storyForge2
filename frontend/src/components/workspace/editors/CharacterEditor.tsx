@@ -20,7 +20,7 @@ function readSet(data: unknown): CharacterSet {
   };
 }
 
-function setField(c: Character, path: string, value: string): Character {
+function setField(c: Character, path: string, value: unknown): Character {
   const next: Character = JSON.parse(JSON.stringify(c));
   const parts = path.split(".");
   let obj: Record<string, unknown> = next as unknown as Record<string, unknown>;
@@ -29,6 +29,16 @@ function setField(c: Character, path: string, value: string): Character {
   }
   obj[parts[parts.length - 1]] = value;
   return next;
+}
+
+/** Split a chip string into an array. The chip fields are joined with "、" or
+ *  "," on render and re-split on save. Mirrors the helper in WorldEditor. */
+function parseChips(s: string): string[] {
+  return s.split(/[、,]/).map((x) => x.trim()).filter(Boolean);
+}
+
+function chipsToString(arr: string[] | undefined): string {
+  return Array.isArray(arr) ? arr.join("、") : "";
 }
 
 const ROLE_LABELS: Record<Character["character_type"], string> = {
@@ -43,6 +53,15 @@ const ROLE_LABELS: Record<Character["character_type"], string> = {
  * character as a collapsible card with editable name/role and chip-style
  * fields for personality/voice. Add/delete supported via generate/delete
  * endpoints (v1.9 wizard character CRUD).
+ *
+ * v2.1.4: the personality / voice_signature chip fields
+ * (core_traits / beliefs / desires / fears / values / taboos) used to render
+ * as <input> (single-line), which clipped multi-line chip strings. They are
+ * now auto-grow textareas. The save path also fixes a latent bug: those
+ * fields are typed as `string[]`, but the old onChange passed the raw string
+ * from the input instead of the parsed array — so any edit would have
+ * silently corrupted the array into a string. The new path uses
+ * `parseChips` on the textarea value before saving.
  */
 export default function CharacterEditor({ projectId, data, onSaved, readOnly }: BaseEditorProps) {
   const [set, setSet] = useState<CharacterSet>(() => readSet(data));
@@ -63,7 +82,7 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
     setSet({ ...set, characters: list });
   };
 
-  const setChipsField = (idx: number, field: string, chips: string) => {
+  const setChipsField = (idx: number, field: string, chips: string[]) => {
     const next = setField(set.characters[idx], field, chips);
     updateChar(idx, next);
   };
@@ -188,66 +207,15 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
               </div>
             </div>
 
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">
-                核心特质 (core_traits, 、分隔)
-              </label>
-              <input
-                value={c.personality.core_traits.join("、")}
-                onChange={(e) => setChipsField(idx, "personality.core_traits", e.target.value)}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">信念 (beliefs, 、)</label>
-                <input
-                  value={c.personality.beliefs.join("、")}
-                  onChange={(e) => setChipsField(idx, "personality.beliefs", e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">欲望 (desires, 、)</label>
-                <input
-                  value={c.personality.desires.join("、")}
-                  onChange={(e) => setChipsField(idx, "personality.desires", e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">恐惧 (fears, 、)</label>
-                <input
-                  value={c.personality.fears.join("、")}
-                  onChange={(e) => setChipsField(idx, "personality.fears", e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-              <div>
-                <label className="block font-label-mono text-system-log mb-1 text-xs">价值观 (values, 、)</label>
-                <input
-                  value={c.personality.values.join("、")}
-                  onChange={(e) => setChipsField(idx, "personality.values", e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-            </div>
-
+            <ChipFields
+              character={c}
+              onChipsChange={(field, chips) => setChipsField(idx, field, chips)}
+            />
             <VoiceFields
               character={c}
               onSpeechChange={(v) => updateChar(idx, setField(c, "voice_signature.speech_style", v))}
               onThoughtChange={(v) => updateChar(idx, setField(c, "voice_signature.thought_patterns", v))}
             />
-            <div>
-              <label className="block font-label-mono text-system-log mb-1 text-xs">禁忌 (taboos, 、)</label>
-              <input
-                value={c.voice_signature.taboos.join("、")}
-                onChange={(e) => setChipsField(idx, "voice_signature.taboos", e.target.value)}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container"
-              />
-            </div>
           </div>
         </details>
       ))}
@@ -305,6 +273,102 @@ export default function CharacterEditor({ projectId, data, onSaved, readOnly }: 
         </div>
       )}
     </div>
+  );
+}
+
+/** Sub-component for the six chip-style fields of ONE character
+ *  (core_traits / beliefs / desires / fears / values / taboos). Split out
+ *  so `useAutoHeight` can be called per-textarea inside the Rules of Hooks
+ *  (it's illegal to call hooks inside `.map()`). Each field round-trips
+ *  string[] via "、"-join on render and parseChips on save. */
+function ChipFields({
+  character,
+  onChipsChange,
+}: {
+  character: Character;
+  onChipsChange: (field: string, chips: string[]) => void;
+}) {
+  const traitsRef = useRef<HTMLTextAreaElement>(null);
+  const beliefsRef = useRef<HTMLTextAreaElement>(null);
+  const desiresRef = useRef<HTMLTextAreaElement>(null);
+  const fearsRef = useRef<HTMLTextAreaElement>(null);
+  const valuesRef = useRef<HTMLTextAreaElement>(null);
+  const taboosRef = useRef<HTMLTextAreaElement>(null);
+  useAutoHeight(traitsRef, [chipsToString(character.personality.core_traits)]);
+  useAutoHeight(beliefsRef, [chipsToString(character.personality.beliefs)]);
+  useAutoHeight(desiresRef, [chipsToString(character.personality.desires)]);
+  useAutoHeight(fearsRef, [chipsToString(character.personality.fears)]);
+  useAutoHeight(valuesRef, [chipsToString(character.personality.values)]);
+  useAutoHeight(taboosRef, [chipsToString(character.voice_signature.taboos)]);
+  return (
+    <>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">
+          核心特质 (core_traits, 、分隔)
+        </label>
+        <textarea
+          ref={traitsRef}
+          data-testid="character-0-core-traits"
+          value={chipsToString(character.personality.core_traits)}
+          onChange={(e) => onChipsChange("personality.core_traits", parseChips(e.target.value))}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">信念 (beliefs, 、)</label>
+          <textarea
+            ref={beliefsRef}
+            data-testid="character-0-beliefs"
+            value={chipsToString(character.personality.beliefs)}
+            onChange={(e) => onChipsChange("personality.beliefs", parseChips(e.target.value))}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+          />
+        </div>
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">欲望 (desires, 、)</label>
+          <textarea
+            ref={desiresRef}
+            data-testid="character-0-desires"
+            value={chipsToString(character.personality.desires)}
+            onChange={(e) => onChipsChange("personality.desires", parseChips(e.target.value))}
+            className="bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">恐惧 (fears, 、)</label>
+          <textarea
+            ref={fearsRef}
+            data-testid="character-0-fears"
+            value={chipsToString(character.personality.fears)}
+            onChange={(e) => onChipsChange("personality.fears", parseChips(e.target.value))}
+            className="bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+          />
+        </div>
+        <div>
+          <label className="block font-label-mono text-system-log mb-1 text-xs">价值观 (values, 、)</label>
+          <textarea
+            ref={valuesRef}
+            data-testid="character-0-values"
+            value={chipsToString(character.personality.values)}
+            onChange={(e) => onChipsChange("personality.values", parseChips(e.target.value))}
+            className="bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="block font-label-mono text-system-log mb-1 text-xs">禁忌 (taboos, 、)</label>
+        <textarea
+          ref={taboosRef}
+          data-testid="character-0-taboos"
+          value={chipsToString(character.voice_signature.taboos)}
+          onChange={(e) => onChipsChange("voice_signature.taboos", parseChips(e.target.value))}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container overflow-hidden"
+        />
+      </div>
+    </>
   );
 }
 

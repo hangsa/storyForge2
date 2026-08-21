@@ -778,6 +778,22 @@ export const api = {
   advance: (projectId: string, targetStage: string) =>
     request<AdvanceResponse>("POST", "/conductor/advance", { project_id: projectId, target_stage: targetStage }),
 
+  resetPreview: (projectId: string) =>
+    request<{
+      draft_count: number;
+      has_progress: boolean;
+      has_checkpoint: boolean;
+      has_chunks: boolean;
+    }>("GET", `/project/${encodeURIComponent(projectId)}/reset-preview`),
+
+  resetToInit: (projectId: string) =>
+    request<{
+      error: boolean;
+      code: string;
+      message: string;
+      detail: { project_id: string };
+    }>("POST", `/project/${encodeURIComponent(projectId)}/reset`),
+
   generateConcept: (projectId: string, userModifications: string = "") =>
     request<ConceptResponse>("POST", "/stage1/generate", { project_id: projectId, user_modifications: userModifications }),
 

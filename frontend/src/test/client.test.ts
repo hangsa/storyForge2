@@ -247,4 +247,18 @@ describe("stage4 exemptions + sf-log + precheck client", () => {
       user_modifications: "",
     });
   });
+
+  it("regenerateChapterOutlineRange_postsBody", async () => {
+    await api.regenerateChapterOutlineRange("p1", 3, 5, "let me adjust");
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "/api/stage3/regenerate-chapter-outline?project_id=p1",
+    );
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      chapter_start: 3,
+      chapter_end: 5,
+      user_modifications: "let me adjust",
+    });
+  });
 });

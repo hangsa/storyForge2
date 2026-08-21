@@ -900,6 +900,22 @@ export const api = {
       { section, user_modifications: userModifications },
     ),
 
+  regenerateChapterOutlineRange: (
+    projectId: string,
+    chapterStart: number,
+    chapterEnd: number,
+    userModifications: string = "",
+  ): Promise<{ chapters: unknown[] }> =>
+    request<{ chapters: unknown[] }>(
+      "POST",
+      `/stage3/regenerate-chapter-outline?project_id=${encodeURIComponent(projectId)}`,
+      {
+        chapter_start: chapterStart,
+        chapter_end: chapterEnd,
+        user_modifications: userModifications,
+      },
+    ),
+
   growthWorkshopCheck: (projectId: string, characterId: string) =>
     request<WorkshopCheckResult>(
       "POST",

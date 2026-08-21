@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api, { NovelOutline } from "../api/client";
 import { useWorkspaceMode } from "../hooks/useWorkspaceMode";
@@ -19,6 +19,7 @@ import AutopilotMiddlePanel from "../components/workspace/AutopilotMiddlePanel";
 import AddChaptersModal, { type AddChaptersProgress } from "../components/workspace/AddChaptersModal";
 import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
 import AIConsoleModal from "../components/aiConsole/AIConsoleModal";
+import ConfirmDialog from "../components/shared/ConfirmDialog";
 
 // Internal record for progress.json-derived chapter status. Kept local to
 // this page (not exported) — the canonical `ChapterStatus` union lives in
@@ -35,6 +36,27 @@ function mapProgressStatus(s: string): ChapterStatus {
   if (s === "in_progress") return "writing";
   if (s === "pending") return "planned";
   return "pending";
+}
+
+// Format the ConfirmDialog message based on what resetPreview returned. When
+// nothing is on disk to delete we still allow the user to proceed — the
+// state-machine regression itself is the value (going back to INIT).
+function buildInitMessage(p?: {
+  draft_count: number;
+  has_progress: boolean;
+  has_checkpoint: boolean;
+  has_chunks: boolean;
+}): string {
+  if (!p) return "无法预览待删除内容。";
+  const parts: string[] = [];
+  if (p.draft_count > 0) parts.push(`${p.draft_count} 个章节草稿`);
+  if (p.has_progress) parts.push("写作进度（progress.json）");
+  if (p.has_checkpoint) parts.push("检查点（.storyforge_checkpoint.json）");
+  if (p.has_chunks) parts.push("实时写作缓冲（autopilot/chunks/）");
+  if (parts.length === 0) {
+    return "项目目前无草稿可清理，仅将项目状态改回 INIT（章节大纲）。\n\n确认继续？";
+  }
+  return `将删除 ${parts.join("、")}，并将项目状态改回 INIT（章节大纲）。\n\n此操作不可恢复，确认继续？`;
 }
 
 export default function WorkspacePage({ projectId: projectIdProp }: { projectId?: string } = {}) {
@@ -56,6 +78,42 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
   const [currentScene, setCurrentScene] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // v2.1: 初始化按钮状态机. preview is fetched before the user confirms the
+  // destructive action so the dialog can show what will actually be deleted.
+  const [initPreview, setInitPreview] = useState<{
+    open: boolean;
+    preview?: {
+      draft_count: number;
+      has_progress: boolean;
+      has_checkpoint: boolean;
+      has_chunks: boolean;
+    };
+    busy: boolean;
+  }>({ open: false, busy: false });
+
+  const handleInit = useCallback(async () => {
+    try {
+      const preview = await api.resetPreview(projectId);
+      setInitPreview({ open: true, preview, busy: false });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      show(`预览失败：${msg}`);
+    }
+  }, [projectId, show]);
+
+  const confirmInit = useCallback(async () => {
+    setInitPreview((s) => ({ ...s, busy: true }));
+    try {
+      await api.resetToInit(projectId);
+      setInitPreview({ open: false, busy: false });
+      navigate(`/project/${encodeURIComponent(projectId)}/wizard`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      show(`重置失败：${msg}`);
+      setInitPreview((s) => ({ ...s, busy: false }));
+    }
+  }, [projectId, show, navigate]);
 
   // Tracks the on-disk content for the currently-selected scene. Set
   // after a successful save and after a successful draft load (Task 4).
@@ -496,6 +554,7 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
               }
               setReloadKey((k) => k + 1);
             }}
+            onInit={handleInit}
           />
         }
         center={
@@ -651,6 +710,17 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
       <AIConsoleModal
         isOpen={consoleOpen}
         onClose={() => setConsoleOpen(false)}
+      />
+      {/* v2.1: 初始化项目 confirm dialog — driven by initPreview state. */}
+      <ConfirmDialog
+        open={initPreview.open}
+        title="初始化项目"
+        message={buildInitMessage(initPreview.preview)}
+        confirmLabel="确认初始化"
+        cancelLabel="取消"
+        busy={initPreview.busy}
+        onCancel={() => setInitPreview({ open: false, busy: false })}
+        onConfirm={confirmInit}
       />
     </div>
   );

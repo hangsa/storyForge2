@@ -1526,9 +1526,6 @@ async def skip_scene(data: dict):
     }
 
 
-_CHAPTER_RANGE_RE = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
-
-
 def _planned_chapter_total_from_novel_outline(novel_outline: Optional[dict]) -> int:
     """The user's planned total chapter count, parsed from volume ranges.
 

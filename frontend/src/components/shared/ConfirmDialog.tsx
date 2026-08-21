@@ -6,12 +6,16 @@ interface Props {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** When true, disables confirm button and shows a spinner. */
+  busy?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
 export default function ConfirmDialog({
-  open, title, message, confirmLabel = "确认", cancelLabel = "取消", onCancel, onConfirm,
+  open, title, message, confirmLabel = "确认", cancelLabel = "取消",
+  busy = false,
+  onCancel, onConfirm,
 }: Props) {
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -54,7 +58,8 @@ export default function ConfirmDialog({
             type="button"
             data-testid="confirm-dialog-cancel"
             onClick={onCancel}
-            className="px-4 py-2 rounded bg-surface-container text-system-log hover:bg-surface-container-high text-sm"
+            disabled={busy}
+            className="px-4 py-2 rounded bg-surface-container text-system-log hover:bg-surface-container-high text-sm disabled:opacity-40"
           >
             {cancelLabel}
           </button>
@@ -63,8 +68,18 @@ export default function ConfirmDialog({
             type="button"
             data-testid="confirm-dialog-confirm"
             onClick={onConfirm}
-            className="px-4 py-2 rounded bg-primary-container text-surface-container-low hover:opacity-90 text-sm"
+            disabled={busy}
+            className="px-4 py-2 rounded bg-primary-container text-surface-container-low hover:opacity-90 text-sm disabled:opacity-40 inline-flex items-center gap-1.5"
           >
+            {busy && (
+              <span
+                data-testid="confirm-dialog-spinner"
+                aria-hidden="true"
+                className="material-symbols-outlined text-[14px] animate-spin inline-block"
+              >
+                progress_activity
+              </span>
+            )}
             {confirmLabel}
           </button>
         </div>

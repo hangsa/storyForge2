@@ -74,4 +74,36 @@ describe("ConfirmDialog", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it("disables confirm button when busy is true", () => {
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        title="t"
+        message="m"
+        busy
+        onCancel={() => {}}
+        onConfirm={onConfirm}
+      />,
+    );
+    const confirmBtn = screen.getByTestId("confirm-dialog-confirm");
+    expect(confirmBtn).toBeDisabled();
+    fireEvent.click(confirmBtn);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("renders spinner icon when busy is true", () => {
+    render(
+      <ConfirmDialog
+        open
+        title="t"
+        message="m"
+        busy
+        onCancel={() => {}}
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("confirm-dialog-spinner")).toBeInTheDocument();
+  });
 });

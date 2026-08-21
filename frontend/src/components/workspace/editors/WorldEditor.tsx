@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import api, { PowerSystem, World } from "../../../api/client";
 import { useAutoHeight } from "../../../hooks/useAutoHeight";
+import { useToast } from "../../../hooks/useToast";
 import { AutoTextarea } from "../../shared/AutoTextarea";
+import { SectionRegenerateButton } from "../../shared/SectionRegenerateButton";
 
 interface BaseEditorProps {
   projectId: string;
@@ -60,6 +62,11 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
   const [world, setWorld] = useState<World>(() => readWorld(data));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { show } = useToast();
+  const reportRegen = (target: string) => ({
+    onSuccess: (t: string) => show(`${t} 已重新生成`),
+    onError: (t: string, m: string) => show(`重新生成 ${t} 失败：${m}`),
+  });
   const worldRef = useRef(world);
   worldRef.current = world;
   const geographyRef = useRef<HTMLTextAreaElement>(null);
@@ -106,7 +113,19 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
       <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">世界观</div>
 
       <div>
-        <label className="block font-label-mono text-system-log mb-1 text-xs">时代 (era)</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="font-label-mono text-system-log text-xs">时代 (era)</label>
+          {!readOnly && (
+            <SectionRegenerateButton
+              target="era"
+              statusReporter={reportRegen("时代与地理")}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateWorldSection(projectId, "era", mods);
+                setWorld({ ...world, era: result.era, geography: result.geography, era_social_structure: result.era_social_structure, era_cultural_history: result.era_cultural_history });
+              }}
+            />
+          )}
+        </div>
         <textarea
           ref={eraRef}
           data-testid="world-era"
@@ -149,8 +168,20 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
       </div>
 
       <div className="border-t border-outline-variant pt-3 space-y-2">
-        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
-          力量体系 ({world.power_systems.length} 个 — 详细增删请到 Stage2)
+        <div className="flex items-center justify-between">
+          <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+            力量体系 ({world.power_systems.length} 个 — 详细增删请到 Stage2)
+          </div>
+          {!readOnly && (
+            <SectionRegenerateButton
+              target="power_system"
+              statusReporter={reportRegen("力量体系")}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateWorldSection(projectId, "power_system", mods);
+                setWorld({ ...world, power_systems: result.power_systems });
+              }}
+            />
+          )}
         </div>
         {world.power_systems.length === 0 && (
           <p className="font-body-ui text-system-log/60 text-xs">尚未配置力量体系。</p>
@@ -161,12 +192,32 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
             idx={i}
             ps={ps}
             onChange={(k, v) => setPs(i, k, v)}
+            showRegen={!readOnly}
+            statusReporter={reportRegen(`力量体系 #${i + 1}`)}
+            onRegenerate={async (mods) => {
+              const result = await api.regeneratePowerSystemItem(projectId, i, mods);
+              const next = world.power_systems.slice();
+              next[i] = result.power_system;
+              setWorld({ ...world, power_systems: next });
+            }}
           />
         ))}
       </div>
 
       <div className="border-t border-outline-variant pt-3 space-y-2">
-        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">世界规则 (core_rules, 、分隔)</div>
+        <div className="flex items-center justify-between">
+          <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">世界规则 (core_rules, 、分隔)</div>
+          {!readOnly && (
+            <SectionRegenerateButton
+              target="core_rules"
+              statusReporter={reportRegen("世界规则")}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateWorldSection(projectId, "core_rules", mods);
+                setWorld({ ...world, core_rules: result.core_rules });
+              }}
+            />
+          )}
+        </div>
         <textarea
           ref={coreRulesRef}
           data-testid="world-core-rules"
@@ -177,8 +228,20 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
       </div>
 
       <div className="border-t border-outline-variant pt-3 space-y-2">
-        <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
-          势力 (factions, {world.factions.length} 个 — 详细增删请到 Stage2)
+        <div className="flex items-center justify-between">
+          <div className="font-label-mono text-system-log text-[10px] uppercase tracking-wider">
+            势力 (factions, {world.factions.length} 个 — 详细增删请到 Stage2)
+          </div>
+          {!readOnly && (
+            <SectionRegenerateButton
+              target="factions"
+              statusReporter={reportRegen("阵营")}
+              onRegenerate={async (mods) => {
+                const result = await api.regenerateWorldSection(projectId, "factions", mods);
+                setWorld({ ...world, factions: result.factions });
+              }}
+            />
+          )}
         </div>
         {world.factions.length === 0 && (
           <p className="font-body-ui text-system-log/60 text-xs">尚未配置势力。</p>
@@ -229,11 +292,14 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
  *  inside `.map()`). Short identifier (name) stays as <input>; long-text
  *  fields (stages / core_rules / ceilings / cost_system) are textareas. */
 function PowerSystemCard({
-  idx, ps, onChange,
+  idx, ps, onChange, showRegen, statusReporter, onRegenerate,
 }: {
   idx: number;
   ps: PowerSystem;
   onChange: <K extends keyof PowerSystem>(k: K, v: PowerSystem[K]) => void;
+  showRegen: boolean;
+  statusReporter: { onSuccess: (target: string) => void; onError: (target: string, message: string) => void };
+  onRegenerate: (userModifications: string) => Promise<void>;
 }) {
   const stagesRef = useRef<HTMLTextAreaElement>(null);
   const rulesRef = useRef<HTMLTextAreaElement>(null);
@@ -248,6 +314,16 @@ function PowerSystemCard({
       data-testid={`world-power-${idx}`}
       className="border border-outline-variant rounded-lg p-2 space-y-2"
     >
+      {showRegen && (
+        <div className="flex justify-end">
+          <SectionRegenerateButton
+            target={`power-system-${idx}`}
+            testId={`section-regenerate-power-system-${idx}`}
+            statusReporter={statusReporter}
+            onRegenerate={onRegenerate}
+          />
+        </div>
+      )}
       <div>
         <label className="block font-label-mono text-system-log mb-1 text-xs">名称</label>
         <input

@@ -107,7 +107,7 @@ describe("ChapterOutlineEditor", () => {
     expect(themeArea.value).toBe("新主题");
   });
 
-  it("renders scene rows inside an expanded chapter", () => {
+  it("does not render scene rows in the right sidebar (scene editing moved elsewhere)", () => {
     render(
       <ChapterOutlineEditor
         projectId="p1"
@@ -125,250 +125,13 @@ describe("ChapterOutlineEditor", () => {
         onSaved={() => {}}
       />,
     );
-    expect(screen.getByTestId("scene-row-1-toggle")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-row-2-toggle")).toBeInTheDocument();
-  });
-
-  it("expanding a scene reveals goal/conflict/emotional_arc/narrative_role/beat_type inputs", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [
-                { scene_number: 1, goal: "原goal", conflict: "原conflict", emotional_arc: "原arc", narrative_role: "setup", beat_type: "inciting", registry_changes: { created: [], updated: [] }, required_logs: [] },
-              ],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    expect(screen.getByTestId("scene-1-goal")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-1-conflict")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-1-emotional-arc")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-1-narrative-role")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-1-beat-type")).toBeInTheDocument();
-  });
-
-  it("narrative_role select offers exactly the 4 enum values", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    const select = screen.getByTestId("scene-1-narrative-role") as HTMLSelectElement;
-    const opts = Array.from(select.options).map((o) => o.value);
-    expect(opts).toEqual(["setup", "mini_payoff", "cliffhanger", "major_reveal"]);
-  });
-
-  it("editing scene.goal updates the textarea value", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [{ scene_number: 1, goal: "原goal", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    const goal = screen.getByTestId("scene-1-goal") as HTMLTextAreaElement;
-    fireEvent.change(goal, { target: { value: "新goal" } });
-    expect(goal.value).toBe("新goal");
-  });
-
-  it("changing narrative_role updates the select value", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    const select = screen.getByTestId("scene-1-narrative-role") as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: "cliffhanger" } });
-    expect(select.value).toBe("cliffhanger");
-  });
-
-  it("editing one scene's goal does not affect sibling scenes in the same chapter", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [
-                { scene_number: 1, goal: "原goal1", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] },
-                { scene_number: 2, goal: "原goal2", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] },
-              ],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    fireEvent.click(screen.getByTestId("scene-row-2-toggle"));
-    const goal1 = screen.getByTestId("scene-1-goal") as HTMLTextAreaElement;
-    const goal2 = screen.getByTestId("scene-2-goal") as HTMLTextAreaElement;
-    fireEvent.change(goal1, { target: { value: "新goal1" } });
-    expect(goal1.value).toBe("新goal1");
-    expect(goal2.value).toBe("原goal2");
-  });
-
-  it("B-fields accordion is hidden by default", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
+    expect(screen.queryByTestId("scene-row-1-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("scene-row-2-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("scene-1-goal")).not.toBeInTheDocument();
     expect(screen.queryByTestId("scene-1-b-accordion")).not.toBeInTheDocument();
   });
 
-  it("expanding B-fields accordion reveals registry_changes.created rows + add button", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [
-                {
-                  scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "",
-                  registry_changes: {
-                    created: [{ type: "conflict", id_pattern: "cf_001", description: "主角与师父起冲突" }],
-                    updated: [],
-                  },
-                  required_logs: ["character_relation_change"],
-                },
-              ],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    fireEvent.click(screen.getByTestId("scene-1-b-toggle"));
-    expect(screen.getByTestId("scene-1-b-accordion")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-1-registry-created-0-type")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-1-registry-created-0-id-pattern")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-1-registry-created-0-description")).toBeInTheDocument();
-    expect(screen.getByTestId("scene-1-registry-created-add")).toBeInTheDocument();
-  });
-
-  it("clicking + 新增 button appends an empty registry_changes.created row", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [
-                { scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] },
-              ],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    fireEvent.click(screen.getByTestId("scene-1-b-toggle"));
-    fireEvent.click(screen.getByTestId("scene-1-registry-created-add"));
-    expect(screen.getByTestId("scene-1-registry-created-0-type")).toBeInTheDocument();
-  });
-
-  it("required_logs renders chips and an add input", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [
-                { scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: ["character_relation_change", "knowledge_gain"] },
-              ],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    fireEvent.click(screen.getByTestId("scene-1-b-toggle"));
-    expect(screen.getByTestId("scene-1-required-log-0")).toHaveTextContent("character_relation_change");
-    expect(screen.getByTestId("scene-1-required-log-1")).toHaveTextContent("knowledge_gain");
-    expect(screen.getByTestId("scene-1-required-log-add")).toBeInTheDocument();
-  });
-
-  it("typing a new required_log tag and pressing Enter appends it", () => {
-    render(
-      <ChapterOutlineEditor
-        projectId="p1"
-        data={{
-          chapters: [
-            {
-              chapter_number: 1, title: "第一章", theme: "觉醒",
-              scene_plan: [
-                { scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] },
-              ],
-            },
-          ],
-        }}
-        onSaved={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    fireEvent.click(screen.getByTestId("scene-1-b-toggle"));
-    const input = screen.getByTestId("scene-1-required-log-input") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "twist_reveal" } });
-    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
-    expect(screen.getByTestId("scene-1-required-log-0")).toHaveTextContent("twist_reveal");
-  });
-
-  it("save calls api.updateOutline once with the edited outline + calls onSaved", async () => {
+  it("save calls api.updateOutline once with the edited outline (scene_plan preserved unchanged) + calls onSaved", async () => {
     const onSaved = vi.fn();
     render(
       <ChapterOutlineEditor
@@ -376,7 +139,7 @@ describe("ChapterOutlineEditor", () => {
         data={{
           chapters: [
             { chapter_number: 1, title: "原标题", theme: "原主题",
-              scene_plan: [{ scene_number: 1, goal: "", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
+              scene_plan: [{ scene_number: 1, goal: "原goal", conflict: "", emotional_arc: "", narrative_role: "setup", beat_type: "", registry_changes: { created: [], updated: [] }, required_logs: [] }] },
           ],
         }}
         onSaved={onSaved}
@@ -388,6 +151,8 @@ describe("ChapterOutlineEditor", () => {
     const [projectIdArg, outlineArg] = mockedUpdateOutline.mock.calls[0];
     expect(projectIdArg).toBe("p1");
     expect(outlineArg.chapters[0].title).toBe("新标题");
+    // Scene data round-trips intact even though the sidebar doesn't edit it.
+    expect(outlineArg.chapters[0].scene_plan[0].goal).toBe("原goal");
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
@@ -447,9 +212,7 @@ describe("ChapterOutlineEditor", () => {
       />,
     );
     expect((screen.getByTestId("chapter-1-title") as HTMLInputElement).disabled).toBe(true);
-    fireEvent.click(screen.getByTestId("scene-row-1-toggle"));
-    expect((screen.getByTestId("scene-1-goal") as HTMLTextAreaElement).disabled).toBe(true);
-    expect((screen.getByTestId("scene-1-narrative-role") as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByTestId("chapter-1-theme") as HTMLTextAreaElement).disabled).toBe(true);
     expect(screen.getByTestId("chapter-outline-editor-save")).toBeDisabled();
   });
 

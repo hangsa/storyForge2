@@ -507,7 +507,8 @@ class PlannerAgent(BaseAgent):
             {
                 "era": world.get("era", ""),
                 "power_systems": [
-                    ps.get("name", "") for ps in iter_power_systems(world)
+                    {"name": ps.get("name", ""), "stages": ps.get("stages", [])}
+                    for ps in iter_power_systems(world)
                 ],
                 "core_rules": world.get("core_rules", []),
             },
@@ -575,7 +576,8 @@ class PlannerAgent(BaseAgent):
             {
                 "era": world.get("era", ""),
                 "power_systems": [
-                    ps.get("name", "") for ps in iter_power_systems(world)
+                    {"name": ps.get("name", ""), "stages": ps.get("stages", [])}
+                    for ps in iter_power_systems(world)
                 ],
                 "core_rules": world.get("core_rules", []),
             },

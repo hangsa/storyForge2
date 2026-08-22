@@ -490,6 +490,51 @@ class TestGenerateNovelOutlineContext:
         )
         assert "暂无" in _stub_template["map_context"]
 
+    @pytest.mark.asyncio
+    async def test_world_context_includes_power_system_stages(self, _stub_template):
+        """The LLM must see the full stage list per power system, not just the
+        system names — otherwise it falls back to training-data xianxia tropes
+        (元婴/金丹/筑基) absent from the declared world. Found on
+        proj_1a7d7fcf where world.json defines 建木灵种 + 古修 systems without
+        元婴, yet Volume 1's summary mentioned '一剑斩灭元婴级追兵'."""
+        from backend.agents.planner import PlannerAgent
+
+        world = {
+            "era": "异世界",
+            "power_systems": [
+                {"name": "建木灵种修行体系",
+                 "stages": ["种心", "生根", "化形", "觉醒", "通神", "证道", "合道"]},
+                {"name": "古修体系",
+                 "stages": ["见微", "纳息", "通窍", "化意", "载道", "同尘", "真一"]},
+            ],
+            "core_rules": [],
+        }
+        agent = PlannerAgent("proj_x")
+        await agent.generate_novel_outline(
+            concept={}, story_dna={}, world=world,
+            characters=[_make_char("p1", "林峰", "protagonist")],
+            target_total_words=1_000_000,
+        )
+        parsed = json.loads(_stub_template["world_context"])
+        assert "power_systems" in parsed
+        # Each power system entry must carry its stages list (not just the name).
+        for ps in parsed["power_systems"]:
+            assert "stages" in ps, f"power_system {ps.get('name')!r} missing stages"
+            assert isinstance(ps["stages"], list)
+            assert len(ps["stages"]) > 0
+        names = [ps["name"] for ps in parsed["power_systems"]]
+        assert "建木灵种修行体系" in names
+        assert "古修体系" in names
+        # The full whitelist must be reachable from the prompt.
+        joined_stages = "\n".join(
+            s for ps in parsed["power_systems"] for s in ps["stages"]
+        )
+        for required in ("种心", "通神", "合道", "见微", "载道", "真一"):
+            assert required in joined_stages, (
+                f"stage {required!r} not surfaced to LLM — "
+                "planner.py is dropping power_system.stages"
+            )
+
 
 class TestApiMapDataDefensiveRead:
     """The /api/stage3/generate-novel-outline endpoint must tolerate a missing

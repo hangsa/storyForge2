@@ -559,3 +559,190 @@ class TestApiMapDataDefensiveRead:
         # And the full character list, not just [0].
         assert len(call_kwargs["characters"]) == 1
         assert call_kwargs["characters"][0]["name"] == "林峰"
+
+
+def _seed_project_with_power_systems(projects_dir: Path, proj_id: str) -> None:
+    """Seed a project whose world.json uses the modern power_systems array
+    shape — needed for OutlineTermGuard tests, since the guard only
+    matters when the world declares stages that don't match xianxia
+    training-data tropes (the proj_1a7d7fcf shape)."""
+    _write_json(projects_dir, proj_id, "project.json", {
+        "id": proj_id,
+        "title": "建木",
+        "genre": "cool_novel",
+        "min_words": 4000,
+        "current_stage": "STAGE3",
+        "stage_history": [],
+        "created_at": "2025-01-01T00:00:00",
+    })
+    _write_json(projects_dir, proj_id, "concept_and_dna.json", {
+        "concept": {"title": "建木", "premise": "test", "tone": "", "theme": "逆袭"},
+        "story_dna": {"core_contradiction": {"statement": "建木吞噬世界"}},
+    })
+    _write_json(projects_dir, proj_id, "world.json", {
+        "era": "建木纪元",
+        "power_systems": [
+            {"name": "建木灵种修行体系",
+             "stages": ["种心", "生根", "化形", "觉醒", "通神", "证道", "合道"]},
+            {"name": "古修体系",
+             "stages": ["见微", "纳息", "通窍", "化意", "载道", "同尘", "真一"]},
+        ],
+        "core_rules": [],
+    })
+    _write_json(projects_dir, proj_id, "characters.json", {
+        "characters": [{"id": "c1", "name": "高阳",
+                        "personality": {"core_traits": []},
+                        "current_state": {}}],
+    })
+
+
+class TestOutlineTermGuardEndpoint:
+    """The /api/stage3/generate-novel-outline endpoint must reject
+    generation results that contain xianxia cultivation tropes absent
+    from world.json. Soft prompt constraints can still leak — the
+    OutlineTermGuard is the post-merge safety net. Surfaced on
+    proj_1a7d7fcf where Volume 1 mentioned '元婴级追兵' despite world
+    having no 元婴 stage."""
+
+    def test_generate_novel_outline_422_on_forbidden_term(self, client, project_data, monkeypatch):
+        from backend.config import settings
+        monkeypatch.setattr(settings, "projects_dir", settings.projects_dir)
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _seed_project_with_power_systems(settings.projects_dir, proj_id)
+
+        contaminated = {
+            "core_conflict_theme": "建木吞噬世界",
+            "volumes": [
+                {"name": "第一卷 试炼", "chapter_range": "1-50",
+                 "summary": "高阳一剑斩灭元婴级追兵",
+                 "key_events": ["觉醒"]},
+            ],
+            "mc_growth_arc": [{"label": "起点", "target_chapter_range": "1-20",
+                              "description": "建木灵种生根"}],
+            "key_plot_points": [],
+        }
+        with patch("backend.agents.planner.PlannerAgent.generate_novel_outline", new_callable=AsyncMock) as mock:
+            mock.return_value = (contaminated, None)
+            resp = client.post("/api/stage3/generate-novel-outline", json={"project_id": proj_id})
+
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["code"] == "FORBIDDEN_TERM_DETECTED"
+        violations = body["detail"]["detail"]["violations"]
+        assert len(violations) == 1
+        assert violations[0]["term"] == "元婴"
+        assert violations[0]["path"] == "volumes[0].summary"
+
+        # File should NOT have been written — guard runs before write.
+        assert not (settings.projects_dir / proj_id / "novel_outline.json").exists()
+
+    def test_generate_novel_outline_200_when_clean(self, client, project_data, monkeypatch):
+        """Clean LLM output (only world-declared stage names) → 200."""
+        from backend.config import settings
+        monkeypatch.setattr(settings, "projects_dir", settings.projects_dir)
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _seed_project_with_power_systems(settings.projects_dir, proj_id)
+
+        clean = {
+            "core_conflict_theme": "建木吞噬世界",
+            "volumes": [
+                {"name": "第一卷 试炼", "chapter_range": "1-50",
+                 "summary": "高阳从种心修至通神，最终合道",
+                 "key_events": ["觉醒"]},
+            ],
+            "mc_growth_arc": [{"label": "起点", "target_chapter_range": "1-20",
+                              "description": "踏入载道门槛"}],
+            "key_plot_points": [],
+        }
+        with patch("backend.agents.planner.PlannerAgent.generate_novel_outline", new_callable=AsyncMock) as mock:
+            mock.return_value = (clean, None)
+            resp = client.post("/api/stage3/generate-novel-outline", json={"project_id": proj_id})
+
+        assert resp.status_code == 200, resp.text
+        assert (settings.projects_dir / proj_id / "novel_outline.json").exists()
+
+    def test_regenerate_novel_outline_section_422_on_forbidden_term(self, client, project_data, monkeypatch):
+        """The section-regen endpoint merges LLM output into existing
+        novel_outline.json — the guard must catch contamination there too."""
+        from backend.config import settings
+        monkeypatch.setattr(settings, "projects_dir", settings.projects_dir)
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _seed_project_with_power_systems(settings.projects_dir, proj_id)
+        # Pre-existing clean outline to merge into.
+        _write_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "core_conflict_theme": "建木吞噬世界",
+            "generated_at": "2026-01-01T00:00:00",
+            "volumes": [],
+            "mc_growth_arc": [],
+            "key_plot_points": [],
+        })
+
+        contaminated = {
+            "core_conflict_theme": "建木吞噬世界",
+            "volumes": [{"name": "第二卷", "chapter_range": "51-100",
+                        "summary": "面对化神级圣城审判官",
+                        "key_events": []}],
+            "mc_growth_arc": [],
+            "key_plot_points": [],
+        }
+        with patch("backend.agents.planner.PlannerAgent.generate_novel_outline", new_callable=AsyncMock) as mock:
+            mock.return_value = (contaminated, None)
+            resp = client.post(
+                "/api/stage3/regenerate-novel-outline-section",
+                params={"project_id": proj_id},
+                json={"section": "volumes"},
+            )
+
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["code"] == "FORBIDDEN_TERM_DETECTED"
+        violations = body["detail"]["detail"]["violations"]
+        assert any(v["term"] == "化神" for v in violations)
+
+        # Pre-existing file must NOT have been overwritten with contaminated merge.
+        on_disk = json.loads((settings.projects_dir / proj_id / "novel_outline.json").read_text())
+        assert on_disk["volumes"] == []  # untouched
+
+    def test_regenerate_chapter_outline_422_on_forbidden_term(self, client, project_data, monkeypatch):
+        """Per-chapter regenerate must also be guarded."""
+        from backend.config import settings
+        monkeypatch.setattr(settings, "projects_dir", settings.projects_dir)
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        _seed_project_with_power_systems(settings.projects_dir, proj_id)
+        _write_json(settings.projects_dir, proj_id, "outline.json", {
+            "chapters": [{"chapter_number": 1, "title": "序章",
+                          "scenes": [{"scene_number": 1, "conflict": "平静"}]}],
+        })
+        _write_json(settings.projects_dir, proj_id, "novel_outline.json", {
+            "volumes": [{"name": "第一卷", "chapter_range": "1-10"}],
+        })
+
+        contaminated_chapter = {
+            "chapter_number": 1,
+            "title": "序章",
+            "scenes": [{"scene_number": 1,
+                        "conflict": "面对筑基期对手",
+                        "goal": "脱险"}],
+        }
+        with patch("backend.agents.planner.PlannerAgent.generate_outline", new_callable=AsyncMock) as mock:
+            mock.return_value = (contaminated_chapter, None)
+            resp = client.post(
+                "/api/stage3/regenerate-chapter-outline",
+                params={"project_id": proj_id},
+                json={"chapter_start": 1, "chapter_end": 1},
+            )
+
+        assert resp.status_code == 422, resp.text
+        body = resp.json()
+        assert body["detail"]["code"] == "FORBIDDEN_TERM_DETECTED"
+        violations = body["detail"]["detail"]["violations"]
+        assert any(v["term"] == "筑基" for v in violations)
+        assert violations[0]["path"] == "chapters[0].scenes[0].conflict"
+
+        # Existing outline.json must be unchanged.
+        on_disk = json.loads((settings.projects_dir / proj_id / "outline.json").read_text())
+        assert on_disk["chapters"][0]["scenes"][0]["conflict"] == "平静"

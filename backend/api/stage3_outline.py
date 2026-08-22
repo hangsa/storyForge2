@@ -8,6 +8,9 @@ from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.conductor.branch_simulator import BranchSimulator
+from backend.conductor.outline_term_guard import (
+    scan_outline_for_forbidden_terms,
+)
 from backend.agents.planner import PlannerAgent
 from backend.llm.model_router import get_model_router
 from backend.services.agent_prompt_stores import (
@@ -31,6 +34,40 @@ NOVEL_OUTLINE_SECTION_TO_KEY = {
     "mc_growth": ("mc_growth_arc", []),
     "key_plot": ("key_plot_points", []),
 }
+
+
+def _reject_if_forbidden_terms(project_id: str, doc: dict, *, kind: str) -> None:
+    """Post-merge safety net: refuse to persist outlines containing xianxia
+    cultivation tropes absent from the declared world. Soft-constraint
+    prompts (novel_outline_generation.yaml rule #10, outline_generation.yaml
+    rule #11) can still leak terms; this guard rejects with 422 instead of
+    silently persisting contaminated data.
+
+    Surfaced on proj_1a7d7fcf (2026-08-22): Volume 1's summary mentioned
+    '一剑斩灭元婴级追兵' despite world.json having no 元婴 stage.
+    """
+    world = fm.read_json(project_id, "world.json") or {}
+    violations = scan_outline_for_forbidden_terms(doc, world)
+    if not violations:
+        return
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "error": True,
+            "code": "FORBIDDEN_TERM_DETECTED",
+            "message": (
+                f"{kind}包含 {len(violations)} 处未在世界观中声明的境界术语，"
+                "已被拒绝写入。请在 user_modifications 中明确要求改用 world.json "
+                "power_systems[*].stages 已声明的阶段名。"
+            ),
+            "detail": {
+                "violations": [
+                    {"path": v.path, "term": v.term, "snippet": v.snippet}
+                    for v in violations
+                ],
+            },
+        },
+    )
 
 
 def _realign_growth_curves(project_id: str, novel_outline: dict) -> None:
@@ -147,6 +184,7 @@ async def generate_outline(data: dict):
     existing_chapters.append(result)
     existing_chapters.sort(key=lambda ch: ch.get("chapter_number", 0))
     merged_outline = {"chapters": existing_chapters}
+    _reject_if_forbidden_terms(project_id, merged_outline, kind="章节大纲")
     fm.write_json(project_id, "outline.json", merged_outline)
 
     progress = fm.read_json(project_id, "progress.json") or {}
@@ -289,6 +327,8 @@ async def generate_novel_outline(data: dict):
     result["generated_at"] = existing.get("generated_at", now) if existing.get("generated_at") else now
     result["updated_at"] = now
 
+    _reject_if_forbidden_terms(project_id, result, kind="全书大纲")
+
     fm.write_json(project_id, "novel_outline.json", result)
 
     _realign_growth_curves(project_id, result)
@@ -410,6 +450,8 @@ async def regenerate_novel_outline_section(
     merged["generated_at"] = existing.get("generated_at") or now
     merged["updated_at"] = now
 
+    _reject_if_forbidden_terms(project_id, merged, kind="全书大纲")
+
     fm.write_json(project_id, "novel_outline.json", merged)
 
     _realign_growth_curves(project_id, merged)
@@ -508,6 +550,7 @@ async def regenerate_chapter_outline(
 
     chapters.sort(key=lambda ch: ch.get("chapter_number", 0))
     merged_outline = {"chapters": chapters}
+    _reject_if_forbidden_terms(project_id, merged_outline, kind="章节大纲")
     fm.write_json(project_id, "outline.json", merged_outline)
 
     return {

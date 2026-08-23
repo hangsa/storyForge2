@@ -268,11 +268,19 @@ class StageStateMachine:
 
         return result
 
-    def regress_to_init(self, project_id: str) -> TransitionResult:
-        """反向推进到 INIT：清空 stage4 运行时产物 + current_stage=INIT。
+    def regress_to_stage3(self, project_id: str) -> TransitionResult:
+        """反向推进到 STAGE3（章节大纲阶段）：清空 stage4 运行时产物 + current_stage=STAGE3。
+
+        v2.1 行为变更：早期版本写回 INIT，会触发 STAGE3 前置检查 STAGE_NOT_READY
+        导致用户无法重新生成全文大纲（proj_1a7d7fcf 2026-08-23 反馈）。改写 STAGE3
+        后，章节大纲端点（/stage3/generate、/stage3/regenerate-chapter-outline、
+        /stage3/regenerate-novel-outline-section）的 STAGE_ORDER.index 检查均通过，
+        用户可重新生成章节大纲（走 wizard 或 regenerate-chapter-outline 路径）。
+        STAGE3 不要求 diagnosis_report.json，与上一节 STAGE4 写作阶段的产物清空
+        解耦。
 
         原子性范围（v2.1 明确权衡）：任何文件 IO 失败都抛 OSError，不回滚。
-        补救路径：用户重试。regress_to_init 是幂等的（已删除文件跳过、
+        补救路径：用户重试。regress_to_stage3 是幂等的（已删除文件跳过、
         project.json stage 字段是覆盖写）。若未来需要严格原子性，
         可引入"先备份 .reset_backup/ 再原子提交"两步提交模式。
 
@@ -289,7 +297,7 @@ class StageStateMachine:
 
         # Capture the actual current stage BEFORE mutating project.json, so
         # the returned TransitionResult.from_stage honestly reports where we
-        # came from (e.g. STAGE4 → INIT, not INIT → INIT).
+        # came from (e.g. STAGE4 → STAGE3, not STAGE3 → STAGE3).
         current_stage = self.get_current_stage(project_id)
 
         # 1. 删除章节草稿（idempotent：glob miss 是 no-op）
@@ -310,10 +318,10 @@ class StageStateMachine:
             for f in chunks_dir.glob("*.jsonl"):
                 f.unlink()
 
-        # 4. 改 project.json current_stage=INIT（原子写：tmp + replace）
+        # 4. 改 project.json current_stage=STAGE3（原子写：tmp + replace）
         project_file = project_dir / "project.json"
         data = self._read_json(project_id, "project.json") or {}
-        data["current_stage"] = Stage.INIT.value
+        data["current_stage"] = Stage.STAGE3.value
         tmp_file = project_file.with_suffix(".tmp")
         with open(tmp_file, "w", encoding="utf-8") as f:
             _json.dump(data, f, ensure_ascii=False, indent=2)
@@ -322,6 +330,6 @@ class StageStateMachine:
         return TransitionResult(
             allowed=True,
             from_stage=current_stage,
-            to_stage=Stage.INIT,
-            message=f"{current_stage.value} → INIT 已重置",
+            to_stage=Stage.STAGE3,
+            message=f"{current_stage.value} → STAGE3 已重置",
         )

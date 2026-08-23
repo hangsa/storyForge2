@@ -1,12 +1,18 @@
-"""StageStateMachine.regress_to_init() — atomically clear STAGE4 runtime
-state and regress current_stage to INIT, preserving init-phase artifacts
-and stage_history.
+"""StageStateMachine.regress_to_stage3() — atomically clear STAGE4 runtime
+state and regress current_stage to STAGE3 (章节大纲阶段), preserving
+init-phase artifacts and stage_history.
 
-The regress_to_init helper is the foundation of the workspace "初始化"
+The regress_to_stage3 helper is the foundation of the workspace "初始化"
 button: it deletes chapters/*.md + progress.json + .storyforge_checkpoint.json
-+ autopilot/chunks/*.jsonl, then writes project.json with current_stage=INIT.
++ autopilot/chunks/*.jsonl, then writes project.json with current_stage=STAGE3.
 It is intentionally NOT transactional — idempotent retry is the recovery
 path for partial-write failures (see spec §错误处理).
+
+v2.1 behavior change: target stage was INIT in early versions, but writing
+INIT blocks STAGE3+ endpoints (STAGE_NOT_READY) and prevents the user from
+re-generating the chapter/novel outline after a reset. Writing STAGE3 instead
+keeps the chapter-outline endpoints (which require current_stage >= STAGE3
+via STAGE_ORDER.index) reachable while clearing all STAGE4 runtime state.
 """
 from __future__ import annotations
 
@@ -57,7 +63,7 @@ def test_regress_deletes_chapter_drafts(sm, projects_dir):
     (chapters / "ch01_scene_002_draft.md").write_text("scene 2 body")
     (chapters / "ch02_scene_001_draft.md").write_text("ch2 scene 1")
 
-    result = sm.regress_to_init(pid)
+    result = sm.regress_to_stage3(pid)
 
     assert result.allowed is True
     assert list(chapters.glob("ch*_scene_*_draft.md")) == []
@@ -70,7 +76,7 @@ def test_regress_deletes_progress_and_checkpoint(sm, projects_dir):
     (proj / "progress.json").write_text('{"chapters":[]}', encoding="utf-8")
     (proj / ".storyforge_checkpoint.json").write_text('{"pipeline_stage":"x"}', encoding="utf-8")
 
-    sm.regress_to_init(pid)
+    sm.regress_to_stage3(pid)
 
     assert not (proj / "progress.json").exists()
     assert not (proj / ".storyforge_checkpoint.json").exists()
@@ -85,22 +91,22 @@ def test_regress_clears_chunks_but_keeps_dir(sm, projects_dir):
     (chunks / "ch01_scene_001.jsonl").write_text('{"seq":1,"text":"a"}', encoding="utf-8")
     (chunks / "ch02_scene_003.jsonl").write_text('{"seq":1,"text":"b"}', encoding="utf-8")
 
-    sm.regress_to_init(pid)
+    sm.regress_to_stage3(pid)
 
     assert list(chunks.glob("*.jsonl")) == []
     assert chunks.exists()  # SceneChunkStore expects the parent dir to exist
 
 
-def test_regress_writes_current_stage_init(sm, projects_dir):
+def test_regress_writes_current_stage_stage3(sm, projects_dir):
     pid = "proj_test"
     proj = projects_dir / pid
     _seed_project(projects_dir, pid, stage="STAGE4")
     (proj / "progress.json").write_text('{}', encoding="utf-8")
 
-    sm.regress_to_init(pid)
+    sm.regress_to_stage3(pid)
 
     data = json.loads((proj / "project.json").read_text(encoding="utf-8"))
-    assert data["current_stage"] == "INIT"
+    assert data["current_stage"] == "STAGE3"
 
 
 def test_regress_preserves_stage_history(sm, projects_dir):
@@ -112,7 +118,7 @@ def test_regress_preserves_stage_history(sm, projects_dir):
     ]
     _seed_project(projects_dir, pid, stage="STAGE4", stage_history=history)
 
-    sm.regress_to_init(pid)
+    sm.regress_to_stage3(pid)
 
     data = json.loads((proj / "project.json").read_text(encoding="utf-8"))
     assert data["stage_history"] == history
@@ -131,7 +137,7 @@ def test_regress_preserves_init_artifacts(sm, projects_dir):
     chapters.mkdir()
     (chapters / "ch01_scene_001_draft.md").write_text("body", encoding="utf-8")
 
-    sm.regress_to_init(pid)
+    sm.regress_to_stage3(pid)
 
     for fn in ("outline.json", "characters.json", "world.json",
                "novel_outline.json", "concept_and_dna.json"):
@@ -141,7 +147,7 @@ def test_regress_preserves_init_artifacts(sm, projects_dir):
 def test_regress_raises_project_not_found_when_project_missing(sm):
     from backend.conductor.state_machine import ProjectNotFoundError
     with pytest.raises(ProjectNotFoundError, match="不存在"):
-        sm.regress_to_init("proj_nonexistent")
+        sm.regress_to_stage3("proj_nonexistent")
 
 
 def test_regress_is_idempotent(sm, projects_dir):
@@ -151,29 +157,29 @@ def test_regress_is_idempotent(sm, projects_dir):
     _seed_project(projects_dir, pid)
     (proj / "progress.json").write_text('{}', encoding="utf-8")
 
-    r1 = sm.regress_to_init(pid)
-    r2 = sm.regress_to_init(pid)
+    r1 = sm.regress_to_stage3(pid)
+    r2 = sm.regress_to_stage3(pid)
 
     assert r1.allowed is True
     assert r2.allowed is True
     data = json.loads((proj / "project.json").read_text(encoding="utf-8"))
-    assert data["current_stage"] == "INIT"
+    assert data["current_stage"] == "STAGE3"
 
 
 def test_regress_reports_actual_from_stage(sm, projects_dir):
     """from_stage should reflect the project's actual current_stage before reset,
-    not be hardcoded to Stage.INIT."""
+    not be hardcoded to Stage.STAGE3."""
     pid = "proj_test"
     proj = projects_dir / pid
     _seed_project(projects_dir, pid, stage="STAGE5")
     (proj / "progress.json").write_text('{}', encoding="utf-8")
 
-    result = sm.regress_to_init(pid)
+    result = sm.regress_to_stage3(pid)
 
     assert result.allowed is True
     assert result.from_stage == Stage.STAGE5
-    assert result.to_stage == Stage.INIT
-    assert "STAGE5" in result.message and "INIT" in result.message
+    assert result.to_stage == Stage.STAGE3
+    assert "STAGE5" in result.message and "STAGE3" in result.message
 
 
 # === /reset-preview endpoint tests ===
@@ -280,14 +286,14 @@ def test_reset_endpoint_clears_state(client, projects_dir):
     assert resp.json() == {
         "error": False,
         "code": "OK",
-        "message": "项目已重置到初始化",
+        "message": "项目已重置到章节大纲阶段",
         "detail": {"project_id": pid},
     }
 
     assert list((proj / "chapters").glob("ch*_scene_*_draft.md")) == []
     assert not (proj / "progress.json").exists()
     assert not (proj / ".storyforge_checkpoint.json").exists()
-    assert json.loads((proj / "project.json").read_text(encoding="utf-8"))["current_stage"] == "INIT"
+    assert json.loads((proj / "project.json").read_text(encoding="utf-8"))["current_stage"] == "STAGE3"
 
 
 def test_reset_endpoint_preserves_init_artifacts(client, projects_dir):
@@ -318,7 +324,7 @@ def test_reset_endpoint_404_for_missing_project(client):
 
 
 def test_reset_endpoint_is_idempotent(client, projects_dir):
-    """第二次 POST 也返回 200（regress_to_init 幂等）。"""
+    """第二次 POST 也返回 200（regress_to_stage3 幂等）。"""
     pid = "proj_test"
     proj = projects_dir / pid
     proj.mkdir(parents=True)

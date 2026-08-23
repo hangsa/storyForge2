@@ -172,25 +172,20 @@ async def reset_preview(project_id: str):
 
 
 @router.post("/{project_id}/reset")
-async def reset_to_stage6(project_id: str):
-    """原子地清空章节草稿 + 运行时状态，并将 current_stage 写回 STAGE6。
+async def reset_to_init(project_id: str):
+    """原子地清空章节草稿 + 运行时状态，并将 current_stage 写回 INIT。
 
     保留：concept/world/character/novel_outline/outline 等 init 阶段产物
     + stage_history（向后追溯能力）。
 
-    v2.1 行为变更：早期版本写回 INIT，会导致 STAGE3 endpoint 拒绝
-    （STAGE_NOT_READY）；改写 STAGE6 后，STAGE3+ 端点均不被 stage_machine
-    阻塞，用户可重新生成章节大纲（走 regenerate-novel-outline-section
-    或 wizard 等路径）。
-
     不实现严格事务回滚：中途失败时已删除的文件不回滚，由前端 toast 报错
-    并由用户重试。regress_to_stage6 幂等（已删除文件跳过）。
+    并由用户重试。regress_to_init 幂等（已删除文件跳过）。
 
     错误：ProjectNotFoundError → 404；其他 OSError → 500（FastAPI 默认）。
     """
     sm = StageStateMachine(settings.projects_dir)
     try:
-        sm.regress_to_stage6(project_id)
+        sm.regress_to_init(project_id)
     except ProjectNotFoundError as e:
         raise HTTPException(
             status_code=404,
@@ -204,7 +199,7 @@ async def reset_to_stage6(project_id: str):
     return {
         "error": False,
         "code": "OK",
-        "message": "项目已重置到 STAGE6",
+        "message": "项目已重置到初始化",
         "detail": {"project_id": project_id},
     }
 

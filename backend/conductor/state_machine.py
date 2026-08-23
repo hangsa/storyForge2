@@ -268,11 +268,17 @@ class StageStateMachine:
 
         return result
 
-    def regress_to_init(self, project_id: str) -> TransitionResult:
-        """反向推进到 INIT：清空 stage4 运行时产物 + current_stage=INIT。
+    def regress_to_stage6(self, project_id: str) -> TransitionResult:
+        """反向推进到 STAGE6：清空 stage4 运行时产物 + current_stage=STAGE6。
+
+        v2.1 行为变更：早期版本写回 INIT，会触发 STAGE3 前置检查 STAGE_NOT_READY
+        导致用户无法重新生成全文大纲（proj_1a7d7fcf 2026-08-23 反馈）。改写 STAGE6
+        后，STAGE3/STAGE4 等所有更高优先级 endpoint 都不被 stage_machine 阻塞，
+        保留 init 阶段产物（concept/world/character/novel_outline/outline.json）
+        仍可让用户走 wizard 或 regenerate-novel-outline-section 等路径修改章节大纲。
 
         原子性范围（v2.1 明确权衡）：任何文件 IO 失败都抛 OSError，不回滚。
-        补救路径：用户重试。regress_to_init 是幂等的（已删除文件跳过、
+        补救路径：用户重试。regress_to_stage6 是幂等的（已删除文件跳过、
         project.json stage 字段是覆盖写）。若未来需要严格原子性，
         可引入"先备份 .reset_backup/ 再原子提交"两步提交模式。
 
@@ -289,7 +295,7 @@ class StageStateMachine:
 
         # Capture the actual current stage BEFORE mutating project.json, so
         # the returned TransitionResult.from_stage honestly reports where we
-        # came from (e.g. STAGE4 → INIT, not INIT → INIT).
+        # came from (e.g. STAGE4 → STAGE6, not STAGE6 → STAGE6).
         current_stage = self.get_current_stage(project_id)
 
         # 1. 删除章节草稿（idempotent：glob miss 是 no-op）
@@ -310,10 +316,10 @@ class StageStateMachine:
             for f in chunks_dir.glob("*.jsonl"):
                 f.unlink()
 
-        # 4. 改 project.json current_stage=INIT（原子写：tmp + replace）
+        # 4. 改 project.json current_stage=STAGE6（原子写：tmp + replace）
         project_file = project_dir / "project.json"
         data = self._read_json(project_id, "project.json") or {}
-        data["current_stage"] = Stage.INIT.value
+        data["current_stage"] = Stage.STAGE6.value
         tmp_file = project_file.with_suffix(".tmp")
         with open(tmp_file, "w", encoding="utf-8") as f:
             _json.dump(data, f, ensure_ascii=False, indent=2)
@@ -322,6 +328,6 @@ class StageStateMachine:
         return TransitionResult(
             allowed=True,
             from_stage=current_stage,
-            to_stage=Stage.INIT,
-            message=f"{current_stage.value} → INIT 已重置",
+            to_stage=Stage.STAGE6,
+            message=f"{current_stage.value} → STAGE6 已重置",
         )

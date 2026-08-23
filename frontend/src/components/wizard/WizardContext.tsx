@@ -33,6 +33,22 @@ export interface WizardData {
   characters: CharacterSet | null;
   novel_outline: NovelOutline | null;
   chapter1_outline: Outline | null;
+  /**
+   * Mid-batch progress for step 6 (chapter-outline generation). Non-null when
+   * the user paused mid-batch — ChapterOutlineStep renders a "继续生成" CTA
+   * from this, then clears it on completion or fresh auto-trigger. Shape:
+   *   - done: number of chapters already generated and persisted to disk.
+   *   - total: planned batch size (parsed from novel_outline.volumes[0] end,
+   *     or fallback 10 when Volume 1 is missing).
+   *   - last_user_modifications: the prompt mods applied to the last batch
+   *     iteration, re-used on resume so the user's instructions survive
+   *     a pause/refresh cycle. Empty string means "no mods".
+   */
+  chapter_outline_progress: {
+    done: number;
+    total: number;
+    last_user_modifications: string;
+  } | null;
 }
 
 export const TOTAL_STEPS = 6;
@@ -44,6 +60,7 @@ const EMPTY_DATA: WizardData = {
   characters: null,
   novel_outline: null,
   chapter1_outline: null,
+  chapter_outline_progress: null,
 };
 
 // Maps each wizard data key to the step that owns it. step 4 (Map) owns no

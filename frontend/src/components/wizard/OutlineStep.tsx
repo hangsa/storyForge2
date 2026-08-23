@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import api, { NovelOutline } from "../../api/client";
+import { runWithGuardRetry } from "../../utils/outlineGuardRetry";
 import { useWizard } from "./WizardContext";
 import { RegenerateModal } from "../shared/RegenerateModal";
 import { SectionRegenerateButton } from "../shared/SectionRegenerateButton";
@@ -23,6 +24,10 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
   const [outline, setOutline] = useState<NovelOutline>(wizard.data.novel_outline ?? EMPTY_OUTLINE);
   const [busy, setBusy] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  // v2.1: per-call retry attempt counter for FORBIDDEN_TERM_DETECTED. Reset
+  // to 1 at the start of each handleStart so "正在生成…" is the default
+  // and "正在第N次生成…" only appears on guard-driven retries.
+  const [attempt, setAttempt] = useState(1);
   // Mirror latest state for handlers registered in the modal footer.
   const outlineRef = useRef(outline);
   outlineRef.current = outline;
@@ -30,8 +35,13 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
   const handleStart = async (userModifications: string = "") => {
     wizard.startStep(5);
     setBusy(true);
+    setAttempt(1);
     try {
-      const result = await api.generateNovelOutline(projectId, userModifications);
+      const result = await runWithGuardRetry(
+        (mods) => api.generateNovelOutline(projectId, mods),
+        userModifications,
+        { onAttempt: (a) => setAttempt(a) },
+      );
       setOutline(result);
       // v1.8.4: mark generated so step 5 stays reachable in the indicator
       // when the user navigates away before clicking "下一步".
@@ -147,7 +157,13 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
-          <p className="font-body-ui text-primary-container mt-3 text-sm">正在生成全书大纲…</p>
+          <p className="font-body-ui text-primary-container mt-3 text-sm">
+            正在
+            <span data-testid="novel-outline-attempt">
+              {attempt > 1 ? `第${attempt}次` : ""}
+            </span>
+            生成全书大纲…
+          </p>
         </div>
       )}
 

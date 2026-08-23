@@ -3,17 +3,24 @@ import { render, screen, act, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ToastProvider } from "../hooks/useToast";
 
-vi.mock("../api/client", () => ({
-  default: {
-    generateNovelOutline: vi.fn(),
-    updateNovelOutline: vi.fn(),
-    getConcept: vi.fn(),
-    getWorld: vi.fn(),
-    getCharacter: vi.fn(),
-    getNovelOutline: vi.fn(),
-    getOutline: vi.fn(),
-  },
-}));
+vi.mock("../api/client", async () => {
+  // Preserve real ApiError so outlineGuardRetry can instanceof-check it.
+  const actual = await vi.importActual<typeof import("../api/client")>(
+    "../api/client",
+  );
+  return {
+    ...actual,
+    default: {
+      generateNovelOutline: vi.fn(),
+      updateNovelOutline: vi.fn(),
+      getConcept: vi.fn(),
+      getWorld: vi.fn(),
+      getCharacter: vi.fn(),
+      getNovelOutline: vi.fn(),
+      getOutline: vi.fn(),
+    },
+  };
+});
 
 import api from "../api/client";
 import InitWizardModal from "../components/wizard/InitWizardModal";

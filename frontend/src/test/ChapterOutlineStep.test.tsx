@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ToastProvider } from "../hooks/useToast";
+import { ApiError } from "../api/client";
 
 const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
 
@@ -10,18 +11,27 @@ vi.mock("react-router-dom", async () => {
   return { ...real, useNavigate: () => mockNavigate };
 });
 
-vi.mock("../api/client", () => ({
-  default: {
-    generateOutline: vi.fn(),
-    updateOutline: vi.fn(),
-    advance: vi.fn(),
-    getConcept: vi.fn(),
-    getWorld: vi.fn(),
-    getCharacter: vi.fn(),
-    getNovelOutline: vi.fn(),
-    getOutline: vi.fn(),
-  },
-}));
+vi.mock("../api/client", async () => {
+  // Preserve the real ApiError class so test fixtures (and the
+  // outlineGuardRetry helper) can both instantiate and instanceof-check
+  // it. Only the default-export methods are mocked.
+  const actual = await vi.importActual<typeof import("../api/client")>(
+    "../api/client",
+  );
+  return {
+    ...actual,
+    default: {
+      generateOutline: vi.fn(),
+      updateOutline: vi.fn(),
+      advance: vi.fn(),
+      getConcept: vi.fn(),
+      getWorld: vi.fn(),
+      getCharacter: vi.fn(),
+      getNovelOutline: vi.fn(),
+      getOutline: vi.fn(),
+    },
+  };
+});
 
 import api from "../api/client";
 import InitWizardModal from "../components/wizard/InitWizardModal";
@@ -145,12 +155,13 @@ describe("ChapterOutlineStep", () => {
     expect(call[1].chapters).toHaveLength(10);
   });
 
-  // --- v1.8.3: default scope = min(10, planned total). The first third is
-  // approximated as "first 10 chapters" for typical 30-chapter novels; the
-  // planned total (parsed from novel_outline.volumes[].chapter_range) caps
-  // the batch when the novel is shorter.
+  // --- v2.1: default scope = end of Volume 1 (parsed from
+  // novel_outline.volumes[0].chapter_range). The wizard bulk-generates one
+  // volume at a time; later volumes come from the workspace cockpit.
+  // Fallback to 10 when Volume 1 is missing/unparseable (degenerate novel
+  // outline / pre-step-5 project).
 
-  it("scope: novel_outline missing → defaults to 10", async () => {
+  it("scope: novel_outline missing → falls back to 10", async () => {
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
       async (_id, n) => mergedOutlineThrough(n as number),
@@ -169,15 +180,11 @@ describe("ChapterOutlineStep", () => {
         chapter1_outline: null,
       },
     });
-    // The auto-trigger is gated on wizard.data.novel_outline being non-null
-    // (handled by the chapter-outline step itself, not via prefill). Test
-    // simply verifies that with no novel outline the default 10 fires.
-    // See ChapterOutlineStep: scope is recomputed inside handleStart, so
-    // the missing novel_outline path falls back to 10.
+    // No Volume 1 → helper returns 0 → fallback path → 10 calls.
     await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
   });
 
-  it("scope: novel_outline with 30 chapters (1-30) → caps at 10", async () => {
+  it("scope: Volume 1 = '1-30' → generates all 30 chapters of Volume 1", async () => {
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
       core_conflict_theme: "x",
       volumes: [{ name: "v1", chapter_range: "1-30", summary: "x", key_events: [] }],
@@ -190,12 +197,12 @@ describe("ChapterOutlineStep", () => {
       async (_id, n) => mergedOutlineThrough(n as number),
     );
     setup();
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(30));
     // v1.9: auto-trigger passes "" as user_modifications by default.
-    expect(api.generateOutline).toHaveBeenLastCalledWith(PROJECT, 10, "");
+    expect(api.generateOutline).toHaveBeenLastCalledWith(PROJECT, 30, "");
   });
 
-  it("scope: novel_outline with 5 chapters (1-5) → caps at 5", async () => {
+  it("scope: Volume 1 = '1-5' (short novel) → still caps to 5", async () => {
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
       core_conflict_theme: "x",
       volumes: [{ name: "v1", chapter_range: "1-5", summary: "x", key_events: [] }],
@@ -209,11 +216,28 @@ describe("ChapterOutlineStep", () => {
     );
     setup();
     await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(5));
-    // v1.9: auto-trigger passes "" as user_modifications by default.
     expect(api.generateOutline).toHaveBeenLastCalledWith(PROJECT, 5, "");
   });
 
-  it("scope: unparseable chapter_range → defaults to 10", async () => {
+  it("scope: Volume 1 = '1-80' (long first volume) → generates all 80 chapters", async () => {
+    // v2.1: a 80-chapter first volume produces 80 sequential calls — the
+    // user explicitly opted in by writing "1-80" in their novel outline.
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-80", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    setup();
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(80));
+  });
+
+  it("scope: Volume 1 missing/unparseable → falls back to 10", async () => {
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
       core_conflict_theme: "x",
       volumes: [{ name: "v1", chapter_range: "garbage", summary: "x", key_events: [] }],
@@ -229,14 +253,16 @@ describe("ChapterOutlineStep", () => {
     await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
   });
 
-  it("scope: multi-volume novel_outline sums ranges and caps at 10", async () => {
-    // 1-30, 31-60, 61-90 = max end 90. min(10, 90) = 10.
+  it("scope: multi-volume novel_outline → scope = Volume 1 ONLY, not all volumes", async () => {
+    // v2.1 behavior change vs v1.8.3. Previously cap at min(10, max-end)=10.
+    // Now the wizard bulk-generates Volume 1 (chapters 1-50) and stops;
+    // Volume 2/3 are produced via the workspace cockpit.
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
       core_conflict_theme: "x",
       volumes: [
-        { name: "v1", chapter_range: "1-30", summary: "x", key_events: [] },
-        { name: "v2", chapter_range: "31-60", summary: "x", key_events: [] },
-        { name: "v3", chapter_range: "61-90", summary: "x", key_events: [] },
+        { name: "v1", chapter_range: "1-50", summary: "x", key_events: [] },
+        { name: "v2", chapter_range: "51-100", summary: "x", key_events: [] },
+        { name: "v3", chapter_range: "101-150", summary: "x", key_events: [] },
       ],
       mc_growth_arc: [],
       key_plot_points: [],
@@ -247,7 +273,8 @@ describe("ChapterOutlineStep", () => {
       async (_id, n) => mergedOutlineThrough(n as number),
     );
     setup();
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(50));
+    expect(api.generateOutline).toHaveBeenLastCalledWith(PROJECT, 50, "");
   });
 
   it("mid-batch error: keeps generated chapters, shows error banner", async () => {
@@ -381,5 +408,329 @@ describe("ChapterOutlineStep", () => {
     // Either we saw progress or the batch finished fast — both are valid.
     await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
     expect(sawProgress || true).toBe(true);
+  });
+
+  // --- v2.1: pause / resume. The wizard's batch loop honors a pause
+  // signal at every chapter boundary, persists progress.done / total to
+  // wizard.data, and the resume CTA picks up where the user left off on
+  // the next mount (or after the user clicks 继续生成).
+
+  it("pause: clicking 暂停 stops the loop at the next chapter boundary and saves progress", async () => {
+    // Volume 1 = 50 chapters. Pause mid-batch (after chapter 3).
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-50", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    // Slow each call so the pause button is reachable before the batch
+    // finishes (without this the entire 50-call loop resolves before
+    // act() can click — React batches, the user's click would land AFTER
+    // completion).
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => {
+        await new Promise((r) => setTimeout(r, 5));
+        return mergedOutlineThrough(n as number);
+      },
+    );
+    setup();
+    // Wait for the loading UI to render and the pause button to appear.
+    const pauseBtn = await screen.findByTestId("chapter-outline-pause");
+    // Click pause. The in-flight chapter (chapter 1) finishes and the
+    // post-iteration check breaks — but we want to ensure we capture the
+    // click BEFORE the entire 50-call batch resolves.
+    await act(async () => {
+      pauseBtn.click();
+    });
+    // Eventually the loop exits after the next boundary. The exact point
+    // depends on scheduling, but it must be < 50 calls (paused, not done).
+    // Wait at most a few hundred ms for the resume banner to land.
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("chapter-outline-resume-banner")).toBeInTheDocument();
+      },
+      { timeout: 2000 },
+    );
+    // The CTA text shows the partial count. Whatever done is, it must be
+    // < total (50).
+    const banner = screen.getByTestId("chapter-outline-resume-banner");
+    expect(banner.textContent).toMatch(/剩余/);
+    // And the form must render the chapters that DID finish.
+    expect(screen.getByTestId("chapter-outline-form")).toBeInTheDocument();
+    // generateOutline was called for chapters 1..done, NOT all 50.
+    const calls = (api.generateOutline as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.length).toBeLessThan(50);
+    // Last call's chapter_number == done (the banner's "上次生成了").
+    const lastCh = calls[calls.length - 1]?.[1] as number;
+    expect(lastCh).toBeGreaterThan(0);
+  });
+
+  it("resume: clicking 继续生成 after a pause resumes from done+1", async () => {
+    // v2.1: simulate a paused state by pre-seeding wizard.data with
+    // chapter_outline_progress + chapter1_outline (5 chapters on disk),
+    // and the disk-side getOutline hydrating the same 5. User clicks
+    // 继续 → batch resumes from chapter 6.
+    const existing5 = {
+      chapters: Array.from({ length: 5 }, (_, k) => ({
+        chapter_number: k + 1,
+        title: `已生成的第${k + 1}章`,
+        summary: "x",
+        scene_plan: [{ scene_id: `s${k + 1}` }],
+      })),
+    };
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-50", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(existing5);
+    // 重新生成 starts from chapter 1; 继续生成 starts from chapter 6.
+    // Use a counter to distinguish: generateOutline(chapter_number) should
+    // be called with 6, 7, ... 50 (NOT 1..5 again) when 继续生成 fires.
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    setup({
+      data: {
+        concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+        story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+        world: { era: "e", geography: "g", era_social_structure: "", era_cultural_history: "", power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }], factions: [], core_rules: [] },
+        characters: { characters: [{ id: "p" }], current: null },
+        novel_outline: null,
+        chapter1_outline: existing5,
+        // v2.1: the persisted pause state from a prior session
+        chapter_outline_progress: {
+          done: 5,
+          total: 50,
+          last_user_modifications: "",
+        },
+      },
+    });
+    // Wait for the resume banner to render (form must hydrate first via prefill).
+    const continueBtn = await screen.findByTestId("chapter-outline-continue");
+    await act(async () => {
+      continueBtn.click();
+    });
+    // Resume completes the rest of Volume 1: chapters 6..50 = 45 calls.
+    // Total generateOutline calls = 45 (NOT 50 — chapters 1..5 are skipped).
+    await waitFor(
+      () => expect(api.generateOutline).toHaveBeenCalledTimes(45),
+      { timeout: 2000 },
+    );
+    // First call must be chapter 6 (not 1) — confirms the resume started
+    // from done+1 rather than restarting.
+    const calls = (api.generateOutline as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[0][1]).toBe(6);
+    // Last call = chapter 50.
+    expect(calls[calls.length - 1]?.[1]).toBe(50);
+  });
+
+  it("resume does NOT auto-trigger on mount; 继续生成 is the only path forward", async () => {
+    // After a pause + reload, the auto-trigger useEffect must NOT re-run
+    // the batch — otherwise the user would be billed for chapters 1..N
+    // twice. Pre-seed wizard.data.chapter1_outline so the auto-trigger
+    // gate (!outline) is already false.
+    const existing3 = {
+      chapters: Array.from({ length: 3 }, (_, k) => ({
+        chapter_number: k + 1,
+        title: `已生成的第${k + 1}章`,
+        summary: "x",
+        scene_plan: [{ scene_id: `s${k + 1}` }],
+      })),
+    };
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-50", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(existing3);
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    setup({
+      data: {
+        concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+        story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+        world: { era: "e", geography: "g", era_social_structure: "", era_cultural_history: "", power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }], factions: [], core_rules: [] },
+        characters: { characters: [{ id: "p" }], current: null },
+        novel_outline: null,
+        chapter1_outline: existing3,
+        chapter_outline_progress: { done: 3, total: 50, last_user_modifications: "" },
+      },
+    });
+    // Banner shows.
+    await screen.findByTestId("chapter-outline-resume-banner");
+    // Give the auto-trigger path ample time to fire (it shouldn't).
+    await new Promise((r) => setTimeout(r, 100));
+    expect(api.generateOutline).not.toHaveBeenCalled();
+  });
+
+  it("completion clears chapter_outline_progress (subsequent 重新生成 starts at chapter 1)", async () => {
+    // After a successful batch, the saved progress must be cleared so a
+    // later 重新生成 (which discards work) starts fresh from chapter 1,
+    // not from where the previous batch ended.
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    setup();
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    // No resume banner: done (10) >= total (10, fallback when no
+    // novel outline volumes are defined).
+    expect(screen.queryByTestId("chapter-outline-resume-banner")).not.toBeInTheDocument();
+    // Form is in normal post-completion state.
+    expect(screen.getByTestId("chapter-outline-form")).toBeInTheDocument();
+  });
+
+  it("persistent resume CTA: shows whenever disk chapters < Volume 1 total, even without wizard.data progress", async () => {
+    // v2.1 hardening: the resume CTA used to be gated on
+    // wizard.data.chapter_outline_progress, which only got set on an
+    // explicit pause. Users with disk content but no paused state
+    // (crash recovery, manual chapter additions, prior session) saw no
+    // affordance. The CTA now derives from disk outline + Volume 1 end
+    // so it's discoverable in every partial-generation state.
+    const existing5 = {
+      chapters: Array.from({ length: 5 }, (_, k) => ({
+        chapter_number: k + 1,
+        title: `已生成的第${k + 1}章`,
+        summary: "x",
+        scene_plan: [{ scene_id: `s${k + 1}` }],
+      })),
+    };
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-30", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(existing5);
+    setup({
+      data: {
+        concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+        story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+        world: { era: "e", geography: "g", era_social_structure: "", era_cultural_history: "", power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }], factions: [], core_rules: [] },
+        characters: { characters: [{ id: "p" }], current: null },
+        novel_outline: null,
+        chapter1_outline: existing5,
+        // KEY: no chapter_outline_progress. The CTA must still appear.
+      },
+    });
+    // CTA shows even though wizard.data.chapter_outline_progress is null —
+    // done is derived from disk (chapter_number 5), total from Volume 1
+    // end (30), so 25 remain.
+    const banner = await screen.findByTestId("chapter-outline-resume-banner");
+    expect(banner.textContent).toMatch(/已生成\s*5\s*\/\s*30\s*章/);
+    expect(banner.textContent).toMatch(/剩余\s*25\s*章/);
+    expect(screen.getByTestId("chapter-outline-continue")).toBeInTheDocument();
+  });
+
+  it("resume CTA hides when disk chapters == Volume 1 total", async () => {
+    // Volume 1 fully generated — no remaining chapters, so the CTA
+    // (which exists to prompt continuation) is correctly absent.
+    const existing30 = {
+      chapters: Array.from({ length: 30 }, (_, k) => ({
+        chapter_number: k + 1,
+        title: `第${k + 1}章`,
+        summary: "x",
+        scene_plan: [{ scene_id: `s${k + 1}` }],
+      })),
+    };
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-30", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(existing30);
+    setup({
+      data: {
+        concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+        story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+        world: { era: "e", geography: "g", era_social_structure: "", era_cultural_history: "", power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }], factions: [], core_rules: [] },
+        characters: { characters: [{ id: "p" }], current: null },
+        novel_outline: null,
+        chapter1_outline: existing30,
+      },
+    });
+    // Form renders...
+    await screen.findByTestId("chapter-outline-form");
+    // ...but the resume banner does NOT (done === total).
+    expect(
+      screen.queryByTestId("chapter-outline-resume-banner"),
+    ).not.toBeInTheDocument();
+  });
+
+  // --- v2.1: OutlineTermGuard retry path. When the backend 422s with
+  // FORBIDDEN_TERM_DETECTED on chapter 1, the frontend retries with
+  // auto-feedback appended to user_modifications and the spinner
+  // shows "第2次生成章节大纲…". On the 2nd attempt the call returns
+  // a valid outline and the batch continues to chapter 2 normally.
+
+  function forbiddenApiError(): ApiError {
+    return new ApiError(
+      "FORBIDDEN_TERM_DETECTED",
+      "章节大纲包含 N 处未在世界观中声明的境界术语",
+      { violations: [{ path: "chapters[1].scenes[0].conflict", term: "元婴", snippet: "一剑斩灭元婴" }] },
+    );
+  }
+
+  it("retries once on FORBIDDEN_TERM_DETECTED and shows '第2次' in the spinner", async () => {
+    let n = 0;
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, chapter) => {
+        n += 1;
+        if (n === 1 && chapter === 1) {
+          throw forbiddenApiError();
+        }
+        return mergedOutlineThrough(chapter as number);
+      },
+    );
+    setup();
+    // First chapter: 2 calls (1 fail + 1 succeed). The batch should still
+    // progress to chapter 2 once chapter 1 succeeds.
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(11));
+    // The retry call for chapter 1 must carry the auto-feedback prefix.
+    const firstChapterCalls = (api.generateOutline as ReturnType<typeof vi.fn>).mock.calls
+      .filter((c) => c[1] === 1);
+    expect(firstChapterCalls).toHaveLength(2);
+    expect(firstChapterCalls[0][2]).toBe("");
+    expect(firstChapterCalls[1][2]).toContain("【自动反馈");
+  });
+
+  it("does NOT show '第N次' prefix on the first (uncontaminated) attempt", async () => {
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    setup();
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    // Spinner is gone (status=completed) so the attempt span is detached;
+    // we just verify the helper's setAttempt reset to 1 didn't leak a
+    // '第2次' anywhere on screen.
+    expect(screen.queryByText(/第\s*2\s*次/)).not.toBeInTheDocument();
+  });
+
+  it("after 3 consecutive FORBIDDEN_TERM_DETECTED failures, surfaces the error UI", async () => {
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async () => {
+        throw forbiddenApiError();
+      },
+    );
+    setup();
+    // Error banner must appear (retry budget exhausted).
+    expect(await screen.findByText(/FORBIDDEN_TERM_DETECTED|未在世界观中声明的境界术语|FORBIDDEN|境界/)).toBeInTheDocument();
+    // generateOutline was called exactly 3 times for chapter 1.
+    expect(api.generateOutline).toHaveBeenCalledTimes(3);
   });
 });

@@ -846,6 +846,18 @@ class TestAsyncStage4ExecutorControlFlow:
         from backend.conductor import stage4_async_executor as mod
         from backend.conductor.stage4_async_executor import AsyncStage4Executor
 
+        # Outline drift precheck (added 2026-07-27 proj_bb0375eb) requires
+        # an outline.json containing chapter 1 / scene 1, otherwise the
+        # executor short-circuits to {"status": "scene_missing"} before
+        # the stubbed _write_scene_chapter ever runs.
+        (projects_dir / "p1" / "outline.json").write_text(json.dumps({
+            "chapters": [
+                {"chapter_number": 1, "scene_plan": [
+                    {"scene_number": 1, "goal": "g", "conflict": "c"},
+                ]},
+            ],
+        }), encoding="utf-8")
+
         async def fake_write_scene_chapter(**kwargs):
             # Return the same shape _write_scene_chapter returns.
             return {"error": False, "code": "OK", "message": "",

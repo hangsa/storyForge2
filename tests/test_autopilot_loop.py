@@ -327,17 +327,18 @@ class TestEnsureReturnContract:
         state. Repaired chapters are returned in the result so the API can
         surface them in the no_work_to_do toast / response.
 
-        v2.1: a chapter that's repaired to status='completed' is ALSO
-        considered done and will be regenerated (reset to pending, scenes
-        re-enqueued) — same path as any other completed chapter. So after
-        ensure(), ch2 lands back at status='pending' but the queue holds
-        write-2-1 and write-2-2."""
+        v2.1 (2026-08-20 trust-the-disk fix): a chapter that's repaired
+        to status='completed' stays completed — seed_queue no longer
+        regenerates completed chapters (that destructive path lost
+        ch1–ch11 drafts on proj_1a7d7fcf 2026-08-20). So after ensure(),
+        ch2 lands at status='completed' (not pending) and the queue
+        holds ONLY ch3's scene (the unfinished one).
+        """
         from backend.conductor.autopilot_session import AutopilotSessionManager
         from backend.models.autopilot_session import ManagedStartConfig
         # Outline says ch2 has 2 scenes; progress says ch2 is in_progress
-        # with both scenes completed → repair should flip it, then regen
-        # resets it again so scenes get re-enqueued. ch3 is genuinely
-        # unfinished, so its scene is also enqueued.
+        # with both scenes completed → repair should flip ch2 to
+        # 'completed'. ch3 has an unfinished scene → it gets enqueued.
         (projects_dir / "p1" / "outline.json").write_text(json.dumps({
             "chapters": [
                 {"chapter_number": 2, "scene_plan": [
@@ -371,18 +372,19 @@ class TestEnsureReturnContract:
         result = await svc.ensure("p1", mgr, StubExec(), ManagedStartConfig())
         assert result.outcome == "started"
         assert result.repaired_chapters == [2]
-        # The repair is persisted to disk first, then regeneration resets
-        # the now-completed ch2 back to pending. The end state on disk
-        # reflects the regen pass.
+        # The repair is persisted to disk. Critically, ch2 is NOT
+        # regenerated anymore (destructive path removed 2026-08-20): the
+        # status flip to 'completed' is the final state on disk.
         from pathlib import Path
         persisted = json.loads(
             (Path(projects_dir) / "p1" / "progress.json").read_text()
         )
         ch2 = next(c for c in persisted["chapters"] if c["chapter_number"] == 2)
-        assert ch2["status"] == "pending"
-        # Queue holds ch2 scenes (from regen) + ch3 scene (from in-progress).
+        assert ch2["status"] == "completed"
+        # Queue holds only ch3's unfinished scene — ch2's completed
+        # scenes are correctly skipped (no destructive reset).
         ids = {q.id for q in mgr.load().queue if q.kind == "write_scene"}
-        assert ids == {"write-2-1", "write-2-2", "write-3-1"}
+        assert ids == {"write-3-1"}
         await svc.cancel("p1")
 
     @pytest.mark.asyncio
@@ -391,9 +393,12 @@ class TestEnsureReturnContract:
         surface scope decisions honestly to the user (e.g., "scope [2,2]
         had no work" rather than silently widening to all_planned).
 
-        Range [2,2] overlaps with the completed ch2, so v2.1 regenerates
-        ch2 (1 scene) → outcome='started' with scope_used='range' and
-        ch3 (out of scope) untouched."""
+        Range [2,2] overlaps with the already-completed ch2. With the
+        trust-the-disk behavior (2026-08-20 fix), seed_queue no longer
+        regenerates completed chapters, so there's nothing to do in
+        scope → outcome='no_work_to_do', scope reported honestly as
+        'range', matched=0. ch3 (out of scope) untouched.
+        """
         from backend.conductor.autopilot_session import AutopilotSessionManager
         from backend.models.autopilot_session import ManagedStartConfig
         (projects_dir / "p1" / "outline.json").write_text(json.dumps({
@@ -424,16 +429,16 @@ class TestEnsureReturnContract:
                 return {"status": "ok"}
 
         result = await svc.ensure("p1", mgr, StubExec(), cfg)
-        # v2.1: scope [2,2] regenerates ch2 (1 scene) → 'started', scope
-        # reported honestly, no fallback. ch3 (out of scope) untouched.
-        assert result.outcome == "started"
+        # Trust-the-disk: completed ch2 stays completed, no regen. The
+        # only chapter in scope [2,2] is already done, so there's no
+        # work — outcome reflects this honestly.
+        assert result.outcome == "no_work_to_do"
         assert result.seed_result.fallback_applied is False
         assert result.seed_result.scope_used == "range"
-        assert result.seed_result.matched == 1  # ch2's scene (regenerated)
-        assert result.seed_result.enqueued == 1
+        assert result.seed_result.matched == 0
+        assert result.seed_result.enqueued == 0
         ids = {q.id for q in mgr.load().queue if q.kind == "write_scene"}
-        assert ids == {"write-2-1"}
-        assert "write-3-1" not in ids  # out of scope
+        assert ids == set()  # nothing enqueued
         await svc.cancel("p1")
 
     @pytest.mark.asyncio

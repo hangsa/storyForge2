@@ -468,7 +468,20 @@ class TestSeedQueueRange:
 
     def test_scope_range_includes_completed_chapters(self, regen_projects_dir):
         """Range [2, 5] overlaps with completed ch1-3 AND in-progress ch4-6.
-        Regeneration should reset ch2, ch3 (completed) and queue everything."""
+
+        New behavior (post proj_1a7d7fcf 2026-08-20): completed chapters in
+        scope are NOT regenerated. The destructive path used to delete
+        drafts here, which is exactly the bug we removed. With the trust-
+        the-disk model, completed chapters stay completed; only the
+        unfinished ones get enqueued.
+
+        NB: the fixture sets current_chapter=7, which raises the floor to
+        chapter 6. Range [2,5] is entirely below the floor, so nothing in
+        scope is enqueued. To get the "completed chapters in scope stay
+        completed" assertion below the floor would mask the bug, so we
+        instead test it with the floor neutralized by a cfg whose range
+        straddles current_chapter.
+        """
         from backend.conductor.autopilot_session import AutopilotSessionManager
         mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
         cfg = ManagedStartConfig(scope="range", start_chapter=2, end_chapter=5)
@@ -477,20 +490,57 @@ class TestSeedQueueRange:
         progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
         result = seed_queue(mgr, outline, progress, None, cfg,
                             projects_dir=regen_projects_dir)
-        # 4 chapters × 3 scenes = 12 items enqueued
-        assert result.enqueued == 12
-        # ch2 and ch3 should be reset to pending
+        # Floor=current_chapter-1=6 > end_chapter=5 → empty scope, no enqueue.
+        assert result.enqueued == 0
+        # progress.json untouched (no regen, no promotion)
         progress_after = json.loads(
             (regen_projects_dir / "p_range" / "progress.json").read_text()
         )
-        for ch_num in [2, 3]:
+        for ch_num in [1, 2, 3]:
             ch = next(c for c in progress_after["chapters"] if c["chapter_number"] == ch_num)
-            assert ch["status"] == "pending", f"ch{ch_num} should be reset"
-        # ch1 (outside range) should be untouched
-        ch1 = next(c for c in progress_after["chapters"] if c["chapter_number"] == 1)
-        assert ch1["status"] == "completed"
+            assert ch["status"] == "completed", f"ch{ch_num} must remain completed"
+        # Critical: NO drafts deleted. chapters/ directory didn't even exist
+        # in the fixture, but no exception was raised either.
+        assert not (regen_projects_dir / "p_range" / "chapters").exists()
 
-    def test_scope_all_planned_also_regenerates_completed(self, regen_projects_dir):
+    def test_scope_range_completed_chapters_preserved_when_range_straddles_floor(
+        self, regen_projects_dir,
+    ):
+        """Range [4, 6] straddles the floor (current_chapter=7 → floor=6).
+        Floor INCLUDES ch6, so target = {ch6}. ch6 has 3 pending scenes,
+        which get enqueued. ch1-3 (completed) and ch4-5 (in_progress, but
+        all scenes pending) are below the floor and NOT enqueued.
+
+        Most importantly: completed chapters below the floor stay
+        completed, no deletion, no regen.
+        """
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=4, end_chapter=6)
+        mgr.start(cfg)
+        outline = json.loads((regen_projects_dir / "p_range" / "outline.json").read_text())
+        progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
+        result = seed_queue(mgr, outline, progress, None, cfg,
+                            projects_dir=regen_projects_dir)
+        # Floor=6, target after clamp = {ch6} only. ch6 has 3 pending scenes → 3 enqueued.
+        assert result.enqueued == 3
+        # ch1-3 status preserved as completed (no destructive regen).
+        progress_after = json.loads(
+            (regen_projects_dir / "p_range" / "progress.json").read_text()
+        )
+        for ch_num in [1, 2, 3]:
+            ch = next(c for c in progress_after["chapters"] if c["chapter_number"] == ch_num)
+            assert ch["status"] == "completed"
+
+    def test_scope_all_planned_preserves_completed_chapters(self, regen_projects_dir):
+        """all_planned scope must NOT reset completed chapters anymore.
+
+        Old behavior regenerated ch1-3 (deleted drafts + reset progress)
+        because they were all DONE_STATUSES. New behavior keeps them
+        completed and only enqueues the unfinished scenes in ch4-6 +
+        the never-started ch7-12. The floor is current_chapter-1=6, so
+        target is ch7-12 = 6 chapters × 3 scenes = 18 scenes.
+        """
         from backend.conductor.autopilot_session import AutopilotSessionManager
         mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
         cfg = ManagedStartConfig(scope="all_planned")
@@ -499,16 +549,18 @@ class TestSeedQueueRange:
         progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
         result = seed_queue(mgr, outline, progress, None, cfg,
                             projects_dir=regen_projects_dir)
-        # all_planned regenerates ch1-3 + enqueues ch4-12 = 12 chapters × 3 = 36
-        assert result.enqueued == 36
-        # ch1, ch2, ch3 all reset
+        # Floor=6 INCLUDES ch6, so target = ch6-12 = 7 chapters. ch6 has 3
+        # pending scenes; ch7-12 have no progress entry → all scenes unfinished.
+        # 7 × 3 = 21 scenes enqueued.
+        assert result.enqueued == 21
+        # ch1, ch2, ch3 status preserved as completed (NOT reset to pending)
         progress_after = json.loads(
             (regen_projects_dir / "p_range" / "progress.json").read_text()
         )
         for ch_num in [1, 2, 3]:
             ch = next(c for c in progress_after["chapters"] if c["chapter_number"] == ch_num)
-            assert ch["status"] == "pending", f"ch{ch_num} should be reset"
-        # ch4-6 untouched (in_progress, not completed)
+            assert ch["status"] == "completed", f"ch{ch_num} must remain completed"
+        # ch4-6 untouched (still in_progress per fixture)
         for ch_num in [4, 5, 6]:
             ch = next(c for c in progress_after["chapters"] if c["chapter_number"] == ch_num)
             assert ch["status"] == "in_progress"
@@ -540,6 +592,194 @@ class TestSeedQueueRange:
         # No chapters in [100, 110]; no fallback (we removed next_chapter fallback).
         assert result.enqueued == 0
         assert result.fallback_applied is False
+
+    # ------------------------------------------------------------------
+    # New behavior tests — trust-the-disk promotion + current_chapter
+    # floor (added 2026-08-20, proj_1a7d7fcf regression fix).
+    # ------------------------------------------------------------------
+
+    def test_seed_queue_does_not_delete_drafts_when_chapter_marked_complete(
+        self, regen_projects_dir,
+    ):
+        """The OLD destructive-regen path deleted chapters/ch{N}_*.md
+        whenever a chapter was in DONE_STATUSES. The NEW path keeps
+        drafts on disk and just trusts them.
+
+        Reproduces proj_1a7d7fcf 2026-08-20 root cause: ch1-3 are marked
+        completed in the fixture; with the old code, all_planned
+        seed_queue would unlink ch01-*.md etc. The new code leaves
+        them alone.
+        """
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        proj = regen_projects_dir / "p_range"
+        # Pre-create drafts for ch1 (would have been deleted by old code).
+        (proj / "chapters").mkdir()
+        draft_ch1s1 = proj / "chapters" / "ch01_scene_001_draft.md"
+        draft_ch1s1.write_text("chapter 1 scene 1 content")
+        draft_ch3s3 = proj / "chapters" / "ch03_scene_003_draft.md"
+        draft_ch3s3.write_text("chapter 3 scene 3 content")
+
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=1, end_chapter=12)
+        mgr.start(cfg)
+        outline = json.loads((proj / "outline.json").read_text())
+        progress = json.loads((proj / "progress.json").read_text())
+        seed_queue(mgr, outline, progress, None, cfg,
+                   projects_dir=regen_projects_dir)
+
+        # Drafts MUST still be there (the entire point of the fix).
+        assert draft_ch1s1.exists(), "ch01 draft deleted by seed_queue — REGRESSION"
+        assert draft_ch1s1.read_text() == "chapter 1 scene 1 content"
+        assert draft_ch3s3.exists(), "ch03 draft deleted by seed_queue — REGRESSION"
+        assert draft_ch3s3.read_text() == "chapter 3 scene 3 content"
+
+    def test_seed_queue_promotes_drafts_on_disk_to_completed(
+        self, regen_projects_dir,
+    ):
+        """Trust-the-disk promotion: if chapters/ch{NN}_scene_{NNN}_draft.md
+        exists on disk but progress.json shows the scene as pending,
+        flip it to completed (write back to progress.json).
+        """
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        proj = regen_projects_dir / "p_range"
+        (proj / "chapters").mkdir()
+        # ch4 scene 1 has a draft on disk but progress says pending.
+        draft = proj / "chapters" / "ch04_scene_001_draft.md"
+        draft.write_text("ch4 s1 content")
+
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=4, end_chapter=4)
+        mgr.start(cfg)
+        outline = json.loads((proj / "outline.json").read_text())
+        progress = json.loads((proj / "progress.json").read_text())
+        seed_queue(mgr, outline, progress, None, cfg,
+                   projects_dir=regen_projects_dir)
+
+        # progress.json must now show ch4 scene 1 as completed.
+        progress_after = json.loads((proj / "progress.json").read_text())
+        ch4 = next(c for c in progress_after["chapters"]
+                   if c["chapter_number"] == 4)
+        ch4s1 = next(s for s in ch4["scenes"] if s["scene_number"] == 1)
+        assert ch4s1["status"] == "completed", \
+            f"ch4 scene 1 should be promoted; got {ch4s1['status']!r}"
+        # Draft must still exist (no deletion).
+        assert draft.exists()
+
+    def test_seed_queue_skips_chapters_without_progress_entries(
+        self, regen_projects_dir,
+    ):
+        """If a draft exists but progress.json has NO entry for that
+        chapter at all, do NOT auto-create progress entries — let the
+        runner do it. Reason: the chapter may have been outline-drifted
+        (user regenerated the outline and this draft is orphaned).
+
+        Setting: ch13 is in the outline (we'll add it) but progress.json
+        has no entry for ch13. We pre-place a draft for ch13 scene 1.
+        seed_queue must NOT add a progress entry for ch13; it must
+        enqueue the scene normally (no promotion happens for missing
+        entries, but the scene IS unfinished so it gets queued).
+        """
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        proj = regen_projects_dir / "p_range"
+        # Extend the outline to ch13 (the fixture only has 1-12).
+        outline = json.loads((proj / "outline.json").read_text())
+        outline["chapters"].append({
+            "chapter_number": 13,
+            "scene_plan": [{"scene_number": 1}, {"scene_number": 2}],
+        })
+        (proj / "outline.json").write_text(json.dumps(outline))
+        # Drop a draft for ch13 scene 1.
+        (proj / "chapters").mkdir()
+        orphan_draft = proj / "chapters" / "ch13_scene_001_draft.md"
+        orphan_draft.write_text("orphan draft from old outline version")
+
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=13, end_chapter=13)
+        mgr.start(cfg)
+        progress = json.loads((proj / "progress.json").read_text())
+        seed_queue(mgr, outline, progress, None, cfg,
+                   projects_dir=regen_projects_dir)
+
+        progress_after = json.loads((proj / "progress.json").read_text())
+        ch13_entries = [c for c in progress_after["chapters"]
+                        if c["chapter_number"] == 13]
+        # Must NOT have auto-created an entry — the runner will.
+        assert ch13_entries == [], \
+            "seed_queue must not auto-create progress entries for orphan drafts"
+
+    def test_seed_queue_clamps_to_current_chapter_minus_one_on_resume(
+        self, regen_projects_dir,
+    ):
+        """The original bug: cfg says start=1, current_chapter says 7,
+        resume should NOT enqueue ch1-5 (those are below the floor).
+
+        With current_chapter=7 (the fixture), the floor is 6. With
+        cfg start_chapter=1 and end=12, target_chapters after clamping
+        is ch6-12 = 7 chapters. ch6 has 3 pending scenes (in_progress),
+        ch7-12 have no progress entries → all 3 scenes each are
+        unfinished. 7 × 3 = 21 scenes enqueued.
+        """
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=1, end_chapter=12)
+        mgr.start(cfg)
+        outline = json.loads((regen_projects_dir / "p_range" / "outline.json").read_text())
+        progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
+        result = seed_queue(mgr, outline, progress, None, cfg,
+                            projects_dir=regen_projects_dir)
+        # Floor=6 INCLUDES ch6, so target is ch6-12 = 7 × 3 = 21.
+        assert result.enqueued == 21
+        # ch1-3 status preserved as completed (not reset).
+        progress_after = json.loads(
+            (regen_projects_dir / "p_range" / "progress.json").read_text()
+        )
+        for ch_num in [1, 2, 3]:
+            ch = next(c for c in progress_after["chapters"]
+                      if c["chapter_number"] == ch_num)
+            assert ch["status"] == "completed"
+
+    def test_seed_queue_honors_cfg_start_above_floor(
+        self, regen_projects_dir,
+    ):
+        """If cfg.start_chapter is ABOVE the floor (current_chapter-1),
+        cfg wins. Reason: the user explicitly chose a future range;
+        we shouldn't drag them backward to where the runner is now.
+
+        Fixture: current_chapter=7, floor=6. cfg says start=10.
+        Target should be ch10-12 = 3 chapters × 3 scenes = 9.
+        """
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=10, end_chapter=12)
+        mgr.start(cfg)
+        outline = json.loads((regen_projects_dir / "p_range" / "outline.json").read_text())
+        progress = json.loads((regen_projects_dir / "p_range" / "progress.json").read_text())
+        result = seed_queue(mgr, outline, progress, None, cfg,
+                            projects_dir=regen_projects_dir)
+        # Floor=6 < cfg.start=10 → cfg wins. ch10-12 = 9 scenes.
+        assert result.enqueued == 9
+
+    def test_seed_queue_no_clamp_when_current_chapter_is_one(
+        self, regen_projects_dir,
+    ):
+        """When current_chapter is 1 (fresh project), floor=0 → no clamp.
+        Equivalent to the pre-fix behavior for fresh starts.
+        """
+        from backend.conductor.autopilot_session import AutopilotSessionManager
+        proj = regen_projects_dir / "p_range"
+        progress = json.loads((proj / "progress.json").read_text())
+        progress["current_chapter"] = 1
+        (proj / "progress.json").write_text(json.dumps(progress))
+
+        mgr = AutopilotSessionManager(regen_projects_dir, "p_range")
+        cfg = ManagedStartConfig(scope="range", start_chapter=1, end_chapter=12)
+        mgr.start(cfg)
+        outline = json.loads((proj / "outline.json").read_text())
+        result = seed_queue(mgr, outline, progress, None, cfg,
+                            projects_dir=regen_projects_dir)
+        # No clamp → all 12 chapters in scope, but ch1-3 are completed
+        # so only ch4-12 = 9 × 3 = 27 scenes get enqueued.
+        assert result.enqueued == 27
 
 
 class TestRangePreviewEndpoint:

@@ -55,6 +55,12 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
   // "重新生成" button. The modal returns the typed modification string,
   // which is passed to every api.generateOutline call in the batch.
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  // v2.1: per-chapter regenerate. A non-null value means a RegenerateModal
+  // is open targeting that specific chapter_number. Kept separate from
+  // `showRegenerateModal` so the bulk-regen footer button and the
+  // per-chapter card button don't fight over the same modal instance.
+  const [perChapterRegen, setPerChapterRegen] = useState<{ chapterNumber: number } | null>(null);
+  const [perChapterRegenBusy, setPerChapterRegenBusy] = useState(false);
   // Mirror latest state for handlers registered in the modal footer.
   const outlineRef = useRef(outline);
   outlineRef.current = outline;
@@ -192,6 +198,39 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
     if (!outline) return;
     const chapters = outline.chapters.map((ch, i) => (i === idx ? { ...ch, title } : ch));
     setOutline({ ...outline, chapters });
+  };
+
+  // v2.1: per-chapter regenerate. Calls /stage3/regenerate-chapter-outline
+  // with chapter_start = chapter_end = n. The API returns the FULL merged
+  // outline (not just the regenerated chapter), so we replace local state
+  // wholesale — same pattern as the bulk generateOutline path. We do NOT
+  // touch wizard.data.chapter_outline_progress: that progress is for the
+  // "继续生成" resume flow which is about a batch, not a single-chapter
+  // refresh, and a single-chapter refresh shouldn't disturb that counter.
+  const handleRegenerateOne = async (
+    chapterNumber: number,
+    userModifications: string,
+  ) => {
+    setPerChapterRegenBusy(true);
+    try {
+      const result = await api.regenerateChapterOutlineRange(
+        projectId,
+        chapterNumber,
+        chapterNumber,
+        userModifications,
+      );
+      setOutline({
+        chapters: result.chapters as Outline["chapters"],
+      });
+      setPerChapterRegen(null);
+    } catch (e) {
+      wizard.setStatus(
+        "error",
+        e instanceof Error ? e.message : `第 ${chapterNumber} 章重新生成失败`,
+      );
+    } finally {
+      setPerChapterRegenBusy(false);
+    }
   };
 
   const handleFinish = async () => {
@@ -360,7 +399,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
         <div data-testid="chapter-outline-form" className="space-y-3">
           <div className="font-label-mono text-primary-container text-sm">
             已生成 {outline.chapters.length} 章 ·{" "}
-            {outline.chapters.reduce((acc, ch) => acc + ch.scene_plan.length, 0)} 个场景
+            {outline.chapters.reduce((acc, ch) => acc + (ch.scene_plan?.length ?? 0), 0)} 个场景
             {isPartialProgress && (
               <span
                 data-testid="chapter-outline-partial-note"
@@ -370,24 +409,80 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
               </span>
             )}
           </div>
-          {outline.chapters.map((ch, idx) => (
-            <div key={idx} className="border border-outline-variant rounded-lg p-3 space-y-2">
-              <div className="flex items-center gap-3">
-                <label className="font-label-mono text-primary-container text-sm whitespace-nowrap">
-                  第 {ch.chapter_number} 章标题
-                </label>
-                <input
-                  data-testid={`chapter-${ch.chapter_number}-title`}
-                  value={ch.title}
-                  onChange={(e) => updateChapterTitle(idx, e.target.value)}
-                  className="flex-1 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
-                />
+          {outline.chapters.map((ch, idx) => {
+            // Defensive: when the LLM emits a malformed first chapter (e.g.
+            // the MiniMax-M3 think-block leak captured as
+            // {"text": "", "degraded": true}), chapter_number / title /
+            // scene_plan can all be missing. Without these guards the form
+            // renders throw and the wizard tree unmounts — proj_1a7d7fcf
+            // 2026-08-23: blank wizard page until the chapter was scrubbed.
+            // We render a degraded badge instead of crashing so the user
+            // can still see / edit the well-formed siblings and re-generate.
+            if (
+              typeof ch.chapter_number !== "number" ||
+              typeof ch.title !== "string" ||
+              !Array.isArray(ch.scene_plan)
+            ) {
+              return (
+                <div
+                  key={idx}
+                  data-testid="chapter-outline-degraded"
+                  className="border border-error/40 rounded-lg p-3 bg-error-container/10 space-y-2"
+                >
+                  <div className="font-body-ui text-error text-xs">
+                    第 {idx + 1} 章解析异常（{(ch as { degraded?: boolean }).degraded ? "LLM 输出降级" : "字段缺失"}），已跳过渲染。
+                  </div>
+                  {/* idx+1 is the badge's display position — used as the
+                      target chapter_number for the regenerate call. If the
+                      degraded entry is real noise (no chapter_number on disk),
+                      the API will generate a new chapter for that position
+                      and the residual entry remains in the array (sorted to
+                      chapter_number=0 default). Use the project's
+                      outline.json scrub step to remove that residue. */}
+                  <button
+                    type="button"
+                    data-testid="chapter-outline-degraded-regenerate"
+                    onClick={() => setPerChapterRegen({ chapterNumber: idx + 1 })}
+                    disabled={busy || perChapterRegenBusy}
+                    className="px-3 py-1.5 text-xs border border-error/60 rounded-lg
+                               text-error hover:bg-error-container/20
+                               transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    重新生成该章
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <div key={idx} className="border border-outline-variant rounded-lg p-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  <label className="font-label-mono text-primary-container text-sm whitespace-nowrap">
+                    第 {ch.chapter_number} 章标题
+                  </label>
+                  <input
+                    data-testid={`chapter-${ch.chapter_number}-title`}
+                    value={ch.title}
+                    onChange={(e) => updateChapterTitle(idx, e.target.value)}
+                    className="flex-1 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+                  />
+                  <button
+                    type="button"
+                    data-testid={`chapter-${ch.chapter_number}-regenerate`}
+                    onClick={() => setPerChapterRegen({ chapterNumber: ch.chapter_number })}
+                    disabled={busy || perChapterRegenBusy}
+                    className="px-3 py-2 text-xs border border-outline-variant rounded-lg
+                               text-primary-container hover:bg-surface-container-low
+                               transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    重新生成
+                  </button>
+                </div>
+                <div className="font-body-ui text-primary-container text-[10px]">
+                  {ch.scene_plan.length} 个场景
+                </div>
               </div>
-              <div className="font-body-ui text-primary-container text-[10px]">
-                {ch.scene_plan.length} 个场景 · 概要字数 {((ch as { summary?: string }).summary?.length ?? 0)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           <p className="font-body-ui text-primary-container/60 text-xs">
             场景级详情可在工作台的大纲标签页内编辑。
           </p>
@@ -413,6 +508,21 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
           await handleStart(text);
         }}
         onCancel={() => setShowRegenerateModal(false)}
+      />
+      {/* v2.1: per-chapter regenerate modal. Separate instance from the
+          bulk-regen modal above so the two flows can never overlap visually. */}
+      <RegenerateModal
+        open={perChapterRegen !== null}
+        target={perChapterRegen ? `第 ${perChapterRegen.chapterNumber} 章` : ""}
+        busy={perChapterRegenBusy}
+        onConfirm={async (text) => {
+          if (perChapterRegen) {
+            await handleRegenerateOne(perChapterRegen.chapterNumber, text);
+          }
+        }}
+        onCancel={() => {
+          if (!perChapterRegenBusy) setPerChapterRegen(null);
+        }}
       />
     </div>
   );

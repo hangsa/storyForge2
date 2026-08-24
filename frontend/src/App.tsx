@@ -57,7 +57,15 @@ function App() {
         path="/project/:projectId/wizard"
         element={
           <Suspense fallback={<LoadingFallback />}>
-            <WizardDeepLinkPage />
+            {/* Defense-in-depth: if a wizard step throws (e.g. malformed
+                chapter outline crashing ChapterOutlineStep — proj_1a7d7fcf
+                2026-08-23), the user previously saw a blank page with no
+                recovery affordance. Wrap in StageErrorBoundary so they get
+                the same CircuitBreaker fallback the /workspace and stage
+                routes use, with 重试渲染 / 回退 buttons. */}
+            <StageErrorBoundary stageName="wizard">
+              <WizardDeepLinkPage />
+            </StageErrorBoundary>
           </Suspense>
         }
       />

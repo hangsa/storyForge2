@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "../../api/client";
+import api, { type NovelOutline } from "../../api/client";
 import { useWorkspacePanel, type WorkspacePanel } from "../../hooks/useWorkspacePanel";
 import ConceptEditor from "./editors/ConceptEditor";
 import WorldEditor from "./editors/WorldEditor";
@@ -47,6 +47,22 @@ const FETCHER: Record<WorkspacePanel, (id: string) => Promise<unknown>> = {
   export: async () => ({}),
 };
 
+// The chapter-outline editor groups chapter rows by volume, so it needs the
+// novel-level outline (volumes + chapter_range) in addition to the per-chapter
+// outline. We fetch both in parallel and bundle them so the editor can render
+// volume headers without doing its own data fetches. Other panels fetch only
+// what their editor needs.
+async function fetchChapterOutlineBundle(projectId: string): Promise<{
+  outline: unknown;
+  novelOutline: unknown;
+}> {
+  const [outline, novelOutline] = await Promise.all([
+    api.getOutline(projectId),
+    api.getNovelOutline(projectId).catch(() => null),
+  ]);
+  return { outline, novelOutline };
+}
+
 export default function ContextPanel({ projectId, readOnly, readOnlyReason }: Props) {
   const { panel, setPanel } = useWorkspacePanel();
   const [data, setData] = useState<unknown>(null);
@@ -59,7 +75,10 @@ export default function ContextPanel({ projectId, readOnly, readOnlyReason }: Pr
     let cancelled = false;
     setLoading(true);
     setData(null);
-    FETCHER[panel](projectId)
+    const fetcher = panel === "chapter-outline"
+      ? () => fetchChapterOutlineBundle(projectId)
+      : () => FETCHER[panel](projectId);
+    fetcher()
       .then((d) => { if (!cancelled) setData(d); })
       .catch(() => { if (!cancelled) setData(null); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -116,5 +135,20 @@ function EditorForPanel({
   if (panel === "world") return <WorldEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
   if (panel === "character") return <CharacterEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
   if (panel === "outline") return <NovelOutlineEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
-  return <ChapterOutlineEditor projectId={projectId} data={data} onSaved={onSaved} readOnly={readOnly} />;
+  // chapter-outline receives a bundled { outline, novelOutline } so the
+  // editor can group chapter rows by their owning volume. See
+  // fetchChapterOutlineBundle above. The novelOutline cast treats anything
+  // weird (missing file, partial schema) as null — the editor falls back to
+  // a single "未分组" section in that case.
+  const bundle = (data ?? null) as { outline?: unknown; novelOutline?: unknown } | null;
+  const novelOutline = (bundle?.novelOutline ?? null) as NovelOutline | null;
+  return (
+    <ChapterOutlineEditor
+      projectId={projectId}
+      data={bundle?.outline}
+      novelOutline={novelOutline}
+      onSaved={onSaved}
+      readOnly={readOnly}
+    />
+  );
 }

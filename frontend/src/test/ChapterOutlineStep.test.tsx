@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, waitFor } from "@testing-library/react";
+import { render, screen, act, waitFor, within, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ToastProvider } from "../hooks/useToast";
 import { ApiError } from "../api/client";
@@ -29,6 +29,7 @@ vi.mock("../api/client", async () => {
       getCharacter: vi.fn(),
       getNovelOutline: vi.fn(),
       getOutline: vi.fn(),
+      regenerateChapterOutlineRange: vi.fn(),
     },
   };
 });
@@ -69,6 +70,7 @@ beforeEach(() => {
   (api.getCharacter as ReturnType<typeof vi.fn>).mockReset();
   (api.getNovelOutline as ReturnType<typeof vi.fn>).mockReset();
   (api.getOutline as ReturnType<typeof vi.fn>).mockReset();
+  (api.regenerateChapterOutlineRange as ReturnType<typeof vi.fn>).mockReset();
   mockNavigate.mockReset();
   sessionStorage.clear();
 });
@@ -732,5 +734,227 @@ describe("ChapterOutlineStep", () => {
     expect(await screen.findByText(/FORBIDDEN_TERM_DETECTED|未在世界观中声明的境界术语|FORBIDDEN|境界/)).toBeInTheDocument();
     // generateOutline was called exactly 3 times for chapter 1.
     expect(api.generateOutline).toHaveBeenCalledTimes(3);
+  });
+
+  // proj_1a7d7fcf 2026-08-23: MiniMax-M3 occasionally emits the first scene
+  // inside the <think> block, which the streaming parser captures as a
+  // chapter dict like { text: "", degraded: true } (no chapter_number /
+  // title / scene_plan). Without defensive guards in the chapter map the
+  // `ch.scene_plan.length` access crashed and the wizard tree unmounted
+  // → blank page. The form must now render a degraded badge for the
+  // offending chapter and keep going with the well-formed siblings.
+  it("renders a degraded-chapter badge instead of crashing when a chapter is malformed", async () => {
+    const mixed = {
+      chapters: [
+        // The MiniMax-M3 think-block leak shape: scene captured inside
+        // <think>, streaming parser records degraded=true with no fields.
+        ({ text: "", degraded: true } as unknown) as { chapter_number: number; title: string; scene_plan: unknown[] },
+        // Well-formed sibling so we can confirm it still renders.
+        { chapter_number: 2, title: "正常生成的第2章", summary: "x", scene_plan: [{ scene_id: "s2" }] },
+        // Missing scene_plan (different failure shape).
+        ({ chapter_number: 3, title: "缺字段的第3章", summary: "x" } as unknown) as { chapter_number: number; title: string; scene_plan: unknown[] },
+        // Well-formed tail.
+        { chapter_number: 4, title: "正常生成的第4章", summary: "x", scene_plan: [{ scene_id: "s4" }] },
+      ],
+    };
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-5", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(mixed);
+    setup({
+      data: {
+        concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+        story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+        world: { era: "e", geography: "g", era_social_structure: "", era_cultural_history: "", power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }], factions: [], core_rules: [] },
+        characters: { characters: [{ id: "p" }], current: null },
+        novel_outline: null,
+        chapter1_outline: mixed,
+      },
+    });
+    // The two well-formed siblings render their title inputs.
+    await screen.findByTestId("chapter-2-title");
+    await screen.findByTestId("chapter-4-title");
+    // The malformed chapters show a degraded badge, NOT a title input.
+    expect(screen.queryByTestId("chapter-1-title")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chapter-3-title")).not.toBeInTheDocument();
+    const badges = screen.getAllByTestId("chapter-outline-degraded");
+    expect(badges).toHaveLength(2);
+    // The first one specifically mentions the LLM-downgrade reason so
+    // the user knows to "重新生成" this chapter.
+    expect(badges[0].textContent).toMatch(/LLM\s*输出降级/);
+    // Scene-plan summary above the form uses the `?? 0` guard so the
+    // missing scene_plan on chapter 3 doesn't zero out the total.
+    expect(screen.getByTestId("chapter-outline-form").textContent).toMatch(/已生成\s*4\s*章/);
+  });
+
+  // v2.1: per-chapter "重新生成" — without this the only path was the modal
+  // footer's bulk regen (regenerates Volume 1 from chapter 1), so a user
+  // wanting to fix just one chapter had no UI option. The button calls
+  // /stage3/regenerate-chapter-outline for that single chapter_number.
+  it("renders a '重新生成' button on each well-formed chapter card", async () => {
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    setup();
+    await screen.findByTestId("chapter-outline-form");
+    for (let i = 1; i <= 10; i++) {
+      expect(
+        screen.getByTestId(`chapter-${i}-regenerate`),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("clicking a per-chapter '重新生成' button opens the modal with target='第 N 章'", async () => {
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    setup();
+    await screen.findByTestId("chapter-outline-form");
+    await act(async () => {
+      screen.getByTestId("chapter-3-regenerate").click();
+    });
+    const modal = await screen.findByTestId("regenerate-modal");
+    // The header should reference chapter 3 specifically, not the bulk
+    // "章纲" target that the modal-footer button uses.
+    expect(modal.textContent).toMatch(/第\s*3\s*章/);
+    expect(modal.textContent).not.toMatch(/章纲/);
+  });
+
+  it("confirming the per-chapter modal calls regenerateChapterOutlineRange with a single-chapter range and updates the form", async () => {
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    (api.regenerateChapterOutlineRange as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, start, end, mods) => {
+        // Mirror backend/api/stage3_outline.py:546-561: the response's
+        // `detail.chapters` is the FULL merged outline (existing chapters
+        // deduped by chapter_number, the regenerated range appended). The
+        // mock must mirror that contract or the wizard will appear to lose
+        // chapters outside the regenerated range.
+        const chapters = Array.from({ length: 10 }, (_, k) => ({
+          chapter_number: k + 1,
+          title: `第${k + 1}章`,
+          scene_plan: [{ scene_id: `s${k + 1}` }],
+        }));
+        for (let n = start as number; n <= (end as number); n++) {
+          const idx = chapters.findIndex((c) => c.chapter_number === n);
+          if (idx >= 0) chapters.splice(idx, 1);
+          chapters.push({
+            chapter_number: n,
+            title: `新第${n}章`,
+            scene_plan: [{ scene_id: `new-s${n}` }],
+          });
+        }
+        chapters.sort((a, b) => a.chapter_number - b.chapter_number);
+        return { chapters };
+      },
+    );
+    setup();
+    await screen.findByTestId("chapter-outline-form");
+    await act(async () => {
+      screen.getByTestId("chapter-5-regenerate").click();
+    });
+    await screen.findByTestId("regenerate-modal");
+    await act(async () => {
+      screen.getByTestId("regenerate-modal-confirm").click();
+    });
+    await waitFor(() =>
+      expect(api.regenerateChapterOutlineRange).toHaveBeenCalledWith(
+        PROJECT,
+        5,
+        5,
+        "",
+      ),
+    );
+    // The local outline state must be replaced with the API's response so
+    // the user sees the regenerated chapter immediately (no manual refetch).
+    const input = (await screen.findByTestId("chapter-5-title")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe("新第5章"));
+    // Other chapters must remain — single-chapter regen is NOT a bulk regen.
+    expect((screen.getByTestId("chapter-4-title") as HTMLInputElement).value).toBe("第4章");
+    expect((screen.getByTestId("chapter-6-title") as HTMLInputElement).value).toBe("第6章");
+  });
+
+  it("passes the modal textarea text through to user_modifications on the API", async () => {
+    (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, n) => mergedOutlineThrough(n as number),
+    );
+    (api.regenerateChapterOutlineRange as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_id, start) => ({
+        chapters: [{
+          chapter_number: start as number,
+          title: `新第${start as number}章`,
+          scene_plan: [{ scene_id: `new-s${start as number}` }],
+        }],
+      }),
+    );
+    setup();
+    await screen.findByTestId("chapter-outline-form");
+    await act(async () => {
+      screen.getByTestId("chapter-2-regenerate").click();
+    });
+    const modal = await screen.findByTestId("regenerate-modal");
+    const ta = modal.querySelector("textarea") as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(ta, { target: { value: "节奏更紧凑" } });
+    });
+    await act(async () => {
+      screen.getByTestId("regenerate-modal-confirm").click();
+    });
+    await waitFor(() =>
+      expect(api.regenerateChapterOutlineRange).toHaveBeenCalledWith(
+        PROJECT,
+        2,
+        2,
+        "节奏更紧凑",
+      ),
+    );
+  });
+
+  it("degraded-chapter badge exposes a '重新生成该章' button that targets the bad slot", async () => {
+    const mixed = {
+      chapters: [
+        ({ text: "", degraded: true } as unknown) as { chapter_number: number; title: string; scene_plan: unknown[] },
+        { chapter_number: 2, title: "正常生成的第2章", summary: "x", scene_plan: [{ scene_id: "s2" }] },
+        { chapter_number: 3, title: "缺字段的第3章", summary: "x" } as unknown as { chapter_number: number; title: string; scene_plan: unknown[] },
+        { chapter_number: 4, title: "正常生成的第4章", summary: "x", scene_plan: [{ scene_id: "s4" }] },
+      ],
+    };
+    (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
+      core_conflict_theme: "x",
+      volumes: [{ name: "v1", chapter_range: "1-5", summary: "x", key_events: [] }],
+      mc_growth_arc: [],
+      key_plot_points: [],
+      generated_at: "",
+      updated_at: "",
+    });
+    (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(mixed);
+    setup({
+      data: {
+        concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+        story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+        world: { era: "e", geography: "g", era_social_structure: "", era_cultural_history: "", power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }], factions: [], core_rules: [] },
+        characters: { characters: [{ id: "p" }], current: null },
+        novel_outline: null,
+        chapter1_outline: mixed,
+      },
+    });
+    await screen.findByTestId("chapter-outline-form");
+    const badges = screen.getAllByTestId("chapter-outline-degraded");
+    expect(badges).toHaveLength(2);
+    // Both degraded badges must have a regenerate button.
+    expect(within(badges[0]).getByTestId("chapter-outline-degraded-regenerate")).toBeInTheDocument();
+    expect(within(badges[1]).getByTestId("chapter-outline-degraded-regenerate")).toBeInTheDocument();
+    // Clicking the first one (idx 0 → "第 1 章") opens a modal targeting chapter 1.
+    await act(async () => {
+      within(badges[0]).getByTestId("chapter-outline-degraded-regenerate").click();
+    });
+    const modal = await screen.findByTestId("regenerate-modal");
+    expect(modal.textContent).toMatch(/第\s*1\s*章/);
   });
 });

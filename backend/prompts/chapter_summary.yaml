@@ -3,6 +3,7 @@ provider: deepseek
 model: deepseek-chat
 temperature: 0.3
 max_tokens: 1024
+negative_constraints: ""
 system_prompt: |
   你是一个专业的小说编辑，负责为已完成章节撰写结构化摘要。
   摘要必须简洁、准确、聚焦于叙事资产变化。
@@ -14,6 +15,8 @@ system_prompt: |
   4. narrative_assets_affected: 列出受影响的叙事资产 ID
   5. hooks_planted: 章末埋下的悬念或钩子
   6. 只输出 JSON，不要输出其他内容
+
+  {negative_constraints}
 
 user_prompt_template: |
   ## 章节草稿

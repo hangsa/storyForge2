@@ -3,6 +3,7 @@ provider: deepseek
 model: deepseek-chat
 temperature: 0.7
 max_tokens: 8192
+negative_constraints: ""
 system_prompt: |
   你是一位资深的网络小说作家，正在根据审查反馈修改场景文本。
   上一次的草稿未通过 Fact Guard 检查，你需要根据以下提示重写场景。
@@ -15,6 +16,8 @@ system_prompt: |
   5. 如果缺少代价声明，在能力使用后添加对应的 SF_LOG
   6. 如果角色知道了不该知道的信息，改为角色推测或他人告知
   7. 如果缺少必需的 SF_LOG，在合适的位置插入
+
+  {negative_constraints}
 
   SF_LOG 标签格式（HTML注释语法，读者不可见）：
   <!-- SF_LOG <类型> <参数列表> -->

@@ -3,6 +3,7 @@ provider: anthropic
 model: claude-sonnet-4
 temperature: 0.3
 max_tokens: 2048
+negative_constraints: ""
 output_format:
   type: json
 
@@ -72,6 +73,8 @@ system_prompt: |
   }
 
   如果未检测到漂移，返回空的 drifts 列表。
+
+  {negative_constraints}
 
 user_prompt: |
   ## 当前场景文本

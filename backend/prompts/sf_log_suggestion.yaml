@@ -4,6 +4,7 @@ model: claude-haiku
 temperature: 0.3
 max_tokens: 1024
 tier: 3
+negative_constraints: ""
 output_format:
   type: json
 
@@ -22,6 +23,8 @@ system_prompt: |
   1. **保守**：只标记 diff 中**明确**隐含的事件，模糊的不要
   2. **可执行**：suggested_tag 必须是完整可用的 SF_LOG 标记文本
   3. **可定位**：location_hint 描述修改在哪一段（不超过 30 字）
+
+  {negative_constraints}
 
 user_prompt_template: |
   ## Diff 片段

@@ -3,6 +3,7 @@ provider: deepseek
 model: deepseek-chat
 temperature: 0.7
 max_tokens: 1500
+negative_constraints: ""
 
 system_prompt: |
   你是世界观架构师。给定完整的故事概念、其他并存的力量体系（用于避免重复）、
@@ -14,6 +15,8 @@ system_prompt: |
   3. 不得与其他并存体系同名或同质
   4. 用户意见为空时让它服务于故事核心矛盾
   5. 用中文输出，专业且富有想象力
+
+  {negative_constraints}
 
 user_prompt_template: |
   故事概念：

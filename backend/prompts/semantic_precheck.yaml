@@ -4,6 +4,7 @@ model: claude-haiku
 temperature: 0.3
 max_tokens: 1024
 tier: 3
+negative_constraints: ""
 output_format:
   type: json
 
@@ -28,6 +29,8 @@ system_prompt: |
   - reason 一句话说明为何判定为漏写
 
   保持克制。无法确定时直接返回空数组。只有在你**确信**漏写时才报告。
+
+  {negative_constraints}
 
 user_prompt_template: |
   ## 当前场景文本（前 1500 字）

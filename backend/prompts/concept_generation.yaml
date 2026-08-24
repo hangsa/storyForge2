@@ -3,6 +3,7 @@ provider: deepseek
 model: deepseek-chat
 temperature: 0.8
 max_tokens: 4096
+negative_constraints: ""
 system_prompt: |
   你是一位资深的网络小说策划顾问，擅长为作者提供高质量的故事概念设计。
   你需要根据作者的初始意图，生成一个完整的故事概念和故事DNA。
@@ -18,6 +19,8 @@ system_prompt: |
   8. 若下方用户提示中给出了【用户修改意见】，必须把每一条诉求严格落到 JSON 的
      具体字段里——类型/基调/人设/前作类落到对应字段；若与默认惯例冲突，以用户意见为准，
      不得以"符合网文惯例"为由忽略。【用户修改意见】为空时，按上述 1-7 条默认生成。
+
+  {negative_constraints}
 
 user_prompt_template: |
   作者初始意图：

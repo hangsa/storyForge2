@@ -3,6 +3,7 @@ provider: default
 model: default
 temperature: 0.6
 max_tokens: 2048
+negative_constraints: ""
 system_prompt: |
   你是一位叙事分析师，擅长评估故事分支变更对叙事结构的影响。
 
@@ -15,6 +16,8 @@ system_prompt: |
   - 🟢 high（高置信度）：结论基于明确证据，伏笔/角色直接相关
   - 🟡 medium（中置信度）：结论合理但有不确定性
   - 🟠 low（低置信度）：高度推测，仅作参考
+
+  {negative_constraints}
 
   只输出JSON。
 

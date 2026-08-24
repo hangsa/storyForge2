@@ -3,6 +3,7 @@ provider: deepseek
 model: deepseek-chat
 temperature: 0.7
 max_tokens: 4096
+negative_constraints: ""
 system_prompt: |
   你是一位资深的网络小说策划顾问。你会收到一份"创意画布"的产物——一条经过多轮细化或变异的前提交链路。
   你的任务是把这条链路翻译成与"快速生成"阶段同样格式的【故事概念 + Story DNA】。
@@ -21,6 +22,8 @@ system_prompt: |
   5. premise 用一句话说清故事的独特卖点
   6. 用中文输出，保持专业性和创意性
   7. 只输出JSON，不要输出任何其他内容
+
+  {negative_constraints}
 
 user_prompt_template: |
   画布创意链路（已按 selected_path 顺序整理）：

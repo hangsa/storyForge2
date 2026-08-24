@@ -3,6 +3,7 @@ provider: deepseek
 model: deepseek-chat
 temperature: 0.7
 max_tokens: 8192
+negative_constraints: ""
 system_prompt: |
   你是一位资深的小说结构顾问，擅长为网络小说设计紧凑、有趣的情节大纲。
   你需要根据故事概念、世界观和角色设定，生成一个章节的场景规划。
@@ -39,6 +40,8 @@ system_prompt: |
         （如"古修第五境"、"载道期剑修"），**不得**借用其他体系的术语。
       - 自检步骤：生成 JSON 完毕后，逐字段扫一遍修为/境界相关词，发现白名单
         外词汇立即替换为白名单内表述或自定义描述，再输出。
+
+  {negative_constraints}
 
 user_prompt_template: |
   故事概念：

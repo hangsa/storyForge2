@@ -35,6 +35,7 @@ class PromptOverridePayload(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     output_format: Optional[Dict[str, Any]] = None
+    negative_constraints: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
 

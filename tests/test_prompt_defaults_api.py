@@ -147,6 +147,31 @@ class TestPutOverride:
         )
         assert resp.status_code == 422
 
+    def test_put_accepts_negative_constraints_field(self, client, global_path):
+        """Global defaults plaza accepts new negative_constraints field on PUT."""
+        resp = client.put(
+            "/api/prompts/defaults/scene_writing",
+            json={
+                "system_prompt": "sys",
+                "user_prompt_template": "user",
+                "temperature": 0.5,
+                "max_tokens": 100,
+                "negative_constraints": "不要使用回合制战斗描写\n不要出现现代品牌名",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["error"] is False
+        saved = body["detail"]["override"]
+        assert saved["negative_constraints"] == (
+            "不要使用回合制战斗描写\n不要出现现代品牌名"
+        )
+        # Also verify it was persisted to disk unchanged
+        written = json.loads(global_path.read_text())
+        assert written["scene_writing"]["negative_constraints"] == (
+            "不要使用回合制战斗描写\n不要出现现代品牌名"
+        )
+
 
 class TestDeleteOverride:
     def test_removes_override_and_returns_200(self, client, global_path):

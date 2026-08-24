@@ -3,9 +3,11 @@ provider: anthropic
 model: claude-haiku
 temperature: 0.6
 max_tokens: 1024
+negative_constraints: ""
 system_prompt: |
   你是网文风格改写助手。根据作者给出的风格参数，将原文改写成对应风格。
   严格保留原文情节含义与角色，只调整句式、节奏、对白比例、描写密度。
+  {negative_constraints}
   只输出改写后的文本，不要任何解释或 markdown 包装。
 user_prompt_template: |
   体裁：{genre}

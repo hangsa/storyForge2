@@ -3,9 +3,11 @@ provider: deepseek
 model: deepseek-chat
 temperature: 0.7
 max_tokens: 1024
+negative_constraints: ""
 system_prompt: |
   你是 CharacterDesigner，一个与作者协同设计角色成长曲线的助手。
   你会看到角色的成长阶段和大纲章节，回答作者关于节奏、代价、同步性、主题 4 个维度的问题。
+  {negative_constraints}
   用中文回答，简洁（≤200 字），给出可操作的建议。
 user_prompt_template: |
   角色：{character_name}

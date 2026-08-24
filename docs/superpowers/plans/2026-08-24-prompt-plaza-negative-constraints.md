@@ -289,15 +289,32 @@ Expected: 4 failures — output should contain `不要使用回合制战斗描�
             prompts_dir=self.prompts_dir,
         )
         # Negative-constraints injection: render the user's block (or strip
-        # the placeholder cleanly when empty), then expose it as a kwarg
-        # PromptTemplate.format_system substitutes into {negative_constraints}.
+        # the placeholder cleanly when empty). Substitute directly into
+        # system_prompt so format_system(**kwargs) never sees the literal
+        # {negative_constraints} placeholder — caller-supplied kwargs cannot
+        # override it. Plan B: no placeholder means no implicit append.
+        import re
         from backend.services.prompt_override_store import render_negative_block
 
         nc_raw = str(data.get("negative_constraints", "") or "")
         rendered = render_negative_block(nc_raw)
         system_prompt = str(data.get("system_prompt", "") or "")
-        if not rendered:
-            system_prompt = system_prompt.replace("{negative_constraints}", "").rstrip() + "\n"
+        if rendered:
+            system_prompt = system_prompt.replace("{negative_constraints}", rendered)
+        else:
+            # Strip the placeholder line and its surrounding newline so
+            # DEFAULT_SYS\n{...}\nTAIL collapses to DEFAULT_SYS\nTAIL.
+            # Convention: placeholder lives on its own line. Three patterns
+            # cover middle / start / end placement.
+            system_prompt = re.sub(
+                r"\n\s*\{negative_constraints\}\s*\n", "\n", system_prompt
+            )
+            system_prompt = re.sub(
+                r"\A\s*\{negative_constraints\}\s*\n", "", system_prompt
+            )
+            system_prompt = re.sub(
+                r"\n\s*\{negative_constraints\}\s*\Z", "", system_prompt
+            )
         data = {
             **data,
             "system_prompt": system_prompt,
@@ -305,6 +322,8 @@ Expected: 4 failures — output should contain `不要使用回合制战斗描�
         }
         return PromptTemplate(data)
 ```
+
+> **⚠️ Plan revision:** 早期草稿用 `.replace().rstrip() + "\n"` 砍空值 — 在 `DEFAULT_SYS\n{...}\nTAIL` 这种 middle 位置会留下空行，在 plain 单 placeholder 位置会留下 stray 尾换行，让 test 2 / test 4 必失败。同时 kwarg 注入那条路也不通（`generate_from_template` 调 `format_system(**kwargs)`，kwargs 里没 `negative_constraints`，所以设 `data["negative_constraints"] = rendered` 不会让 `format_system` 自动填进去）。spec 复审已核实这两条偏差是必要的 —— 修法就是上文的正则 strip + 直接 string 替换。
 
 - [ ] **Step 4: 运行测试，确认通过**
 

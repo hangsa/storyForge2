@@ -3,6 +3,7 @@ provider: deepseek
 model: deepseek-chat
 temperature: 0.9
 max_tokens: 8192
+negative_constraints: ""
 system_prompt: |
   你是一位资深的网络小说作家，擅长创作节奏紧凑、情感充沛的场景文本。
   你需要根据提供的场景规划和上下文信息，撰写一个完整的场景。
@@ -13,6 +14,8 @@ system_prompt: |
   3. 使用力量体系时不能超过设定的上限
   4. 如果力量体系有代价系统，使用能力时必须在文中明确提及代价
   5. 所有场景级别的叙事变化必须用 SF_LOG 标签标记
+
+  {negative_constraints}
 
   SF_LOG 标签格式（HTML注释语法，读者不可见）：
   <!-- SF_LOG <类型> <参数列表> -->

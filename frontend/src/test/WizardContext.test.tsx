@@ -278,6 +278,35 @@ describe("WizardContext", () => {
     expect(result.current.currentStep).toBe(4);
   });
 
+  it("resave of step 5 clears step 6 chapter_outline_progress (regression: missing from STEP_DATA_KEY_TO_STEP)", () => {
+    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    act(() => result.current.saveStep(1, {
+      concept: { title: "C", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
+      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+    }));
+    act(() => result.current.saveStep(2, { world: {
+      era: "W", geography: "G",
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [], core_rules: [],
+    }}));
+    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
+    act(() => result.current.saveStep(5, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
+    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
+    // Simulate a partially-completed chapter-outline batch from a prior run.
+    act(() => result.current.updateData({
+      chapter_outline_progress: { done: 3, total: 10, last_user_modifications: "" },
+    }));
+    expect(result.current.data.chapter_outline_progress?.done).toBe(3);
+    // Resaving step 5 should clear step 6's chapter_outline_progress so the
+    // user doesn't see stale mid-batch progress when the next step 6 attempt
+    // starts fresh.
+    act(() => result.current.saveStep(5, {
+      novel_outline: { core_conflict_theme: "t2", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" },
+    }));
+    expect(result.current.data.chapter_outline_progress).toBeNull();
+    expect(result.current.data.chapter1_outline).toBeNull();
+  });
+
   it("resave of step 1 clears data for steps 2..6 and keeps only concept/story_dna", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     act(() => result.current.saveStep(1, {

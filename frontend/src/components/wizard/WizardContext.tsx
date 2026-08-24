@@ -72,6 +72,13 @@ const STEP_DATA_KEY_TO_STEP: Partial<Record<keyof WizardData, number>> = {
   characters: 3,
   novel_outline: 5,
   chapter1_outline: 6,
+  // Mid-batch progress for step 6's chapter-outline generation. Lives in
+  // wizard.data so it survives navigation; must be cleared on resave of any
+  // step ≤ 5 so a stale "3/10 done" from a previous run doesn't leak into
+  // the next attempt. Without this entry, the resave branch's
+  // `ownerStep === undefined` fallback would treat this key as unmapped and
+  // preserve it.
+  chapter_outline_progress: 6,
 };
 
 interface WizardState {

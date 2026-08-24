@@ -151,3 +151,20 @@ class TestNegativeConstraintsInjection:
         prompt = agent.load_prompt("without_placeholder", project_id="p4_no_override")
         out = prompt.format_system(negative_constraints="unused")
         assert out == "DEFAULT_SYS_NO_PC\nTAIL"
+
+    def test_placeholder_only_content_stripped_when_empty(
+        self, nc_prompts_dir, nc_projects_dir
+    ):
+        """When the placeholder is the SOLE content of system_prompt (no
+        surrounding newlines), the strip must still remove it so the LLM
+        never sees a literal `{negative_constraints}` token."""
+        (nc_prompts_dir / "placeholder_only.yaml").write_text(
+            "system_prompt: '{negative_constraints}'\n"
+            "user_prompt_template: 'whatever'\n"
+            "negative_constraints: ''\n"
+        )
+        agent = _agent(nc_prompts_dir, nc_projects_dir, "p5_sole")
+        prompt = agent.load_prompt("placeholder_only", project_id="p5_sole")
+        out = prompt.format_system(negative_constraints="unused")
+        assert "{negative_constraints}" not in out
+        assert out == ""

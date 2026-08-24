@@ -183,4 +183,35 @@ describe("PromptEditPanel negative_constraints", () => {
     fireEvent.click(screen.getByTestId("reset-button"));
     expect(onReset).toHaveBeenCalled();
   });
+
+  it("shows soft-cap warning over 1500 chars", () => {
+    const longText = "z".repeat(1501);
+    render(
+      <PromptEditPanel
+        detail={makeDetail({ negative_constraints: longText })}
+        loading={false}
+        error={null}
+        onSave={vi.fn()}
+        onReset={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("nc-warn")).toBeInTheDocument();
+    expect(screen.getByTestId("nc-warn").textContent).toMatch(/tokens/);
+  });
+
+  it("does not show soft-cap warning at exactly 1500 chars", () => {
+    const atLimit = "z".repeat(1500);
+    render(
+      <PromptEditPanel
+        detail={makeDetail({ negative_constraints: atLimit })}
+        loading={false}
+        error={null}
+        onSave={vi.fn()}
+        onReset={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("nc-warn")).toBeNull();
+  });
 });

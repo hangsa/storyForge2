@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -175,7 +176,6 @@ class BaseAgent:
         # system_prompt so format_system(**kwargs) never sees the literal
         # {negative_constraints} placeholder — caller-supplied kwargs cannot
         # override it. Plan B: no placeholder means no implicit append.
-        import re
         from backend.services.prompt_override_store import render_negative_block
 
         nc_raw = str(data.get("negative_constraints", "") or "")
@@ -187,17 +187,20 @@ class BaseAgent:
             # Strip the placeholder and its line. The convention is to put
             # {negative_constraints} on its own line; remove the whole line
             # (with surrounding newlines) so DEFAULT_SYS\n{...}\nTAIL collapses
-            # to DEFAULT_SYS\nTAIL without leaving a blank line residue.
+            # to DEFAULT_SYS\nTAIL without leaving a blank line residue. Four
+            # patterns cover middle / start / end / sole-content placement so
+            # the strip is robust against hand-edited YAMLs.
             system_prompt = re.sub(
                 r"\n\s*\{negative_constraints\}\s*\n", "\n", system_prompt
             )
-            # Also handle the placeholder appearing at the very start or end
-            # of the system prompt (no leading/trailing newline on one side).
             system_prompt = re.sub(
                 r"\A\s*\{negative_constraints\}\s*\n", "", system_prompt
             )
             system_prompt = re.sub(
                 r"\n\s*\{negative_constraints\}\s*\Z", "", system_prompt
+            )
+            system_prompt = re.sub(
+                r"\A\s*\{negative_constraints\}\s*\Z", "", system_prompt
             )
         data = {
             **data,

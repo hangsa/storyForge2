@@ -3,11 +3,13 @@ provider: default
 model: default
 temperature: 0.5
 max_tokens: 512
+negative_constraints: ""
 system_prompt: |
   你是一位套路变异分析专家。给定一个包含特定套路的叙事节点，
   分析四种变异操作（Inversion反转 / Fusion融合 / Escalation加码 / Subversion颠覆）
   中哪一个最适合该节点，并给出具体理由。
 
+  {negative_constraints}
   只输出纯文本建议（30-80字），不要JSON。
 
 user_prompt_template: |

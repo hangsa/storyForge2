@@ -3,6 +3,7 @@ provider: default
 model: default
 temperature: 0.8
 max_tokens: 2048
+negative_constraints: ""
 system_prompt: |
   你是一位创意写作顾问，擅长通过变异操作在网络文学套路中创造新鲜感。
 
@@ -17,6 +18,8 @@ system_prompt: |
   2. 核心冲突要体现变异后的新张力
   3. 新颖点要具体可感，能抓住读者
   4. 自洽性检查要诚实地评估变异的逻辑可行性
+
+  {negative_constraints}
   5. 只输出JSON
 
 user_prompt_template: |

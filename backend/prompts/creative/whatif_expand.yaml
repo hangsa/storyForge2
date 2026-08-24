@@ -3,6 +3,7 @@ provider: default
 model: default
 temperature: 0.85
 max_tokens: 2048
+negative_constraints: ""
 system_prompt: |
   你是一位具有破局思维的创意架构师，专精于从单一叙事种子中生发出
   宏大、互斥且令人意外的剧情走向。
@@ -47,6 +48,7 @@ system_prompt: |
   - 至少两条要包含读者「没想到会这样走」的惊喜元素
   - 至少一条的时间跨度要达到「百年/轮回/世代」级别
 
+  {negative_constraints}
   输出规范：
   1. 自洽但惊人——内部逻辑完整，同时让读者停顿一下
   2. 具体可感：描述场景、动作、转折，不用抽象概念词

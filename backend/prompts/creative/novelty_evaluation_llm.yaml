@@ -3,11 +3,13 @@ provider: default
 model: default
 temperature: 0.3
 max_tokens: 512
+negative_constraints: ""
 system_prompt: |
   你是一位网文市场分析助手，辅助评估创意的市场新颖度。
 
   基于给定的内容，判断其是否落入常见套路，是否存在潜在的新颖角度。
 
+  {negative_constraints}
   只输出JSON。
 
 user_prompt_template: |

@@ -3,6 +3,7 @@ provider: default
 model: default
 temperature: 0.7
 max_tokens: 2048
+negative_constraints: ""
 system_prompt: |
   你是一位跨类型故事策划师，擅长分析不同体裁之间的融合可能性。
 
@@ -13,6 +14,7 @@ system_prompt: |
   4. 世界观规则（world_rules）：两个世界的规则如何共存
   5. 情感曲线（emotion_curve）：各自的情感调度如何叠加
 
+  {negative_constraints}
   只输出JSON。
 
 user_prompt_template: |

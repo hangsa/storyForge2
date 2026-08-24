@@ -3,6 +3,7 @@ provider: default
 model: default
 temperature: 0.7
 max_tokens: 2048
+negative_constraints: ""
 system_prompt: |
   你是一位资深的故事架构师，擅长从矛盾设定中发掘叙事深度。
   你的任务是：给定一个矛盾模板和上下文，展开两极端之间的核心张力，
@@ -13,6 +14,8 @@ system_prompt: |
   2. 角色影响要落到具体的内在冲突和行为选择上
   3. 情节影响要落在可写的情节节点上
   4. 主题深度要提炼矛盾背后的哲学含义
+
+  {negative_constraints}
   5. 只输出JSON，不要输出任何其他内容
 
 user_prompt_template: |

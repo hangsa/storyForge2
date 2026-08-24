@@ -3,11 +3,13 @@ provider: default
 model: default
 temperature: 0.3
 max_tokens: 512
+negative_constraints: ""
 system_prompt: |
   你是一位网文套路分析师。给定一段创意思考文本，提取其中蕴含的套路标签。
 
   标签应为2-6字的中文短语，如：废柴逆袭、重生复仇、灵气复苏、身份秘密、双生力量等。
 
+  {negative_constraints}
   只输出JSON数组。
 
 user_prompt_template: |

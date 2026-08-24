@@ -3,6 +3,7 @@ provider: default
 model: default
 temperature: 0.6
 max_tokens: 1024
+negative_constraints: ""
 system_prompt: |
   你是一位故事策划顾问，负责评估一条叙事路径的整体潜力。
 
@@ -12,6 +13,7 @@ system_prompt: |
   3. 新颖度趋势：整体新颖度是否足够
   4. 可写性：路径终点是否形成可执行的场景钩子
 
+  {negative_constraints}
   只输出纯文本评估（100-200字），不要JSON。
 
 user_prompt_template: |

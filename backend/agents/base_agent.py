@@ -170,6 +170,40 @@ class BaseAgent:
             global_override_store=self._global_override_store,
             prompts_dir=self.prompts_dir,
         )
+        # Negative-constraints injection: render the user's block (or strip
+        # the placeholder cleanly when empty). Substitute directly into
+        # system_prompt so format_system(**kwargs) never sees the literal
+        # {negative_constraints} placeholder — caller-supplied kwargs cannot
+        # override it. Plan B: no placeholder means no implicit append.
+        import re
+        from backend.services.prompt_override_store import render_negative_block
+
+        nc_raw = str(data.get("negative_constraints", "") or "")
+        rendered = render_negative_block(nc_raw)
+        system_prompt = str(data.get("system_prompt", "") or "")
+        if rendered:
+            system_prompt = system_prompt.replace("{negative_constraints}", rendered)
+        else:
+            # Strip the placeholder and its line. The convention is to put
+            # {negative_constraints} on its own line; remove the whole line
+            # (with surrounding newlines) so DEFAULT_SYS\n{...}\nTAIL collapses
+            # to DEFAULT_SYS\nTAIL without leaving a blank line residue.
+            system_prompt = re.sub(
+                r"\n\s*\{negative_constraints\}\s*\n", "\n", system_prompt
+            )
+            # Also handle the placeholder appearing at the very start or end
+            # of the system prompt (no leading/trailing newline on one side).
+            system_prompt = re.sub(
+                r"\A\s*\{negative_constraints\}\s*\n", "", system_prompt
+            )
+            system_prompt = re.sub(
+                r"\n\s*\{negative_constraints\}\s*\Z", "", system_prompt
+            )
+        data = {
+            **data,
+            "system_prompt": system_prompt,
+            "negative_constraints": rendered,
+        }
         return PromptTemplate(data)
 
     def _load_prompt_dict_from_yaml(self, template_name: str) -> dict:

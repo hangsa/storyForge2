@@ -26,6 +26,7 @@ export interface PromptOverridePayload {
   temperature?: number;
   max_tokens?: number;
   output_format?: Record<string, unknown>;
+  negative_constraints?: string;
 }
 
 // ----------------------------------------------------------------------

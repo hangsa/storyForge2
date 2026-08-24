@@ -291,3 +291,16 @@ def reset_project_override_store() -> None:
     call rebuilds from current settings. Mirror of `reset_model_router()`."""
     global _override_store_instance
     _override_store_instance = None
+
+
+def render_negative_block(value: str) -> str:
+    """Format a free-text negative-constraint list as the `【禁止事项】` block.
+
+    Returns "" when input is empty / whitespace-only so BaseAgent can
+    decide not to substitute {negative_constraints} at all.
+    """
+    lines = [ln.strip() for ln in value.splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    body = "\n".join(f"- {ln}" for ln in lines)
+    return f"\n\n【禁止事项】\n{body}"

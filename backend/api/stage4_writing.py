@@ -113,7 +113,7 @@ _THINK_REVIEW_MARKERS = (
     "✓", "✅", "verify", "Let me check", "Let me also",
     "Metaphor count", "Word count", "word count",
     "Checking again", "Let me carefully", "carefully analyze",
-    "Let me think about", "Wait,", "Actually,",
+    "Let me think about", "Wait", "Wait,", "Actually", "Actually,",
 )
 
 
@@ -226,7 +226,14 @@ def _extract_scene_from_think_block(text: str) -> str:
         candidates.append((score, idx, s))
 
     if not candidates:
-        return ""
+        # Section-level split yielded nothing usable. This happens when
+        # MiniMax-M3 emits the entire scene INSIDE the think block with
+        # NO recognized section markers (`---` / `Draft:` / `Final:` /
+        # `##`), so the whole content is one `parts` entry whose
+        # aggregate CJK density drops below the 0.45 filter because
+        # English self-review lines are interleaved with Chinese prose.
+        # Fall back to per-line scoring (preserves prose, drops reviews).
+        return _extract_prose_lines_from_think_block(inside)
 
     # Prefer the LAST high-scoring section (final-draft bias) when scores tie
     # within 0.5; otherwise take the top scorer.
@@ -257,6 +264,11 @@ def _extract_scene_from_think_block(text: str) -> str:
             return False  # blank lines are normal separators, drop them
         if "<!-- SF_LOG" in stripped or "-->" in stripped:
             return False
+        # Markdown code fence lines inside the think block — the model
+        # sometimes wraps the scene in ``` fences while doing inline
+        # self-revision. Treat them as labels (drop them).
+        if stripped.startswith("```"):
+            return True
         # Common separator labels that the model leaves as headings.
         if re.match(
             r"^(?:Final|Revised|Draft|Here'?s|Let'?s|Let\s+me|Now\s+the|Now\s+I|"
@@ -293,7 +305,104 @@ def _extract_scene_from_think_block(text: str) -> str:
     start = 0
     while start < end and is_review_or_label_line(lines[start]):
         start += 1
-    return "\n".join(lines[start:end]).strip()
+    # After edge trimming, also strip INTERNAL review/label/fence lines
+    # that landed between prose lines. The model interleaves English
+    # self-review + closing code fences with Chinese prose when doing
+    # inline self-revision (proj_1a7d7fcf 2026-08-23 ch15-4). Without
+    # this pass, ``` lines and "Wait, ..." review sentences leak into
+    # the recovered scene. Keep blank lines as paragraph separators;
+    # collapse runs of >1 blank into one.
+    kept = []
+    for line in lines[start:end]:
+        if is_review_or_label_line(line):
+            continue
+        if line.strip() == "":
+            if kept and kept[-1] != "":
+                kept.append("")
+            continue
+        kept.append(line)
+    # Strip trailing blank if present.
+    while kept and kept[-1] == "":
+        kept.pop()
+    return "\n".join(kept).strip()
+
+
+def _extract_prose_lines_from_think_block(think_content: str) -> str:
+    """Fallback for the section-level recovery path: when MiniMax-M3 emits
+    the entire scene INSIDE the think block with no recognized section
+    markers (`---` / `Draft:` / `Final:` / `##`), so the whole block lands
+    in a single `_THINK_SECTION_SEP_RE.split()` part whose aggregate CJK
+    density may dip below the 0.45 threshold because English self-review
+    lines are interleaved with Chinese prose.
+
+    Failure mode this recovers (proj_1a7d7fcf 2026-08-23 ch15-4):
+        <think>
+        高阳把黑卡压在吧台上，服务员低头看了一眼就匆匆离开。
+        He checked the watch and then walked to the back door.
+        Let me verify the metaphor count: 2.
+        苏晓晓站在雨里，雨水顺着发梢滴落，她回头看了一眼。
+        Actually, I should add more atmosphere here.
+        ...
+        高阳把黑
+        </think>
+
+    The section-level path sees one part with density ≈ 0.33 (below 0.45
+    filter) and rejects it, returning "" → "LLM 返回了空文本". This
+    fallback instead scores EACH LINE individually: keep lines that are
+    CJK-dominant (cjk_pct >= 0.55 AND cjk >= 3) AND not a code fence.
+    Drop pure-English review/sentiment lines. The output is the
+    concatenation of the surviving prose lines, joined by `\n`. Returns
+    "" when no CJK-dominant line exists (the caller should still treat
+    that as a hard failure).
+
+    Order matters: the model interleaves Chinese prose + English self-
+    review in the original line order, so preserving line order is what
+    lets the prose read as a coherent scene after stripping review lines.
+    """
+    if not think_content or not think_content.strip():
+        return ""
+    prose_lines = []
+    for line in think_content.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            # Preserve blank lines as paragraph separators — they help
+            # downstream stages see scene breaks. But to avoid accumulating
+            # many blanks, only keep one blank between prose blocks.
+            if prose_lines and prose_lines[-1] != "":
+                prose_lines.append("")
+            continue
+        # Code fence lines (markdown ```) are noise from the fallback's POV:
+        # either the model wrapped prose in a fence inside the think block,
+        # or it's an artifact. Skip them.
+        if stripped.startswith("```"):
+            continue
+        # SF_LOG tags are scene metadata — their ASCII wrapper tags drag
+        # down CJK density, but they're part of the scene. Keep them
+        # regardless of density. Same rule as the section-level trim.
+        if "<!-- SF_LOG" in stripped or stripped == "-->" or stripped.startswith("-->"):
+            prose_lines.append(stripped)
+            continue
+        cjk = len(re.findall(r"[一-鿿]", stripped))
+        ascii_alpha = len(re.findall(r"[a-zA-Z]", stripped))
+        total = cjk + ascii_alpha
+        if total == 0:
+            # Pure-punctuation line (e.g. "---" before prose starts).
+            # Skip — not prose.
+            continue
+        cjk_pct = cjk / total
+        # Require BOTH: high CJK ratio AND a minimum character count.
+        # The character-count gate rejects very short CJK fragments like
+        # "高阳" or "苏晓晓" that appear in English review lines ("高阳
+        # 把黑卡" appears in the middle of an English review about the
+        # character). Threshold 3 catches 2-character names but keeps
+        # short prose. Tested on captured ch15-4 failure samples.
+        if cjk_pct >= 0.55 and cjk >= 3:
+            prose_lines.append(stripped)
+        # else: drop the line (English review, label, etc.)
+    # Strip trailing blank if present (don't end with empty line).
+    while prose_lines and prose_lines[-1] == "":
+        prose_lines.pop()
+    return "\n".join(prose_lines)
 
 
 def _normalize_scene_text(text: str) -> str:

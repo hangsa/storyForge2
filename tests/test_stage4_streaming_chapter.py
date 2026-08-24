@@ -519,3 +519,102 @@ def test_normalize_legacy_think_plus_json_fence_still_works():
     assert "<!-- SF_LOG mystery_clue" in cleaned
     assert not cleaned.startswith("{")
     assert "```" not in cleaned
+
+
+def test_normalize_recovers_inline_revised_chinese_lines_without_section_markers():
+    """Failure mode observed on proj_1a7d7fcf 2026-08-23 ch15-4: MiniMax-M3
+    emits the entire scene INSIDE the think block with NO recognized
+    section markers (`---` / `Draft:` / `Final:` / `##`). The think block
+    alternates Chinese prose lines with English self-review lines, ending
+    with a trailing cut-off CJK fragment (no `\n</think>\n` body after).
+    The current `_extract_scene_from_think_block` splits on 0 markers →
+    1 part → returns "" → caller emits "LLM 返回了空文本". The fix must
+    fall back to per-line CJK-density scoring and recover the prose lines
+    while dropping the English review lines."""
+    raw = (
+        "<think>\n"
+        "高阳把黑卡压在吧台上，服务员低头看了一眼就匆匆离开。\n"
+        "He checked the watch and then walked to the back door.\n"
+        "Let me verify the metaphor count: 2.\n"
+        "苏晓晓站在雨里，雨水顺着发梢滴落，她回头看了一眼。\n"
+        "Actually, I should add more atmosphere here.\n"
+        "Wait, the chapter needs more tension. Let me revise:\n"
+        "苏晓晓的眼神冷了下来，她没有接高阳递过来的伞。\n"
+        "高阳的手指悬在半空，那张黑卡在霓虹灯下反着光。\n"
+        "Let me check the SF_LOG tag: character_location_change.\n"
+        "<!-- SF_LOG character_location_change char=\"高阳\" location=\"雨夜街道\" -->\n"
+        "高阳把黑\n"
+        "</think>"
+    )
+    cleaned = sw._normalize_scene_text(raw)
+    assert cleaned, "must recover prose lines from inline think block"
+    # The Chinese prose lines must be present, the English review lines
+    # must be stripped.
+    assert "高阳把黑卡压在吧台上" in cleaned
+    assert "苏晓晓站在雨里" in cleaned
+    assert "苏晓晓的眼神冷了下来" in cleaned
+    assert "高阳的手指悬在半空" in cleaned
+    assert "<!-- SF_LOG character_location_change" in cleaned
+    # English review lines are noise — must not leak into draft.md.
+    assert "He checked the watch" not in cleaned
+    assert "Let me verify" not in cleaned
+    assert "Actually," not in cleaned
+    assert "Let me check the SF_LOG tag" not in cleaned
+    # Trailing truncated fragment ("高阳把黑") is acceptable to keep
+    # (it's already past the cutoff point — but since the prose line
+    # before it ("高阳的手指悬在半空") is complete, only that trailing
+    # partial line may remain). Crucially, the result must NOT be empty.
+
+
+def test_normalize_recovers_chinese_lines_wrapped_in_code_fences():
+    """Variant of the ch15-4 failure: the inline self-revision inside the
+    think block is wrapped in markdown ``` fences. The fallback must still
+    recover the prose lines (skipping the fence lines)."""
+    raw = (
+        "<think>\n"
+        "```\n"
+        "高阳把黑卡压在吧台上，服务员低头看了一眼。\n"
+        "Wait, I should make this more tense.\n"
+        "苏晓晓站在雨里，她没有接伞。\n"
+        "```\n"
+        "Actually let me add a SF_LOG:\n"
+        "<!-- SF_LOG conflict_escalate id=\"cf_001\" new_intensity=\"critical\" trigger=\"黑卡\" -->\n"
+        "苏晓晓的眼神冷了下来。\n"
+        "</think>"
+    )
+    cleaned = sw._normalize_scene_text(raw)
+    assert cleaned, "must recover prose lines even with code fences inside think block"
+    assert "高阳把黑卡压在吧台上" in cleaned
+    assert "苏晓晓站在雨里" in cleaned
+    assert "苏晓晓的眼神冷了下来" in cleaned
+    assert "<!-- SF_LOG conflict_escalate" in cleaned
+    # Fence lines and review lines must be stripped.
+    assert "```" not in cleaned
+    assert "Wait, I should make this more tense" not in cleaned
+    assert "Actually let me add a SF_LOG" not in cleaned
+
+
+def test_normalize_still_empty_for_english_only_think_block():
+    """Regression: pure-English think block (no Chinese prose at all)
+    must still return "" — the fallback must not invent prose. The
+    existing test_normalize_returns_empty_when_think_block_has_no_scene
+    covers the no-marker case; this one covers the case where the model
+    emits English self-review lines that would mistakenly be classified
+    as review but there's no CJK prose to fall back on."""
+    raw = (
+        "<think>\n"
+        "I will write a scene about two characters.\n"
+        "Let me check the requirements: tension, atmosphere, mystery.\n"
+        "Actually, I'll start with the dialogue.\n"
+        "Wait, the prompt says to focus on character interaction.\n"
+        "Okay, let me draft something.\n"
+        "On second thought, this is too complex.\n"
+        "I should stop and ask for clarification.\n"
+        "Stopping here.\n"
+        "</think>"
+    )
+    cleaned = sw._normalize_scene_text(raw)
+    assert cleaned == "", (
+        "pure-English think block with no CJK prose must still return empty; "
+        "fallback must not invent prose"
+    )

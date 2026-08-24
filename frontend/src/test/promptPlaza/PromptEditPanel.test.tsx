@@ -3,6 +3,30 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import PromptEditPanel from "../../components/home/promptPlaza/PromptEditPanel";
 import type { PromptDetail } from "../../api/promptPlaza";
 
+function makeDetail(extra: Record<string, unknown> = {}): PromptDetail {
+  return {
+    name: "scene_writing",
+    builtin_yaml: {
+      name: "scene_writing",
+      system_prompt: "DEFAULT",
+      user_prompt_template: "u",
+      temperature: 0.7,
+      max_tokens: 1000,
+      output_format: {},
+    },
+    override: null,
+    effective: {
+      system_prompt: "DEFAULT",
+      user_prompt_template: "u",
+      temperature: 0.7,
+      max_tokens: 1000,
+      output_format: {},
+      negative_constraints: "",
+      ...extra,
+    },
+  };
+}
+
 const DETAIL: PromptDetail = {
   name: "scene_writing",
   builtin_yaml: {
@@ -100,5 +124,63 @@ describe("PromptEditPanel", () => {
   it("shows error state", () => {
     render(<PromptEditPanel detail={null} loading={false} error="some error" onSave={vi.fn()} onReset={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByText("some error")).toBeInTheDocument();
+  });
+});
+
+describe("PromptEditPanel negative_constraints", () => {
+  it("renders negative_constraints textarea", () => {
+    render(
+      <PromptEditPanel
+        detail={makeDetail()}
+        loading={false}
+        error={null}
+        onSave={vi.fn()}
+        onReset={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const ta = screen.getByTestId("edit-negative-constraints");
+    expect(ta).toBeInTheDocument();
+    expect(ta.tagName).toBe("TEXTAREA");
+  });
+
+  it("includes negative_constraints in save payload when dirty", () => {
+    const onSave = vi.fn();
+    render(
+      <PromptEditPanel
+        detail={makeDetail({ negative_constraints: "OLD RULE" })}
+        loading={false}
+        error={null}
+        onSave={onSave}
+        onReset={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const ta = screen.getByTestId("edit-negative-constraints");
+    fireEvent.change(ta, { target: { value: "新规则" } });
+    fireEvent.click(screen.getByTestId("save-button"));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ negative_constraints: "新规则" }),
+    );
+  });
+
+  it("clears negative_constraints on reset", () => {
+    const onReset = vi.fn();
+    render(
+      <PromptEditPanel
+        detail={makeDetail({ negative_constraints: "BASELINE" })}
+        loading={false}
+        error={null}
+        onSave={vi.fn()}
+        onReset={onReset}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.change(
+      screen.getByTestId("edit-negative-constraints"),
+      { target: { value: "DIRTY EDIT" } },
+    );
+    fireEvent.click(screen.getByTestId("reset-button"));
+    expect(onReset).toHaveBeenCalled();
   });
 });

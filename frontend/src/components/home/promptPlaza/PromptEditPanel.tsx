@@ -13,6 +13,7 @@ interface Props {
     temperature?: number;
     max_tokens?: number;
     output_format?: Record<string, unknown>;
+    negative_constraints?: string;
   }) => void;
   onReset: () => void;
   onClose: () => void;
@@ -34,11 +35,14 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
   const [temperature, setTemperature] = useState(0.9);
   const [maxTokens, setMaxTokens] = useState(1000);
   const [outputFormatJson, setOutputFormatJson] = useState("{}");
+  const [negativeConstraints, setNegativeConstraints] = useState("");
 
   const systemRef = useRef<HTMLTextAreaElement>(null);
   const userRef = useRef<HTMLTextAreaElement>(null);
+  const negRef = useRef<HTMLTextAreaElement>(null);
   useAutoHeight(systemRef, [systemPrompt]);
   useAutoHeight(userRef, [userTemplate]);
+  useAutoHeight(negRef, [negativeConstraints]);
 
   // Reset draft when detail changes
   useEffect(() => {
@@ -49,6 +53,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
     setMaxTokens(getEffectiveNumber(detail, "max_tokens", 1000));
     const of = (detail.effective as Record<string, unknown>).output_format;
     setOutputFormatJson(of ? JSON.stringify(of) : "{}");
+    setNegativeConstraints(getEffectiveString(detail, "negative_constraints"));
   }, [detail]);
 
   const dirty = useMemo(() => {
@@ -58,14 +63,16 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
     const baseTemp = getEffectiveNumber(detail, "temperature", 0.9);
     const baseMax = getEffectiveNumber(detail, "max_tokens", 1000);
     const baseOf = JSON.stringify((detail.effective as Record<string, unknown>).output_format ?? {});
+    const baseNc = getEffectiveString(detail, "negative_constraints");
     return (
       systemPrompt !== baseSystem ||
       userTemplate !== baseUser ||
       temperature !== baseTemp ||
       maxTokens !== baseMax ||
-      outputFormatJson !== baseOf
+      outputFormatJson !== baseOf ||
+      negativeConstraints !== baseNc
     );
-  }, [detail, systemPrompt, userTemplate, temperature, maxTokens, outputFormatJson]);
+  }, [detail, systemPrompt, userTemplate, temperature, maxTokens, outputFormatJson, negativeConstraints]);
 
   if (loading) {
     return (
@@ -102,6 +109,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
       temperature,
       max_tokens: maxTokens,
       output_format: parsed,
+      negative_constraints: negativeConstraints,
     });
   };
 
@@ -155,6 +163,31 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
             className="w-full bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm font-mono overflow-hidden"
             style={{ resize: "none" }}
           />
+        </div>
+        <div>
+          <label className="block text-xs font-label-mono text-system-log mb-1">
+            负面清单 / 禁止事项
+            <span className="ml-2 text-system-log/60">
+              {negativeConstraints.length} 字
+              {negativeConstraints.length > 1500 && (
+                <span className="ml-2 text-error" data-testid="nc-warn">
+                  该清单预计 ~{Math.round(negativeConstraints.length * 1.5)} tokens，超过 1500 字符可能挤占提示词上下文预算
+                </span>
+              )}
+            </span>
+          </label>
+          <textarea
+            ref={negRef}
+            value={negativeConstraints}
+            onChange={(e) => setNegativeConstraints(e.target.value)}
+            placeholder="一行一条规则。例：不要使用回合制战斗描写"
+            data-testid="edit-negative-constraints"
+            className="w-full bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm font-mono overflow-hidden"
+            style={{ resize: "none" }}
+          />
+          <p className="mt-1 text-xs text-system-log/70">
+            会作为【禁止事项】区块注入到系统提示词的占位符位置；空则不注入。
+          </p>
         </div>
         <AdvancedSection
           temperature={temperature}

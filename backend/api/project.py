@@ -13,6 +13,28 @@ router = APIRouter(prefix="/api/project", tags=["project"])
 fm = FileManager(settings.projects_dir)
 
 
+def _resolve_display_title(file_manager: FileManager, project_id: str, fallback: str) -> str:
+    """Pick the title shown on the bookshelf.
+
+    Priority: concept_and_dna.json's `concept.title` (set by init wizard
+    step 1) when non-empty, else the project.json title (set at create
+    time from the user's explicit title or intent prefix), else
+    `fallback` (the long-standing "未命名" sentinel).
+
+    This is a read-time derivation so it works for every existing
+    project without migration, and naturally tracks concept edits
+    without a parallel write to project.json on each concept save.
+    """
+    concept_doc = file_manager.read_json(project_id, "concept_and_dna.json")
+    if isinstance(concept_doc, dict):
+        concept = concept_doc.get("concept")
+        if isinstance(concept, dict):
+            concept_title = concept.get("title")
+            if isinstance(concept_title, str) and concept_title.strip():
+                return concept_title
+    return fallback
+
+
 @router.get("/list")
 async def list_projects():
     projects = []
@@ -42,9 +64,12 @@ async def list_projects():
                                         latest_mtime = max(latest_mtime, sub.stat().st_mtime)
                         except OSError:
                             continue
+                    fallback_title = data.get("title", "未命名") or "未命名"
                     projects.append({
                         "id": data.get("id", proj_dir.name),
-                        "title": data.get("title", "未命名"),
+                        "title": _resolve_display_title(
+                            fm_local, proj_dir.name, fallback_title,
+                        ),
                         "genre": data.get("genre", ""),
                         "current_stage": data.get("current_stage", "INIT"),
                         "created_at": data.get("created_at", ""),
@@ -336,6 +361,7 @@ async def get_project_status(project_id: str):
             },
         )
 
+    fallback_title = data.get("title", "") or ""
     return {
         "error": False,
         "code": "OK",
@@ -343,7 +369,7 @@ async def get_project_status(project_id: str):
         "detail": {
             "project_id": project_id,
             "current_stage": data.get("current_stage", "INIT"),
-            "title": data.get("title", ""),
+            "title": _resolve_display_title(fm, project_id, fallback_title),
             "created_at": data.get("created_at", ""),
         },
     }

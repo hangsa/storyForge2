@@ -18,12 +18,24 @@ from backend.models.autopilot_session import (
     CurrentTask, ManagedStartConfig, QueueItem, SessionState,
 )
 from backend.utils.file_manager import FileManager
+from backend.conductor.chapter_drafts_scanner import discover_drafts
 
 
 logger = logging.getLogger(__name__)
 
 
 DONE_STATUSES = frozenset({"completed", "force_passed", "skipped"})
+
+# Status-promotion ladder for trust-the-disk promotion (see
+# _promote_discovered_drafts). Mirrors the ladder in
+# backend/conductor/stage4_async_executor.py:_write_scene_progress so a
+# disk-side draft and a runner-side completion reach the same terminal
+# status via the same precedence rules. Without the ladder, a draft
+# discovered after a force_passed scene would get demoted to completed
+# — wrong if the original breaker verdict was "force_passed" for a
+# reason the user wants preserved.
+_PROMOTION_LADDER = {"pending": 0, "in_progress": 1, "force_passed": 2, "completed": 3}
+
 
 # Retry-then-pause: a transient LLM hiccup (peer-closed, 5xx, rate limit)
 # shouldn't kill the whole autopilot run. We retry the SAME scene up to
@@ -173,6 +185,65 @@ def find_latest_completed_chapter(progress: dict, outline: dict) -> Optional[int
         if is_chapter_complete(ch_progress.get("scenes", []) or [], planned):
             completed.append(ch_num)
     return max(completed) if completed else None
+
+
+def _promote_discovered_drafts(
+    fm: FileManager,
+    project_id: str,
+    progress: dict,
+    discovered: set,
+) -> int:
+    """Promote disk-side drafts to `status='completed'` in the in-memory
+    `progress` dict, but ONLY for scenes whose progress entry already
+    exists with a status below 'completed' on the ladder.
+
+    Returns the count of scenes promoted. Does NOT persist — the caller
+    (seed_queue) writes the updated progress.json once after the loop so
+    we don't fsync on every promotion.
+
+    Conservative on missing entries: if `progress` has no entry for the
+    chapter at all (chapter never started in progress.json), we don't
+    auto-create one. Same for scenes. The reasoning:
+      - auto-creating chapter entries would mask bookkeeping bugs
+        (e.g. _advance_chapter skipped writing for some reason);
+      - the user's outline might have been regenerated AFTER the draft
+        was written, making the draft orphaned;
+      - the safer default is "the runner still has to run the scene" —
+        it'll just no-op on the existing draft via the `_scene_in_outline`
+        precheck or skip cleanly via the outline drift short-circuit.
+    The caller can later re-run seed_queue after the chapter advances
+    and the progress entry exists, at which point promotion kicks in.
+
+    Mirrors the ladder from `_write_scene_progress` in
+    stage4_async_executor.py — pending → in_progress → force_passed →
+    completed. We only ever promote UP the ladder: a pending scene with a
+    draft becomes completed; a force_passed scene with a draft also
+    becomes completed (the draft is newer evidence than the breaker
+    verdict, and the user would rather have a real scene than a
+    placeholder). We never demote (no path sets status back to
+    pending/in_progress/force_passed).
+    """
+    chapters = progress.setdefault("chapters", []) or []
+    promoted = 0
+    for ch_num, sc_num in discovered:
+        ch_p = next(
+            (c for c in chapters if c.get("chapter_number") == ch_num),
+            None,
+        )
+        if ch_p is None:
+            continue
+        sc_p = next(
+            (s for s in ch_p.get("scenes", []) or []
+             if s.get("scene_number") == sc_num),
+            None,
+        )
+        if sc_p is None:
+            continue
+        existing = sc_p.get("status")
+        if _PROMOTION_LADDER.get(existing, 0) < _PROMOTION_LADDER["completed"]:
+            sc_p["status"] = "completed"
+            promoted += 1
+    return promoted
 
 
 def compute_range_defaults(
@@ -376,10 +447,21 @@ def seed_queue(
       - "range": chapters whose chapter_number is in
         [cfg.start_chapter, cfg.end_chapter] inclusive.
 
-    When `projects_dir` is provided, every chapter in scope whose status is
-    in DONE_STATUSES is regenerated (progress reset, drafts cleared, queue
-    items dropped + re-enqueued, checkpoint cleared). Without projects_dir,
-    callers (mostly unit tests) get the no-regeneration path.
+    Trust-the-disk promotion: when `projects_dir` is provided, scan
+    `chapters/` for draft.md files in the target scope. For each scene
+    whose draft exists but progress.json shows it as pending (or has no
+    entry at all), promote to completed via the status ladder. This
+    replaces the destructive regeneration path removed 2026-08-20
+    (proj_1a7d7fcf: it silently destroyed ch1–ch11 drafts after a
+    progress.json drift).
+
+    current_chapter floor: if `progress.current_chapter` is set and > 1,
+    raise the effective start to `current_chapter - 1` so a resume
+    doesn't restart from `cfg.start_chapter` when the runner had
+    actually advanced further. Honors cfg as a lower bound — if the user
+    explicitly asked to start at chapter 5 and current_chapter=8, the
+    floor wins (start at 7), but if they asked start=12 and current=8,
+    start_chapter=12 still wins.
 
     Idempotent on QueueItem ids: items with deterministic ids already in
     mgr.queue are skipped, so a restart that re-runs seed_queue against a
@@ -387,10 +469,13 @@ def seed_queue(
     fallback that was removed in v2.1 left no replacement; out-of-scope
     work stays out of scope.
 
-    Pure-ish: the only side effect is `mgr.add_queue(...)` (which writes
-    session.json) + the optional regenerate_chapter / clear_checkpoint_for_chapter
-    helpers (which write progress.json + remove checkpoint files). No HTTP,
-    no LLM, no executor.
+    Pure-ish: the only side effects are `mgr.add_queue(...)` (which
+    writes session.json), the optional `_promote_discovered_drafts`
+    helper (which writes progress.json), and the target_chapters clamp.
+    No file deletion, no checkpoint clearing, no draft removal — the
+    regeneration helpers (`regenerate_chapter`, `clear_chapter_drafts`,
+    `clear_checkpoint_for_chapter`) remain available for explicit
+    user-initiated flows but are NOT called from seed_queue.
     """
     if not outline or not outline.get("chapters"):
         return SeedResult(enqueued=0, scope_used=cfg.scope, fallback_applied=False)
@@ -410,51 +495,63 @@ def seed_queue(
     else:  # "all_planned"
         target_chapters = list(all_chapters)
 
-    # Regenerate any chapters in scope whose status is terminal.
-    # Must run BEFORE _enqueue_for_scope so the freshly-reset progress
-    # (status='pending' for every scene) is reflected in the enqueue pass
-    # — otherwise regenerated chapters' scenes would still be skipped as
-    # 'done'. projects_dir is the projects ROOT; the project directory is
-    # projects_dir / project_id.
-    regenerated_scenes = 0
+    # Trust-the-disk promotion: walk chapters/, find drafts that exist
+    # but progress.json shows as pending, and flip them to completed.
+    # Must run BEFORE _enqueue_for_scope so the freshly-promoted
+    # progress state is what the enqueue pass sees (otherwise we'd
+    # enqueue scenes whose drafts are already on disk).
+    promoted_scenes = 0
     if projects_dir is not None:
         from backend.utils.file_manager import FileManager
         fm = FileManager(projects_dir)
-        for ch in target_chapters:
-            ch_num = ch.get("chapter_number")
-            ch_progress = progress_by_chapter.get(ch_num, {})
-            planned = ch.get("scene_plan", []) or []
-            if not planned:
-                continue
-            if is_chapter_complete(ch_progress.get("scenes", []) or [], planned):
-                regenerate_chapter(
-                    fm, mgr.project_id, mgr, ch_num, planned,
-                    projects_dir / mgr.project_id,
-                )
-                clear_checkpoint_for_chapter(
-                    mgr.project_id, ch_num, projects_dir,
-                )
-                regenerated_scenes += len(planned)
-                # Reflect the reset locally so the enqueue pass sees the
-                # post-regen state (don't trust stale in-memory progress).
-                progress_by_chapter[ch_num] = {
-                    "chapter_number": ch_num,
-                    "status": "pending",
-                    "scenes": [{"scene_number": s.get("scene_number"),
-                                "status": "pending"}
-                               for s in planned],
+        project_dir = projects_dir / mgr.project_id
+        discovered = discover_drafts(project_dir, target_chapters)
+        if discovered:
+            promoted_scenes = _promote_discovered_drafts(
+                fm, mgr.project_id, progress, discovered,
+            )
+            if promoted_scenes:
+                fm.write_json(mgr.project_id, "progress.json", progress)
+                # Refresh the lookup dict from the just-promoted progress
+                # so _enqueue_for_scope sees the post-promotion state.
+                progress_by_chapter = {
+                    ch.get("chapter_number"): ch
+                    for ch in progress.get("chapters", []) or []
                 }
+                logger.info(
+                    "seed_queue: promoted %d disk-side drafts to completed for %s",
+                    promoted_scenes, mgr.project_id,
+                )
+
+    # current_chapter floor: don't restart from earlier than where the
+    # runner had actually advanced. Honors cfg as a lower bound.
+    progress_cc = progress.get("current_chapter")
+    floor: Optional[int] = None
+    if isinstance(progress_cc, int) and progress_cc > 1:
+        floor = progress_cc - 1
+    if floor is not None:
+        original_count = len(target_chapters)
+        target_chapters = [
+            ch for ch in target_chapters
+            if ch.get("chapter_number", 0) >= floor
+        ]
+        if len(target_chapters) != original_count:
+            logger.info(
+                "seed_queue: clamped target to current_chapter-1=%d for %s "
+                "(%d → %d chapters)",
+                floor, mgr.project_id, original_count, len(target_chapters),
+            )
 
     seeded, matched = _enqueue_for_scope(
         mgr, target_chapters, progress_by_chapter,
     )
 
-    # `enqueued` reports total queue growth attributable to this call:
-    # scenes enqueued via _enqueue_for_scope PLUS scenes enqueued via
-    # regenerate_chapter earlier in this call (those land in the queue
-    # before dedup runs, so seeded alone under-counts them).
+    # `enqueued` reports total queue growth: scenes enqueued via
+    # _enqueue_for_scope PLUS disk-side promotions (which may add
+    # QueueItems for retryable scenes, but mostly they just shrink the
+    # "unfinished" set so they subtract from `matched`).
     return SeedResult(
-        enqueued=seeded + regenerated_scenes,
+        enqueued=seeded,
         scope_used=cfg.scope, fallback_applied=False,
         matched=matched,
     )

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import api, { NovelOutline } from "../../api/client";
+import api, { NovelOutline, VolumeDivision, GrowthMilestone, KeyPlotPoint } from "../../api/client";
 import { runWithGuardRetry } from "../../utils/outlineGuardRetry";
 import { useWizard } from "./WizardContext";
 import { RegenerateModal } from "../shared/RegenerateModal";
@@ -90,6 +90,111 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       // Re-throw so SectionRegenerateButton can surface the failure toast.
       throw new Error(msg);
     }
+  };
+
+  const updateVolume = (i: number, patch: Partial<VolumeDivision>) => {
+    setOutline({
+      ...outline,
+      volumes: outline.volumes.map((v, idx) => (idx === i ? { ...v, ...patch } : v)),
+    });
+  };
+
+  const addVolume = () => {
+    setOutline({
+      ...outline,
+      volumes: [
+        ...outline.volumes,
+        { name: "", chapter_range: "", summary: "", key_events: [] },
+      ],
+    });
+  };
+
+  const removeVolume = (i: number) => {
+    setOutline({
+      ...outline,
+      volumes: outline.volumes.filter((_, idx) => idx !== i),
+    });
+  };
+
+  const updateVolumeEvent = (i: number, j: number, value: string) => {
+    setOutline({
+      ...outline,
+      volumes: outline.volumes.map((v, idx) => {
+        if (idx !== i) return v;
+        return {
+          ...v,
+          key_events: v.key_events.map((e, ej) => (ej === j ? value : e)),
+        };
+      }),
+    });
+  };
+
+  const addVolumeEvent = (i: number) => {
+    setOutline({
+      ...outline,
+      volumes: outline.volumes.map((v, idx) => {
+        if (idx !== i) return v;
+        return { ...v, key_events: [...v.key_events, ""] };
+      }),
+    });
+  };
+
+  const removeVolumeEvent = (i: number, j: number) => {
+    setOutline({
+      ...outline,
+      volumes: outline.volumes.map((v, idx) => {
+        if (idx !== i) return v;
+        return { ...v, key_events: v.key_events.filter((_, ej) => ej !== j) };
+      }),
+    });
+  };
+
+  const updateMilestone = (i: number, patch: Partial<GrowthMilestone>) => {
+    setOutline({
+      ...outline,
+      mc_growth_arc: outline.mc_growth_arc.map((m, idx) => (idx === i ? { ...m, ...patch } : m)),
+    });
+  };
+
+  const addMilestone = () => {
+    setOutline({
+      ...outline,
+      mc_growth_arc: [
+        ...outline.mc_growth_arc,
+        { label: "", target_chapter_range: "", description: "" },
+      ],
+    });
+  };
+
+  const removeMilestone = (i: number) => {
+    setOutline({
+      ...outline,
+      mc_growth_arc: outline.mc_growth_arc.filter((_, idx) => idx !== i),
+    });
+  };
+
+  const updatePlotPoint = (i: number, patch: Partial<KeyPlotPoint>) => {
+    setOutline({
+      ...outline,
+      key_plot_points: outline.key_plot_points.map((p, idx) => (idx === i ? { ...p, ...patch } : p)),
+    });
+  };
+
+  const addPlotPoint = () => {
+    setOutline({
+      ...outline,
+      key_plot_points: [
+        ...outline.key_plot_points,
+        { title: "", must_appear_in_volume: "", description: "", trigger_chapter_hint: "" },
+      ],
+    });
+  };
+
+  const removePlotPoint = (i: number) => {
+    setOutline({
+      ...outline,
+      key_plot_points: outline.key_plot_points.filter((_, idx) => idx !== i),
+    });
   };
 
   // Sync local `outline` state from wizard.data.novel_outline when prefill
@@ -196,72 +301,255 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">分卷 / 阶段划分</div>
-                <SectionRegenerateButton
-                  target="分卷 / 阶段划分"
-                  onRegenerate={handleSectionRegenerate("volumes")}
-                  testId="outline-volumes-regenerate"
-                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={addVolume}
+                    data-testid="add-volume-btn"
+                    className="text-xs text-primary-container font-body-ui flex items-center gap-1 hover:opacity-80"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    添加卷
+                  </button>
+                  <SectionRegenerateButton
+                    target="分卷 / 阶段划分"
+                    onRegenerate={handleSectionRegenerate("volumes")}
+                    testId="outline-volumes-regenerate"
+                  />
+                </div>
               </div>
               <div data-testid="outline-volumes" className="space-y-2">
                 {outline.volumes.map((v, i) => (
                   <div
                     key={`${v.name}-${i}`}
                     data-testid="outline-volume"
-                    className="bg-surface-container border border-outline-variant rounded-lg p-3"
+                    className="bg-surface-container border border-outline-variant rounded-lg p-3 space-y-2"
                   >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <h3 className="font-display text-primary text-sm">{v.name}</h3>
-                      <span className="font-label-mono text-primary-container/60 text-xs shrink-0">
-                        第 {v.chapter_range} 章
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        data-testid={`volume-name-${i}`}
+                        value={v.name}
+                        onChange={(e) => updateVolume(i, { name: e.target.value })}
+                        placeholder="第一卷 崛起期"
+                        className="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                   text-primary text-sm focus:outline-none focus:border-primary-container"
+                      />
+                      <input
+                        data-testid={`volume-range-${i}`}
+                        value={v.chapter_range}
+                        onChange={(e) => updateVolume(i, { chapter_range: e.target.value })}
+                        placeholder="1-50"
+                        className="w-24 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                   text-primary text-sm focus:outline-none focus:border-primary-container"
+                      />
+                      <button
+                        onClick={() => removeVolume(i)}
+                        className="text-system-log hover:text-error"
+                        aria-label="删除卷"
+                        data-testid={`volume-remove-${i}`}
+                      >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                      </button>
                     </div>
-                    {v.summary && (
-                      <p className="font-body-ui text-primary-container text-sm mt-1.5 leading-relaxed">{v.summary}</p>
-                    )}
-                    {v.key_events.length > 0 && (
-                      <ul className="mt-2 space-y-1">
-                        {v.key_events.map((e, j) => (
-                          <li
-                            key={j}
-                            className="font-body-ui text-primary-container/80 text-xs flex gap-2 leading-relaxed"
+                    <AutoTextarea
+                      data-testid={`volume-summary-${i}`}
+                      value={v.summary}
+                      onChange={(e) => updateVolume(i, { summary: e.target.value })}
+                      placeholder="本卷核心冲突与高潮"
+                      minRows={2}
+                      className="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                 text-primary text-sm resize-y
+                                 focus:outline-none focus:border-primary-container"
+                    />
+                    <div className="space-y-1">
+                      {v.key_events.map((event, j) => (
+                        <div key={j} className="flex items-center gap-2">
+                          <input
+                            data-testid={`volume-event-${i}-${j}`}
+                            value={event}
+                            onChange={(e) => updateVolumeEvent(i, j, e.target.value)}
+                            placeholder={`事件 ${j + 1}`}
+                            className="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                       text-primary text-sm focus:outline-none focus:border-primary-container"
+                          />
+                          <button
+                            onClick={() => removeVolumeEvent(i, j)}
+                            className="text-system-log hover:text-error"
+                            aria-label="删除事件"
+                            data-testid={`volume-event-${i}-${j}-remove`}
                           >
-                            <span className="text-primary-container shrink-0">•</span>
-                            <span>{e}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                            <span className="material-symbols-outlined text-sm">delete</span>
+                          </button>
+                        </div>
+                      ))}
+                      {v.key_events.length === 0 && (
+                        <p className="text-system-log/50 font-body-ui text-xs italic">未添加事件</p>
+                      )}
+                      <button
+                        onClick={() => addVolumeEvent(i)}
+                        data-testid={`add-volume-event-${i}`}
+                        className="text-xs text-primary-container font-body-ui flex items-center gap-1 hover:opacity-80"
+                      >
+                        <span className="material-symbols-outlined text-sm">add</span>
+                        添加事件
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center justify-between border border-outline-variant rounded-lg px-3 py-2">
-              <span className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
                 主角成长节点 · {outline.mc_growth_arc.length}
-              </span>
-              <SectionRegenerateButton
-                target="主角成长节点"
-                onRegenerate={handleSectionRegenerate("mc_growth")}
-                testId="outline-mc-growth-regenerate"
-              />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={addMilestone}
+                  data-testid="add-milestone-btn"
+                  className="text-xs text-primary-container font-body-ui flex items-center gap-1 hover:opacity-80"
+                >
+                  <span className="material-symbols-outlined text-sm">add</span>
+                  添加里程碑
+                </button>
+                <SectionRegenerateButton
+                  target="主角成长节点"
+                  onRegenerate={handleSectionRegenerate("mc_growth")}
+                  testId="outline-mc-growth-regenerate"
+                />
+              </div>
             </div>
-            <div className="flex items-center justify-between border border-outline-variant rounded-lg px-3 py-2">
-              <span className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
-                关键情节点 · {outline.key_plot_points.length}
-              </span>
-              <SectionRegenerateButton
-                target="关键情节点"
-                onRegenerate={handleSectionRegenerate("key_plot")}
-                testId="outline-key-plot-regenerate"
-              />
+            <div data-testid="outline-milestones" className="space-y-2">
+              {outline.mc_growth_arc.map((m, i) => (
+                <div
+                  key={i}
+                  data-testid="outline-milestone"
+                  className="bg-surface-container border border-outline-variant rounded-lg p-3 space-y-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      data-testid={`milestone-label-${i}`}
+                      value={m.label}
+                      onChange={(e) => updateMilestone(i, { label: e.target.value })}
+                      placeholder="起点 / 觉醒 / 突破..."
+                      className="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                 text-primary text-sm focus:outline-none focus:border-primary-container"
+                    />
+                    <input
+                      data-testid={`milestone-range-${i}`}
+                      value={m.target_chapter_range}
+                      onChange={(e) => updateMilestone(i, { target_chapter_range: e.target.value })}
+                      placeholder="约第 1-30 章"
+                      className="w-32 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                 text-primary text-sm focus:outline-none focus:border-primary-container"
+                    />
+                    <button
+                      onClick={() => removeMilestone(i)}
+                      className="text-system-log hover:text-error"
+                      aria-label="删除里程碑"
+                      data-testid={`milestone-remove-${i}`}
+                    >
+                      <span className="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                  </div>
+                  <AutoTextarea
+                    data-testid={`milestone-desc-${i}`}
+                    value={m.description}
+                    onChange={(e) => updateMilestone(i, { description: e.target.value })}
+                    placeholder="状态变化描述"
+                    minRows={2}
+                    className="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                               text-primary text-sm resize-y
+                               focus:outline-none focus:border-primary-container"
+                  />
+                </div>
+              ))}
+              {outline.mc_growth_arc.length === 0 && (
+                <p className="text-system-log/50 font-body-ui text-xs italic">未添加里程碑</p>
+              )}
             </div>
           </div>
-          <p className="font-body-ui text-primary-container/60 text-xs">
-            详细分卷/情节点编辑可在工作台的大纲标签页内进行。
-          </p>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
+                关键情节点 · {outline.key_plot_points.length}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={addPlotPoint}
+                  data-testid="add-plot-btn"
+                  className="text-xs text-primary-container font-body-ui flex items-center gap-1 hover:opacity-80"
+                >
+                  <span className="material-symbols-outlined text-sm">add</span>
+                  添加关键点
+                </button>
+                <SectionRegenerateButton
+                  target="关键情节点"
+                  onRegenerate={handleSectionRegenerate("key_plot")}
+                  testId="outline-key-plot-regenerate"
+                />
+              </div>
+            </div>
+            <div data-testid="outline-plots" className="space-y-2">
+              {outline.key_plot_points.map((p, i) => (
+                <div
+                  key={i}
+                  data-testid="outline-plot"
+                  className="bg-surface-container border border-outline-variant rounded-lg p-3 space-y-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      data-testid={`plot-title-${i}`}
+                      value={p.title}
+                      onChange={(e) => updatePlotPoint(i, { title: e.target.value })}
+                      placeholder="关键点标题"
+                      className="flex-1 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                 text-primary text-sm focus:outline-none focus:border-primary-container"
+                    />
+                    <input
+                      data-testid={`plot-volume-${i}`}
+                      value={p.must_appear_in_volume}
+                      onChange={(e) => updatePlotPoint(i, { must_appear_in_volume: e.target.value })}
+                      placeholder="必出场于哪一卷（卷名或留空）"
+                      className="w-48 bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                                 text-primary text-sm focus:outline-none focus:border-primary-container"
+                    />
+                    <button
+                      onClick={() => removePlotPoint(i)}
+                      className="text-system-log hover:text-error"
+                      aria-label="删除关键点"
+                      data-testid={`plot-remove-${i}`}
+                    >
+                      <span className="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                  </div>
+                  <AutoTextarea
+                    data-testid={`plot-desc-${i}`}
+                    value={p.description}
+                    onChange={(e) => updatePlotPoint(i, { description: e.target.value })}
+                    placeholder="为何必出场、如何铺垫"
+                    minRows={2}
+                    className="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                               text-primary text-sm resize-y
+                               focus:outline-none focus:border-primary-container"
+                  />
+                  <input
+                    data-testid={`plot-hint-${i}`}
+                    value={p.trigger_chapter_hint}
+                    onChange={(e) => updatePlotPoint(i, { trigger_chapter_hint: e.target.value })}
+                    placeholder="建议落点（约第 X 章）"
+                    className="w-full bg-surface-container-low border border-outline-variant rounded px-2 py-1
+                               text-primary text-sm focus:outline-none focus:border-primary-container"
+                  />
+                </div>
+              ))}
+              {outline.key_plot_points.length === 0 && (
+                <p className="text-system-log/50 font-body-ui text-xs italic">未添加关键点</p>
+              )}
+            </div>
+          </div>
           {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
         </div>
       )}

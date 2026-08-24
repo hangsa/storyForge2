@@ -84,4 +84,32 @@ describe("AutoTextarea", () => {
     );
     expect((screen.getByTestId("ta") as HTMLTextAreaElement).value).toBe("init");
   });
+
+  it("auto-grows height: sets inline style.height after mount so long content isn't clipped", () => {
+    // jsdom doesn't lay out, so scrollHeight is 0 — but the effect must still
+    // run and set style.height. The presence of an inline style.height is what
+    // distinguishes AutoTextarea from a plain <textarea rows={2}> (which never
+    // sets style.height). Regression test for: OutlineStep volume summary /
+    // milestone desc / plot desc switching from <textarea rows={2}> back to a
+    // fixed-height element, which clipped LLM-generated multi-line content.
+    const longContent = "a".repeat(500);
+    const { rerender } = render(
+      <AutoTextarea data-testid="ta" value="" onChange={() => {}} />,
+    );
+    const ta = screen.getByTestId("ta") as HTMLTextAreaElement;
+    expect(ta.style.height).toBe("0px");
+    rerender(
+      <AutoTextarea data-testid="ta" value={longContent} onChange={() => {}} />,
+    );
+    expect(ta.style.height).toBe("0px");
+    const taWithMockedScroll = screen.getByTestId("ta") as HTMLTextAreaElement;
+    Object.defineProperty(taWithMockedScroll, "scrollHeight", {
+      configurable: true,
+      value: 137,
+    });
+    rerender(
+      <AutoTextarea data-testid="ta" value={longContent + "x"} onChange={() => {}} />,
+    );
+    expect(taWithMockedScroll.style.height).toBe("137px");
+  });
 });

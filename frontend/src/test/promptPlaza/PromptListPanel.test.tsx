@@ -4,7 +4,7 @@ import PromptListPanel from "../../components/home/promptPlaza/PromptListPanel";
 
 const SAMPLE = [
   { name: "scene_writing", category: "", label: "场景写作", has_override: false, modified_at: null, builtin: true },
-  { name: "outline", category: "", label: "大纲生成", has_override: false, modified_at: null, builtin: true },
+  { name: "outline", category: "", label: "章节大纲", has_override: false, modified_at: null, builtin: true },
   { name: "mutation", category: "creative", label: "变异", has_override: true, modified_at: "2026-07-19T00:00:00Z", builtin: true },
   { name: "whatif", category: "creative", label: "WhatIf", has_override: false, modified_at: null, builtin: true },
 ];
@@ -44,7 +44,7 @@ describe("PromptListPanel", () => {
     const input = screen.getByPlaceholderText(/搜索/) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "outline" } });
     expect(screen.queryByText("场景写作")).not.toBeInTheDocument();
-    expect(screen.getByText("大纲生成")).toBeInTheDocument();
+    expect(screen.getByText("章节大纲")).toBeInTheDocument();
   });
 
   it("renders empty state when no prompts", () => {

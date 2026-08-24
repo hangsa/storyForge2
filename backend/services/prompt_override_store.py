@@ -25,7 +25,8 @@ PROMPT_CATEGORIES: dict[str, str] = {
 
 PROMPT_LABEL_OVERRIDES: dict[str, str] = {
     "scene_writing": "场景写作",
-    "outline_generation": "大纲生成",
+    "outline_generation": "章节大纲",
+    "novel_outline_generation": "全文大纲",
     "narrative_guard": "叙事守护",
     "concept_generation": "概念生成",
     "world_generation": "世界观生成",

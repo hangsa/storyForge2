@@ -11,12 +11,22 @@ export interface PromptSummary {
   has_override: boolean;
   modified_at: string | null;
   builtin: boolean;
+  /** Which tier currently overrides the YAML default for this project view.
+   *  - "project": project has its own override entry
+   *  - "global":  only the global default is in play (project inherits)
+   *  - "none":    no override at any tier
+   */
+  override_source?: "project" | "global" | "none";
 }
 
 export interface PromptDetail {
   name: string;
   builtin_yaml: Record<string, unknown>;
   override: Record<string, unknown> | null;
+  /** Tier-1 (global) override, surfaced separately so the user can see
+   *  where their effective comes from when the project itself has nothing
+   *  overridden. null when no global entry exists. */
+  global_override: Record<string, unknown> | null;
   effective: Record<string, unknown>;
 }
 

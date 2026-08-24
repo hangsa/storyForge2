@@ -51,4 +51,17 @@ describe("PromptListPanel", () => {
     render(<PromptListPanel prompts={[]} selectedName={null} onSelect={vi.fn()} />);
     expect(screen.getByText(/暂无提示词/)).toBeInTheDocument();
   });
+
+  it("shows has_override badge when only the global layer is in play", () => {
+    // proj_1a7d7fcf 2026-08-24 regression: before the fix, the badge stayed
+    // hidden when only the global default had a tier-1 override, so users
+    // could not tell that the YAML default was being shadowed.
+    const withGlobal = [
+      ...SAMPLE,
+      { name: "novel_outline_generation", category: "", label: "全文大纲", has_override: true, modified_at: "2026-08-24T00:00:00Z", builtin: true, override_source: "global" as const },
+    ];
+    render(<PromptListPanel prompts={withGlobal} selectedName={null} onSelect={vi.fn()} />);
+    const row = screen.getByText("全文大纲").closest('[data-testid="plaza-row"]')!;
+    expect(row.querySelector('[data-testid="override-dot"]')).toBeInTheDocument();
+  });
 });

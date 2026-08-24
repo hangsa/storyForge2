@@ -15,6 +15,7 @@ function makeDetail(extra: Record<string, unknown> = {}): PromptDetail {
       output_format: {},
     },
     override: null,
+    global_override: null,
     effective: {
       system_prompt: "DEFAULT",
       user_prompt_template: "u",
@@ -38,6 +39,7 @@ const DETAIL: PromptDetail = {
     output_format: { type: "json" },
   },
   override: null,
+  global_override: null,
   effective: {
     name: "scene_writing",
     system_prompt: "default sys",

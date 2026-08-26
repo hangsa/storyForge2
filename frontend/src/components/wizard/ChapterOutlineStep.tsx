@@ -15,7 +15,7 @@ interface ChapterOutlineStepProps {
  *  novel outline / pre-step-5 project). v1.8.3 used this same number as
  *  the primary default; v2.1 promoted Volume 1's chapter count to the
  *  primary default and demoted this to the fallback path. */
-const DEFAULT_OUTLINE_CHAPTERS_FALLBACK = 10;
+const DEFAULT_OUTLINE_CHAPTERS_FALLBACK = 20;
 
 /**
  * v2.1: default scope for chapter-outline auto-generation = the chapter

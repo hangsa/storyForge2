@@ -108,23 +108,23 @@ describe("ChapterOutlineStep", () => {
     );
     setup();
     expect(screen.queryByTestId("chapter-outline-start")).not.toBeInTheDocument();
-    // v1.8.3: default scope is 10 chapters (the front third). 10 sequential
-    // POSTs in chapter_number order, no parallelism.
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
-    for (let i = 1; i <= 10; i++) {
+    // v2.1 fallback: default scope is 20 chapters when Volume 1 is
+    // unparseable. 20 sequential POSTs in chapter_number order, no parallelism.
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(20));
+    for (let i = 1; i <= 20; i++) {
       // v1.9: auto-trigger calls handleStart() with no user_modifications,
       // so the 3rd arg defaults to "" — equivalent to today's behavior.
       expect(api.generateOutline).toHaveBeenNthCalledWith(i, PROJECT, i, "");
     }
   });
 
-  it("after auto-trigger the form shows 10 chapter title inputs", async () => {
+  it("after auto-trigger the form shows 20 chapter title inputs", async () => {
     (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
       async (_id, n) => mergedOutlineThrough(n as number),
     );
     setup();
     expect(await screen.findByTestId("chapter-outline-form")).toBeInTheDocument();
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 20; i++) {
       const input = screen.getByTestId(`chapter-${i}-title`) as HTMLInputElement;
       expect(input.value).toBe(`第${i}章`);
     }
@@ -154,16 +154,16 @@ describe("ChapterOutlineStep", () => {
       expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/workspace`),
     );
     const call = (api.updateOutline as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(call[1].chapters).toHaveLength(10);
+    expect(call[1].chapters).toHaveLength(20);
   });
 
   // --- v2.1: default scope = end of Volume 1 (parsed from
   // novel_outline.volumes[0].chapter_range). The wizard bulk-generates one
   // volume at a time; later volumes come from the workspace cockpit.
-  // Fallback to 10 when Volume 1 is missing/unparseable (degenerate novel
+  // Fallback to 20 when Volume 1 is missing/unparseable (degenerate novel
   // outline / pre-step-5 project).
 
-  it("scope: novel_outline missing → falls back to 10", async () => {
+  it("scope: novel_outline missing → falls back to 20", async () => {
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
       async (_id, n) => mergedOutlineThrough(n as number),
@@ -182,8 +182,8 @@ describe("ChapterOutlineStep", () => {
         chapter1_outline: null,
       },
     });
-    // No Volume 1 → helper returns 0 → fallback path → 10 calls.
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    // No Volume 1 → helper returns 0 → fallback path → 20 calls.
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(20));
   });
 
   it("scope: Volume 1 = '1-30' → generates all 30 chapters of Volume 1", async () => {
@@ -239,7 +239,7 @@ describe("ChapterOutlineStep", () => {
     await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(80));
   });
 
-  it("scope: Volume 1 missing/unparseable → falls back to 10", async () => {
+  it("scope: Volume 1 missing/unparseable → falls back to 20", async () => {
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
       core_conflict_theme: "x",
       volumes: [{ name: "v1", chapter_range: "garbage", summary: "x", key_events: [] }],
@@ -252,7 +252,7 @@ describe("ChapterOutlineStep", () => {
       async (_id, n) => mergedOutlineThrough(n as number),
     );
     setup();
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(20));
   });
 
   it("scope: multi-volume novel_outline → scope = Volume 1 ONLY, not all volumes", async () => {
@@ -329,7 +329,7 @@ describe("ChapterOutlineStep", () => {
     expect(await screen.findByTestId("chapter-1-title")).toBeInTheDocument();
   });
 
-  // PROJ_proj_cc4ca4ae_report (v1.8.4): after step 6 auto-generates the 10
+  // PROJ_proj_cc4ca4ae_report (v1.8.4): after step 6 auto-generates the 20
   // chapters, the user clicks an earlier step in the indicator. Step 6 must
   // remain reachable (clickable) on the indicator — currently it's grayed
   // out because handleStart only wrote data via setStatus("completed") and
@@ -349,9 +349,9 @@ describe("ChapterOutlineStep", () => {
       async (_id, n) => mergedOutlineThrough(n as number),
     );
     setup();
-    // Wait for all 10 chapters to be generated (auto-trigger finishes).
+    // Wait for all 20 chapters to be generated (auto-trigger finishes).
     await screen.findByTestId("chapter-outline-form");
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(20));
 
     // Navigate back to step 1.
     await act(async () => {
@@ -371,7 +371,7 @@ describe("ChapterOutlineStep", () => {
       step6.click();
     });
     await screen.findByTestId("chapter-outline-form");
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 20; i++) {
       const input = screen.getByTestId(`chapter-${i}-title`) as HTMLInputElement;
       expect(input.value).toBe(`第${i}章`);
     }
@@ -381,7 +381,7 @@ describe("ChapterOutlineStep", () => {
     expect(api.generateOutline).toHaveBeenCalledTimes(callsBeforeRentry);
   });
 
-  it("progress indicator shows '第 X / 10 章' while generating", async () => {
+  it("progress indicator shows '第 X / 20 章' while generating", async () => {
     // Slow down each call so the progress DOM is observable.
     (api.generateOutline as ReturnType<typeof vi.fn>).mockImplementation(
       async (_id, n) => {
@@ -393,22 +393,22 @@ describe("ChapterOutlineStep", () => {
     // Race the spinner: the first call's progress text becomes visible
     // briefly, then updates as i grows. Wait for the loading UI to appear.
     await waitFor(() => expect(screen.getByTestId("chapter-outline-step")).toBeInTheDocument());
-    // Look for the progress testid at least once before all 10 land.
+    // Look for the progress testid at least once before all 20 land.
     // waitFor will retry until it finds the element OR the form fully
     // renders. Catch the case where form arrives before progress can be
     // asserted by allowing the test to time out gracefully — the more
     // important behaviors are covered by other tests.
     let sawProgress = false;
-    for (let i = 0; i < 30 && !sawProgress; i++) {
+    for (let i = 0; i < 60 && !sawProgress; i++) {
       const el = screen.queryByTestId("chapter-outline-progress");
-      if (el?.textContent && /第\s*\d+\s*\/\s*10\s*章/.test(el.textContent)) {
+      if (el?.textContent && /第\s*\d+\s*\/\s*20\s*章/.test(el.textContent)) {
         sawProgress = true;
       } else if (!el) {
         await new Promise((r) => setTimeout(r, 2));
       }
     }
     // Either we saw progress or the batch finished fast — both are valid.
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(20));
     expect(sawProgress || true).toBe(true);
   });
 
@@ -584,8 +584,8 @@ describe("ChapterOutlineStep", () => {
       async (_id, n) => mergedOutlineThrough(n as number),
     );
     setup();
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
-    // No resume banner: done (10) >= total (10, fallback when no
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(20));
+    // No resume banner: done (20) >= total (20, fallback when no
     // novel outline volumes are defined).
     expect(screen.queryByTestId("chapter-outline-resume-banner")).not.toBeInTheDocument();
     // Form is in normal post-completion state.
@@ -716,7 +716,7 @@ describe("ChapterOutlineStep", () => {
       async (_id, n) => mergedOutlineThrough(n as number),
     );
     setup();
-    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(api.generateOutline).toHaveBeenCalledTimes(20));
     // Spinner is gone (status=completed) so the attempt span is detached;
     // we just verify the helper's setAttempt reset to 1 didn't leak a
     // '第2次' anywhere on screen.
@@ -802,7 +802,7 @@ describe("ChapterOutlineStep", () => {
     );
     setup();
     await screen.findByTestId("chapter-outline-form");
-    for (let i = 1; i <= 10; i++) {
+    for (let i = 1; i <= 20; i++) {
       expect(
         screen.getByTestId(`chapter-${i}-regenerate`),
       ).toBeInTheDocument();
@@ -836,7 +836,7 @@ describe("ChapterOutlineStep", () => {
         // deduped by chapter_number, the regenerated range appended). The
         // mock must mirror that contract or the wizard will appear to lose
         // chapters outside the regenerated range.
-        const chapters = Array.from({ length: 10 }, (_, k) => ({
+        const chapters = Array.from({ length: 20 }, (_, k) => ({
           chapter_number: k + 1,
           title: `第${k + 1}章`,
           scene_plan: [{ scene_id: `s${k + 1}` }],

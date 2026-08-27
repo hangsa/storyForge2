@@ -1,10 +1,11 @@
 export interface SecondaryButtonProps {
   label: string;
-  icon?: "plus" | "search" | "delete";
+  icon?: string;
   variant?: "default" | "destructive";
   size?: "sm" | "md";
   disabled?: boolean;
   onClick: () => void;
+  testId?: string;
 }
 
 const SIZE_CLASS: Record<NonNullable<SecondaryButtonProps["size"]>, string> = {
@@ -19,6 +20,7 @@ export default function SecondaryButton({
   size = "md",
   disabled = false,
   onClick,
+  testId,
 }: SecondaryButtonProps) {
   const colorClass =
     variant === "destructive"
@@ -30,6 +32,7 @@ export default function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      data-testid={testId}
       className={`inline-flex items-center gap-2 bg-surface-container border ${colorClass} rounded ${SIZE_CLASS[size]} hover:bg-surface-container-high transition disabled:opacity-50`}
     >
       {icon && <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>}

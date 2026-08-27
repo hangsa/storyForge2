@@ -27,8 +27,8 @@ type Proj = ModalProps["projects"][number];
 
 function renderModal(props: Partial<ModalProps> = {}) {
   const projects = props.projects ?? ([
-    { id: "proj_a", title: "诡眼少年", genre: "cool_novel", current_stage: "STAGE4", created_at: "2026-07-10T00:00:00", updated_at: 1, min_words: 4000, target_total_words: 4000, target_length_category: "" },
-    { id: "proj_b", title: "测试小说", genre: "cool_novel", current_stage: "INIT", created_at: "2026-07-09T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "" },
+    { id: "proj_a", title: "诡眼少年", genre: "cool_novel", current_stage: "STAGE4", created_at: "2026-07-10T00:00:00", updated_at: 1, min_words: 4000, target_total_words: 4000, target_length_category: "", chapter_count: 0, word_count: 0 },
+    { id: "proj_b", title: "测试小说", genre: "cool_novel", current_stage: "INIT", created_at: "2026-07-09T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "", chapter_count: 0, word_count: 0 },
   ] as Proj[]);
   return render(
     <MemoryRouter>
@@ -50,7 +50,7 @@ describe("BookShelfModal navigation", () => {
   // forces ?mode=managed — the user opts into managed via the top-bar switcher.
   it("links STAGE4 projects to /workspace (default manual mode)", () => {
     renderModal({ projects: [
-      { id: "proj_post", title: "已完成", genre: "cool_novel", current_stage: "STAGE4", created_at: "2026-07-10T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "" },
+      { id: "proj_post", title: "已完成", genre: "cool_novel", current_stage: "STAGE4", created_at: "2026-07-10T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "", chapter_count: 0, word_count: 0 },
     ] });
     const link = screen.getByRole("link", { name: /已完成/ });
     expect(link.getAttribute("href")).toBe("/project/proj_post/workspace");
@@ -58,7 +58,7 @@ describe("BookShelfModal navigation", () => {
 
   it("links INIT/STAGE1-3 projects to /wizard so users can resume initialization", () => {
     renderModal({ projects: [
-      { id: "proj_pre", title: "未完成", genre: "cool_novel", current_stage: "STAGE2", created_at: "2026-07-09T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "" },
+      { id: "proj_pre", title: "未完成", genre: "cool_novel", current_stage: "STAGE2", created_at: "2026-07-09T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "", chapter_count: 0, word_count: 0 },
     ] });
     const link = screen.getByRole("link", { name: /未完成/ });
     expect(link.getAttribute("href")).toBe("/project/proj_pre/wizard");
@@ -66,7 +66,7 @@ describe("BookShelfModal navigation", () => {
 
   it("links STAGE5 (diagnosis) projects to /stage5 instead of the workspace", () => {
     renderModal({ projects: [
-      { id: "diag", title: "诊断项目", genre: "cool_novel", current_stage: "STAGE5", created_at: "2026-07-12T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "" },
+      { id: "diag", title: "诊断项目", genre: "cool_novel", current_stage: "STAGE5", created_at: "2026-07-12T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "", chapter_count: 0, word_count: 0 },
     ] });
     const link = screen.getByRole("link", { name: /诊断项目/ });
     expect(link.getAttribute("href")).toBe("/project/diag/stage5");
@@ -74,7 +74,7 @@ describe("BookShelfModal navigation", () => {
 
   it("links STAGE6 (export) projects to /stage6 instead of the workspace", () => {
     renderModal({ projects: [
-      { id: "export", title: "导出项目", genre: "cool_novel", current_stage: "STAGE6", created_at: "2026-07-12T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "" },
+      { id: "export", title: "导出项目", genre: "cool_novel", current_stage: "STAGE6", created_at: "2026-07-12T00:00:00", updated_at: 0, min_words: 4000, target_total_words: 4000, target_length_category: "", chapter_count: 0, word_count: 0 },
     ] });
     const link = screen.getByRole("link", { name: /导出项目/ });
     expect(link.getAttribute("href")).toBe("/project/export/stage6");

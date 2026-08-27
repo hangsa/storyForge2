@@ -35,12 +35,12 @@ import BookShelf from "../components/home/BookShelf";
 // so the SAMPLE fixture orders updated_at descending — proj_a is newest, proj_f
 // is oldest and falls below the visible top-5 window.
 const SAMPLE = [
-  { id: "proj_a", title: "诡眼少年", genre: "cool_novel", current_stage: "STAGE2", created_at: "2026-06-29T00:00:00", updated_at: 9000, target_total_words: 4_000_000, target_length_category: "标准商业连载", min_words: 4000 },
-  { id: "proj_b", title: "测试小说", genre: "cool_novel", current_stage: "INIT", created_at: "2026-06-28T00:00:00", updated_at: 8000, target_total_words: 4_000_000, target_length_category: "标准商业连载", min_words: 4000 },
-  { id: "proj_c", title: "一部城隍成长史", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-27T00:00:00", updated_at: 7000, target_total_words: 6_000_000, target_length_category: "标准商业连载", min_words: 6000 },
-  { id: "proj_d", title: "数据星河", genre: "kehuan", current_stage: "STAGE4", created_at: "2026-06-26T00:00:00", updated_at: 6000, target_total_words: 8_000_000, target_length_category: "标准商业连载", min_words: 8000 },
-  { id: "proj_e", title: "山野笔记", genre: "dushi", current_stage: "STAGE1", created_at: "2026-06-25T00:00:00", updated_at: 5000, target_total_words: 5_000_000, target_length_category: "标准商业连载", min_words: 5000 },
-  { id: "proj_f", title: "雪落无声", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-24T00:00:00", updated_at: 4000, target_total_words: 5_000_000, target_length_category: "标准商业连载", min_words: 5000 },
+  { id: "proj_a", title: "诡眼少年", genre: "cool_novel", current_stage: "STAGE2", created_at: "2026-06-29T00:00:00", updated_at: 9000, target_total_words: 4_000_000, target_length_category: "标准商业连载", min_words: 4000, chapter_count: 0, word_count: 0 },
+  { id: "proj_b", title: "测试小说", genre: "cool_novel", current_stage: "INIT", created_at: "2026-06-28T00:00:00", updated_at: 8000, target_total_words: 4_000_000, target_length_category: "标准商业连载", min_words: 4000, chapter_count: 0, word_count: 0 },
+  { id: "proj_c", title: "一部城隍成长史", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-27T00:00:00", updated_at: 7000, target_total_words: 6_000_000, target_length_category: "标准商业连载", min_words: 6000, chapter_count: 0, word_count: 0 },
+  { id: "proj_d", title: "数据星河", genre: "kehuan", current_stage: "STAGE4", created_at: "2026-06-26T00:00:00", updated_at: 6000, target_total_words: 8_000_000, target_length_category: "标准商业连载", min_words: 8000, chapter_count: 0, word_count: 0 },
+  { id: "proj_e", title: "山野笔记", genre: "dushi", current_stage: "STAGE1", created_at: "2026-06-25T00:00:00", updated_at: 5000, target_total_words: 5_000_000, target_length_category: "标准商业连载", min_words: 5000, chapter_count: 0, word_count: 0 },
+  { id: "proj_f", title: "雪落无声", genre: "xianxia", current_stage: "STAGE4", created_at: "2026-06-24T00:00:00", updated_at: 4000, target_total_words: 5_000_000, target_length_category: "标准商业连载", min_words: 5000, chapter_count: 0, word_count: 0 },
 ];
 
 beforeEach(() => {

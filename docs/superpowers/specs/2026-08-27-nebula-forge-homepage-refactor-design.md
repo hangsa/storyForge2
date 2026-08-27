@@ -49,7 +49,7 @@ frontend/src/components/
 │   ├── BookShelf.tsx                    ← Renders table + ProjectTableRow
 │   ├── BulkDeleteModal.tsx              ← NEW (replaces BookShelfModal)
 │   ├── MoreActionsModal.tsx             ← Token refresh only
-│   ├── QuickActions.tsx                 ← Token refresh only
+│   ├── QuickActions.tsx                 ← REWRITTEN — composes ds/SecondaryButton + ds/GhostButton
 │   ├── StageDistribution.tsx            ← DELETED (replaced by ds/PhaseIndicator)
 │   ├── ManifestoHeader.tsx              ← DELETED (replaced by ds/BrandHeader)
 │   ├── CreateProjectCard.tsx            ← DELETED
@@ -116,7 +116,7 @@ Replace every `--color-*` value in the `:root` block with the Nebula Forge value
 
 ### Legacy canvas-* tokens (96 usages across 10+ files)
 
-The variables are renamed in name **but keep their value semantics** so existing `bg-canvas-bg` / `text-canvas-accent` utility classes stay functional. The strategy is to **redirect them to design-doc values** without renaming:
+The variables keep their existing names — only the hex values change. The strategy is to **redirect them to design-doc values** without renaming, so existing `bg-canvas-bg` / `text-canvas-accent` utility classes stay functional:
 
 | CSS variable | Old value | New value | Equivalent to |
 |---|---|---|---|
@@ -290,11 +290,29 @@ Marker: `w-2 h-2 rounded-full bg-outline-variant`. Active: `bg-primary ring-4 ri
 interface ProjectTableRowProps {
   project: ProjectSummary;
   selected?: boolean;
-  onClick?: () => void;
+  onClick?: () => void;         // Row body click — navigates to project
+  onSelectChange?: (selected: boolean) => void;  // Checkbox toggle
 }
 ```
 
-Column grid: `grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_120px]`. Hover: `bg-surface-container-low`. Selected: left `border-l-4 border-primary`.
+Column grid: `grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_120px]`. Hover: `bg-surface-container-low`. Selected: left `border-l-4 border-primary`. Row click and checkbox click are separate handlers (see Column layout note above) — `onClick` must NOT also fire on checkbox toggle.
+
+Genre label is resolved via `useGenres(false)` (same hook the current `BookCard` uses) so the `奇幻` / `言情` etc. Chinese labels render regardless of API returning IDs or labels.
+
+Status chip colors follow the existing `STAGE_COLORS` map, but with semantic Material 3 utility classes:
+
+| Stage | Class |
+|---|---|
+| `INIT` | `bg-surface-tint/20 text-surface-tint` |
+| `STAGE1` | `bg-blue-500/20 text-blue-300` |
+| `STAGE2` | `bg-purple-500/20 text-purple-300` |
+| `STAGE3` | `bg-amber-500/20 text-amber-300` |
+| `STAGE4` | `bg-primary-container/20 text-primary-container` |
+| `STAGE5` | `bg-pink-500/20 text-pink-300` |
+| `STAGE6` | `bg-emerald-500/20 text-emerald-300` |
+| `COMPLETED` | `bg-green-500/20 text-green-300` |
+
+The map lives in a sibling `stages.ts` (extracted from `home/stages.ts`) so `ProjectTableRow` and any future stage-aware component share the same source.
 
 ### Layout
 
@@ -376,6 +394,18 @@ Active: `bg-surface-container text-primary border-l-2 border-primary -ml-0.5 pl-
   - On success, `HomePage` removes those IDs from its `projects` state via `onProjectsDeleted`.
   - No `dontShowAgain` option. Confirmation modal is mandatory.
 
+### States
+
+The Bookshelf table handles three non-data states explicitly:
+
+| State | Trigger | UI |
+|---|---| |
+| **Loading** | `projectsLoading === true` (initial fetch in flight) | Centered spinner + `加载中…` text in `text-on-surface-variant` |
+| **Empty** | `projects.length === 0` (no projects at all) | `auto_stories` icon (large, dim) + `还没有项目，点击「+ 新建项目」开始` text in `text-on-surface-variant` |
+| **Filtered empty** | `filtered.length === 0` but `projects.length > 0` | `search_off` icon + `未找到匹配项目` + `GhostButton label="清空筛选"` |
+
+The action bar (`N 已选 · 删除 · 取消`) appears only when `selectedIds.length > 0` and replaces the table's empty state implicitly.
+
 ### Removed / merged
 
 - `BookShelfModal.tsx` is **deleted**; replaced by `BulkDeleteModal.tsx` (confirmation only — the table itself shows all projects).
@@ -383,6 +413,22 @@ Active: `bg-surface-container text-primary border-l-2 border-primary -ml-0.5 pl-
 - `ManifestoHeader.tsx` is **deleted**; replaced by `ds/BrandHeader`.
 - `StageDistribution.tsx` is **deleted**; replaced by `ds/PhaseIndicator`.
 - `StatCard.tsx` (current) is **deleted**; replaced by `ds/StatCard`.
+
+### `BulkDeleteModal` interface
+
+```ts
+interface BulkDeleteModalProps {
+  /** Project IDs the user has selected via row checkboxes. */
+  selectedIds: string[];
+  /** Resolved titles for display in the confirmation prompt. */
+  selectedTitles: string[];
+  isOpen: boolean;
+  onConfirm: () => void;          // calls api.bulkDeleteProjects
+  onCancel: () => void;
+}
+```
+
+Modal body shows `确定要删除以下 N 个项目吗？` followed by a scrollable list of selected titles (capped at 10 with `… 还有 N 个`). Confirm button uses `ds/SecondaryButton variant="destructive"`. Cancel uses `ds/GhostButton`.
 
 ## Brand Rename
 
@@ -485,5 +531,5 @@ Add or extend the existing `backend/tests/test_api_project_list.py` (or equivale
 - Brand copy reads "Nebula Forge" in the sidebar; tagline "让你的灵感长出血肉" is preserved.
 - `ProjectSummary` exposes `chapter_count` and `word_count`; both columns render non-null for projects that have chapters.
 - Toolbar Delete flow: select rows → action bar appears → confirm → rows disappear from list.
-- All existing vitest + pytest tests pass; ~13 new primitive tests pass.
+- All non-deleted vitest + pytest tests pass; ~13 new primitive tests pass.
 - No new TypeScript or backend errors; `npm run build` succeeds.

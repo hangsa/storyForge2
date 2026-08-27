@@ -1,174 +1,182 @@
 import { useMemo, useState } from "react";
-import { ProjectSummary } from "../../api/client";
-import BookShelfModal from "./BookShelfModal";
-import { isPreWizardStage, STAGE_COLORS, STAGE_LABELS } from "../ds/stages";
-import { useGenres } from "../../hooks/useGenres";
+import api, { ProjectSummary } from "../../api/client";
+import {
+  DropdownSelect, GhostButton, PrimaryButton, ProjectTableRow,
+  SearchInput, SecondaryButton,
+} from "../ds";
+import { isPreWizardStage } from "../ds/stages";
+import BulkDeleteModal from "./BulkDeleteModal";
 
-const DEFAULT_VISIBLE = 5;
+type SortKey = "default" | "title" | "chapter_count" | "word_count" | "target_total_words" | "updated_at";
+type SortDir = "asc" | "desc";
 
 interface BookShelfProps {
-  /** Caller owns the fetch — pass the resolved project list here. */
   projects: ProjectSummary[];
-  /** True while the caller's fetch is still in flight. */
   loading: boolean;
-  /** Forwarded to BookShelfModal — the modal owns the bulk-delete UI now,
-   *  so it needs the same pruning callback the parent used to give us. */
   onProjectsDeleted: (deletedIds: string[]) => void;
+  /** Fires when the user clicks the toolbar "+ 新建项目" button. HomePage
+   *  uses this to open the InitWizardModal (replaces the old CreateProjectCard). */
+  onCreateProject?: () => void;
+  /** Fires when the user clicks a row whose stage is pre-wizard (INIT/STAGE1-3).
+   *  HomePage uses this to re-open the InitWizardModal at the right step. */
+  onResumeWizard?: (projectId: string) => void;
 }
 
-export default function BookShelf({ projects, loading, onProjectsDeleted }: BookShelfProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+const GENRE_OPTIONS = [
+  { value: "all", label: "全部题材" },
+  { value: "xuanhuan", label: "玄幻" },
+  { value: "yanqing", label: "言情" },
+];
 
-  const sorted = useMemo(() => {
-    return [...projects].sort((a, b) => {
-      // Primary: updated_at DESC (most recently updated first).
-      if (a.updated_at !== b.updated_at) return b.updated_at - a.updated_at;
-      // Fallback: created_at DESC (most recently created first).
-      return (b.created_at || "").localeCompare(a.created_at || "");
-    });
-  }, [projects]);
+const LENGTH_OPTIONS = [
+  { value: "all", label: "全部分类" },
+  { value: "短篇", label: "短篇" },
+  { value: "标准连载", label: "标准连载" },
+  { value: "长篇巨著", label: "长篇巨著" },
+];
+
+export default function BookShelf({ projects, loading, onProjectsDeleted, onCreateProject, onResumeWizard }: BookShelfProps) {
+  const [search, setSearch] = useState("");
+  const [genre, setGenre] = useState("all");
+  const [length, setLength] = useState("all");
+  const [filtersApplied, setFiltersApplied] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("default");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return sorted;
-    return sorted.filter((p) => p.title.toLowerCase().includes(q));
-  }, [sorted, searchQuery]);
+    let list = projects;
+    const q = search.trim().toLowerCase();
+    if (q) list = list.filter((p) => p.title.toLowerCase().includes(q));
+    if (filtersApplied) {
+      if (genre !== "all") list = list.filter((p) => p.genre === genre);
+      if (length !== "all") list = list.filter((p) => p.target_length_category === length);
+    }
+    return list;
+  }, [projects, search, genre, length, filtersApplied]);
 
-  const visible = filtered.slice(0, DEFAULT_VISIBLE);
-  const [showModal, setShowModal] = useState(false);
+  const sorted = useMemo(() => {
+    if (sortKey === "default") {
+      return [...filtered].sort((a, b) => b.updated_at - a.updated_at);
+    }
+    const list = [...filtered];
+    list.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return list;
+  }, [filtered, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey !== key) { setSortKey(key); setSortDir("asc"); return; }
+    if (sortDir === "asc") setSortDir("desc");
+    else { setSortKey("default"); setSortDir("desc"); }
+  }
+
+  const empty = !loading && projects.length === 0;
+  const filteredEmpty = !loading && projects.length > 0 && sorted.length === 0;
 
   return (
     <section data-testid="book-shelf" className="space-y-3">
       <header className="flex items-center gap-3 flex-wrap">
-        <h2 className="font-headline-md text-primary">书架</h2>
-        <span className="font-label-mono text-xs text-system-log">
+        <h2 className="font-display text-headline-lg-mobile text-primary">书架</h2>
+        <span className="font-mono text-label-sm text-on-surface-variant">
           {loading ? "加载中…" : `共 ${projects.length} 本`}
         </span>
         <div className="flex-1" />
-        <div className="relative">
-          <span className="material-symbols-outlined text-base absolute left-3 top-1/2 -translate-y-1/2 text-system-log/60 pointer-events-none">
-            search
-          </span>
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索项目名称"
-            className="w-60 bg-surface-container border border-outline-variant rounded-lg
-                       pl-9 pr-3 py-1.5 text-sm text-primary placeholder:text-system-log/50
-                       focus:outline-none focus:border-primary-container"
-          />
-        </div>
+        <SearchInput value={search} onChange={setSearch} />
+        <DropdownSelect label="题材" options={GENRE_OPTIONS} value={genre} onChange={setGenre} />
+        <DropdownSelect label="篇幅" options={LENGTH_OPTIONS} value={length} onChange={setLength} />
+        <PrimaryButton label="查询" icon="search" onClick={() => setFiltersApplied(true)} />
+        <PrimaryButton label="+ 新建项目" icon="plus" onClick={() => onCreateProject?.()} />
       </header>
 
-      {loading ? (
-        <div className="text-center py-16 text-system-log/60">
-          <span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span>
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-surface-container border border-outline-variant rounded">
+          <span className="font-mono text-body-md text-on-surface">
+            {selectedIds.size} 已选
+          </span>
+          <SecondaryButton label="删除" variant="destructive" icon="delete" onClick={() => setConfirmOpen(true)} />
+          <GhostButton label="取消" onClick={() => setSelectedIds(new Set())} />
         </div>
-      ) : projects.length === 0 ? (
+      )}
+
+      {loading ? (
+        <div className="text-center py-16 text-on-surface-variant">
+          <span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span>
+          <div className="mt-2 font-body text-body-md">正在加载项目…</div>
+        </div>
+      ) : empty ? (
         <div className="text-center py-16">
-          <span className="material-symbols-outlined text-5xl text-system-log/20 mb-3 block">
+          <span className="material-symbols-outlined text-5xl text-on-surface-variant/20 mb-3 block">
             auto_stories
           </span>
-          <p className="font-body-ui text-system-log">还没有项目，点击新建按钮开始</p>
+          <p className="font-body text-body-md text-on-surface-variant">
+            还没有项目，点击「+ 新建项目」开始
+          </p>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : filteredEmpty ? (
         <div className="text-center py-16">
-          <span className="material-symbols-outlined text-5xl text-system-log/20 mb-3 block">
+          <span className="material-symbols-outlined text-5xl text-on-surface-variant/20 mb-3 block">
             search_off
           </span>
-          <p className="font-body-ui text-system-log">未找到匹配项目</p>
-          <button
-            onClick={() => setSearchQuery("")}
-            className="mt-3 text-sm font-label-mono text-system-log hover:text-primary"
-          >
-            清空搜索
-          </button>
+          <p className="font-body text-body-md text-on-surface-variant mb-3">未找到匹配项目</p>
+          <GhostButton label="清空筛选" onClick={() => { setSearch(""); setGenre("all"); setLength("all"); setFiltersApplied(false); }} />
         </div>
       ) : (
-        <>
-          <div
-            data-testid="book-row"
-            className="flex gap-4 overflow-x-auto pb-2"
-          >
-            {visible.map((p) => (
-              <BookCard key={p.id} project={p} />
-            ))}
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
+          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_120px] items-center py-2 px-3 border-b border-outline-variant font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
+            <div />
+            <button onClick={() => toggleSort("title")}>项目详情</button>
+            <button onClick={() => toggleSort("chapter_count")} className="text-center">章节</button>
+            <button onClick={() => toggleSort("word_count")} className="text-center">字数</button>
+            <button onClick={() => toggleSort("target_total_words")} className="text-center">篇幅</button>
+            <button onClick={() => toggleSort("updated_at")} className="text-right">最后编辑</button>
           </div>
-          {filtered.length > 1 && (
-            <div className="text-center">
-              <button
-                onClick={() => setShowModal(true)}
-                className="text-sm font-label-mono text-system-log hover:text-primary"
-              >
-                查看全部 ({filtered.length}) →
-              </button>
-            </div>
-          )}
-        </>
+          {sorted.map((p) => (
+            <ProjectTableRow
+              key={p.id}
+              project={p}
+              selected={selectedIds.has(p.id)}
+              onClick={() => {
+                if (isPreWizardStage(p.current_stage)) {
+                  onResumeWizard?.(p.id);
+                } else {
+                  window.location.assign(`/${p.id}/stage4`);
+                }
+              }}
+              onSelectChange={(sel) => {
+                setSelectedIds((prev) => {
+                  const next = new Set(prev);
+                  if (sel) next.add(p.id); else next.delete(p.id);
+                  return next;
+                });
+              }}
+            />
+          ))}
+        </div>
       )}
 
-      {showModal && (
-        <BookShelfModal
-          projects={filtered}
-          onClose={() => setShowModal(false)}
-          onProjectsDeleted={onProjectsDeleted}
-        />
-      )}
+      <BulkDeleteModal
+        isOpen={confirmOpen}
+        selectedIds={[...selectedIds]}
+        selectedTitles={sorted.filter((p) => selectedIds.has(p.id)).map((p) => p.title)}
+        onConfirm={async () => {
+          try {
+            await api.bulkDeleteProjects([...selectedIds]);
+          } catch {
+            // swallow — HomePage will refresh and reflect server truth
+          }
+          const deleted = [...selectedIds];
+          onProjectsDeleted(deleted);
+          setSelectedIds(new Set());
+          setConfirmOpen(false);
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </section>
-  );
-}
-
-function BookCard({ project }: { project: ProjectSummary }) {
-  const genres = useGenres(false); // include all so labels render for any project genre
-  const labelByGenre = Object.fromEntries(genres.map((g) => [g.id, g.label_zh]));
-
-  const handleClick = () => {
-    // Pre-wizard stages (INIT, STAGE1, STAGE2, STAGE3) are mid-initialization —
-    // open the wizard so the user can continue from the latest step they
-    // reached. Only STAGE4+ means the wizard finished and we should drop the
-    // user into the workspace (v1.8: /workspace is the project's day-to-day
-    // hub — /stage1 only exists for the inline concept editor).
-    const href = isPreWizardStage(project.current_stage)
-      ? `/project/${encodeURIComponent(project.id)}/wizard`
-      : `/project/${encodeURIComponent(project.id)}/workspace`;
-    window.location.assign(href);
-  };
-
-  return (
-    <div
-      data-testid="book-card"
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleClick();
-        }
-      }}
-      className="shrink-0 w-[260px] bg-surface-container-low border rounded-lg p-4 cursor-pointer
-                  transition-colors border-outline-variant hover:border-primary-container/40"
-    >
-      <div className="flex items-start justify-between mb-2 gap-2">
-        <h3 className="font-headline-md text-primary truncate">{project.title}</h3>
-        <span className={`text-[10px] px-1.5 py-0.5 rounded font-label-mono shrink-0 ${STAGE_COLORS[project.current_stage] || "bg-system-log/20 text-system-log"}`}>
-          {STAGE_LABELS[project.current_stage] || project.current_stage}
-        </span>
-      </div>
-      <div className="flex items-center gap-2 text-xs font-label-mono text-system-log">
-        <span>{labelByGenre[project.genre] || project.genre}</span>
-        <span>·</span>
-        <span>
-          {project.target_length_category || `${(project.target_total_words / 10000).toFixed(0)}万字`}
-        </span>
-        {project.created_at && (
-          <>
-            <span>·</span>
-            <span>{project.created_at.slice(0, 10)}</span>
-          </>
-        )}
-      </div>
-    </div>
   );
 }

@@ -37,19 +37,19 @@ export default function MoreActionsModal({ onClose }: MoreActionsModalProps) {
     >
       <div className="bg-surface-container-lowest border border-outline-variant rounded-lg w-full max-w-md max-h-[90vh] flex flex-col">
         <header className="px-6 py-4 flex items-center justify-between border-b border-outline-variant">
-          <h2 className="font-headline-md text-primary">更多</h2>
+          <h2 className="font-display text-title-md text-primary">更多</h2>
           <button
             onClick={onClose}
             aria-label="关闭"
             data-testid="more-actions-close"
-            className="text-system-log hover:text-primary"
+            className="text-on-surface-variant hover:text-primary"
           >
             <span className="material-symbols-outlined">close</span>
           </button>
         </header>
 
         <div className="p-6 space-y-3">
-          <div className="font-label-mono text-[10px] text-system-log uppercase tracking-wider">
+          <div className="font-label-mono text-[10px] text-on-surface-variant uppercase tracking-wider">
             主题
           </div>
           <div className="space-y-2">
@@ -88,7 +88,7 @@ export default function MoreActionsModal({ onClose }: MoreActionsModalProps) {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-display text-primary text-sm">{opt.label}</div>
-                    <div className="font-body-ui text-system-log text-xs">
+                    <div className="font-body-ui text-on-surface-variant text-xs">
                       {opt.description}
                     </div>
                   </div>

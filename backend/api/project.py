@@ -65,6 +65,16 @@ async def list_projects():
                         except OSError:
                             continue
                     fallback_title = data.get("title", "未命名") or "未命名"
+                    chapter_count = 0
+                    outline_file = proj_dir / "outline.json"
+                    if outline_file.exists():
+                        try:
+                            outline = fm_local.read_json(proj_dir.name, "outline.json")
+                            chapters = outline.get("chapters", []) if outline else []
+                            if isinstance(chapters, list):
+                                chapter_count = len(chapters)
+                        except Exception:
+                            chapter_count = 0
                     projects.append({
                         "id": data.get("id", proj_dir.name),
                         "title": _resolve_display_title(
@@ -73,6 +83,7 @@ async def list_projects():
                         "genre": data.get("genre", ""),
                         "current_stage": data.get("current_stage", "INIT"),
                         "created_at": data.get("created_at", ""),
+                        "chapter_count": chapter_count,
                         "updated_at": latest_mtime,
                         "min_words": data.get("min_words", 2000),
                         "target_total_words": data.get("target_total_words", 1_000_000),

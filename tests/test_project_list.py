@@ -75,3 +75,24 @@ def test_list_updated_at_reflects_recent_file_write(client, temp_projects_dir):
     after_resp = client.get("/api/project/list")
     after_mtime = after_resp.json()["detail"][0]["updated_at"]
     assert after_mtime > initial_mtime
+
+
+def test_list_returns_chapter_count_from_outline(client, temp_projects_dir):
+    project_id = "proj_chapters"
+    _write_project(temp_projects_dir, project_id, {
+        "id": project_id,
+        "title": "有章节",
+        "genre": "cool_novel",
+        "current_stage": "STAGE4",
+        "created_at": "2026-01-01T00:00:00Z",
+    })
+    (temp_projects_dir / project_id / "outline.json").write_text(
+        json.dumps({"chapters": [{"number": 1}, {"number": 2}, {"number": 3}]}),
+        encoding="utf-8",
+    )
+
+    resp = client.get("/api/project/list")
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    assert len(detail) == 1
+    assert detail[0]["chapter_count"] == 3

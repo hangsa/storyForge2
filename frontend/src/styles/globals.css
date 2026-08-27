@@ -9,51 +9,51 @@
   --color-canvas-text-muted: #64748b;
   --color-canvas-text-secondary: #b9cacb;
   --color-canvas-accent: #00dbe9;
-  --color-background: #0b1326;
-  --color-on-background: #dae2fd;
+  --color-background: #051424;
+  --color-on-background: #d4e4fa;
 
   /* Surface */
-  --color-surface: #0b1326;
-  --color-surface-dim: #0b1326;
-  --color-surface-bright: #31394d;
+  --color-surface: #051424;
+  --color-surface-dim: #051424;
+  --color-surface-bright: #2c3a4c;
   --color-surface-panel: #1e293b;
-  --color-surface-variant: #2d3449;
-  --color-surface-container: #171f33;
-  --color-surface-container-low: #131b2e;
-  --color-surface-container-lowest: #060e20;
-  --color-surface-container-high: #222a3d;
-  --color-surface-container-highest: #2d3449;
-  --color-on-surface: #dae2fd;
-  --color-on-surface-variant: #b9cacb;
-  --color-inverse-surface: #dae2fd;
-  --color-inverse-on-surface: #283044;
-  --color-outline: #849495;
-  --color-outline-variant: #334155;
-  --color-surface-tint: #00dbe9;
+  --color-surface-variant: #273647;
+  --color-surface-container: #122131;
+  --color-surface-container-low: #0d1c2d;
+  --color-surface-container-lowest: #010f1f;
+  --color-surface-container-high: #1c2b3c;
+  --color-surface-container-highest: #273647;
+  --color-on-surface: #d4e4fa;
+  --color-on-surface-variant: #bdc8d1;
+  --color-inverse-surface: #d4e4fa;
+  --color-inverse-on-surface: #233143;
+  --color-outline: #87929a;
+  --color-outline-variant: #3e484f;
+  --color-surface-tint: #7bd0ff;
 
   /* Primary (Tech Blue) */
-  --color-primary: #dbfcff;
-  --color-on-primary: #00363a;
-  --color-primary-container: #00f0ff;
-  --color-on-primary-container: #006970;
-  --color-inverse-primary: #006970;
-  --color-primary-fixed: #7df4ff;
-  --color-primary-fixed-dim: #00dbe9;
-  --color-on-primary-fixed: #002022;
-  --color-on-primary-fixed-variant: #004f54;
+  --color-primary: #8ed5ff;
+  --color-on-primary: #00354a;
+  --color-primary-container: #38bdf8;
+  --color-on-primary-container: #004965;
+  --color-inverse-primary: #00668a;
+  --color-primary-fixed: #c4e7ff;
+  --color-primary-fixed-dim: #7bd0ff;
+  --color-on-primary-fixed: #001e2c;
+  --color-on-primary-fixed-variant: #004c69;
 
   /* Secondary (Ether Purple) */
-  --color-secondary: #d0bcff;
-  --color-on-secondary: #3c0091;
-  --color-secondary-container: #571bc1;
-  --color-on-secondary-container: #c4abff;
+  --color-secondary: #bcc7de;
+  --color-on-secondary: #263143;
+  --color-secondary-container: #3e495d;
+  --color-on-secondary-container: #aeb9d0;
   --color-secondary-fixed: #e9ddff;
   --color-secondary-fixed-dim: #d0bcff;
   --color-on-secondary-fixed: #23005c;
   --color-on-secondary-fixed-variant: #5516be;
 
   /* Tertiary (Vitality Green) */
-  --color-tertiary: #d8ffe7;
+  --color-tertiary: #c5cce6;
   --color-on-tertiary: #003824;
   --color-tertiary-container: #65f2b5;
   --color-on-tertiary-container: #006d4a;

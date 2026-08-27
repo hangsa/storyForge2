@@ -6,7 +6,7 @@ export interface SidebarProps {
   collapsible?: boolean;
   persistKey?: string;
   header?: ReactNode;
-  children: ReactNode;
+  children: ReactNode | ((collapsed: boolean) => ReactNode);
   footer?: ReactNode;
 }
 
@@ -52,7 +52,9 @@ export default function Sidebar({
           </button>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-3">{children}</div>
+      <div className="flex-1 overflow-y-auto p-3">
+        {typeof children === "function" ? children(collapsedState) : children}
+      </div>
       {footer && (
         <div className="p-3 border-t border-outline-variant">{showText ? footer : null}</div>
       )}

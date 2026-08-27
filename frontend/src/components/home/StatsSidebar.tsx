@@ -1,12 +1,8 @@
-import { useState, useEffect } from "react";
+import { useMemo } from "react";
 import { ProjectStats } from "../../api/client";
-import StatCard from "./StatCard";
-import StageDistribution from "./StageDistribution";
+import { BrandHeader, PhaseIndicator, Sidebar, StatCard } from "../ds";
+import { STAGE_LABELS } from "../ds/stages";
 import QuickActions from "./QuickActions";
-
-const COLLAPSED_KEY = "storyforge.home.sidebar.collapsed";
-const EXPANDED_WIDTH = "w-[300px]";
-const COLLAPSED_WIDTH = "w-[52px]";
 
 interface StatsSidebarProps {
   stats: ProjectStats | null;
@@ -22,6 +18,11 @@ interface StatsSidebarProps {
   onOpenMore?: () => void;
 }
 
+const STAGE_ORDER = [
+  "INIT", "STAGE1", "STAGE2", "STAGE3",
+  "STAGE4", "STAGE5", "STAGE6", "COMPLETED",
+] as const;
+
 export default function StatsSidebar({
   stats,
   statsLoading,
@@ -35,76 +36,29 @@ export default function StatsSidebar({
   consoleTooltip,
   onOpenMore,
 }: StatsSidebarProps) {
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(COLLAPSED_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(COLLAPSED_KEY, String(collapsed));
-    } catch {
-      // ignore
-    }
-  }, [collapsed]);
-
-  const toggle = () => setCollapsed((v) => !v);
+  const phases = useMemo(
+    () =>
+      STAGE_ORDER.map((key) => ({
+        key,
+        label: STAGE_LABELS[key],
+        count: stats?.stage_distribution?.[key] ?? 0,
+        active: key === "STAGE4",
+        completed: key === "COMPLETED",
+      })),
+    [stats]
+  );
 
   return (
-    <aside
-      data-testid="stats-sidebar"
-      data-collapsed={collapsed ? "true" : "false"}
-      className={`${collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH} shrink-0 border-r border-outline-variant bg-surface-container-lowest flex flex-col transition-[width] duration-150`}
+    <Sidebar
+      persistKey="storyforge.home.sidebar.collapsed"
+      header={<BrandHeader brandName="Nebula Forge" />}
+      footer={null}
     >
-      <div className="px-4 py-4 border-b border-outline-variant flex items-center justify-between">
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary-container text-2xl">
-              auto_stories
-            </span>
-            <span className="font-display text-primary text-lg">StoryForge</span>
-          </div>
-        )}
-        <button
-          onClick={toggle}
-          aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-          data-testid="sidebar-toggle"
-          className="text-system-log hover:text-primary ml-auto"
-        >
-          <span className="material-symbols-outlined text-xl">
-            {collapsed ? "chevron_right" : "chevron_left"}
-          </span>
-        </button>
-      </div>
-
-      {!collapsed && (
-        <>
-          <section className="p-4 border-b border-outline-variant">
-            <div className="font-label-mono text-[10px] text-system-log uppercase tracking-wider mb-2">
-              统计
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <StatCard label="总书籍" value={stats?.total_books ?? null} />
-              <StatCard label="总章节" value={stats?.total_chapters ?? null} />
-              <StatCard label="总字数" value={stats?.total_words ?? null} />
-            </div>
-          </section>
-
-          <section className="p-4 border-b border-outline-variant">
-            <div className="font-label-mono text-[10px] text-system-log uppercase tracking-wider mb-2">
-              阶段分布
-            </div>
-            <StageDistribution distribution={stats?.stage_distribution ?? null} />
-          </section>
-
-          <section className="p-4">
-            <div className="font-label-mono text-[10px] text-system-log uppercase tracking-wider mb-2">
-              快捷操作
-            </div>
+      {(collapsed) => (
+        <div className="flex flex-col gap-4">
+          {collapsed ? (
             <QuickActions
+              collapsed
               onRefresh={onRefresh}
               refreshing={refreshing}
               onOpenPlaza={onOpenPlaza}
@@ -115,35 +69,51 @@ export default function StatsSidebar({
               consoleTooltip={consoleTooltip}
               onOpenMore={onOpenMore}
             />
-            {statsLoading && (
-              <div className="mt-3 text-[10px] font-label-mono text-system-log/60">
-                加载中…
-              </div>
-            )}
-          </section>
-        </>
-      )}
+          ) : (
+            <>
+              <section>
+                <h3 className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant mb-2">
+                  统计
+                </h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatCard label="总书籍" value={stats?.total_books ?? null} size="sm" />
+                  <StatCard label="总章节" value={stats?.total_chapters ?? null} size="sm" />
+                  <StatCard label="总字数" value={stats?.total_words ?? null} size="sm" />
+                </div>
+              </section>
 
-      {collapsed && (
-        <div className="flex-1 flex flex-col items-center pt-3 gap-3">
-          <span className="material-symbols-outlined text-primary-container text-2xl">
-            auto_stories
-          </span>
-          <div className="flex-1 w-full px-2">
-            <QuickActions
-              onRefresh={onRefresh}
-              refreshing={refreshing}
-              onOpenPlaza={onOpenPlaza}
-              plazaDisabled={plazaDisabled}
-              plazaTooltip={plazaTooltip}
-              onOpenConsole={onOpenConsole}
-              consoleDisabled={consoleDisabled}
-              consoleTooltip={consoleTooltip}
-              onOpenMore={onOpenMore}
-            />
-          </div>
+              <section>
+                <h3 className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant mb-2">
+                  阶段分布
+                </h3>
+                <PhaseIndicator phases={phases} />
+              </section>
+
+              <section>
+                <h3 className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant mb-2">
+                  快捷操作
+                </h3>
+                <QuickActions
+                  onRefresh={onRefresh}
+                  refreshing={refreshing}
+                  onOpenPlaza={onOpenPlaza}
+                  plazaDisabled={plazaDisabled}
+                  plazaTooltip={plazaTooltip}
+                  onOpenConsole={onOpenConsole}
+                  consoleDisabled={consoleDisabled}
+                  consoleTooltip={consoleTooltip}
+                  onOpenMore={onOpenMore}
+                />
+                {statsLoading && (
+                  <div className="mt-3 font-mono text-label-sm text-on-surface-variant/60">
+                    加载中…
+                  </div>
+                )}
+              </section>
+            </>
+          )}
         </div>
       )}
-    </aside>
+    </Sidebar>
   );
 }

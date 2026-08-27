@@ -60,7 +60,7 @@ export default function ProjectTableRow({
         </span>
         <span className="font-display text-on-surface truncate">{project.title}</span>
       </div>
-      <div className="text-center font-mono text-body-md text-on-surface-variant">
+      <div className="text-center font-mono text-label-sm text-on-surface-variant">
         {genreLabel}
       </div>
       <div className="flex justify-center">
@@ -68,11 +68,11 @@ export default function ProjectTableRow({
           {stageLabel}
         </span>
       </div>
-      <div className="text-center font-mono text-body-md text-on-surface">{project.chapter_count}</div>
-      <div className="text-center font-mono text-body-md text-on-surface">
+      <div className="text-center font-mono text-label-sm text-on-surface">{project.chapter_count}</div>
+      <div className="text-center font-mono text-label-sm text-on-surface">
         {formatWordCount(project.word_count)}
       </div>
-      <div className="text-center font-mono text-body-md text-on-surface-variant">
+      <div className="text-center font-mono text-label-sm text-on-surface-variant">
         {project.target_length_category}
       </div>
       <div className="text-right font-mono text-label-sm text-on-surface-variant">

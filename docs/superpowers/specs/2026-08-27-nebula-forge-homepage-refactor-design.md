@@ -130,18 +130,34 @@ This means 96 existing usages (across HomePage, Workspace, aiConsole, etc.) auto
 
 ### Typography tokens (Tailwind `fontSize` extension)
 
-Add the design-doc sizes to `tailwind.config.ts` under `theme.fontSize`:
+Add the design-doc sizes to `tailwind.config.ts` under `theme.fontSize`. Font family is applied separately (Tailwind's `fontFamily` is orthogonal to `fontSize`); for any token that uses JetBrains Mono / Hanken Grotesk / Inter, the consumer must compose the appropriate `font-mono` / `font-display` / `font-body` utility alongside `text-<token>`.
 
-| Token | font | size | weight | line-height |
+```ts
+// tailwind.config.ts (fragment)
+theme: {
+  fontSize: {
+    'display-lg':    ['48px', { lineHeight: '56px', fontWeight: '700', letterSpacing: '-0.02em' }],
+    'headline-lg':   ['32px', { lineHeight: '40px', fontWeight: '600' }],
+    'headline-lg-mobile': ['24px', { lineHeight: '32px', fontWeight: '600' }],
+    'title-md':      ['20px', { lineHeight: '28px', fontWeight: '500' }],
+    'body-lg':       ['18px', { lineHeight: '30px', fontWeight: '400' }],
+    'body-md':       ['16px', { lineHeight: '24px', fontWeight: '400' }],
+    'label-sm':      ['12px', { lineHeight: '16px', fontWeight: '500', letterSpacing: '0.05em' }],
+    'stats-number':  ['24px', { lineHeight: '32px', fontWeight: '600' }],
+  },
+}
+```
+
+| Token | Font family (compose with) | Size | Weight | Line height |
 |---|---|---|---|---|
-| `display-lg` | Hanken Grotesk | 48px | 700 | 56px |
-| `headline-lg` | Hanken Grotesk | 32px | 600 | 40px |
-| `headline-lg-mobile` | Hanken Grotesk | 24px | 600 | 32px |
-| `title-md` | Hanken Grotesk | 20px | 500 | 28px |
-| `body-lg` | Inter | 18px | 400 | 30px |
-| `body-md` | Inter | 16px | 400 | 24px |
-| `label-sm` | JetBrains Mono | 12px | 500 | 16px |
-| `stats-number` | JetBrains Mono | 24px | 600 | 32px |
+| `display-lg` | Hanken Grotesk (`font-display`) | 48px | 700 | 56px |
+| `headline-lg` | Hanken Grotesk (`font-display`) | 32px | 600 | 40px |
+| `headline-lg-mobile` | Hanken Grotesk (`font-display`) | 24px | 600 | 32px |
+| `title-md` | Hanken Grotesk (`font-display`) | 20px | 500 | 28px |
+| `body-lg` | Inter (`font-body`) | 18px | 400 | 30px |
+| `body-md` | Inter (`font-body`) | 16px | 400 | 24px |
+| `label-sm` | JetBrains Mono (`font-mono`) | 12px | 500 | 16px |
+| `stats-number` | JetBrains Mono (`font-mono`) | 24px | 600 | 32px |
 
 ### Rounded & spacing
 
@@ -167,7 +183,7 @@ interface PrimaryButtonProps {
 }
 ```
 
-Styling: `bg-primary text-on-primary rounded px-4 py-2 hover:bg-primary-container transition`. Loading state replaces the icon with a spinner and disables clicks.
+Styling: `bg-primary text-on-primary rounded px-4 py-2 hover:bg-primary/90 transition`. Loading state replaces the icon with a spinner and disables clicks.
 
 **`SecondaryButton`** — Slate border + hover fill (used for "删除", Modal actions).
 
@@ -252,7 +268,7 @@ interface StatCardProps {
 }
 ```
 
-Styling: `bg-surface-container-low border border-outline-variant rounded-lg p-3`. Label: `font-mono text-[10px] uppercase tracking-wider text-on-surface-variant`. Value: `font-mono text-2xl text-primary` (sm → `text-base`).
+Styling: `bg-surface-container-low border border-outline-variant rounded-lg p-3`. Label: `font-mono text-label-sm uppercase tracking-wider text-on-surface-variant`. Value: `font-mono text-stats-number text-primary` (sm → `text-base` for the compact sidebar variant).
 
 **`PanelCard`** — generic rounded-lg surface-container card with 1px outline. Used by every "card" in the system.
 
@@ -282,7 +298,7 @@ interface PhaseIndicatorProps {
 }
 ```
 
-Marker: `w-2 h-2 rounded-full bg-outline-variant`. Active: `bg-primary ring-4 ring-primary/20 animate-pulse`. Completed: solid `bg-primary`.
+Marker: `w-2 h-2 rounded-full bg-outline-variant`. Active: `bg-primary ring-4 ring-primary/20 animate-pulse`. Completed: solid `bg-primary`. Label: `font-mono text-label-sm uppercase tracking-wider text-on-surface-variant`. Count: `text-label-sm text-on-surface font-mono` (right-aligned).
 
 **`ProjectTableRow`** — single row of the new Bookshelf table.
 
@@ -329,6 +345,8 @@ interface SidebarProps {
   footer?: React.ReactNode;
 }
 ```
+
+Section headers inside the Sidebar (`统计`, `阶段分布`, `快捷操作`, etc.) are **not** part of the `Sidebar` API — they are authored by the consumer as `<h3 className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant mb-2">…</h3>`. The Sidebar primitive guarantees only the section dividers (`border-b border-outline-variant`) and the vertical rhythm between sections.
 
 **`SidebarNavItem`** — single nav entry.
 

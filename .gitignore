@@ -37,3 +37,7 @@ projects/
 .claude/
 
 llm_usage.jsonl
+
+# Git worktrees (local isolation directories)
+worktrees/
+.worktrees/

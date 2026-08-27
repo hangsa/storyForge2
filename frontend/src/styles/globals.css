@@ -4,11 +4,11 @@
 
 :root {
   /* Canvas & Background */
-  --color-canvas-bg: #020617;
-  --color-canvas-surface: #0b1326;
-  --color-canvas-text-muted: #64748b;
-  --color-canvas-text-secondary: #b9cacb;
-  --color-canvas-accent: #00dbe9;
+  --color-canvas-bg: #051424;
+  --color-canvas-surface: #122131;
+  --color-canvas-text-muted: #bdc8d1;
+  --color-canvas-text-secondary: #d4e4fa;
+  --color-canvas-accent: #7bd0ff;
   --color-background: #051424;
   --color-on-background: #d4e4fa;
 

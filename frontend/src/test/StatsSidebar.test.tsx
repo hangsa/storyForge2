@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, act, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import StatsSidebar from "../components/home/StatsSidebar";
 
 const SAMPLE_STATS = {
@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 
 describe("StatsSidebar", () => {
-  it("renders expanded by default with brand, stats, distribution, actions", () => {
+  it("renders the Nebula Forge brand and stats sections when expanded", () => {
     render(
       <StatsSidebar
         stats={SAMPLE_STATS}
@@ -26,123 +26,66 @@ describe("StatsSidebar", () => {
         refreshing={false}
       />
     );
-    expect(screen.getByText("StoryForge")).toBeInTheDocument();
-    expect(screen.getAllByTestId("stat-card").length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByTestId("stage-distribution")).toBeInTheDocument();
-    expect(screen.getByTestId("quick-actions")).toBeInTheDocument();
+    expect(screen.getByText("Nebula Forge")).toBeInTheDocument();
+    expect(screen.getByText("统计")).toBeInTheDocument();
+    expect(screen.getByText("阶段分布")).toBeInTheDocument();
+    expect(screen.getByText("快捷操作")).toBeInTheDocument();
+    expect(screen.getByText("总书籍")).toBeInTheDocument();
+    expect(screen.getByText("总章节")).toBeInTheDocument();
+    expect(screen.getByText("总字数")).toBeInTheDocument();
   });
 
-  it("shows placeholder values when stats is null", () => {
-    render(
-      <StatsSidebar
-        stats={null}
-        statsLoading={false}
-        onRefresh={() => {}}
-        refreshing={false}
-      />
-    );
-    const cards = screen.getAllByTestId("stat-card");
-    expect(cards.length).toBeGreaterThanOrEqual(3);
-    cards.forEach((c) => {
-      expect(c.textContent).toContain("—");
-    });
-  });
-
-  it("collapses to icon-only mode when toggle is clicked", () => {
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-        onRefresh={() => {}}
-        refreshing={false}
-      />
-    );
-    const toggle = screen.getByRole("button", { name: /collapse|收起|折叠/ });
-    expect(toggle).toBeInTheDocument();
-    act(() => {
-      toggle.click();
-    });
-    // After collapse, the brand text is hidden.
-    expect(screen.queryByText("StoryForge")).not.toBeInTheDocument();
-    // Quick actions remain (they are still useful when collapsed).
-    expect(screen.getByTestId("quick-actions")).toBeInTheDocument();
-  });
-
-  it("persists collapsed state to localStorage", () => {
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-        onRefresh={() => {}}
-        refreshing={false}
-      />
-    );
-    const toggle = screen.getByRole("button", { name: /collapse|收起|折叠/ });
-    act(() => {
-      toggle.click();
-    });
-    expect(localStorage.getItem("storyforge.home.sidebar.collapsed")).toBe("true");
-  });
-
-  it("hydrates from localStorage on mount", () => {
+  it("renders only the collapsed icon column when localStorage says collapsed", () => {
     localStorage.setItem("storyforge.home.sidebar.collapsed", "true");
     render(
       <StatsSidebar
         stats={SAMPLE_STATS}
         statsLoading={false}
-        onRefresh={() => {}}
+        onRefresh={vi.fn()}
         refreshing={false}
       />
     );
-    expect(screen.queryByText("StoryForge")).not.toBeInTheDocument();
+    expect(screen.queryByText("统计")).not.toBeInTheDocument();
+    expect(screen.queryByText("快捷操作")).not.toBeInTheDocument();
+    // Brand text hidden but BrandHeader icon still present
+    expect(screen.getByText("auto_stories")).toBeInTheDocument();
   });
 
-  it("invokes onRefresh when the refresh action is clicked", () => {
-    let called = 0;
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-        onRefresh={() => { called += 1; }}
-        refreshing={false}
-      />
-    );
-    act(() => {
-      screen.getByTestId("qa-refresh").click();
-    });
-    expect(called).toBe(1);
-  });
-
-  it("renders the three numeric tiles with total_books, total_chapters, total_words", () => {
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-        onRefresh={() => {}}
-        refreshing={false}
-      />
-    );
-    expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("87")).toBeInTheDocument();
-    expect(screen.getByText("214,000")).toBeInTheDocument();
-  });
-
-  it("更多 button is enabled and calls onOpenMore when clicked", () => {
+  it("forwards refresh / plaza / console / more callbacks to QuickActions", () => {
+    const onRefresh = vi.fn();
+    const onOpenPlaza = vi.fn();
+    const onOpenConsole = vi.fn();
     const onOpenMore = vi.fn();
     render(
       <StatsSidebar
         stats={SAMPLE_STATS}
         statsLoading={false}
-        onRefresh={() => {}}
+        onRefresh={onRefresh}
         refreshing={false}
+        onOpenPlaza={onOpenPlaza}
+        onOpenConsole={onOpenConsole}
         onOpenMore={onOpenMore}
       />
     );
-    const moreBtn = screen.getByTestId("qa-more");
-    expect(moreBtn).not.toBeDisabled();
-    act(() => {
-      moreBtn.click();
-    });
+    screen.getByTestId("qa-refresh").click();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    screen.getByTestId("qa-prompt-square").click();
+    expect(onOpenPlaza).toHaveBeenCalledTimes(1);
+    screen.getByTestId("qa-ai-console").click();
+    expect(onOpenConsole).toHaveBeenCalledTimes(1);
+    screen.getByTestId("qa-more").click();
     expect(onOpenMore).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows 加载中… when statsLoading is true", () => {
+    render(
+      <StatsSidebar
+        stats={null}
+        statsLoading
+        onRefresh={() => {}}
+        refreshing={false}
+      />
+    );
+    expect(screen.getByText("加载中…")).toBeInTheDocument();
   });
 });

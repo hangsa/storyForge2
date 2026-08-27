@@ -38,7 +38,7 @@ export default function Sidebar({
       className="shrink-0 bg-canvas-bg border-r border-outline-variant flex flex-col transition-[width] duration-200"
     >
       <div className="flex items-center justify-between p-3 border-b border-outline-variant">
-        {showText ? header : null}
+        {header}
         {collapsible && (
           <button
             type="button"

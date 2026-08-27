@@ -13,6 +13,12 @@ const SIZE_CLASS: Record<NonNullable<SecondaryButtonProps["size"]>, string> = {
   md: "px-4 py-2 text-base",
 };
 
+// Icon sits one notch smaller than the label so it reads as a glyph, not a letter.
+const ICON_SIZE_CLASS: Record<NonNullable<SecondaryButtonProps["size"]>, string> = {
+  sm: "text-xs",
+  md: "text-sm",
+};
+
 export default function SecondaryButton({
   label,
   icon,
@@ -35,7 +41,7 @@ export default function SecondaryButton({
       data-testid={testId}
       className={`inline-flex items-center gap-2 bg-surface-container border ${colorClass} rounded ${SIZE_CLASS[size]} hover:bg-surface-container-high transition disabled:opacity-50`}
     >
-      {icon && <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>}
+      {icon && <span className={`material-symbols-outlined ${ICON_SIZE_CLASS[size]}`} aria-hidden="true">{icon}</span>}
       <span>{label}</span>
     </button>
   );

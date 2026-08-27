@@ -17,22 +17,24 @@ interface BookShelfProps {
   /** Fires when the user clicks a row whose stage is pre-wizard (INIT/STAGE1-3).
    *  HomePage uses this to re-open the InitWizardModal at the right step. */
   onResumeWizard?: (projectId: string) => void;
+  /** Fires when the user clicks the "+ 新建项目" action button. */
+  onOpenCreate?: () => void;
 }
 
 const GENRE_OPTIONS = [
-  { value: "all", label: "全部题材" },
+  { value: "all", label: "所有题材" },
   { value: "xuanhuan", label: "玄幻" },
   { value: "yanqing", label: "言情" },
 ];
 
 const LENGTH_OPTIONS = [
-  { value: "all", label: "全部分类" },
+  { value: "all", label: "篇幅不限" },
   { value: "短篇", label: "短篇" },
   { value: "标准连载", label: "标准连载" },
   { value: "长篇巨著", label: "长篇巨著" },
 ];
 
-export default function BookShelf({ projects, loading, onProjectsDeleted, onResumeWizard }: BookShelfProps) {
+export default function BookShelf({ projects, loading, onProjectsDeleted, onResumeWizard, onOpenCreate }: BookShelfProps) {
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState("all");
   const [length, setLength] = useState("all");
@@ -84,6 +86,13 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
           {loading ? "加载中…" : `共 ${projects.length} 本`}
         </span>
         <div className="flex-1" />
+        {onOpenCreate && (
+          <PrimaryButton
+            label="+ 新建项目"
+            icon="plus"
+            onClick={onOpenCreate}
+          />
+        )}
         <SearchInput value={search} onChange={setSearch} />
         <DropdownSelect label="题材" options={GENRE_OPTIONS} value={genre} onChange={setGenre} />
         <DropdownSelect label="篇幅" options={LENGTH_OPTIONS} value={length} onChange={setLength} />

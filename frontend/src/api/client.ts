@@ -121,6 +121,10 @@ export interface ProjectStats {
   total_chapters: number;
   total_words: number;
   stage_distribution: Record<string, number>;
+  /** Cumulative word count at each chapter completion, oldest → newest.
+   *  Empty when no chapters have been written. Used by the sidebar
+   *  sparkline on 总字数. */
+  word_count_series: number[];
 }
 
 export interface Project {

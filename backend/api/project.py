@@ -317,6 +317,11 @@ async def get_project_stats():
     total_books = 0
     total_chapters = 0
     total_words = 0
+    # (chapter mtime, chapter char count) pairs collected in iteration order;
+    # sorted by mtime ascending, then reduced to a cumulative word-count
+    # series for the sparkline on 总字数. Pair form keeps the data-source
+    # local to this loop instead of walking the chapter dirs twice.
+    chapter_points: list[tuple[float, int]] = []
 
     if projects_dir.exists():
         for proj_dir in projects_dir.iterdir():
@@ -356,7 +361,20 @@ async def get_project_stats():
                     except Exception:
                         continue
                     visible = _SF_LOG_COMMENT_RE.sub("", text)
-                    total_words += len(visible)
+                    chars = len(visible)
+                    total_words += chars
+                    try:
+                        mtime = draft_file.stat().st_mtime
+                    except OSError:
+                        mtime = 0.0
+                    chapter_points.append((mtime, chars))
+
+    chapter_points.sort(key=lambda p: p[0])
+    cumulative = 0
+    word_count_series: list[int] = []
+    for _, chars in chapter_points:
+        cumulative += chars
+        word_count_series.append(cumulative)
 
     return {
         "error": False,
@@ -367,6 +385,7 @@ async def get_project_stats():
             "total_chapters": total_chapters,
             "total_words": total_words,
             "stage_distribution": stage_distribution,
+            "word_count_series": word_count_series,
         },
     }
 

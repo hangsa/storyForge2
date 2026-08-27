@@ -1,23 +1,24 @@
 import { useState, useCallback, useEffect } from "react";
 import api, { type ProjectSummary } from "../api/client";
 import StatsSidebar from "../components/home/StatsSidebar";
-import CreateProjectCard from "../components/home/CreateProjectCard";
+import CreateProjectModal from "../components/home/CreateProjectModal";
 import BookShelf from "../components/home/BookShelf";
 import InitWizardModal from "../components/wizard/InitWizardModal";
 import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
 import AIConsoleModal from "../components/aiConsole/AIConsoleModal";
-import MoreActionsModal from "../components/home/MoreActionsModal";
 import { useProjectStats } from "../hooks/useProjectStats";
+import { useToast } from "../hooks/useToast";
+import { BrandHeader } from "../components/ds";
 
 export default function HomePage() {
-  const { stats, loading: statsLoading, refresh } = useProjectStats();
+  const { stats, loading: statsLoading } = useProjectStats();
+  const toast = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
   const [plazaOpen, setPlazaOpen] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   // v1.8.2: single source of truth for the project list. BookShelf used to
   // fetch /api/project/list on its own, doubling the round-trip on every
@@ -69,6 +70,7 @@ export default function HomePage() {
           // proceed even if advance fails (mirrors prior behavior)
         }
         setWizardProjectId(project.id);
+        setCreateOpen(false);
       } catch (e) {
         setCreateError(e instanceof Error ? e.message : "创建项目失败");
       } finally {
@@ -82,15 +84,6 @@ export default function HomePage() {
     setWizardProjectId(projectId);
   }, []);
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await refresh();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refresh]);
-
   const handleOpenPlaza = useCallback(() => {
     setPlazaOpen(true);
   }, []);
@@ -99,34 +92,66 @@ export default function HomePage() {
     setConsoleOpen(true);
   }, []);
 
-  const handleOpenMore = useCallback(() => {
-    setMoreOpen(true);
+  const handleOpenCreate = useCallback(() => {
+    setCreateError(null);
+    setCreateOpen(true);
   }, []);
 
+  const handleCloseCreate = useCallback(() => {
+    setCreateOpen(false);
+    setCreateError(null);
+  }, []);
+
+  // Global settings page is not yet implemented (existing settings route is
+  // project-scoped at /project/:projectId/settings). Surface the button per
+  // the design, but route to a toast until a global route exists.
+  const handleOpenSettings = useCallback(() => {
+    toast.show("设置功能即将上线，请进入具体项目后访问");
+  }, [toast]);
+
+  const handleOpenSupport = useCallback(() => {
+    toast.show("支持中心即将上线");
+  }, [toast]);
+
   return (
-    <div className="min-h-screen bg-canvas-bg flex">
-      <StatsSidebar
-        stats={stats}
-        statsLoading={statsLoading}
-        onRefresh={handleRefresh}
-        refreshing={refreshing}
-        onOpenPlaza={handleOpenPlaza}
-        onOpenConsole={handleOpenConsole}
-        onOpenMore={handleOpenMore}
+    <div className="min-h-screen bg-canvas-bg flex flex-col">
+      <header
+        data-testid="home-top-bar"
+        className="shrink-0 border-b border-outline-variant bg-canvas-bg px-4 py-3 flex items-center"
+      >
+        <BrandHeader
+          brandName="Nebula Forge"
+          version="V0.1.0"
+          versionLayout="stacked"
+          versionTestId="version-chip"
+        />
+      </header>
+      <div className="flex flex-1 min-h-0">
+        <StatsSidebar
+          stats={stats}
+          statsLoading={statsLoading}
+          onOpenPlaza={handleOpenPlaza}
+          onOpenConsole={handleOpenConsole}
+          onOpenSettings={handleOpenSettings}
+          onOpenSupport={handleOpenSupport}
+        />
+        <main className="flex-1 min-w-0 px-8 py-8 max-w-[1200px] mx-auto">
+          <BookShelf
+            projects={projects}
+            loading={projectsLoading}
+            onProjectsDeleted={handleProjectsDeleted}
+            onResumeWizard={handleResumeWizard}
+            onOpenCreate={handleOpenCreate}
+          />
+        </main>
+      </div>
+      <CreateProjectModal
+        isOpen={createOpen}
+        submitting={submitting}
+        error={createError}
+        onSubmit={handleCreate}
+        onClose={handleCloseCreate}
       />
-      <main className="flex-1 min-w-0 px-8 py-8 max-w-[1200px] mx-auto">
-        <CreateProjectCard
-          onSubmit={handleCreate}
-          submitting={submitting}
-          error={createError}
-        />
-        <BookShelf
-          projects={projects}
-          loading={projectsLoading}
-          onProjectsDeleted={handleProjectsDeleted}
-          onResumeWizard={handleResumeWizard}
-        />
-      </main>
       <PromptPlazaModal
         isOpen={plazaOpen}
         projectId={null}
@@ -137,7 +162,6 @@ export default function HomePage() {
         isOpen={consoleOpen}
         onClose={() => setConsoleOpen(false)}
       />
-      {moreOpen && <MoreActionsModal onClose={() => setMoreOpen(false)} />}
       {wizardProjectId && (
         <InitWizardModal
           projectId={wizardProjectId}

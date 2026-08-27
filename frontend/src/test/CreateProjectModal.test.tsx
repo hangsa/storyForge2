@@ -8,14 +8,35 @@ vi.mock("../hooks/useGenres", () => ({
   ],
 }));
 
-import CreateProjectCard from "../components/home/CreateProjectCard";
+import CreateProjectModal from "../components/home/CreateProjectModal";
 
-describe("CreateProjectCard", () => {
+describe("CreateProjectModal", () => {
   it("renders genre options from useGenres hook", () => {
-    render(<CreateProjectCard onSubmit={async () => {}} submitting={false} error={null} />);
+    render(
+      <CreateProjectModal
+        isOpen
+        submitting={false}
+        error={null}
+        onSubmit={async () => {}}
+        onClose={() => {}}
+      />
+    );
     const select = screen.getByTestId("genre-input") as HTMLSelectElement;
     const options = Array.from(select.options).map((o) => o.value);
     expect(options).toContain("cool_novel");
     expect(options).toContain("xuanyi");
+  });
+
+  it("renders nothing when isOpen is false", () => {
+    const { container } = render(
+      <CreateProjectModal
+        isOpen={false}
+        submitting={false}
+        error={null}
+        onSubmit={async () => {}}
+        onClose={() => {}}
+      />
+    );
+    expect(container.firstChild).toBeNull();
   });
 });

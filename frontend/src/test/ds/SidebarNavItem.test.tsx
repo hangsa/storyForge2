@@ -12,7 +12,7 @@ describe("SidebarNavItem", () => {
   it("applies active border + background when active", () => {
     const { container } = render(<SidebarNavItem icon="home" label="主页" active />);
     expect(container.firstChild).toHaveClass("border-primary");
-    expect(container.firstChild).toHaveClass("bg-surface-container");
+    expect(container.firstChild).toHaveClass("bg-primary-container/15");
   });
 
   it("hides the label when collapsed", () => {

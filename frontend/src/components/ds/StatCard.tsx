@@ -6,6 +6,8 @@ export interface StatCardProps {
   sparkline?: ReactNode;
   size?: "sm" | "md";
   unit?: string;
+  /** Optional small text rendered to the right of the label, e.g. "Total". */
+  sublabel?: string;
 }
 
 export default function StatCard({
@@ -14,6 +16,7 @@ export default function StatCard({
   sparkline,
   size = "md",
   unit,
+  sublabel,
 }: StatCardProps) {
   const display = value === null ? "—" : `${value}${unit ?? ""}`;
   const valueClass =
@@ -23,8 +26,15 @@ export default function StatCard({
 
   return (
     <div className="bg-surface-container-low border border-outline-variant rounded-lg p-3">
-      <div className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
-        {label}
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
+          {label}
+        </div>
+        {sublabel && (
+          <div className="font-body text-[10px] text-on-surface-variant/70">
+            {sublabel}
+          </div>
+        )}
       </div>
       <div className={`mt-1 ${valueClass}`}>{display}</div>
       {sparkline && <div className="mt-2">{sparkline}</div>}

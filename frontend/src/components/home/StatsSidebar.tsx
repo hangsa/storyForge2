@@ -1,85 +1,129 @@
 import { useMemo } from "react";
 import { ProjectStats } from "../../api/client";
-import { BrandHeader, PhaseIndicator, Sidebar, StatCard } from "../ds";
-import { STAGE_LABELS } from "../ds/stages";
-import QuickActions from "./QuickActions";
+import { PhaseIndicator, Sidebar, SidebarNavItem, Sparkline, StatCard } from "../ds";
+import { BUSINESS_GROUPS, businessGroupOf } from "../ds/stages";
 
 interface StatsSidebarProps {
   stats: ProjectStats | null;
   statsLoading: boolean;
-  onRefresh: () => void;
-  refreshing: boolean;
   onOpenPlaza?: () => void;
   plazaDisabled?: boolean;
   plazaTooltip?: string;
   onOpenConsole?: () => void;
   consoleDisabled?: boolean;
   consoleTooltip?: string;
-  onOpenMore?: () => void;
+  onOpenSettings?: () => void;
+  onOpenSupport?: () => void;
 }
-
-const STAGE_ORDER = [
-  "INIT", "STAGE1", "STAGE2", "STAGE3",
-  "STAGE4", "STAGE5", "STAGE6", "COMPLETED",
-] as const;
 
 export default function StatsSidebar({
   stats,
   statsLoading,
-  onRefresh,
-  refreshing,
   onOpenPlaza,
   plazaDisabled,
   plazaTooltip,
   onOpenConsole,
   consoleDisabled,
   consoleTooltip,
-  onOpenMore,
+  onOpenSettings,
+  onOpenSupport,
 }: StatsSidebarProps) {
+  // Collapse the 8 backend stages into the 4 business-facing groups shown
+  // in the sidebar. Sum counts across every stage that maps to each group,
+  // so a project in STAGE3 contributes to 概念 alongside STAGE1/2.
   const phases = useMemo(
     () =>
-      STAGE_ORDER.map((key) => ({
-        key,
-        label: STAGE_LABELS[key],
-        count: stats?.stage_distribution?.[key] ?? 0,
-        active: key === "STAGE4",
-        completed: key === "COMPLETED",
-      })),
+      BUSINESS_GROUPS.map((label) => {
+        const count = Object.entries(stats?.stage_distribution ?? {}).reduce(
+          (acc, [stage, n]) => (businessGroupOf(stage) === label ? acc + (n ?? 0) : acc),
+          0
+        );
+        return {
+          key: label,
+          label,
+          count,
+          active: label === "写作中",
+          completed: label === "已完成",
+        };
+      }),
     [stats]
   );
 
   return (
     <Sidebar
+      width={240}
       persistKey="storyforge.home.sidebar.collapsed"
-      header={<BrandHeader brandName="Nebula Forge" />}
-      footer={null}
+      header={null}
+      footer={
+        <div className="flex flex-col gap-1">
+          <FooterButton
+            icon="settings"
+            label="设置"
+            testId="footer-settings"
+            onClick={onOpenSettings}
+          />
+          <FooterButton
+            icon="help"
+            label="支持"
+            testId="footer-support"
+            onClick={onOpenSupport}
+          />
+        </div>
+      }
       testId="stats-sidebar"
     >
       {(collapsed) => (
         <div className="flex flex-col gap-4">
-          {collapsed ? (
-            <QuickActions
-              collapsed
-              onRefresh={onRefresh}
-              refreshing={refreshing}
-              onOpenPlaza={onOpenPlaza}
-              plazaDisabled={plazaDisabled}
-              plazaTooltip={plazaTooltip}
-              onOpenConsole={onOpenConsole}
-              consoleDisabled={consoleDisabled}
-              consoleTooltip={consoleTooltip}
-              onOpenMore={onOpenMore}
+          <nav className="flex flex-col">
+            <SidebarNavItem
+              icon="auto_stories"
+              label="图书墙"
+              active
+              collapsed={collapsed}
+              testId="nav-bookshelf"
             />
-          ) : (
+            <SidebarNavItem
+              icon="smart_toy"
+              label="AI 控制台"
+              onClick={onOpenConsole}
+              collapsed={collapsed}
+              testId="nav-ai-console"
+            />
+            <SidebarNavItem
+              icon="forum"
+              label="提示词广场"
+              onClick={onOpenPlaza}
+              collapsed={collapsed}
+              testId="nav-prompt-plaza"
+            />
+            <SidebarNavItem
+              icon="monitoring"
+              label="统计数据"
+              collapsed={collapsed}
+              testId="nav-stats"
+            />
+          </nav>
+
+          {!collapsed && (
             <>
               <section>
                 <h3 className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant mb-2">
-                  统计
+                  全部统计
                 </h3>
                 <div className="grid grid-cols-3 gap-2">
-                  <StatCard label="总书籍" value={stats?.total_books ?? null} size="sm" />
+                  <StatCard label="书籍数量" value={stats?.total_books ?? null} size="sm" />
                   <StatCard label="总章节" value={stats?.total_chapters ?? null} size="sm" />
-                  <StatCard label="总字数" value={stats?.total_words ?? null} size="sm" />
+                  <StatCard
+                    label="总字数"
+                    value={stats?.total_words ?? null}
+                    size="sm"
+                    sublabel="Total"
+                    sparkline={
+                      stats?.word_count_series && stats.word_count_series.length >= 2 ? (
+                        <Sparkline data={stats.word_count_series} testId="sparkline-total-words" />
+                      ) : null
+                    }
+                  />
                 </div>
               </section>
 
@@ -89,32 +133,39 @@ export default function StatsSidebar({
                 </h3>
                 <PhaseIndicator phases={phases} />
               </section>
-
-              <section>
-                <h3 className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant mb-2">
-                  快捷操作
-                </h3>
-                <QuickActions
-                  onRefresh={onRefresh}
-                  refreshing={refreshing}
-                  onOpenPlaza={onOpenPlaza}
-                  plazaDisabled={plazaDisabled}
-                  plazaTooltip={plazaTooltip}
-                  onOpenConsole={onOpenConsole}
-                  consoleDisabled={consoleDisabled}
-                  consoleTooltip={consoleTooltip}
-                  onOpenMore={onOpenMore}
-                />
-                {statsLoading && (
-                  <div className="mt-3 font-mono text-label-sm text-on-surface-variant/60">
-                    加载中…
-                  </div>
-                )}
-              </section>
             </>
+          )}
+
+          {statsLoading && (
+            <div className="font-mono text-label-sm text-on-surface-variant/60">
+              加载中…
+            </div>
           )}
         </div>
       )}
     </Sidebar>
+  );
+}
+
+function FooterButton({
+  icon, label, onClick, testId,
+}: {
+  icon: string;
+  label: string;
+  onClick?: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      className="w-full flex items-center gap-2 py-1.5 pl-4 pr-3 rounded text-sm text-on-surface-variant hover:text-primary hover:bg-surface-container-low"
+    >
+      <span className="material-symbols-outlined text-lg" aria-hidden="true">
+        {icon}
+      </span>
+      <span>{label}</span>
+    </button>
   );
 }

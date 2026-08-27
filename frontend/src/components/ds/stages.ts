@@ -36,3 +36,33 @@ export const STAGE_LABELS: Record<string, string> = {
 export function isPreWizardStage(stage: string): boolean {
   return stage === "INIT" || stage === "STAGE1" || stage === "STAGE2" || stage === "STAGE3";
 }
+
+/**
+ * 4 business-facing groups used by the sidebar's phase indicator, collapsing
+ * the 8 backend stages into one row each per the Nebula Forge design.
+ *
+ * Mapping rationale:
+ *   概念   — everything before chapter writing starts (INIT + STAGE1-3:
+ *            init wizard, concept, world/character, outline)
+ *   写作中 — the chapter-writing workspace (STAGE4)
+ *   润色中 — post-writing review and export (STAGE5 + STAGE6)
+ *   已完成 — finished projects (COMPLETED)
+ */
+export type BusinessGroup = "概念" | "写作中" | "润色中" | "已完成";
+
+export const BUSINESS_GROUPS: BusinessGroup[] = ["概念", "写作中", "润色中", "已完成"];
+
+const STAGE_TO_GROUP: Record<string, BusinessGroup> = {
+  INIT: "概念",
+  STAGE1: "概念",
+  STAGE2: "概念",
+  STAGE3: "概念",
+  STAGE4: "写作中",
+  STAGE5: "润色中",
+  STAGE6: "润色中",
+  COMPLETED: "已完成",
+};
+
+export function businessGroupOf(stage: string): BusinessGroup | null {
+  return STAGE_TO_GROUP[stage] ?? null;
+}

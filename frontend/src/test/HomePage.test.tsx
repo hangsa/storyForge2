@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import HomePage from "../pages/HomePage";
+import { ToastProvider } from "../hooks/useToast";
 
 vi.mock("../hooks/useGenres", () => ({
   useGenres: () => [
@@ -20,31 +21,58 @@ function mockEmptyProjectEndpoints() {
       return Promise.resolve(new Response(JSON.stringify({ error: false, detail: [] })));
     }
     if (typeof url === "string" && url.includes("/api/project/stats")) {
-      return Promise.resolve(new Response(JSON.stringify({ error: false, detail: {} })));
+      return Promise.resolve(new Response(JSON.stringify({ error: false, detail: {
+        total_books: 0, total_chapters: 0, total_words: 0,
+        stage_distribution: {}, word_count_series: [],
+      } })));
     }
     return Promise.resolve(new Response("{}"));
   });
 }
 
+// HomePage now calls useToast for the placeholder 设置/支持 footer handlers,
+// so it must render inside a ToastProvider like the real App shell does.
+function renderHome() {
+  return render(
+    <ToastProvider>
+      <HomePage />
+    </ToastProvider>
+  );
+}
+
 describe("HomePage", () => {
-  it("renders StatsSidebar, CreateProjectCard, and BookShelf table after projects load", async () => {
+  it("renders TopBar + StatsSidebar + BookShelf after projects load", async () => {
     mockEmptyProjectEndpoints();
-    render(<HomePage />);
+    renderHome();
     await waitFor(() => {
+      expect(screen.getByTestId("home-top-bar")).toBeInTheDocument();
       expect(screen.getByTestId("stats-sidebar")).toBeInTheDocument();
       expect(screen.getByTestId("book-shelf")).toBeInTheDocument();
     });
-    // CreateProjectCard must render so users can create a project from the
-    // new HomePage. Regressing this (e.g. by removing the card import or
-    // dropping the render) would re-introduce the bug where "+ 新建项目"
-    // silently did nothing.
-    expect(screen.getByTestId("create-project-card")).toBeInTheDocument();
+    // Brand + version chip live in the global top bar.
     expect(screen.getByText("Nebula Forge")).toBeInTheDocument();
+    expect(screen.getByTestId("version-chip")).toHaveTextContent("V0.1.0");
+    // The card is gone — creation now flows through a modal opened by the
+    // BookShelf header's "+ 新建项目" button.
+    expect(screen.queryByTestId("create-project-card")).not.toBeInTheDocument();
+    expect(screen.getByText("+ 新建项目")).toBeInTheDocument();
+  });
+
+  it("opens the create-project modal when the + 新建项目 button is clicked", async () => {
+    mockEmptyProjectEndpoints();
+    renderHome();
+    await waitFor(() => screen.getByText("+ 新建项目"));
+    expect(screen.queryByTestId("create-project-modal")).not.toBeInTheDocument();
+    const button = screen.getByText("+ 新建项目");
+    button.click();
+    await waitFor(() => {
+      expect(screen.getByTestId("create-project-modal")).toBeInTheDocument();
+    });
   });
 
   it("shows the bookshelf empty state when there are no projects", async () => {
     mockEmptyProjectEndpoints();
-    render(<HomePage />);
+    renderHome();
     await waitFor(() => {
       expect(screen.getByText(/还没有项目/)).toBeInTheDocument();
     });

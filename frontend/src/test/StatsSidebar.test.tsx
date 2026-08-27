@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import StatsSidebar from "../components/home/StatsSidebar";
 
 const SAMPLE_STATS = {
@@ -10,6 +10,7 @@ const SAMPLE_STATS = {
     INIT: 1, STAGE1: 2, STAGE2: 0, STAGE3: 0,
     STAGE4: 5, STAGE5: 0, STAGE6: 0, COMPLETED: 4,
   },
+  word_count_series: [20000, 45000, 70000, 120000, 160000, 214000],
 };
 
 beforeEach(() => {
@@ -17,20 +18,19 @@ beforeEach(() => {
 });
 
 describe("StatsSidebar", () => {
-  it("renders the Nebula Forge brand and stats sections when expanded", () => {
+  it("renders the stats sections when expanded (brand moved to TopBar)", () => {
     render(
       <StatsSidebar
         stats={SAMPLE_STATS}
         statsLoading={false}
-        onRefresh={() => {}}
-        refreshing={false}
       />
     );
-    expect(screen.getByText("Nebula Forge")).toBeInTheDocument();
-    expect(screen.getByText("统计")).toBeInTheDocument();
+    // Brand now lives in the global TopBar, not the sidebar.
+    expect(screen.queryByText("Nebula Forge")).not.toBeInTheDocument();
+    expect(screen.getByText("全部统计")).toBeInTheDocument();
     expect(screen.getByText("阶段分布")).toBeInTheDocument();
-    expect(screen.getByText("快捷操作")).toBeInTheDocument();
-    expect(screen.getByText("总书籍")).toBeInTheDocument();
+    expect(screen.queryByText("快捷操作")).not.toBeInTheDocument();
+    expect(screen.getByText("书籍数量")).toBeInTheDocument();
     expect(screen.getByText("总章节")).toBeInTheDocument();
     expect(screen.getByText("总字数")).toBeInTheDocument();
   });
@@ -41,40 +41,10 @@ describe("StatsSidebar", () => {
       <StatsSidebar
         stats={SAMPLE_STATS}
         statsLoading={false}
-        onRefresh={vi.fn()}
-        refreshing={false}
       />
     );
-    expect(screen.queryByText("统计")).not.toBeInTheDocument();
+    expect(screen.queryByText("全部统计")).not.toBeInTheDocument();
     expect(screen.queryByText("快捷操作")).not.toBeInTheDocument();
-    // Brand text hidden but BrandHeader icon still present
-    expect(screen.getByText("auto_stories")).toBeInTheDocument();
-  });
-
-  it("forwards refresh / plaza / console / more callbacks to QuickActions", () => {
-    const onRefresh = vi.fn();
-    const onOpenPlaza = vi.fn();
-    const onOpenConsole = vi.fn();
-    const onOpenMore = vi.fn();
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-        onRefresh={onRefresh}
-        refreshing={false}
-        onOpenPlaza={onOpenPlaza}
-        onOpenConsole={onOpenConsole}
-        onOpenMore={onOpenMore}
-      />
-    );
-    screen.getByTestId("qa-refresh").click();
-    expect(onRefresh).toHaveBeenCalledTimes(1);
-    screen.getByTestId("qa-prompt-square").click();
-    expect(onOpenPlaza).toHaveBeenCalledTimes(1);
-    screen.getByTestId("qa-ai-console").click();
-    expect(onOpenConsole).toHaveBeenCalledTimes(1);
-    screen.getByTestId("qa-more").click();
-    expect(onOpenMore).toHaveBeenCalledTimes(1);
   });
 
   it("shows 加载中… when statsLoading is true", () => {
@@ -82,10 +52,124 @@ describe("StatsSidebar", () => {
       <StatsSidebar
         stats={null}
         statsLoading
-        onRefresh={() => {}}
-        refreshing={false}
       />
     );
     expect(screen.getByText("加载中…")).toBeInTheDocument();
+  });
+
+  it("renders nav items with 图书墙 active and forwards console/plaza clicks", () => {
+    const onOpenPlaza = vi.fn();
+    const onOpenConsole = vi.fn();
+    render(
+      <StatsSidebar
+        stats={SAMPLE_STATS}
+        statsLoading={false}
+        onOpenPlaza={onOpenPlaza}
+        onOpenConsole={onOpenConsole}
+      />
+    );
+    // 图书墙 is the current section — marked active via class, no onClick.
+    const bookshelf = screen.getByTestId("nav-bookshelf");
+    expect(bookshelf.className).toContain("bg-primary-container/15");
+    expect(bookshelf.className).toContain("border-primary");
+
+    screen.getByTestId("nav-ai-console").click();
+    expect(onOpenConsole).toHaveBeenCalledTimes(1);
+
+    screen.getByTestId("nav-prompt-plaza").click();
+    expect(onOpenPlaza).toHaveBeenCalledTimes(1);
+
+    expect(screen.getByTestId("nav-stats")).toBeInTheDocument();
+  });
+
+  it("renders 设置/支持 footer buttons and forwards clicks", () => {
+    const onOpenSettings = vi.fn();
+    const onOpenSupport = vi.fn();
+    render(
+      <StatsSidebar
+        stats={SAMPLE_STATS}
+        statsLoading={false}
+        onOpenSettings={onOpenSettings}
+        onOpenSupport={onOpenSupport}
+      />
+    );
+    screen.getByTestId("footer-settings").click();
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    screen.getByTestId("footer-support").click();
+    expect(onOpenSupport).toHaveBeenCalledTimes(1);
+  });
+
+  it("no longer renders the version chip (moved to TopBar)", () => {
+    render(
+      <StatsSidebar
+        stats={SAMPLE_STATS}
+        statsLoading={false}
+      />
+    );
+    expect(screen.queryByTestId("version-chip")).not.toBeInTheDocument();
+  });
+
+  it("renders the 总字数 sparkline when word_count_series has >= 2 points", () => {
+    render(
+      <StatsSidebar
+        stats={SAMPLE_STATS}
+        statsLoading={false}
+      />
+    );
+    expect(screen.getByTestId("sparkline-total-words")).toBeInTheDocument();
+  });
+
+  it("hides the 总字数 sparkline when word_count_series is empty or short", () => {
+    const emptyStats = { ...SAMPLE_STATS, word_count_series: [] };
+    const { rerender } = render(
+      <StatsSidebar
+        stats={emptyStats}
+        statsLoading={false}
+      />
+    );
+    expect(screen.queryByTestId("sparkline-total-words")).not.toBeInTheDocument();
+
+    const shortStats = { ...SAMPLE_STATS, word_count_series: [42] };
+    rerender(
+      <StatsSidebar
+        stats={shortStats}
+        statsLoading={false}
+      />
+    );
+    expect(screen.queryByTestId("sparkline-total-words")).not.toBeInTheDocument();
+  });
+
+  it("renders Total sublabel on the 总字数 stat card", () => {
+    render(
+      <StatsSidebar
+        stats={SAMPLE_STATS}
+        statsLoading={false}
+      />
+    );
+    expect(screen.getByText("Total")).toBeInTheDocument();
+  });
+
+  it("collapses 8 backend stages into 4 business groups with summed counts", () => {
+    // SAMPLE_STATS:
+    //   INIT:1 STAGE1:2 STAGE2:0 STAGE3:0  → 概念 = 3
+    //   STAGE4:5                              → 写作中 = 5
+    //   STAGE5:0 STAGE6:0                     → 润色中 = 0
+    //   COMPLETED:4                           → 已完成 = 4
+    render(
+      <StatsSidebar
+        stats={SAMPLE_STATS}
+        statsLoading={false}
+      />
+    );
+    const phaseList = screen.getByRole("list");
+    expect(phaseList).toBeInTheDocument();
+    expect(within(phaseList).getByText("概念")).toBeInTheDocument();
+    expect(within(phaseList).getByText("写作中")).toBeInTheDocument();
+    expect(within(phaseList).getByText("润色中")).toBeInTheDocument();
+    expect(within(phaseList).getByText("已完成")).toBeInTheDocument();
+
+    // Old stage labels should no longer be shown.
+    expect(within(phaseList).queryByText("工作台")).not.toBeInTheDocument();
+    expect(within(phaseList).queryByText("初始化")).not.toBeInTheDocument();
   });
 });

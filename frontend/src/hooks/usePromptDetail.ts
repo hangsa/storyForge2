@@ -35,7 +35,7 @@ export function usePromptDetail(projectId: string | null, name: string | null): 
 }
 
 /** Fetches /api/prompts/defaults/{name} when name !== null. Used by the
- *  home-page QuickActions entry, which has no project context. */
+ *  home-page sidebar nav 提示词广场 entry, which has no project context. */
 export function useDefaultPromptDetail(name: string | null): UsePromptDetailReturn {
   const [detail, setDetail] = useState<PromptDetail | null>(null);
   const [loading, setLoading] = useState(false);

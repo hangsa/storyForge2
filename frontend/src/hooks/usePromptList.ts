@@ -35,7 +35,7 @@ export function usePromptList(projectId: string | null): UsePromptListReturn {
 }
 
 /** Fetches /api/prompts/defaults/list when enabled=true. Used by the home-page
- *  QuickActions entry, which has no project context. */
+ *  sidebar nav 提示词广场 entry, which has no project context. */
 export function useDefaultPromptList(enabled: boolean = true): UsePromptListReturn {
   const [prompts, setPrompts] = useState<PromptSummary[]>([]);
   const [loading, setLoading] = useState(false);

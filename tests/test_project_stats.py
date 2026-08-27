@@ -140,3 +140,27 @@ class TestProjectStats:
         resp = client.get("/api/project/stats")
         keys = set(resp.json()["detail"]["stage_distribution"].keys())
         assert keys == {"INIT", "STAGE1", "STAGE2", "STAGE3", "STAGE4", "STAGE5", "STAGE6", "COMPLETED"}
+
+    def test_word_count_series_is_cumulative_and_monotonic(self, client, temp_projects_dir):
+        # Three chapter drafts across two projects, written in this order so
+        # mtime ordering matches insertion order. Series must be cumulative
+        # word counts in that order — strictly non-decreasing, with the final
+        # value equal to total_words.
+        a = _make_project(temp_projects_dir, "proj_a")
+        b = _make_project(temp_projects_dir, "proj_b")
+        _add_scene_draft(a, 1, 1, "你好")                # 2 chars
+        _add_scene_draft(a, 1, 2, "中文测试")            # 4 chars
+        _add_scene_draft(b, 1, 1, "abc")                # 3 chars
+
+        resp = client.get("/api/project/stats")
+        detail = resp.json()["detail"]
+        series = detail["word_count_series"]
+        assert len(series) == 3
+        assert series == [2, 6, 9]
+        assert series[-1] == detail["total_words"]
+        for prev, curr in zip(series, series[1:]):
+            assert curr >= prev
+
+    def test_word_count_series_empty_when_no_chapters(self, client):
+        resp = client.get("/api/project/stats")
+        assert resp.json()["detail"]["word_count_series"] == []

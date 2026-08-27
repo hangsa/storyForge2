@@ -38,4 +38,7 @@ export type { SidebarProps } from "./Sidebar";
 export { default as SidebarNavItem } from "./SidebarNavItem";
 export type { SidebarNavItemProps } from "./SidebarNavItem";
 
+export { default as Sparkline } from "./Sparkline";
+export type { SparklineProps } from "./Sparkline";
+
 export { STAGE_COLORS, STAGE_LABELS, isPreWizardStage } from "./stages";

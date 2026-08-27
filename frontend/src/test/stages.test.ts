@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPreWizardStage } from "../components/home/stages";
+import { isPreWizardStage } from "../components/ds/stages";
 
 describe("isPreWizardStage", () => {
   it("treats INIT, STAGE1, STAGE2, STAGE3 as pre-wizard", () => {

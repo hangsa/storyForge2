@@ -49,7 +49,7 @@ export default function MoreActionsModal({ onClose }: MoreActionsModalProps) {
         </header>
 
         <div className="p-6 space-y-3">
-          <div className="font-label-mono text-[10px] text-on-surface-variant uppercase tracking-wider">
+          <div className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider">
             主题
           </div>
           <div className="space-y-2">
@@ -88,7 +88,7 @@ export default function MoreActionsModal({ onClose }: MoreActionsModalProps) {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-display text-primary text-sm">{opt.label}</div>
-                    <div className="font-body-ui text-on-surface-variant text-xs">
+                    <div className="font-body text-on-surface-variant text-xs">
                       {opt.description}
                     </div>
                   </div>

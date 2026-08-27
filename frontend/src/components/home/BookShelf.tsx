@@ -14,9 +14,6 @@ interface BookShelfProps {
   projects: ProjectSummary[];
   loading: boolean;
   onProjectsDeleted: (deletedIds: string[]) => void;
-  /** Fires when the user clicks the toolbar "+ 新建项目" button. HomePage
-   *  uses this to open the InitWizardModal (replaces the old CreateProjectCard). */
-  onCreateProject?: () => void;
   /** Fires when the user clicks a row whose stage is pre-wizard (INIT/STAGE1-3).
    *  HomePage uses this to re-open the InitWizardModal at the right step. */
   onResumeWizard?: (projectId: string) => void;
@@ -35,7 +32,7 @@ const LENGTH_OPTIONS = [
   { value: "长篇巨著", label: "长篇巨著" },
 ];
 
-export default function BookShelf({ projects, loading, onProjectsDeleted, onCreateProject, onResumeWizard }: BookShelfProps) {
+export default function BookShelf({ projects, loading, onProjectsDeleted, onResumeWizard }: BookShelfProps) {
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState("all");
   const [length, setLength] = useState("all");
@@ -91,7 +88,6 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onCrea
         <DropdownSelect label="题材" options={GENRE_OPTIONS} value={genre} onChange={setGenre} />
         <DropdownSelect label="篇幅" options={LENGTH_OPTIONS} value={length} onChange={setLength} />
         <PrimaryButton label="查询" icon="search" onClick={() => setFiltersApplied(true)} />
-        <PrimaryButton label="+ 新建项目" icon="plus" onClick={() => onCreateProject?.()} />
       </header>
 
       {selectedIds.size > 0 && (
@@ -145,7 +141,7 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onCrea
                 if (isPreWizardStage(p.current_stage)) {
                   onResumeWizard?.(p.id);
                 } else {
-                  window.location.assign(`/${p.id}/stage4`);
+                  window.location.assign(`/project/${p.id}/stage4`);
                 }
               }}
               onSelectChange={(sel) => {

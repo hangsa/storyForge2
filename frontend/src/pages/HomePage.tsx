@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import api, { type ProjectSummary } from "../api/client";
 import StatsSidebar from "../components/home/StatsSidebar";
+import CreateProjectCard from "../components/home/CreateProjectCard";
 import BookShelf from "../components/home/BookShelf";
 import InitWizardModal from "../components/wizard/InitWizardModal";
 import PromptPlazaModal from "../components/home/promptPlaza/PromptPlazaModal";
@@ -81,15 +82,6 @@ export default function HomePage() {
     setWizardProjectId(projectId);
   }, []);
 
-  const handleCreateProject = useCallback(() => {
-    // Opens the InitWizardModal in "from scratch" mode. The InitWizardModal
-    // distinguishes "create new" vs "resume existing" by whether
-    // wizardProjectId is set to a non-existent project id; for a brand-new
-    // project, pass an empty string. Adjust per InitWizardModal's API if it
-    // requires a projectId for new projects too.
-    setWizardProjectId("");
-  }, []);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -123,11 +115,15 @@ export default function HomePage() {
         onOpenMore={handleOpenMore}
       />
       <main className="flex-1 min-w-0 px-8 py-8 max-w-[1200px] mx-auto">
+        <CreateProjectCard
+          onSubmit={handleCreate}
+          submitting={submitting}
+          error={createError}
+        />
         <BookShelf
           projects={projects}
           loading={projectsLoading}
           onProjectsDeleted={handleProjectsDeleted}
-          onCreateProject={handleCreateProject}
           onResumeWizard={handleResumeWizard}
         />
       </main>

@@ -29,10 +29,10 @@ export default function QuickActions({
   if (collapsed) {
     return (
       <div data-testid="quick-actions" className="flex flex-col gap-2">
-        <IconButton icon="smart_toy" disabled={consoleDisabled} tooltip={consoleTooltip} onClick={onOpenConsole} testId="qa-ai-console" />
-        <IconButton icon="forum" disabled={plazaDisabled} tooltip={plazaTooltip} onClick={onOpenPlaza} testId="qa-prompt-square" />
-        <IconButton icon={refreshing ? "progress_activity" : "refresh"} onClick={onRefresh} testId="qa-refresh" spinning={refreshing} />
-        <IconButton icon="more_horiz" onClick={onOpenMore} testId="qa-more" />
+        <IconButton icon="smart_toy" disabled={consoleDisabled} tooltip={consoleTooltip} onClick={() => onOpenConsole?.()} testId="qa-ai-console" />
+        <IconButton icon="forum" disabled={plazaDisabled} tooltip={plazaTooltip} onClick={() => onOpenPlaza?.()} testId="qa-prompt-square" />
+        <IconButton icon={refreshing ? "progress_activity" : "refresh"} onClick={() => onRefresh()} testId="qa-refresh" spinning={refreshing} />
+        <IconButton icon="more_horiz" onClick={() => onOpenMore?.()} testId="qa-more" />
       </div>
     );
   }

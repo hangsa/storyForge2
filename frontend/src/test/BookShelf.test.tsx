@@ -23,8 +23,10 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(api, "bulkDeleteProjects").mockResolvedValue({
     deleted: ["p1"],
-    skipped: [],
-  } as unknown as Awaited<ReturnType<typeof api.bulkDeleteProjects>>);
+    failed: [],
+    deleted_count: 1,
+    failed_count: 0,
+  });
 });
 
 describe("BookShelf table", () => {
@@ -75,5 +77,42 @@ describe("BookShelf table", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(onDeleted).toHaveBeenCalledWith(["p1"]);
     expect(api.bulkDeleteProjects).toHaveBeenCalledWith(["p1"]);
+  });
+
+  it("navigates to /project/<id>/stage4 when a post-wizard row is clicked", () => {
+    const assignSpy = vi.fn();
+    const originalAssign = window.location.assign;
+    Object.defineProperty(window, "location", {
+      value: { ...window.location, assign: assignSpy },
+      writable: true,
+      configurable: true,
+    });
+    try {
+      render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={() => {}} />);
+      // p1 has STAGE4 — row body click should navigate to /project/p1/stage4
+      fireEvent.click(screen.getByText("翻天"));
+      expect(assignSpy).toHaveBeenCalledWith("/project/p1/stage4");
+    } finally {
+      Object.defineProperty(window, "location", {
+        value: { ...window.location, assign: originalAssign },
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
+  it("re-opens the wizard via onResumeWizard when a pre-wizard row is clicked", () => {
+    const onResume = vi.fn();
+    const projects: ProjectSummary[] = [
+      {
+        ...PROJECTS[0],
+        id: "init1",
+        title: "未开张",
+        current_stage: "INIT",
+      },
+    ];
+    render(<BookShelf projects={projects} loading={false} onProjectsDeleted={() => {}} onResumeWizard={onResume} />);
+    fireEvent.click(screen.getByText("未开张"));
+    expect(onResume).toHaveBeenCalledWith("init1");
   });
 });

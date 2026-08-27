@@ -20,7 +20,7 @@ export default function AdvancedSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         data-testid="advanced-toggle"
-        className="w-full px-3 py-2 flex items-center justify-between text-sm text-system-log hover:text-primary"
+        className="w-full px-3 py-2 flex items-center justify-between text-sm text-on-surface-variant hover:text-primary"
       >
         <span>高级</span>
         <span className="material-symbols-outlined text-base">
@@ -30,7 +30,7 @@ export default function AdvancedSection({
       {open && (
         <div className="px-3 pb-3 space-y-3" data-testid="advanced-body">
           <div>
-            <label className="block text-xs font-label-mono text-system-log mb-1">
+            <label className="block text-xs font-mono text-on-surface-variant mb-1">
               temperature: {temperature.toFixed(2)}
             </label>
             <input
@@ -43,7 +43,7 @@ export default function AdvancedSection({
             />
           </div>
           <div>
-            <label className="block text-xs font-label-mono text-system-log mb-1">max_tokens</label>
+            <label className="block text-xs font-mono text-on-surface-variant mb-1">max_tokens</label>
             <input
               type="number"
               min="1" max="32768"
@@ -54,7 +54,7 @@ export default function AdvancedSection({
             />
           </div>
           <div>
-            <label className="block text-xs font-label-mono text-system-log mb-1">output_format (JSON)</label>
+            <label className="block text-xs font-mono text-on-surface-variant mb-1">output_format (JSON)</label>
             <textarea
               value={outputFormatJson}
               onChange={(e) => onOutputFormatChange(e.target.value)}

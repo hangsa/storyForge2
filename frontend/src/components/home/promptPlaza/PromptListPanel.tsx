@@ -30,7 +30,7 @@ export default function PromptListPanel({ prompts, selectedName, onSelect }: Pro
 
   if (prompts.length === 0) {
     return (
-      <div className="p-4 text-system-log text-sm text-center">
+      <div className="p-4 text-on-surface-variant text-sm text-center">
         暂无提示词
       </div>
     );
@@ -46,14 +46,14 @@ export default function PromptListPanel({ prompts, selectedName, onSelect }: Pro
           placeholder="搜索提示词"
           data-testid="plaza-search"
           className="w-full bg-surface-container border border-outline-variant rounded
-                     px-3 py-1.5 text-sm text-primary placeholder:text-system-log/50
+                     px-3 py-1.5 text-sm text-primary placeholder:text-on-surface-variant/50
                      focus:outline-none focus:border-primary-container"
         />
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {Array.from(grouped.entries()).map(([category, items]) => (
           <div key={category || "_root"}>
-            <div className="font-label-mono text-[10px] text-system-log uppercase tracking-wider mb-1.5">
+            <div className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider mb-1.5">
               {PROMPT_CATEGORY_LABELS[category] ?? category}
             </div>
             <div className="space-y-1">

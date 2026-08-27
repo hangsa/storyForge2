@@ -151,7 +151,7 @@ export default function PromptPlazaModal({ isOpen, projectId, projectTitle, onCl
           <div className="flex items-center gap-3">
             <h2 className="font-display text-primary text-xl">{title}</h2>
             {projectTitle && (
-              <span className="text-sm text-system-log">项目：{projectTitle}</span>
+              <span className="text-sm text-on-surface-variant">项目：{projectTitle}</span>
             )}
           </div>
           <button
@@ -159,7 +159,7 @@ export default function PromptPlazaModal({ isOpen, projectId, projectTitle, onCl
             onClick={onClose}
             aria-label="关闭"
             data-testid="plaza-close"
-            className="text-system-log hover:text-primary"
+            className="text-on-surface-variant hover:text-primary"
           >
             <span className="material-symbols-outlined">close</span>
           </button>
@@ -181,7 +181,7 @@ export default function PromptPlazaModal({ isOpen, projectId, projectTitle, onCl
               <div className="p-3 text-error text-xs">{listError}</div>
             )}
             {listLoading && (
-              <div className="p-3 text-system-log text-xs">加载中…</div>
+              <div className="p-3 text-on-surface-variant text-xs">加载中…</div>
             )}
           </aside>
           <main className="flex-1 flex flex-col overflow-hidden">

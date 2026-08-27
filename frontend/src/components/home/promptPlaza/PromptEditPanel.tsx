@@ -76,7 +76,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-system-log text-sm">
+      <div className="flex-1 flex items-center justify-center text-on-surface-variant text-sm">
         加载中…
       </div>
     );
@@ -90,7 +90,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
   }
   if (!detail) {
     return (
-      <div className="flex-1 flex items-center justify-center text-system-log text-sm">
+      <div className="flex-1 flex items-center justify-center text-on-surface-variant text-sm">
         请从左侧选择一个提示词
       </div>
     );
@@ -119,7 +119,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
         <div>
           <h3 className="font-display text-primary text-lg">{detail.name}</h3>
           {detail.override && (
-            <span className="text-xs font-label-mono text-primary-container">
+            <span className="text-xs font-mono text-primary-container">
               已自定义 {detail.override._modified_at as string}
             </span>
           )}
@@ -128,7 +128,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
           type="button"
           onClick={onClose}
           aria-label="关闭"
-          className="text-system-log hover:text-primary"
+          className="text-on-surface-variant hover:text-primary"
         >
           <span className="material-symbols-outlined">close</span>
         </button>
@@ -136,7 +136,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         <div>
-          <label className="block text-xs font-label-mono text-system-log mb-1">
+          <label className="block text-xs font-mono text-on-surface-variant mb-1">
             System Prompt
           </label>
           <textarea
@@ -149,9 +149,9 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
           />
         </div>
         <div>
-          <label className="block text-xs font-label-mono text-system-log mb-1">
+          <label className="block text-xs font-mono text-on-surface-variant mb-1">
             User Prompt Template
-            <span className="ml-2 text-system-log/60">
+            <span className="ml-2 text-on-surface-variant/60">
               {userTemplate.length} 字
             </span>
           </label>
@@ -165,9 +165,9 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
           />
         </div>
         <div>
-          <label className="block text-xs font-label-mono text-system-log mb-1">
+          <label className="block text-xs font-mono text-on-surface-variant mb-1">
             负面清单 / 禁止事项
-            <span className="ml-2 text-system-log/60">
+            <span className="ml-2 text-on-surface-variant/60">
               {negativeConstraints.length} 字
               {negativeConstraints.length > 1500 && (
                 <span className="ml-2 text-error" data-testid="nc-warn">
@@ -185,7 +185,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
             className="w-full bg-surface-container border border-outline-variant rounded px-3 py-2 text-sm font-mono overflow-hidden"
             style={{ resize: "none" }}
           />
-          <p className="mt-1 text-xs text-system-log/70">
+          <p className="mt-1 text-xs text-on-surface-variant/70">
             会作为【禁止事项】区块注入到系统提示词的占位符位置；空则不注入。
           </p>
         </div>
@@ -204,7 +204,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
           type="button"
           onClick={onReset}
           data-testid="reset-button"
-          className="px-3 py-1.5 text-sm text-system-log hover:text-primary disabled:opacity-40"
+          className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-primary disabled:opacity-40"
         >
           重置为默认
         </button>

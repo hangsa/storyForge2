@@ -75,6 +75,18 @@ async def list_projects():
                                 chapter_count = len(chapters)
                         except Exception:
                             chapter_count = 0
+                    word_count = 0
+                    chapters_dir = proj_dir / "chapters"
+                    if chapters_dir.exists() and chapters_dir.is_dir():
+                        for draft_file in chapters_dir.iterdir():
+                            if not draft_file.is_file() or not draft_file.name.endswith(".md"):
+                                continue
+                            try:
+                                text = draft_file.read_text(encoding="utf-8")
+                                visible = _re.sub(r"<!--.*?-->", "", text, flags=_re.DOTALL)
+                                word_count += len(visible)
+                            except (OSError, UnicodeDecodeError):
+                                continue
                     projects.append({
                         "id": data.get("id", proj_dir.name),
                         "title": _resolve_display_title(
@@ -84,6 +96,7 @@ async def list_projects():
                         "current_stage": data.get("current_stage", "INIT"),
                         "created_at": data.get("created_at", ""),
                         "chapter_count": chapter_count,
+                        "word_count": word_count,
                         "updated_at": latest_mtime,
                         "min_words": data.get("min_words", 2000),
                         "target_total_words": data.get("target_total_words", 1_000_000),

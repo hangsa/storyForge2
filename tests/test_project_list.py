@@ -96,3 +96,30 @@ def test_list_returns_chapter_count_from_outline(client, temp_projects_dir):
     detail = resp.json()["detail"]
     assert len(detail) == 1
     assert detail[0]["chapter_count"] == 3
+
+
+def test_list_returns_word_count_from_drafts(client, temp_projects_dir):
+    project_id = "proj_words"
+    _write_project(temp_projects_dir, project_id, {
+        "id": project_id,
+        "title": "有字数",
+        "genre": "cool_novel",
+        "current_stage": "STAGE4",
+        "created_at": "2026-01-01T00:00:00Z",
+    })
+    chapters_dir = temp_projects_dir / project_id / "chapters"
+    chapters_dir.mkdir()
+    # Two drafts totalling 10 visible chars after stripping SF_LOG tags.
+    (chapters_dir / "ch01_scene_001_draft.md").write_text(
+        "你好世界<!-- SF_LOG foo -->", encoding="utf-8"
+    )
+    (chapters_dir / "ch02_scene_001_draft.md").write_text(
+        "另外六个字符<!-- SF_LOG bar --><!-- SF_LOG baz -->", encoding="utf-8"
+    )
+
+    resp = client.get("/api/project/list")
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    assert len(detail) == 1
+    # 4 + 6 = 10 visible chars (SF_LOG tag contents stripped)
+    assert detail[0]["word_count"] == 10

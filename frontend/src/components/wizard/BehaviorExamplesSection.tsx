@@ -39,7 +39,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
   return (
     <div className="space-y-4" data-testid="behavior-examples-section">
       <div className="flex items-center justify-between">
-        <h3 className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
+        <h3 className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
           行为示例
         </h3>
         <div className="flex items-center gap-2">
@@ -49,7 +49,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
               data-testid="behavior-example-regenerate"
               onClick={onRegenerate}
               disabled={regenerating}
-              className="inline-flex items-center gap-2 rounded border border-outline-variant bg-surface-container px-3 py-1.5 font-body-ui text-xs text-primary-container hover:border-primary-container/50 hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded border border-outline-variant bg-surface-container px-3 py-1.5 font-body text-body-md text-xs text-primary-container hover:border-primary-container/50 hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-60"
             >
               {regenerating && (
                 <span
@@ -65,7 +65,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
             type="button"
             data-testid="behavior-example-add"
             onClick={add}
-            className="rounded-full border border-dashed border-outline-variant px-3 py-1.5 font-body-ui text-xs text-primary-container/70 transition-colors hover:border-primary-container/50 hover:text-primary-container"
+            className="rounded-full border border-dashed border-outline-variant px-3 py-1.5 font-body text-body-md text-xs text-primary-container/70 transition-colors hover:border-primary-container/50 hover:text-primary-container"
           >
             + 添加示例
           </button>
@@ -73,7 +73,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
       </div>
 
       {examples.length === 0 && (
-        <p className="font-body-ui text-primary-container/60 text-xs">
+        <p className="font-body text-body-md text-primary-container/60 text-xs">
           暂无行为示例，点击"添加示例"开始。
         </p>
       )}
@@ -86,21 +86,21 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
             className="rounded-lg border border-outline-variant bg-surface-container p-3 space-y-2"
           >
             <div className="mb-1 flex items-center justify-between">
-              <span className="font-label-mono text-primary-container/80 text-[10px]">
+              <span className="font-mono text-primary-container/80 text-[10px]">
                 示例 #{idx + 1}
               </span>
               <button
                 type="button"
                 data-testid="behavior-example-delete"
                 onClick={() => remove(idx)}
-                className="p-1 font-body-ui text-xs text-primary-container/70 hover:text-error"
+                className="p-1 font-body text-body-md text-xs text-primary-container/70 hover:text-error"
                 aria-label="删除示例"
               >
                 删除
               </button>
             </div>
             <label className="block">
-              <span className="mb-1 block font-label-mono text-primary-container/80 text-[10px]">
+              <span className="mb-1 block font-mono text-primary-container/80 text-[10px]">
                 情境
               </span>
               <AutoTextarea
@@ -112,7 +112,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
               />
             </label>
             <label className="block">
-              <span className="mb-1 block font-label-mono text-primary-container/80 text-[10px]">
+              <span className="mb-1 block font-mono text-primary-container/80 text-[10px]">
                 动作
               </span>
               <AutoTextarea
@@ -124,7 +124,7 @@ const BehaviorExamplesSection: React.FC<BehaviorExamplesSectionProps> = ({
               />
             </label>
             <label className="block">
-              <span className="mb-1 block font-label-mono text-primary-container/80 text-[10px]">
+              <span className="mb-1 block font-mono text-primary-container/80 text-[10px]">
                 台词示例
               </span>
               <AutoTextarea

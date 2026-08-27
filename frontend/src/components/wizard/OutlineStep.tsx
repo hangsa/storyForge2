@@ -262,7 +262,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
-          <p className="font-body-ui text-primary-container mt-3 text-sm">
+          <p className="font-body text-body-md text-primary-container mt-3 text-sm">
             正在
             <span data-testid="novel-outline-attempt">
               {attempt > 1 ? `第${attempt}次` : ""}
@@ -273,7 +273,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       )}
 
       {wizard.status === "error" && (
-        <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
+        <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body text-body-md text-sm">
           {wizard.errorMessage}
         </div>
       )}
@@ -282,7 +282,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
         <div data-testid="outline-form" className="space-y-4">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <div className="font-label-mono text-primary-container text-xs">核心冲突与主题</div>
+              <div className="font-mono text-primary-container text-xs">核心冲突与主题</div>
               <SectionRegenerateButton
                 target="核心冲突与主题"
                 onRegenerate={handleSectionRegenerate("core_conflict")}
@@ -300,12 +300,12 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
           {outline.volumes.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">分卷 / 阶段划分</div>
+                <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">分卷 / 阶段划分</div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={addVolume}
                     data-testid="add-volume-btn"
-                    className="text-xs text-primary-container font-body-ui flex items-center gap-1 hover:opacity-80"
+                    className="text-xs text-primary-container font-body text-body-md flex items-center gap-1 hover:opacity-80"
                   >
                     <span className="material-symbols-outlined text-sm">add</span>
                     添加卷
@@ -343,7 +343,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
                       />
                       <button
                         onClick={() => removeVolume(i)}
-                        className="text-system-log hover:text-error"
+                        className="text-on-surface-variant hover:text-error"
                         aria-label="删除卷"
                         data-testid={`volume-remove-${i}`}
                       >
@@ -373,7 +373,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
                           />
                           <button
                             onClick={() => removeVolumeEvent(i, j)}
-                            className="text-system-log hover:text-error"
+                            className="text-on-surface-variant hover:text-error"
                             aria-label="删除事件"
                             data-testid={`volume-event-${i}-${j}-remove`}
                           >
@@ -382,12 +382,12 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
                         </div>
                       ))}
                       {v.key_events.length === 0 && (
-                        <p className="text-system-log/50 font-body-ui text-xs italic">未添加事件</p>
+                        <p className="text-on-surface-variant/50 font-body text-body-md text-xs italic">未添加事件</p>
                       )}
                       <button
                         onClick={() => addVolumeEvent(i)}
                         data-testid={`add-volume-event-${i}`}
-                        className="text-xs text-primary-container font-body-ui flex items-center gap-1 hover:opacity-80"
+                        className="text-xs text-primary-container font-body text-body-md flex items-center gap-1 hover:opacity-80"
                       >
                         <span className="material-symbols-outlined text-sm">add</span>
                         添加事件
@@ -401,14 +401,14 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
+              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
                 主角成长节点 · {outline.mc_growth_arc.length}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={addMilestone}
                   data-testid="add-milestone-btn"
-                  className="text-xs text-primary-container font-body-ui flex items-center gap-1 hover:opacity-80"
+                  className="text-xs text-primary-container font-body text-body-md flex items-center gap-1 hover:opacity-80"
                 >
                   <span className="material-symbols-outlined text-sm">add</span>
                   添加里程碑
@@ -446,7 +446,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
                     />
                     <button
                       onClick={() => removeMilestone(i)}
-                      className="text-system-log hover:text-error"
+                      className="text-on-surface-variant hover:text-error"
                       aria-label="删除里程碑"
                       data-testid={`milestone-remove-${i}`}
                     >
@@ -466,21 +466,21 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
                 </div>
               ))}
               {outline.mc_growth_arc.length === 0 && (
-                <p className="text-system-log/50 font-body-ui text-xs italic">未添加里程碑</p>
+                <p className="text-on-surface-variant/50 font-body text-body-md text-xs italic">未添加里程碑</p>
               )}
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
+              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
                 关键情节点 · {outline.key_plot_points.length}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={addPlotPoint}
                   data-testid="add-plot-btn"
-                  className="text-xs text-primary-container font-body-ui flex items-center gap-1 hover:opacity-80"
+                  className="text-xs text-primary-container font-body text-body-md flex items-center gap-1 hover:opacity-80"
                 >
                   <span className="material-symbols-outlined text-sm">add</span>
                   添加关键点
@@ -518,7 +518,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
                     />
                     <button
                       onClick={() => removePlotPoint(i)}
-                      className="text-system-log hover:text-error"
+                      className="text-on-surface-variant hover:text-error"
                       aria-label="删除关键点"
                       data-testid={`plot-remove-${i}`}
                     >
@@ -546,7 +546,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
                 </div>
               ))}
               {outline.key_plot_points.length === 0 && (
-                <p className="text-system-log/50 font-body-ui text-xs italic">未添加关键点</p>
+                <p className="text-on-surface-variant/50 font-body text-body-md text-xs italic">未添加关键点</p>
               )}
             </div>
           </div>

@@ -5,10 +5,10 @@ export default function MapStep() {
 
   return (
     <div data-testid="map-step" className="text-center py-12 space-y-6">
-      <span className="material-symbols-outlined text-6xl text-system-log/30 block">map</span>
+      <span className="material-symbols-outlined text-6xl text-on-surface-variant/30 block">map</span>
       <div>
         <h2 className="font-display text-primary text-xl mb-2">地图系统</h2>
-        <p className="font-body-ui text-system-log text-sm max-w-md mx-auto">
+        <p className="font-body text-body-md text-on-surface-variant text-sm max-w-md mx-auto">
           地图系统功能即将推出，可在工作台内补做此步。当前可跳过。
         </p>
       </div>

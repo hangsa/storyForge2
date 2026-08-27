@@ -156,12 +156,12 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       {wizard.status === "generating" && (
         <div data-testid="concept-loading" className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
-          <p className="font-body-ui text-primary-container mt-3 text-sm">正在生成概念与 Story DNA…</p>
+          <p className="font-body text-body-md text-primary-container mt-3 text-sm">正在生成概念与 Story DNA…</p>
         </div>
       )}
 
       {wizard.status === "error" && (
-        <div data-testid="concept-error" className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
+        <div data-testid="concept-error" className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body text-body-md text-sm">
           {wizard.errorMessage}
         </div>
       )}
@@ -169,7 +169,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       {(wizard.status === "completed" || wizard.data.concept) && (
         <div data-testid="concept-form" className="space-y-3">
           <div className="flex items-center justify-between">
-            <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
+            <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
               概念信息
             </div>
             <SectionRegenerateButton
@@ -180,7 +180,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
           </div>
           <div className="space-y-3">
           <div>
-            <label className="block font-label-mono text-primary-container mb-1 text-xs">标题</label>
+            <label className="block font-mono text-primary-container mb-1 text-xs">标题</label>
             <input
               data-testid="concept-title"
               value={concept.title}
@@ -189,7 +189,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
             />
           </div>
           <div>
-            <label className="block font-label-mono text-primary-container mb-1 text-xs">前提</label>
+            <label className="block font-mono text-primary-container mb-1 text-xs">前提</label>
             <AutoTextarea
               data-testid="concept-premise"
               value={concept.premise}
@@ -200,7 +200,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-label-mono text-primary-container mb-1 text-xs">基调</label>
+              <label className="block font-mono text-primary-container mb-1 text-xs">基调</label>
               <input
                 data-testid="concept-tone"
                 value={concept.tone}
@@ -209,7 +209,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
               />
             </div>
             <div>
-              <label className="block font-label-mono text-primary-container mb-1 text-xs">主题</label>
+              <label className="block font-mono text-primary-container mb-1 text-xs">主题</label>
               <input
                 data-testid="concept-theme"
                 value={concept.theme}
@@ -220,7 +220,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-label-mono text-primary-container mb-1 text-xs">目标读者</label>
+              <label className="block font-mono text-primary-container mb-1 text-xs">目标读者</label>
               <input
                 value={concept.target_audience}
                 onChange={(e) => setConcept({ ...concept, target_audience: e.target.value })}
@@ -228,7 +228,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
               />
             </div>
             <div>
-              <label className="block font-label-mono text-primary-container mb-1 text-xs">风格模板</label>
+              <label className="block font-mono text-primary-container mb-1 text-xs">风格模板</label>
               <input
                 value={concept.style_template}
                 onChange={(e) => setConcept({ ...concept, style_template: e.target.value })}
@@ -239,7 +239,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
           </div>
           <div className="border-t border-outline-variant pt-3 space-y-2">
             <div className="flex items-center justify-between">
-              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">核心矛盾</div>
+              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">核心矛盾</div>
               <SectionRegenerateButton
                 target="核心矛盾"
                 onRegenerate={handleSectionRegenerate("dna")}

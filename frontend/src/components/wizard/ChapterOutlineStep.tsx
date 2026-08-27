@@ -320,7 +320,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
-          <p className="font-body-ui text-primary-container mt-3 text-sm">
+          <p className="font-body text-body-md text-primary-container mt-3 text-sm">
             正在
             <span data-testid="chapter-outline-attempt">
               {attempt > 1 ? `第${attempt}次` : ""}
@@ -329,7 +329,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
             {progress && (
               <span
                 data-testid="chapter-outline-progress"
-                className="ml-2 font-label-mono"
+                className="ml-2 font-mono"
               >
                 第 {progress.done} / {progress.total} 章
               </span>
@@ -350,7 +350,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
       )}
 
       {wizard.status === "error" && (
-        <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
+        <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body text-body-md text-sm">
           {wizard.errorMessage}
         </div>
       )}
@@ -378,10 +378,10 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
             data-testid="chapter-outline-resume-banner"
             className="flex items-center justify-between gap-3 p-3 bg-tertiary-container/30 border border-primary-container/40 rounded-lg"
           >
-            <p className="font-body-ui text-primary text-sm">
-              已生成 <span className="font-label-mono">{done}</span> /{" "}
-              <span className="font-label-mono">{total}</span> 章（第 1 卷），
-              剩余 <span className="font-label-mono">{remaining}</span> 章未生成。
+            <p className="font-body text-body-md text-primary text-sm">
+              已生成 <span className="font-mono">{done}</span> /{" "}
+              <span className="font-mono">{total}</span> 章（第 1 卷），
+              剩余 <span className="font-mono">{remaining}</span> 章未生成。
             </p>
             <button
               type="button"
@@ -397,7 +397,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
 
       {outline && outline.chapters.length > 0 && (
         <div data-testid="chapter-outline-form" className="space-y-3">
-          <div className="font-label-mono text-primary-container text-sm">
+          <div className="font-mono text-primary-container text-sm">
             已生成 {outline.chapters.length} 章 ·{" "}
             {outline.chapters.reduce((acc, ch) => acc + (ch.scene_plan?.length ?? 0), 0)} 个场景
             {isPartialProgress && (
@@ -429,7 +429,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
                   data-testid="chapter-outline-degraded"
                   className="border border-error/40 rounded-lg p-3 bg-error-container/10 space-y-2"
                 >
-                  <div className="font-body-ui text-error text-xs">
+                  <div className="font-body text-body-md text-error text-xs">
                     第 {idx + 1} 章解析异常（{(ch as { degraded?: boolean }).degraded ? "LLM 输出降级" : "字段缺失"}），已跳过渲染。
                   </div>
                   {/* idx+1 is the badge's display position — used as the
@@ -456,7 +456,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
             return (
               <div key={idx} className="border border-outline-variant rounded-lg p-3 space-y-2">
                 <div className="flex items-center gap-3">
-                  <label className="font-label-mono text-primary-container text-sm whitespace-nowrap">
+                  <label className="font-mono text-primary-container text-sm whitespace-nowrap">
                     第 {ch.chapter_number} 章标题
                   </label>
                   <input
@@ -477,13 +477,13 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
                     重新生成
                   </button>
                 </div>
-                <div className="font-body-ui text-primary-container text-[10px]">
+                <div className="font-body text-body-md text-primary-container text-[10px]">
                   {ch.scene_plan.length} 个场景
                 </div>
               </div>
             );
           })}
-          <p className="font-body-ui text-primary-container/60 text-xs">
+          <p className="font-body text-body-md text-primary-container/60 text-xs">
             场景级详情可在工作台的大纲标签页内编辑。
           </p>
           <div className="flex justify-end pt-2">

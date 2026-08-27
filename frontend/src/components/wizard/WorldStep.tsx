@@ -291,12 +291,12 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
-          <p className="font-body-ui text-primary-container mt-3 text-sm">正在生成世界观…</p>
+          <p className="font-body text-body-md text-primary-container mt-3 text-sm">正在生成世界观…</p>
         </div>
       )}
 
       {wizard.status === "error" && (
-        <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
+        <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body text-body-md text-sm">
           {wizard.errorMessage}
         </div>
       )}
@@ -306,7 +306,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
           {/* 时代与地理 */}
           <div className="border border-outline-variant rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">时代与地理</div>
+              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">时代与地理</div>
               <SectionRegenerateButton
                 target="时代与地理"
                 onRegenerate={handleSectionRegenerate("era")}
@@ -315,7 +315,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block font-label-mono text-primary-container mb-1 text-xs">时代背景</label>
+                <label className="block font-mono text-primary-container mb-1 text-xs">时代背景</label>
                 <AutoTextarea
                   value={world.era}
                   onChange={(e) => setWorld({ ...world, era: e.target.value })}
@@ -324,7 +324,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                 />
               </div>
               <div>
-                <label className="block font-label-mono text-primary-container mb-1 text-xs">地理环境</label>
+                <label className="block font-mono text-primary-container mb-1 text-xs">地理环境</label>
                 <AutoTextarea
                   value={world.geography}
                   onChange={(e) => setWorld({ ...world, geography: e.target.value })}
@@ -333,7 +333,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                 />
               </div>
               <div>
-                <label className="block font-label-mono text-primary-container mb-1 text-xs">
+                <label className="block font-mono text-primary-container mb-1 text-xs">
                   社会结构 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
                 </label>
                 <AutoTextarea
@@ -345,7 +345,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                 />
               </div>
               <div>
-                <label className="block font-label-mono text-primary-container mb-1 text-xs">
+                <label className="block font-mono text-primary-container mb-1 text-xs">
                   历史文化 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
                 </label>
                 <AutoTextarea
@@ -362,7 +362,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
           {/* 力量体系 */}
           <div className="border border-outline-variant rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">力量体系</div>
+              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">力量体系</div>
               <div className="flex items-center gap-1">
                 <SectionRegenerateButton
                   target="力量体系"
@@ -386,7 +386,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
             </div>
             <div data-testid="world-power-systems" className="space-y-3">
               {world.power_systems.length === 0 && (
-                <p className="font-body-ui text-primary-container/40 text-xs text-center py-3">暂无力量体系</p>
+                <p className="font-body text-body-md text-primary-container/40 text-xs text-center py-3">暂无力量体系</p>
               )}
               {world.power_systems.map((ps, i) => (
                 <div
@@ -412,7 +412,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                     </button>
                   </div>
                   <div className="pr-6">
-                    <label className="block font-label-mono text-primary-container mb-1 text-[10px]">体系名称</label>
+                    <label className="block font-mono text-primary-container mb-1 text-[10px]">体系名称</label>
                     <input
                       data-testid={`world-power-system-${i}-name`}
                       value={ps.name}
@@ -421,7 +421,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                     />
                   </div>
                   <div>
-                    <label className="block font-label-mono text-primary-container mb-1 text-[10px]">描述</label>
+                    <label className="block font-mono text-primary-container mb-1 text-[10px]">描述</label>
                     <AutoTextarea
                       data-testid={`world-power-system-${i}-description`}
                       value={ps.description}
@@ -431,7 +431,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                     />
                   </div>
                   <div>
-                    <label className="block font-label-mono text-primary-container mb-1 text-[10px]">阶段划分</label>
+                    <label className="block font-mono text-primary-container mb-1 text-[10px]">阶段划分</label>
                     <div data-testid={`world-power-system-${i}-stages`}>
                       <TagEditor
                         items={ps.stages ?? []}
@@ -441,7 +441,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                     </div>
                   </div>
                   <div>
-                    <label className="block font-label-mono text-primary-container mb-1 text-[10px]">体系规则</label>
+                    <label className="block font-mono text-primary-container mb-1 text-[10px]">体系规则</label>
                     <div data-testid={`world-power-system-${i}-rules`}>
                       <TagEditor
                         items={ps.core_rules ?? []}
@@ -451,7 +451,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                     </div>
                   </div>
                   <div>
-                    <label className="block font-label-mono text-primary-container mb-1 text-[10px]">力量上限</label>
+                    <label className="block font-mono text-primary-container mb-1 text-[10px]">力量上限</label>
                     <div data-testid={`world-power-system-${i}-ceilings`}>
                       <TagEditor
                         items={ps.ceilings ?? []}
@@ -461,7 +461,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                     </div>
                   </div>
                   <div>
-                    <label className="block font-label-mono text-primary-container mb-1 text-[10px]">代价系统</label>
+                    <label className="block font-mono text-primary-container mb-1 text-[10px]">代价系统</label>
                     <input
                       data-testid={`world-power-system-${i}-cost`}
                       value={ps.cost_system ?? ""}
@@ -477,7 +477,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
           {/* 世界规则 */}
           <div className="border border-outline-variant rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">世界规则</div>
+              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">世界规则</div>
               <SectionRegenerateButton
                 target="世界规则"
                 onRegenerate={handleSectionRegenerate("core_rules")}
@@ -496,7 +496,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
           {/* 势力分布 */}
           <div className="border border-outline-variant rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">势力分布</div>
+              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">势力分布</div>
               <div className="flex items-center gap-1">
                 <SectionRegenerateButton
                   target="势力分布"
@@ -520,7 +520,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
             </div>
             <div data-testid="world-factions" className="space-y-3">
               {world.factions.length === 0 && (
-                <p className="font-body-ui text-primary-container/40 text-xs text-center py-3">暂无势力</p>
+                <p className="font-body text-body-md text-primary-container/40 text-xs text-center py-3">暂无势力</p>
               )}
               {world.factions.map((f, i) => (
                 <div
@@ -540,7 +540,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                   </button>
                   <div className="grid grid-cols-2 gap-2 pr-6">
                     <div>
-                      <label className="block font-label-mono text-primary-container mb-1 text-[10px]">名称</label>
+                      <label className="block font-mono text-primary-container mb-1 text-[10px]">名称</label>
                       <input
                         data-testid={`world-faction-${i}-name`}
                         value={f.name}
@@ -549,7 +549,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                       />
                     </div>
                     <div>
-                      <label className="block font-label-mono text-primary-container mb-1 text-[10px]">类型</label>
+                      <label className="block font-mono text-primary-container mb-1 text-[10px]">类型</label>
                       <input
                         data-testid={`world-faction-${i}-type`}
                         value={f.type}
@@ -559,7 +559,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                     </div>
                   </div>
                   <div>
-                    <label className="block font-label-mono text-primary-container mb-1 text-[10px]">目标</label>
+                    <label className="block font-mono text-primary-container mb-1 text-[10px]">目标</label>
                     <AutoTextarea
                       data-testid={`world-faction-${i}-goal`}
                       value={f.goal}
@@ -569,7 +569,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
                     />
                   </div>
                   <div>
-                    <label className="block font-label-mono text-primary-container mb-1 text-[10px]">关系</label>
+                    <label className="block font-mono text-primary-container mb-1 text-[10px]">关系</label>
                     <input
                       data-testid={`world-faction-${i}-relations`}
                       value={f.relations}

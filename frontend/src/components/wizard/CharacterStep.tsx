@@ -401,19 +401,19 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       {wizard.status === "generating" && (
         <div className="text-center py-12">
           <span className="material-symbols-outlined text-4xl text-primary-container animate-spin inline-block">progress_activity</span>
-          <p className="font-body-ui text-primary-container mt-3 text-sm">正在生成角色…</p>
+          <p className="font-body text-body-md text-primary-container mt-3 text-sm">正在生成角色…</p>
         </div>
       )}
 
       {wizard.status === "error" && (
-        <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body-ui text-sm">
+        <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body text-body-md text-sm">
           {wizard.errorMessage}
         </div>
       )}
 
       {hasCharacters && (
         <div data-testid="character-form" className="space-y-3">
-          <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">
+          <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
             已生成 {characters!.characters.length} 个角色
           </div>
           <ul data-testid="character-list" className="space-y-2">
@@ -431,7 +431,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <label className="block font-label-mono text-primary-container mb-1 text-[10px]">姓名</label>
+                        <label className="block font-mono text-primary-container mb-1 text-[10px]">姓名</label>
                         <input
                           data-testid={`character-${c.id}-name`}
                           value={c.name ?? ""}
@@ -441,7 +441,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                         />
                       </div>
                       <div>
-                        <label className="block font-label-mono text-primary-container mb-1 text-[10px]">角色类型</label>
+                        <label className="block font-mono text-primary-container mb-1 text-[10px]">角色类型</label>
                         <select
                           data-testid={`character-${c.id}-type`}
                           value={c.character_type}
@@ -456,7 +456,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2 pt-1">
-                      <label className="flex items-center gap-1 font-body-ui text-[11px] text-primary whitespace-nowrap">
+                      <label className="flex items-center gap-1 font-body text-body-md text-[11px] text-primary whitespace-nowrap">
                         <input
                           type="checkbox"
                           data-testid={`character-${c.id}-core`}
@@ -480,7 +480,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                   {/* 人格层 — 5 个 TagEditor（与世界观的力量体系/世界规则一致） */}
                   <div data-testid={`character-${c.id}-personality`} className="space-y-2 border-t border-outline-variant pt-3">
                     <div className="flex items-center justify-between">
-                      <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">人格层</div>
+                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">人格层</div>
                       <SectionRegenerateButton
                         target={`${c.name || c.id} · 人格层`}
                         onRegenerate={handleSectionRegenerate(c.id, "personality")}
@@ -490,7 +490,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {PERSONALITY_FIELDS.map(({ key, label }) => (
                         <div key={key}>
-                          <div className="font-label-mono text-primary-container/80 text-[10px] mb-1">{label}</div>
+                          <div className="font-mono text-primary-container/80 text-[10px] mb-1">{label}</div>
                           <TagEditor
                             items={personality[key] ?? []}
                             onItemsChange={(next) => updatePersonality(c.id, key, next)}
@@ -504,7 +504,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                   {/* 声音签名 */}
                   <div data-testid={`character-${c.id}-voice`} className="space-y-2 border-t border-outline-variant pt-3">
                     <div className="flex items-center justify-between">
-                      <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">声音签名</div>
+                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">声音签名</div>
                       <SectionRegenerateButton
                         target={`${c.name || c.id} · 声音签名`}
                         onRegenerate={handleSectionRegenerate(c.id, "voice_signature")}
@@ -512,7 +512,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                       />
                     </div>
                     <div>
-                      <label className="block font-label-mono text-primary-container/80 mb-1 text-[10px]">说话风格</label>
+                      <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">说话风格</label>
                       <AutoTextarea
                         data-testid={`character-${c.id}-speech-style`}
                         value={voice.speech_style}
@@ -523,7 +523,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                       />
                     </div>
                     <div>
-                      <label className="block font-label-mono text-primary-container/80 mb-1 text-[10px]">思维模式</label>
+                      <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">思维模式</label>
                       <AutoTextarea
                         data-testid={`character-${c.id}-thought-patterns`}
                         value={voice.thought_patterns}
@@ -534,7 +534,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                       />
                     </div>
                     <div>
-                      <div className="font-label-mono text-primary-container/80 mb-1 text-[10px]">行为禁忌</div>
+                      <div className="font-mono text-primary-container/80 mb-1 text-[10px]">行为禁忌</div>
                       <TagEditor
                         items={voice.taboos ?? []}
                         onItemsChange={(next) => updateVoiceField(c.id, "taboos", next)}
@@ -562,7 +562,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                   {/* 当前状态 */}
                   <div className="space-y-2 border-t border-outline-variant pt-3">
                     <div className="flex items-center justify-between">
-                      <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">当前状态</div>
+                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">当前状态</div>
                       <SectionRegenerateButton
                         target={`${c.name || c.id} · 当前状态`}
                         onRegenerate={handleSectionRegenerate(c.id, "current_state")}
@@ -570,7 +570,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                       />
                     </div>
                     <div>
-                      <label className="block font-label-mono text-primary-container/80 mb-1 text-[10px]">位置</label>
+                      <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">位置</label>
                       <input
                         data-testid={`character-${c.id}-location`}
                         value={state.location}
@@ -581,7 +581,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <label className="block font-label-mono text-primary-container/80 mb-1 text-[10px]">身体状况</label>
+                        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">身体状况</label>
                         <input
                           data-testid={`character-${c.id}-physical-condition`}
                           value={state.physical_condition}
@@ -591,7 +591,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                         />
                       </div>
                       <div>
-                        <label className="block font-label-mono text-primary-container/80 mb-1 text-[10px]">情绪</label>
+                        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">情绪</label>
                         <input
                           data-testid={`character-${c.id}-emotional`}
                           value={state.emotional}
@@ -602,7 +602,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                       </div>
                     </div>
                     <div>
-                      <div className="font-label-mono text-primary-container/80 mb-1 text-[10px]">已知秘密</div>
+                      <div className="font-mono text-primary-container/80 mb-1 text-[10px]">已知秘密</div>
                       <TagEditor
                         items={state.known_secrets ?? []}
                         onItemsChange={(next) => updateCurrentState(c.id, "known_secrets", next)}
@@ -614,14 +614,14 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                   {/* 角色不知道的事 */}
                   <div className="space-y-2 border-t border-outline-variant pt-3">
                     <div className="flex items-center justify-between">
-                      <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">角色不知道的事</div>
+                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">角色不知道的事</div>
                       <SectionRegenerateButton
                         target={`${c.name || c.id} · 未知`}
                         onRegenerate={handleSectionRegenerate(c.id, "unknown")}
                         testId={`character-${c.id}-unknown-regenerate`}
                       />
                     </div>
-                    <div className="font-label-mono text-primary-container/80 mb-1 text-[10px]">未知 (unknown_to_character)</div>
+                    <div className="font-mono text-primary-container/80 mb-1 text-[10px]">未知 (unknown_to_character)</div>
                     <TagEditor
                       items={c.unknown_to_character ?? []}
                       onItemsChange={(next) => updateUnknown(c.id, next)}
@@ -632,7 +632,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                   {/* 角色关系 — 始终可见，添加/删除关系直接操作本地状态 */}
                   <div data-testid={`character-${c.id}-relations`} className="space-y-2 border-t border-outline-variant pt-3">
                     <div className="flex items-center justify-between">
-                      <div className="font-label-mono text-primary-container text-[10px] uppercase tracking-wider">角色关系</div>
+                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">角色关系</div>
                       <SectionRegenerateButton
                         target={`${c.name || c.id} · 角色关系`}
                         onRegenerate={handleSectionRegenerate(c.id, "relations")}
@@ -652,7 +652,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
           </ul>
 
           <div className="border-t border-outline-variant pt-3 space-y-2">
-            <p className="font-label-mono text-primary-container/70 text-xs">手动添加更多角色：</p>
+            <p className="font-mono text-primary-container/70 text-xs">手动添加更多角色：</p>
             <div className="flex flex-wrap gap-2">
               {CHARACTER_TYPES.map(({ value, label }) => (
                 <button
@@ -661,7 +661,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                   data-testid={`character-add-${value}`}
                   onClick={() => handleAddOne(value)}
                   disabled={busy}
-                  className="px-3 py-1.5 rounded-full border border-dashed text-sm font-body-ui
+                  className="px-3 py-1.5 rounded-full border border-dashed text-sm font-body text-body-md
                              border-outline-variant text-primary-container/70
                              hover:text-primary-container hover:border-primary-container/50
                              transition-colors disabled:opacity-40"
@@ -672,7 +672,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
             </div>
           </div>
 
-          <p className="font-body-ui text-primary-container/60 text-xs">
+          <p className="font-body text-body-md text-primary-container/60 text-xs">
             角色详情可在工作台的角色标签页内继续编辑。
           </p>
 
@@ -689,7 +689,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
           <div data-testid="delete-confirm-modal" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="bg-surface-container p-6 rounded-lg max-w-md space-y-4">
               <h3 className="font-display text-lg text-primary">删除「{target.name || "未命名"}」？</h3>
-              <p className="font-body-ui text-sm text-primary-container">
+              <p className="font-body text-body-md text-sm text-primary-container">
                 将同时清理 <strong>{cascade}</strong> 个反向关系。
               </p>
               <div className="flex justify-end gap-2">

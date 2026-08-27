@@ -30,15 +30,15 @@ export default function WizardSteps({ currentStep, completedSteps, onJump }: Wiz
               ${isReachable ? "cursor-pointer hover:bg-surface-container-low" : "cursor-not-allowed opacity-50"}`}
           >
             <span
-              className={`w-7 h-7 rounded-full flex items-center justify-center font-label-mono text-xs
+              className={`w-7 h-7 rounded-full flex items-center justify-center font-mono text-xs
                 ${completed ? "bg-primary-container text-surface-container-low" : ""}
                 ${current && !completed ? "border-2 border-primary-container text-primary-container bg-surface-container-low" : ""}
-                ${!isReachable ? "border border-outline-variant text-system-log bg-surface-container" : ""}`}
+                ${!isReachable ? "border border-outline-variant text-on-surface-variant bg-surface-container" : ""}`}
             >
               {completed ? "✓" : stepNum}
             </span>
             <span
-              className={`font-label-mono text-[10px] ${current ? "text-primary-container" : "text-system-log"}`}
+              className={`font-mono text-[10px] ${current ? "text-primary-container" : "text-on-surface-variant"}`}
             >
               {label}
             </span>

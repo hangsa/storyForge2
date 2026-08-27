@@ -45,7 +45,7 @@ export default function CharacterRelationsEditor({ relations, allCharacters, sel
               key={targetId_}
               className="flex items-center justify-between gap-2 p-1.5 bg-surface-container-low rounded"
             >
-              <span className="font-label-mono text-primary text-xs truncate flex-1">
+              <span className="font-mono text-primary text-xs truncate flex-1">
                 {target?.name || targetId_}
               </span>
               <select
@@ -59,7 +59,7 @@ export default function CharacterRelationsEditor({ relations, allCharacters, sel
                 type="button"
                 data-testid={`relations-remove-${targetId_}`}
                 onClick={() => removeRelation(targetId_)}
-                className="text-system-log/60 hover:text-error text-xs"
+                className="text-on-surface-variant/60 hover:text-error text-xs"
                 aria-label="删除关系"
               >×</button>
             </li>
@@ -96,7 +96,7 @@ export default function CharacterRelationsEditor({ relations, allCharacters, sel
           <button
             type="button"
             onClick={() => { setAdding(false); setTargetId(""); }}
-            className="px-2 py-0.5 text-xs bg-surface-container text-system-log rounded"
+            className="px-2 py-0.5 text-xs bg-surface-container text-on-surface-variant rounded"
           >取消</button>
         </div>
       ) : (
@@ -105,7 +105,7 @@ export default function CharacterRelationsEditor({ relations, allCharacters, sel
           data-testid="relations-add-button"
           onClick={() => setAdding(true)}
           disabled={candidates.length === 0}
-          className="px-2 py-1 text-xs text-system-log/70 border border-dashed border-outline-variant rounded hover:text-primary-container hover:border-primary-container/50 disabled:opacity-40"
+          className="px-2 py-1 text-xs text-on-surface-variant/70 border border-dashed border-outline-variant rounded hover:text-primary-container hover:border-primary-container/50 disabled:opacity-40"
         >+ 添加关系</button>
       )}
     </div>

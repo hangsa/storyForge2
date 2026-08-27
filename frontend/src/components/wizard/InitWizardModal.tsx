@@ -70,7 +70,7 @@ function RegenerateStatusBadge({ state }: { state: WizardRegenerateState }) {
         data-status="busy"
         role="status"
         aria-live="polite"
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-container/10 text-primary-container font-body-ui text-xs"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-container/10 text-primary-container font-body text-body-md text-xs"
       >
         <span
           data-testid="wizard-regenerate-status-spinner"
@@ -91,7 +91,7 @@ function RegenerateStatusBadge({ state }: { state: WizardRegenerateState }) {
         data-status="success"
         role="status"
         aria-live="polite"
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-container/15 text-primary-container font-body-ui text-xs"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-container/15 text-primary-container font-body text-body-md text-xs"
       >
         <span aria-hidden="true" className="material-symbols-outlined text-[14px]">check</span>
         {state.target} 已重新生成
@@ -106,7 +106,7 @@ function RegenerateStatusBadge({ state }: { state: WizardRegenerateState }) {
       data-status="failure"
       role="status"
       aria-live="assertive"
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-error-container/30 text-error font-body-ui text-xs max-w-[40ch] truncate"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-error-container/30 text-error font-body text-body-md text-xs max-w-[40ch] truncate"
       title={`重新生成失败: ${state.message}`}
     >
       <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
@@ -257,7 +257,7 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
             onClick={onDismiss}
             aria-label="关闭向导（已保存进度）"
             title="已完成的步骤会自动保存，下次可从书架继续"
-            className="text-system-log hover:text-primary transition-colors"
+            className="text-on-surface-variant hover:text-primary transition-colors"
           >
             <span className="material-symbols-outlined">close</span>
           </button>
@@ -294,7 +294,7 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
               type="button"
               onClick={() => wizard.jumpToStep(Math.max(1, wizard.currentStep - 1))}
               disabled={wizard.currentStep === 1}
-              className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
+              className="px-4 py-2 text-sm bg-surface-container text-on-surface-variant rounded-lg hover:bg-surface-container-low disabled:opacity-40"
             >
               上一步
             </button>
@@ -309,7 +309,7 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
                 type="button"
                 onClick={wizard.regenerateHandler}
                 disabled={wizard.regenerateDisabled}
-                className="px-4 py-2 text-sm bg-surface-container text-system-log rounded-lg hover:bg-surface-container-low disabled:opacity-40"
+                className="px-4 py-2 text-sm bg-surface-container text-on-surface-variant rounded-lg hover:bg-surface-container-low disabled:opacity-40"
               >
                 重新生成
               </button>

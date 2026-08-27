@@ -217,7 +217,7 @@ describe("HomePage /api/project/list fetch", () => {
     ]);
     renderPage();
     expect(await screen.findByText("新")).toBeInTheDocument();
-    const cards = screen.getAllByTestId("book-card");
+    const cards = screen.getAllByRole("row");
     expect(cards[0]).toHaveTextContent("新");
     expect(cards[1]).toHaveTextContent("旧");
   });

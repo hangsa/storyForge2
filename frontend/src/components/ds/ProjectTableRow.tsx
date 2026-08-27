@@ -42,7 +42,7 @@ export default function ProjectTableRow({
     <div
       role="row"
       onClick={onClick}
-      className={`group grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_120px] items-center px-3 py-2 border-b border-outline-variant hover:bg-surface-container-low cursor-pointer ${selectedClass}`}
+      className={`grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_120px] items-center px-3 py-2 border-b border-outline-variant hover:bg-surface-container-low cursor-pointer ${selectedClass}`}
     >
       <div className="flex items-center justify-center">
         <input
@@ -50,7 +50,7 @@ export default function ProjectTableRow({
           checked={selected}
           onChange={(e) => onSelectChange?.(e.target.checked)}
           onClick={(e) => e.stopPropagation()}
-          className="opacity-0 group-hover:opacity-100 checked:opacity-100 w-4 h-4 accent-primary"
+          className="w-4 h-4 accent-primary"
           aria-label="select row"
         />
       </div>

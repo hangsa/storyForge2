@@ -78,36 +78,49 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
   const empty = !loading && projects.length === 0;
   const filteredEmpty = !loading && projects.length > 0 && sorted.length === 0;
 
+  // Select-all toggles every row currently visible (after search/filter/sort).
+  // The header checkbox's own checked state is binary: it only reflects
+  // "all rows checked" vs. "anything else" — partial selection just shows
+  // the unchecked state, per the design.
+  const allChecked = sorted.length > 0 && selectedIds.size === sorted.length;
+  function toggleSelectAll() {
+    setSelectedIds(allChecked ? new Set() : new Set(sorted.map((p) => p.id)));
+  }
+
   return (
     <section data-testid="book-shelf" className="space-y-3">
-      <header className="flex items-center gap-3 flex-wrap">
+      <header className="flex items-center gap-3">
         <h2 className="font-display text-headline-lg-mobile text-primary">书架</h2>
         <span className="font-mono text-label-sm text-on-surface-variant">
           {loading ? "加载中…" : `共 ${projects.length} 本`}
         </span>
-        <div className="flex-1" />
-        {onOpenCreate && (
-          <PrimaryButton
-            label="+ 新建项目"
-            icon="plus"
-            onClick={onOpenCreate}
-          />
-        )}
+      </header>
+
+      <div className="flex items-center gap-3 flex-wrap">
         <SearchInput value={search} onChange={setSearch} />
         <DropdownSelect label="题材" options={GENRE_OPTIONS} value={genre} onChange={setGenre} />
         <DropdownSelect label="篇幅" options={LENGTH_OPTIONS} value={length} onChange={setLength} />
-        <PrimaryButton label="查询" icon="search" onClick={() => setFiltersApplied(true)} />
-      </header>
+        <PrimaryButton label="查询" icon="search" size="sm" onClick={() => setFiltersApplied(true)} />
+      </div>
 
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-surface-container border border-outline-variant rounded">
-          <span className="font-mono text-body-md text-on-surface">
-            {selectedIds.size} 已选
-          </span>
-          <SecondaryButton label="删除" variant="destructive" icon="delete" onClick={() => setConfirmOpen(true)} />
-          <GhostButton label="取消" onClick={() => setSelectedIds(new Set())} />
-        </div>
-      )}
+      <div className="flex items-center gap-3">
+        {onOpenCreate && (
+          <PrimaryButton
+            label="+ 新建项目"
+            onClick={onOpenCreate}
+            size="sm"
+          />
+        )}
+        <SecondaryButton
+          label="删除"
+          variant="destructive"
+          icon="delete"
+          size="sm"
+          disabled={selectedIds.size === 0}
+          onClick={() => setConfirmOpen(true)}
+          testId="bulk-delete-trigger"
+        />
+      </div>
 
       {loading ? (
         <div className="text-center py-16 text-on-surface-variant">
@@ -134,7 +147,17 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
       ) : (
         <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
           <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_120px] items-center py-2 px-3 border-b border-outline-variant font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
-            <div />
+            <div className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                checked={allChecked}
+                onChange={toggleSelectAll}
+                disabled={sorted.length === 0}
+                aria-label="select all"
+                data-testid="select-all"
+                className="w-4 h-4 accent-primary"
+              />
+            </div>
             <button onClick={() => toggleSort("title")}>项目详情</button>
             <button onClick={() => toggleSort("chapter_count")} className="text-center">章节</button>
             <button onClick={() => toggleSort("word_count")} className="text-center">字数</button>

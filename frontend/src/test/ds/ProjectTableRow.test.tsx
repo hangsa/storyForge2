@@ -70,4 +70,12 @@ describe("ProjectTableRow", () => {
     // INIT should use surface-tint per ds/stages.ts (not system-log)
     expect(STAGE_COLORS.INIT).toMatch(/surface-tint/);
   });
+
+  it("renders the row checkbox visible by default (not hover-only)", () => {
+    const { container } = render(<ProjectTableRow project={PROJECT} />);
+    const cb = container.querySelector('input[type="checkbox"]');
+    expect(cb).not.toBeNull();
+    expect(cb!.className).not.toMatch(/opacity-0/);
+    expect(cb!.className).not.toMatch(/group-hover/);
+  });
 });

@@ -5,6 +5,13 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Top-level on-* aliases so `text-on-primary` / `text-on-primary-container`
+        // compile to the right color. The nested `primary.on-primary` form
+        // generates `text-primary-on-primary`, not `text-on-primary` — that
+        // mismatch left the PrimaryButton text invisible (inheriting the body
+        // text color, which is the same light blue as the button background).
+        "on-primary": "var(--color-on-primary)",
+        "on-primary-container": "var(--color-on-primary-container)",
         primary: {
           DEFAULT: "var(--color-primary)",
           container: "var(--color-primary-container)",

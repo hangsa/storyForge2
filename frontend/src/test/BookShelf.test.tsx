@@ -57,26 +57,41 @@ describe("BookShelf table", () => {
     expect(screen.queryByText("另一书")).not.toBeInTheDocument();
   });
 
-  it("exposes the bulk action bar after a row is selected", () => {
+  it("disables the 删除 button when no rows are selected", () => {
     render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={() => {}} />);
-    const checkboxes = screen.getAllByRole("checkbox");
-    fireEvent.click(checkboxes[0]);
-    expect(screen.getByText(/1 已选/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
+    const trigger = screen.getByTestId("bulk-delete-trigger");
+    expect(trigger).toBeDisabled();
   });
 
   it("opens BulkDeleteModal when 删除 is clicked and forwards IDs on confirm", async () => {
     const onDeleted = vi.fn();
     render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={onDeleted} />);
+    // First checkbox is the header select-all; row checkboxes follow.
     const checkboxes = screen.getAllByRole("checkbox");
-    fireEvent.click(checkboxes[0]);
-    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(screen.getByTestId("bulk-delete-trigger"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "删除" }));
     // Wait for the awaited api.bulkDeleteProjects to resolve
     await new Promise((r) => setTimeout(r, 0));
     expect(onDeleted).toHaveBeenCalledWith(["p1"]);
     expect(api.bulkDeleteProjects).toHaveBeenCalledWith(["p1"]);
+  });
+
+  it("toggles every visible row when the select-all checkbox is clicked", () => {
+    render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={() => {}} />);
+    const selectAll = screen.getByTestId("select-all");
+    expect(selectAll).not.toBeChecked();
+
+    fireEvent.click(selectAll);
+    const rowCheckboxes = screen.getAllByRole("checkbox").slice(1);
+    expect(rowCheckboxes).toHaveLength(PROJECTS.length);
+    for (const cb of rowCheckboxes) expect(cb).toBeChecked();
+    expect(screen.getByTestId("bulk-delete-trigger")).not.toBeDisabled();
+
+    fireEvent.click(selectAll);
+    for (const cb of rowCheckboxes) expect(cb).not.toBeChecked();
+    expect(screen.getByTestId("bulk-delete-trigger")).toBeDisabled();
   });
 
   it("navigates to /project/<id>/stage4 when a post-wizard row is clicked", () => {

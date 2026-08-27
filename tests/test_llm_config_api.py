@@ -301,6 +301,39 @@ def test_set_provider_api_key_writes_env(client, monkeypatch, tmp_path):
     assert "ANTHROPIC_API_KEY=sk-new" in env_path.read_text(encoding="utf-8")
 
 
+def test_set_provider_api_key_updates_running_env(client, monkeypatch):
+    """The endpoint must inject the new key into os.environ too — probe
+    and `_create_provider_for_model` both read from os.environ (the
+    `STORYFORGE_PROVIDER_API_KEY_<PID>` lookup comes before the legacy
+    `settings.<pid>_api_key` fallback). Without this, a key saved via
+    the AI Console is invisible to the running backend until restart,
+    and the probe returns "API Key 未配置" / project init hits 401.
+    """
+    import os
+
+    prefixed = "STORYFORGE_PROVIDER_API_KEY_ANTHROPIC"
+    legacy = "ANTHROPIC_API_KEY"
+    prior_prefixed = os.environ.pop(prefixed, None)
+    prior_legacy = os.environ.pop(legacy, None)
+    try:
+        res = client.put(
+            "/api/settings/llm-config/providers/anthropic/api-key",
+            json={"value": "sk-live"},
+        )
+        assert res.status_code == 200, res.text
+        assert os.environ.get(prefixed) == "sk-live"
+        assert os.environ.get(legacy) == "sk-live"
+    finally:
+        if prior_prefixed is None:
+            os.environ.pop(prefixed, None)
+        else:
+            os.environ[prefixed] = prior_prefixed
+        if prior_legacy is None:
+            os.environ.pop(legacy, None)
+        else:
+            os.environ[legacy] = prior_legacy
+
+
 def test_migrate_endpoint_idempotent_when_already_v2(client):
     # POST /migrate is idempotent: legacy YAML → migrate_legacy_yaml();
     # already-v2 YAML that lost a builtin → seed_builtin_providers().

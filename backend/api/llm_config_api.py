@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Optional
 
@@ -228,6 +229,13 @@ async def put_provider_api_key(provider_id: str, payload: dict):
     }
     try:
         write_env_atomic(llm_config_mod.ENV_PATH, updates)
+        # Push the new key into the running process's env so probe +
+        # generation can find it without a restart. write_env_atomic
+        # only touches disk; pydantic-settings reads .env at import time
+        # and doesn't auto-refresh, and STOR writing only the prefixed/
+        # legacy-alias keys leaves settings.<pid>_api_key empty for any
+        # user who first configures via the AI Console.
+        os.environ.update(updates)
     except OSError as e:
         _err("WRITE_FAILED", f".env 写入失败: {e}", 500)
     summary = reload_router()

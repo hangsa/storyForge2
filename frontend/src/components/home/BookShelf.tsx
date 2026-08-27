@@ -146,7 +146,7 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
         </div>
       ) : (
         <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
-          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_120px] items-center py-2 px-3 border-b border-outline-variant font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
+          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center py-2 px-3 border-b border-outline-variant font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
             <div className="flex items-center justify-center">
               <input
                 type="checkbox"
@@ -158,7 +158,9 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
                 className="w-4 h-4 accent-primary"
               />
             </div>
-            <button onClick={() => toggleSort("title")}>项目详情</button>
+            <button onClick={() => toggleSort("title")}>书名</button>
+            <button className="text-center">题材</button>
+            <button className="text-center">阶段</button>
             <button onClick={() => toggleSort("chapter_count")} className="text-center">章节</button>
             <button onClick={() => toggleSort("word_count")} className="text-center">字数</button>
             <button onClick={() => toggleSort("target_total_words")} className="text-center">篇幅</button>

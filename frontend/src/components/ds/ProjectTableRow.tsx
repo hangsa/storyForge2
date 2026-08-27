@@ -42,7 +42,7 @@ export default function ProjectTableRow({
     <div
       role="row"
       onClick={onClick}
-      className={`grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_120px] items-center px-3 py-2 border-b border-outline-variant hover:bg-surface-container-low cursor-pointer ${selectedClass}`}
+      className={`grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center px-3 py-2 border-b border-outline-variant hover:bg-surface-container-low cursor-pointer ${selectedClass}`}
     >
       <div className="flex items-center justify-center">
         <input
@@ -58,15 +58,15 @@ export default function ProjectTableRow({
         <span className="material-symbols-outlined text-primary-container shrink-0" aria-hidden="true">
           auto_stories
         </span>
-        <div className="flex flex-col min-w-0">
-          <span className="font-display text-on-surface truncate">{project.title}</span>
-          <div className="flex items-center gap-1">
-            <span className="text-label-sm text-on-surface-variant font-mono">[{genreLabel}]</span>
-            <span className={`text-label-sm px-1.5 py-0.5 rounded font-mono ${chipClass}`}>
-              {stageLabel}
-            </span>
-          </div>
-        </div>
+        <span className="font-display text-on-surface truncate">{project.title}</span>
+      </div>
+      <div className="text-center font-mono text-body-md text-on-surface-variant">
+        {genreLabel}
+      </div>
+      <div className="flex justify-center">
+        <span className={`text-label-sm px-1.5 py-0.5 rounded font-mono ${chipClass}`}>
+          {stageLabel}
+        </span>
       </div>
       <div className="text-center font-mono text-body-md text-on-surface">{project.chapter_count}</div>
       <div className="text-center font-mono text-body-md text-on-surface">

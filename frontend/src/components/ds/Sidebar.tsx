@@ -8,6 +8,8 @@ export interface SidebarProps {
   header?: ReactNode;
   children: ReactNode | ((collapsed: boolean) => ReactNode);
   footer?: ReactNode;
+  /** Optional data-testid applied to the root <aside>. */
+  testId?: string;
 }
 
 export default function Sidebar({
@@ -18,6 +20,7 @@ export default function Sidebar({
   header,
   children,
   footer,
+  testId,
 }: SidebarProps) {
   const [collapsedState, setCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -34,6 +37,7 @@ export default function Sidebar({
 
   return (
     <aside
+      data-testid={testId}
       style={{ width: currentWidth }}
       className="shrink-0 bg-canvas-bg border-r border-outline-variant flex flex-col transition-[width] duration-200"
     >

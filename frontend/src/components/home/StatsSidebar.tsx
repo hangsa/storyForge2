@@ -53,6 +53,7 @@ export default function StatsSidebar({
       persistKey="storyforge.home.sidebar.collapsed"
       header={<BrandHeader brandName="Nebula Forge" />}
       footer={null}
+      testId="stats-sidebar"
     >
       {(collapsed) => (
         <div className="flex flex-col gap-4">

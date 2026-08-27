@@ -105,6 +105,8 @@ export interface ProjectSummary {
   min_words: number;
   target_total_words: number;
   target_length_category: string;
+  chapter_count: number;    // added for Nebula Forge bookshelf
+  word_count: number;       // added for Nebula Forge bookshelf (visible chars in drafts)
 }
 
 export interface BulkDeleteResult {

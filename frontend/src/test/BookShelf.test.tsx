@@ -63,9 +63,21 @@ describe("BookShelf table", () => {
     expect(screen.getByText(/还没有项目/)).toBeInTheDocument();
   });
 
-  it("filters by search input in real time", () => {
-    render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={() => {}} />);
+  it("does not filter until 查询 is clicked (search input is held locally)", () => {
+    // Mirrors the dropdowns' behavior: typing in the search box updates
+    // local state but doesn't narrow the table until the user commits
+    // via 查询. Avoids per-keystroke re-renders and chained-condition
+    // thrash.
+    const onRefresh = vi.fn();
+    render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={() => {}} onRefresh={onRefresh} />);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "翻天" } });
+    // Both rows still visible before 查询 — no narrowing yet.
+    expect(screen.getByText("翻天")).toBeInTheDocument();
+    expect(screen.getByText("另一书")).toBeInTheDocument();
+    expect(onRefresh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "查询" }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    // After 查询, the search narrows the list.
     expect(screen.getByText("翻天")).toBeInTheDocument();
     expect(screen.queryByText("另一书")).not.toBeInTheDocument();
   });

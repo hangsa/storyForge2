@@ -58,15 +58,19 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
     []
   );
 
+  // All filter conditions (search + dropdowns) are held locally until
+  // 查询 is clicked — otherwise typing in the search box or poking a
+  // dropdown would re-render the list mid-keystroke, and chained
+  // condition changes (search → dropdown → search) would each trip a
+  // re-render before the user settles on a final query.
   const filtered = useMemo(() => {
+    if (!filtersApplied) return projects;
     let list = projects;
     const q = search.trim().toLowerCase();
     if (q) list = list.filter((p) => p.title.toLowerCase().includes(q));
-    if (filtersApplied) {
-      if (genre !== "all") list = list.filter((p) => p.genre === genre);
-      if (stage !== "all") list = list.filter((p) => p.current_stage === stage);
-      if (length !== "all") list = list.filter((p) => p.target_length_category === length);
-    }
+    if (genre !== "all") list = list.filter((p) => p.genre === genre);
+    if (stage !== "all") list = list.filter((p) => p.current_stage === stage);
+    if (length !== "all") list = list.filter((p) => p.target_length_category === length);
     return list;
   }, [projects, search, genre, stage, length, filtersApplied]);
 

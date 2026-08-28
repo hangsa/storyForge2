@@ -130,4 +130,34 @@ describe("BookShelf table", () => {
     fireEvent.click(screen.getByText("未开张"));
     expect(onResume).toHaveBeenCalledWith("init1");
   });
+
+  it("fires onRefresh when 查询 is clicked, even with no filters set", () => {
+    const onRefresh = vi.fn();
+    render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={() => {}} onRefresh={onRefresh} />);
+    fireEvent.click(screen.getByRole("button", { name: "查询" }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies local genre/length filters AND fires onRefresh when 查询 is clicked", () => {
+    const onRefresh = vi.fn();
+    const projects: ProjectSummary[] = [
+      { ...PROJECTS[0], genre: "xuanhuan", target_length_category: "标准连载" },
+      { ...PROJECTS[1], genre: "yanqing", target_length_category: "短篇" },
+    ];
+    render(<BookShelf projects={projects} loading={false} onProjectsDeleted={() => {}} onRefresh={onRefresh} />);
+    // Open the 题材 dropdown and pick 玄幻. The table also has a 题材
+    // header button, so scope to the dropdown container.
+    const genreDropdown = screen.getByRole("button", { name: /题材.*所有题材/ });
+    fireEvent.click(genreDropdown);
+    fireEvent.click(screen.getByRole("button", { name: "玄幻" }));
+    // filtersApplied is still false, so the 言情 row remains visible until 查询.
+    expect(screen.getByText("翻天")).toBeInTheDocument();
+    expect(screen.getByText("另一书")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查询" }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    // 玄幻 row still visible, 言情 row filtered out — onRefresh is additive,
+    // it doesn't undo the local filter.
+    expect(screen.getByText("翻天")).toBeInTheDocument();
+    expect(screen.queryByText("另一书")).not.toBeInTheDocument();
+  });
 });

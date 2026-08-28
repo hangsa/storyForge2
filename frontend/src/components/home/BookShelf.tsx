@@ -19,6 +19,10 @@ interface BookShelfProps {
   onResumeWizard?: (projectId: string) => void;
   /** Fires when the user clicks the "+ 新建项目" action button. */
   onOpenCreate?: () => void;
+  /** Fires when the user clicks the "查询" button. HomePage re-fetches the
+   *  project list so changes made elsewhere (another tab, an autopilot
+   *  completion, a manual rename) become visible without a page reload. */
+  onRefresh?: () => void;
 }
 
 const GENRE_OPTIONS = [
@@ -34,7 +38,7 @@ const LENGTH_OPTIONS = [
   { value: "长篇巨著", label: "长篇巨著" },
 ];
 
-export default function BookShelf({ projects, loading, onProjectsDeleted, onResumeWizard, onOpenCreate }: BookShelfProps) {
+export default function BookShelf({ projects, loading, onProjectsDeleted, onResumeWizard, onOpenCreate, onRefresh }: BookShelfProps) {
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState("all");
   const [length, setLength] = useState("all");
@@ -100,7 +104,21 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
         <SearchInput value={search} onChange={setSearch} />
         <DropdownSelect label="题材" options={GENRE_OPTIONS} value={genre} onChange={setGenre} />
         <DropdownSelect label="篇幅" options={LENGTH_OPTIONS} value={length} onChange={setLength} />
-        <PrimaryButton label="查询" icon="search" size="sm" onClick={() => setFiltersApplied(true)} />
+        <PrimaryButton
+          label="查询"
+          icon="search"
+          size="sm"
+          onClick={() => {
+            // Apply the local genre/length dropdowns AND trigger a server
+            // re-fetch. Two reasons the server side matters even when the
+            // user hasn't changed any filter: (a) other clients may have
+            // created/deleted/advanced projects since the page mounted,
+            // (b) stats derived per-row (chapter_count, word_count) get
+            // stale the moment an autopilot loop ticks a chapter.
+            setFiltersApplied(true);
+            onRefresh?.();
+          }}
+        />
       </div>
 
       <div className="flex items-center gap-3">

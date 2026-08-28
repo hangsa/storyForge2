@@ -26,6 +26,14 @@ export default function HomePage() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
 
+  const loadProjects = useCallback(() => {
+    setProjectsLoading(true);
+    return api.listProjects()
+      .then((list) => setProjects(Array.isArray(list) ? list : []))
+      .catch(() => setProjects([]))
+      .finally(() => setProjectsLoading(false));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setProjectsLoading(true);
@@ -142,6 +150,7 @@ export default function HomePage() {
             onProjectsDeleted={handleProjectsDeleted}
             onResumeWizard={handleResumeWizard}
             onOpenCreate={handleOpenCreate}
+            onRefresh={loadProjects}
           />
         </main>
       </div>

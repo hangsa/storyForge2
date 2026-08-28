@@ -27,16 +27,18 @@ export default function StatCard({
   return (
     <div className="bg-surface-container-low border border-outline-variant rounded-lg p-3">
       <div className="flex items-baseline justify-between gap-2">
-        <div className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
-          {label}
+        <div className="flex items-baseline gap-2 min-w-0">
+          <div className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
+            {label}
+          </div>
+          <div className={`${valueClass} truncate`}>{display}</div>
         </div>
         {sublabel && (
-          <div className="font-body text-[10px] text-on-surface-variant/70">
+          <div className="font-body text-[10px] text-on-surface-variant/70 shrink-0">
             {sublabel}
           </div>
         )}
       </div>
-      <div className={`mt-1 ${valueClass}`}>{display}</div>
       {sparkline && <div className="mt-2">{sparkline}</div>}
     </div>
   );

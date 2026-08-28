@@ -117,7 +117,6 @@ export default function StatsSidebar({
                     label="总字数"
                     value={stats?.total_words ?? null}
                     size="sm"
-                    sublabel="Total"
                     sparkline={
                       stats?.word_count_series && stats.word_count_series.length >= 2 ? (
                         <Sparkline data={stats.word_count_series} testId="sparkline-total-words" />

@@ -139,14 +139,14 @@ describe("StatsSidebar", () => {
     expect(screen.queryByTestId("sparkline-total-words")).not.toBeInTheDocument();
   });
 
-  it("renders Total sublabel on the 总字数 stat card", () => {
+  it("does not render the Total sublabel on the 总字数 stat card (removed)", () => {
     render(
       <StatsSidebar
         stats={SAMPLE_STATS}
         statsLoading={false}
       />
     );
-    expect(screen.getByText("Total")).toBeInTheDocument();
+    expect(screen.queryByText("Total")).not.toBeInTheDocument();
   });
 
   it("collapses 8 backend stages into 4 business groups with summed counts", () => {

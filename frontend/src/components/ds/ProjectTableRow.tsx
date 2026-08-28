@@ -55,7 +55,7 @@ export default function ProjectTableRow({
         <span className="material-symbols-outlined text-primary-container shrink-0" aria-hidden="true">
           auto_stories
         </span>
-        <span className="font-display text-on-surface truncate">{project.title}</span>
+        <span className="font-display text-on-surface truncate text-sm">{project.title}</span>
       </div>
       <div className="text-center font-mono text-label-sm text-on-surface-variant">
         {genreLabel}

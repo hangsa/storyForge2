@@ -164,7 +164,7 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
         </div>
       ) : (
         <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
-          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center py-2 px-3 border-b border-outline-variant font-mono uppercase tracking-wider text-on-surface-variant text-base">
+          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center py-2 px-3 border-b border-outline-variant font-mono uppercase tracking-wider text-on-surface-variant text-sm">
             <TableCheckbox
               checked={allChecked}
               onChange={() => toggleSelectAll()}

@@ -110,7 +110,7 @@ export default function StatsSidebar({
                 <h3 className="font-mono text-label-sm uppercase tracking-wider text-on-surface-variant mb-2">
                   全部统计
                 </h3>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-2">
                   <StatCard label="书籍数量" value={stats?.total_books ?? null} size="sm" />
                   <StatCard label="总章节" value={stats?.total_chapters ?? null} size="sm" />
                   <StatCard

@@ -45,3 +45,5 @@ export { default as TableCheckbox } from "./TableCheckbox";
 export type { TableCheckboxProps } from "./TableCheckbox";
 
 export { STAGE_COLORS, STAGE_LABELS, isPreWizardStage } from "./stages";
+export { LENGTH_CATEGORIES, DEFAULT_LENGTH_INDEX } from "./lengths";
+export type { LengthCategory } from "./lengths";

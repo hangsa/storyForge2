@@ -1,15 +1,12 @@
 import { useState } from "react";
 import { useGenres } from "../../hooks/useGenres";
+import { DEFAULT_LENGTH_INDEX, LENGTH_CATEGORIES } from "../ds";
 
 // Per-chapter target is uniform across all length options — see CLAUDE.md
 // for context. Total word count is what differentiates the three categories.
 const WORDS_PER_CHAPTER = 2000;
 
-const LENGTHS: Array<{ value: number; label: string; totalLabel: string }> = [
-  { value: 300_000, label: "短篇快穿", totalLabel: "约30万字" },
-  { value: 1_000_000, label: "标准商业连载", totalLabel: "约100万字" },
-  { value: 3_000_000, label: "宏大史诗巨著", totalLabel: "约300万字" },
-];
+const LENGTHS = LENGTH_CATEGORIES;
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -37,7 +34,7 @@ export default function CreateProjectModal({
   const [intent, setIntent] = useState("");
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("cool_novel");
-  const [lengthIdx, setLengthIdx] = useState(1); // default: 标准商业连载
+  const [lengthIdx, setLengthIdx] = useState(DEFAULT_LENGTH_INDEX); // default: 标准商业连载
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   if (!isOpen) return null;

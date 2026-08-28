@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import api, { ProjectSummary } from "../../api/client";
 import {
-  DropdownSelect, GhostButton, PrimaryButton, ProjectTableRow,
+  DropdownSelect, GhostButton, LENGTH_CATEGORIES, PrimaryButton, ProjectTableRow,
   SearchInput, SecondaryButton, TableCheckbox,
 } from "../ds";
-import { isPreWizardStage } from "../ds/stages";
+import { isPreWizardStage, STAGE_LABELS } from "../ds/stages";
+import { useGenres } from "../../hooks/useGenres";
 import BulkDeleteModal from "./BulkDeleteModal";
 
 type SortKey = "default" | "title" | "chapter_count" | "word_count" | "target_total_words" | "updated_at";
@@ -25,22 +26,16 @@ interface BookShelfProps {
   onRefresh?: () => void;
 }
 
-const GENRE_OPTIONS = [
-  { value: "all", label: "所有题材" },
-  { value: "xuanhuan", label: "玄幻" },
-  { value: "yanqing", label: "言情" },
-];
-
-const LENGTH_OPTIONS = [
-  { value: "all", label: "篇幅不限" },
-  { value: "短篇", label: "短篇" },
-  { value: "标准连载", label: "标准连载" },
-  { value: "长篇巨著", label: "长篇巨著" },
+const STAGE_OPTIONS = [
+  { value: "all", label: "所有阶段" },
+  ...Object.entries(STAGE_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 export default function BookShelf({ projects, loading, onProjectsDeleted, onResumeWizard, onOpenCreate, onRefresh }: BookShelfProps) {
+  const genres = useGenres(false);
   const [search, setSearch] = useState("");
   const [genre, setGenre] = useState("all");
+  const [stage, setStage] = useState("all");
   const [length, setLength] = useState("all");
   const [filtersApplied, setFiltersApplied] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("default");
@@ -48,16 +43,32 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const genreOptions = useMemo(
+    () => [
+      { value: "all", label: "所有题材" },
+      ...genres.map((g) => ({ value: g.id, label: g.label_zh })),
+    ],
+    [genres]
+  );
+  const lengthOptions = useMemo(
+    () => [
+      { value: "all", label: "篇幅不限" },
+      ...LENGTH_CATEGORIES.map((c) => ({ value: c.label, label: c.label })),
+    ],
+    []
+  );
+
   const filtered = useMemo(() => {
     let list = projects;
     const q = search.trim().toLowerCase();
     if (q) list = list.filter((p) => p.title.toLowerCase().includes(q));
     if (filtersApplied) {
       if (genre !== "all") list = list.filter((p) => p.genre === genre);
+      if (stage !== "all") list = list.filter((p) => p.current_stage === stage);
       if (length !== "all") list = list.filter((p) => p.target_length_category === length);
     }
     return list;
-  }, [projects, search, genre, length, filtersApplied]);
+  }, [projects, search, genre, stage, length, filtersApplied]);
 
   const sorted = useMemo(() => {
     if (sortKey === "default") {
@@ -102,19 +113,21 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
 
       <div className="flex items-center gap-3 flex-wrap">
         <SearchInput value={search} onChange={setSearch} />
-        <DropdownSelect label="题材" options={GENRE_OPTIONS} value={genre} onChange={setGenre} />
-        <DropdownSelect label="篇幅" options={LENGTH_OPTIONS} value={length} onChange={setLength} />
+        <DropdownSelect label="题材" options={genreOptions} value={genre} onChange={setGenre} />
+        <DropdownSelect label="阶段" options={STAGE_OPTIONS} value={stage} onChange={setStage} />
+        <DropdownSelect label="篇幅" options={lengthOptions} value={length} onChange={setLength} />
         <PrimaryButton
           label="查询"
           icon="search"
           size="sm"
           onClick={() => {
-            // Apply the local genre/length dropdowns AND trigger a server
-            // re-fetch. Two reasons the server side matters even when the
-            // user hasn't changed any filter: (a) other clients may have
-            // created/deleted/advanced projects since the page mounted,
-            // (b) stats derived per-row (chapter_count, word_count) get
-            // stale the moment an autopilot loop ticks a chapter.
+            // Apply the local genre/stage/length dropdowns AND trigger a
+            // server re-fetch. Two reasons the server side matters even
+            // when the user hasn't changed any filter: (a) other clients
+            // may have created/deleted/advanced projects since the page
+            // mounted, (b) stats derived per-row (chapter_count,
+            // word_count) get stale the moment an autopilot loop ticks a
+            // chapter.
             setFiltersApplied(true);
             onRefresh?.();
           }}
@@ -160,7 +173,7 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
             search_off
           </span>
           <p className="font-body text-body-md text-on-surface-variant mb-3">未找到匹配项目</p>
-          <GhostButton label="清空筛选" onClick={() => { setSearch(""); setGenre("all"); setLength("all"); setFiltersApplied(false); }} />
+          <GhostButton label="清空筛选" onClick={() => { setSearch(""); setGenre("all"); setStage("all"); setLength("all"); setFiltersApplied(false); }} />
         </div>
       ) : (
         <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">

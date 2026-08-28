@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import BookShelf from "../components/home/BookShelf";
 import api from "../api/client";
 import type { ProjectSummary } from "../api/client";
@@ -19,6 +19,16 @@ const PROJECTS: ProjectSummary[] = [
   },
 ];
 
+const GENRES = [
+  { id: "cool_novel", label_zh: "爽文", label_en: "Power Fantasy", family: "power_fantasy" },
+  { id: "xianxia",    label_zh: "仙侠", label_en: "Xianxia",        family: "cultivation" },
+  { id: "xuanhuan",   label_zh: "玄幻", label_en: "Xuanhuan",       family: "cultivation" },
+  { id: "dushi",      label_zh: "都市", label_en: "Contemporary",   family: "contemporary" },
+  { id: "kehuan",     label_zh: "科幻", label_en: "Sci-Fi",         family: "sci_fi" },
+  { id: "xuanyi",     label_zh: "悬疑", label_en: "Mystery",        family: "mystery" },
+  { id: "yanqing",    label_zh: "言情", label_en: "Romance",        family: "romance" },
+];
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(api, "bulkDeleteProjects").mockResolvedValue({
@@ -27,6 +37,9 @@ beforeEach(() => {
     deleted_count: 1,
     failed_count: 0,
   });
+  // useGenres() resolves its option list asynchronously on first mount; mock
+  // it so the 题材/篇幅/阶段 dropdowns actually have entries to render.
+  vi.spyOn(api, "listGenres").mockResolvedValue(GENRES);
 });
 
 describe("BookShelf table", () => {
@@ -155,17 +168,20 @@ describe("BookShelf table", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it("applies local genre/length filters AND fires onRefresh when 查询 is clicked", () => {
+  it("applies local genre/length filters AND fires onRefresh when 查询 is clicked", async () => {
     const onRefresh = vi.fn();
     const projects: ProjectSummary[] = [
       { ...PROJECTS[0], genre: "xuanhuan", target_length_category: "标准连载" },
       { ...PROJECTS[1], genre: "yanqing", target_length_category: "短篇" },
     ];
     render(<BookShelf projects={projects} loading={false} onProjectsDeleted={() => {}} onRefresh={onRefresh} />);
-    // Open the 题材 dropdown and pick 玄幻. The table also has a 题材
-    // header button, so scope to the dropdown container.
+    // Open the 题材 dropdown, then wait for useGenres() to resolve so 玄幻
+    // appears as an option. (Options only render once the dropdown is open.)
     const genreDropdown = screen.getByRole("button", { name: /题材.*所有题材/ });
     fireEvent.click(genreDropdown);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "玄幻" })).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByRole("button", { name: "玄幻" }));
     // filtersApplied is still false, so the 言情 row remains visible until 查询.
     expect(screen.getByText("翻天")).toBeInTheDocument();

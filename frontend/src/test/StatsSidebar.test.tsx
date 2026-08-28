@@ -30,7 +30,7 @@ describe("StatsSidebar", () => {
     expect(screen.getByText("全部统计")).toBeInTheDocument();
     expect(screen.getByText("阶段分布")).toBeInTheDocument();
     expect(screen.queryByText("快捷操作")).not.toBeInTheDocument();
-    expect(screen.getByText("书籍数量")).toBeInTheDocument();
+    expect(screen.getByText("书籍数")).toBeInTheDocument();
     expect(screen.getByText("总章节")).toBeInTheDocument();
     expect(screen.getByText("总字数")).toBeInTheDocument();
   });

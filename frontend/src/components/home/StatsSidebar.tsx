@@ -111,7 +111,7 @@ export default function StatsSidebar({
                   全部统计
                 </h3>
                 <div className="flex flex-col gap-2">
-                  <StatCard label="书籍数量" value={stats?.total_books ?? null} size="sm" />
+                  <StatCard label="书籍数" value={stats?.total_books ?? null} size="sm" />
                   <StatCard label="总章节" value={stats?.total_chapters ?? null} size="sm" />
                   <StatCard
                     label="总字数"

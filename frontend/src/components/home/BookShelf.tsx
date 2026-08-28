@@ -120,21 +120,23 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
         <DropdownSelect label="题材" options={genreOptions} value={genre} onChange={setGenre} />
         <DropdownSelect label="阶段" options={STAGE_OPTIONS} value={stage} onChange={setStage} />
         <DropdownSelect label="篇幅" options={lengthOptions} value={length} onChange={setLength} />
-        <PrimaryButton
-          label="查询"
-          icon="search"
+        <SecondaryButton
+          label="重置"
+          icon="restart_alt"
           size="sm"
           onClick={() => {
-            // Apply the local genre/stage/length dropdowns AND trigger a
-            // server re-fetch. Two reasons the server side matters even
-            // when the user hasn't changed any filter: (a) other clients
-            // may have created/deleted/advanced projects since the page
-            // mounted, (b) stats derived per-row (chapter_count,
-            // word_count) get stale the moment an autopilot loop ticks a
-            // chapter.
-            setFiltersApplied(true);
-            onRefresh?.();
+            // Reset every filter condition to default — search empty,
+            // every dropdown at "all", and filtersApplied back to false so
+            // the table shows the full list. Does NOT fire onRefresh —
+            // the table is already showing server truth, and a reset
+            // shouldn't punish the user with a network round-trip.
+            setSearch("");
+            setGenre("all");
+            setStage("all");
+            setLength("all");
+            setFiltersApplied(false);
           }}
+          testId="reset-filters"
         />
       </div>
 
@@ -154,6 +156,22 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
           disabled={selectedIds.size === 0}
           onClick={() => setConfirmOpen(true)}
           testId="bulk-delete-trigger"
+        />
+        <PrimaryButton
+          label="查询"
+          icon="search"
+          size="sm"
+          onClick={() => {
+            // Apply the local genre/stage/length dropdowns AND trigger a
+            // server re-fetch. Two reasons the server side matters even
+            // when the user hasn't changed any filter: (a) other clients
+            // may have created/deleted/advanced projects since the page
+            // mounted, (b) stats derived per-row (chapter_count,
+            // word_count) get stale the moment an autopilot loop ticks a
+            // chapter.
+            setFiltersApplied(true);
+            onRefresh?.();
+          }}
         />
       </div>
 

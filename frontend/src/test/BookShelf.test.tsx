@@ -180,6 +180,29 @@ describe("BookShelf table", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it("重置 button clears every filter back to defaults without firing onRefresh", async () => {
+    const onRefresh = vi.fn();
+    render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={() => {}} onRefresh={onRefresh} />);
+    // Fill every slot, then commit via 查询 so the table actually narrows.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "翻天" } });
+    fireEvent.click(screen.getByRole("button", { name: /题材.*所有题材/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "玄幻" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "玄幻" }));
+    fireEvent.click(screen.getByRole("button", { name: "查询" }));
+    expect(screen.queryByText("另一书")).not.toBeInTheDocument();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    // Click 重置 — every condition should snap back. No second fetch:
+    // the table is already showing server truth.
+    fireEvent.click(screen.getByTestId("reset-filters"));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("翻天")).toBeInTheDocument();
+    expect(screen.getByText("另一书")).toBeInTheDocument();
+    expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("");
+    expect(screen.getByRole("button", { name: /题材.*所有题材/ })).toBeInTheDocument();
+  });
+
   it("applies local genre/length filters AND fires onRefresh when 查询 is clicked", async () => {
     const onRefresh = vi.fn();
     const projects: ProjectSummary[] = [

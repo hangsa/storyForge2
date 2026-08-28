@@ -1,6 +1,7 @@
 import type { ProjectSummary } from "../../api/client";
 import { useGenres } from "../../hooks/useGenres";
 import { STAGE_COLORS, STAGE_LABELS } from "./stages";
+import TableCheckbox from "./TableCheckbox";
 
 export interface ProjectTableRowProps {
   project: ProjectSummary;
@@ -44,16 +45,12 @@ export default function ProjectTableRow({
       onClick={onClick}
       className={`grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center px-3 py-2 border-b border-outline-variant hover:bg-surface-container-low cursor-pointer ${selectedClass}`}
     >
-      <div className="flex items-center justify-center">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={(e) => onSelectChange?.(e.target.checked)}
-          onClick={(e) => e.stopPropagation()}
-          className="w-4 h-4 accent-primary"
-          aria-label="select row"
-        />
-      </div>
+      <TableCheckbox
+        checked={selected}
+        onChange={(v) => onSelectChange?.(v)}
+        stopRowClickPropagation
+        ariaLabel="select row"
+      />
       <div className="flex items-center gap-2 min-w-0">
         <span className="material-symbols-outlined text-primary-container shrink-0" aria-hidden="true">
           auto_stories

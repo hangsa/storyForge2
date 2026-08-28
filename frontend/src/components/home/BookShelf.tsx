@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import api, { ProjectSummary } from "../../api/client";
 import {
   DropdownSelect, GhostButton, PrimaryButton, ProjectTableRow,
-  SearchInput, SecondaryButton,
+  SearchInput, SecondaryButton, TableCheckbox,
 } from "../ds";
 import { isPreWizardStage } from "../ds/stages";
 import BulkDeleteModal from "./BulkDeleteModal";
@@ -164,18 +164,14 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
         </div>
       ) : (
         <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
-          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center py-2 px-3 border-b border-outline-variant font-mono text-label-sm uppercase tracking-wider text-on-surface-variant">
-            <div className="flex items-center justify-center">
-              <input
-                type="checkbox"
-                checked={allChecked}
-                onChange={toggleSelectAll}
-                disabled={sorted.length === 0}
-                aria-label="select all"
-                data-testid="select-all"
-                className="w-4 h-4 accent-primary"
-              />
-            </div>
+          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center py-2 px-3 border-b border-outline-variant font-mono uppercase tracking-wider text-on-surface-variant text-base">
+            <TableCheckbox
+              checked={allChecked}
+              onChange={() => toggleSelectAll()}
+              disabled={sorted.length === 0}
+              ariaLabel="select all"
+              testId="select-all"
+            />
             <button onClick={() => toggleSort("title")}>书名</button>
             <button className="text-center">题材</button>
             <button className="text-center">阶段</button>

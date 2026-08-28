@@ -94,6 +94,23 @@ describe("BookShelf table", () => {
     expect(screen.getByTestId("bulk-delete-trigger")).toBeDisabled();
   });
 
+  it("header checkbox and row checkboxes share the same visual classes", () => {
+    // Both render through TableCheckbox — same wrapper + same input classes.
+    // This guards against future drift where someone tweaks one in isolation.
+    const { container } = render(<BookShelf projects={PROJECTS} loading={false} onProjectsDeleted={() => {}} />);
+    const selectAll = screen.getByTestId("select-all");
+    const rowCheckboxes = screen.getAllByRole("checkbox").slice(1);
+    const expectedClasses = "w-4 h-4 accent-primary";
+    expect(selectAll.className).toContain(expectedClasses);
+    for (const cb of rowCheckboxes) {
+      expect(cb.className).toContain(expectedClasses);
+    }
+    // Wrapper divs should also be identical.
+    const headerWrapper = container.querySelector('[data-testid="select-all"]')?.parentElement;
+    const rowWrapper = rowCheckboxes[0].parentElement;
+    expect(headerWrapper?.className).toBe(rowWrapper?.className);
+  });
+
   it("navigates to /project/<id>/stage4 when a post-wizard row is clicked", () => {
     const assignSpy = vi.fn();
     const originalAssign = window.location.assign;

@@ -41,4 +41,7 @@ export type { SidebarNavItemProps } from "./SidebarNavItem";
 export { default as Sparkline } from "./Sparkline";
 export type { SparklineProps } from "./Sparkline";
 
+export { default as TableCheckbox } from "./TableCheckbox";
+export type { TableCheckboxProps } from "./TableCheckbox";
+
 export { STAGE_COLORS, STAGE_LABELS, isPreWizardStage } from "./stages";

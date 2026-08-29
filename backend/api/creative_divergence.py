@@ -11,14 +11,13 @@ from backend.utils.file_manager import FileManager
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["creative-divergence"])
 
-# Module-level singleton so tests can patch `fm.projects_dir` and have the
-# patch propagate to every call (see tests/test_creative_divergence_api.py
-# and the project_api_file_manager_pattern memory).
-fm = FileManager(settings.projects_dir)
-
 
 def _file_manager() -> FileManager:
-    return fm
+    # Per-call factory so tests can patch `settings.projects_dir` via
+    # monkeypatch and have the change propagate to every endpoint call.
+    # Aligns with the sibling pattern in backend/api/stage2_world_char.py
+    # (see project_api_file_manager_pattern memory).
+    return FileManager(settings.projects_dir)
 
 
 CD_FILE = "creative_divergence.json"
@@ -52,10 +51,7 @@ def _read_cd(project_id: str) -> dict:
 
 def _write_cd(project_id: str, data: dict) -> None:
     data["updated_at"] = _now()
-    file_mgr = _file_manager()
-    path = file_mgr.projects_dir / project_id / CD_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _file_manager().write_json(project_id, CD_FILE, data)
 
 
 def _generate_variants(prompt: str, count: int) -> List[dict]:
@@ -109,11 +105,7 @@ def select_variant(project_id: str, req: SelectRequest):
     _write_cd(project_id, data)
 
     file_mgr = _file_manager()
-    concept_path = file_mgr.projects_dir / project_id / CONCEPT_FILE
-    if concept_path.exists():
-        cd = json.loads(concept_path.read_text(encoding="utf-8"))
-    else:
-        cd = {"concept": {}, "story_dna": {}}
+    cd = file_mgr.read_json(project_id, CONCEPT_FILE) or {"concept": {}, "story_dna": {}}
     existing_concept = cd.get("concept", {}) or {}
     cd["concept"] = {
         **existing_concept,
@@ -125,8 +117,7 @@ def select_variant(project_id: str, req: SelectRequest):
         "source": "creative_divergence",
         "source_variant_id": req.variant_id,
     }
-    concept_path.parent.mkdir(parents=True, exist_ok=True)
-    concept_path.write_text(json.dumps(cd, ensure_ascii=False, indent=2), encoding="utf-8")
+    file_mgr.write_json(project_id, CONCEPT_FILE, cd)
     return {"concept_payload": cd["concept"]}
 
 

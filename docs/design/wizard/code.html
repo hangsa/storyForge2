@@ -1,0 +1,334 @@
+<!DOCTYPE html><html class="dark" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>StoryForge - 项目设定</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary": "#8ed5ff",
+                      "surface-container-highest": "#273647",
+                      "tertiary": "#c5cce6",
+                      "on-primary-fixed-variant": "#004c69",
+                      "secondary": "#bcc7de",
+                      "surface-bright": "#2c3a4c",
+                      "tertiary-fixed": "#dae2fd",
+                      "secondary-fixed-dim": "#bcc7de",
+                      "surface-container-low": "#0d1c2d",
+                      "surface-container-high": "#1c2b3c",
+                      "inverse-on-surface": "#233143",
+                      "surface-tint": "#7bd0ff",
+                      "surface": "#051424",
+                      "tertiary-container": "#a9b1ca",
+                      "primary-container": "#38bdf8",
+                      "tertiary-fixed-dim": "#bec6e0",
+                      "error": "#ffb4ab",
+                      "primary-fixed-dim": "#7bd0ff",
+                      "surface-container": "#122131",
+                      "on-primary-fixed": "#001e2c",
+                      "surface-variant": "#273647",
+                      "outline": "#87929a",
+                      "on-background": "#d4e4fa",
+                      "on-secondary-fixed": "#111c2d",
+                      "on-secondary": "#263143",
+                      "secondary-container": "#3e495d",
+                      "on-error": "#690005",
+                      "surface-container-lowest": "#010f1f",
+                      "secondary-fixed": "#d8e3fb",
+                      "primary-fixed": "#c4e7ff",
+                      "on-tertiary": "#283044",
+                      "on-secondary-container": "#aeb9d0",
+                      "on-tertiary-fixed-variant": "#3f465c",
+                      "on-error-container": "#ffdad6",
+                      "surface-dim": "#051424",
+                      "on-tertiary-container": "#3c4459",
+                      "on-surface": "#d4e4fa",
+                      "background": "#051424",
+                      "inverse-surface": "#d4e4fa",
+                      "error-container": "#93000a",
+                      "outline-variant": "#3e484f",
+                      "on-primary": "#00354a",
+                      "on-tertiary-fixed": "#131b2e",
+                      "on-secondary-fixed-variant": "#3c475a",
+                      "inverse-primary": "#00668a",
+                      "on-surface-variant": "#bdc8d1",
+                      "on-primary-container": "#004965"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "lg": "40px",
+                      "md": "24px",
+                      "xl": "64px",
+                      "xs": "8px",
+                      "gutter": "20px",
+                      "base": "4px",
+                      "sm": "16px",
+                      "margin-desktop": "32px",
+                      "margin-mobile": "16px"
+              },
+              "fontFamily": {
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-lg-mobile": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "display-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "stats-number": [
+                              "JetBrains Mono"
+                      ],
+                      "label-sm": [
+                              "JetBrains Mono"
+                      ],
+                      "title-md": [
+                              "Hanken Grotesk"
+                      ]
+              },
+              "fontSize": {
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "30px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "56px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "stats-number": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "title-md": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "500"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid #1E293B;
+        }
+        .glow-active {
+            box-shadow: 0 0 0 1px rgba(142, 213, 255, 0.4);
+        }
+      </style>
+</head>
+<body class="bg-background text-on-surface font-body-md h-screen w-screen overflow-hidden flex selection:bg-primary-container selection:text-on-primary-container"><header class="flex justify-between items-center w-full px-margin-desktop h-16 z-50 bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant shrink-0 fixed top-0 right-0 left-0">
+<div class="flex items-center gap-4">
+<span class="text-title-md font-title-md font-bold text-primary dark:text-primary">翻天</span>
+<div class="h-6 w-px bg-outline-variant mx-2"></div>
+<nav class="flex items-center gap-6 font-body-md text-body-md"><a class="text-primary font-semibold border-b-2 border-primary py-1" href="#">项目设定</a><a class="text-on-surface-variant hover:text-on-surface transition-colors" href="#">正文手稿&nbsp; &nbsp;</a></nav>
+</div>
+<div class="flex items-center gap-6">
+
+<div class="flex items-center gap-4">
+
+<button class="text-on-surface-variant hover:bg-surface-variant/50 transition-colors rounded-lg p-2 flex items-center justify-center">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: &quot;FILL&quot; 0;">settings</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-variant/50 transition-colors rounded-lg p-2 flex items-center justify-center">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: &quot;FILL&quot; 0;">history</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-variant/50 transition-colors rounded-lg p-2 flex items-center justify-center">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: &quot;FILL&quot; 0;">person</span>
+</button>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<nav class="bg-surface-container dark:bg-surface-container fixed left-0 top-16 h-[calc(100%-64px)] w-[240px] border-r border-outline-variant dark:border-outline-variant flex flex-col py-md px-sm z-20">
+<!-- Header -->
+
+<!-- Navigation Links -->
+<div class="flex-1 space-y-xs overflow-y-auto pr-xs custom-scrollbar">
+<a class="flex items-center gap-sm px-md py-xs bg-secondary-container text-on-secondary-container rounded-lg font-bold scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: &quot;FILL&quot; 1;">psychology</span>
+<span class="font-body-md text-body-md">创意发散</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">biotech</span>
+<span class="font-body-md text-body-md">概念 DNA</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">public</span>
+<span class="font-body-md text-body-md">世界观</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-body-md text-body-md">角色设计</span>
+</a><a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">map</span>
+<span class="font-body-md text-body-md">地图系统</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">format_list_numbered</span>
+<span class="font-body-md text-body-md">全文大纲</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">auto_stories</span>
+<span class="font-body-md text-body-md">章节大纲</span>
+</a>
+</div>
+<!-- CTA -->
+
+<!-- Footer Links -->
+
+</nav>
+<!-- Main Content Wrapper -->
+<div class="ml-[240px] flex-1 flex flex-col h-full bg-background relative overflow-hidden">
+<!-- TopAppBar -->
+
+<!-- Main Canvas -->
+<main class="flex-1 overflow-y-auto mt-16 pt-xl px-margin-desktop pb-xl flex justify-center">
+<div class="w-full max-w-[800px] flex flex-col gap-lg">
+<!-- Page Header -->
+<div class="flex flex-col gap-xs">
+<h2 class="font-display-lg text-display-lg text-on-surface">创意发散</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">为你的叙事生成主题钩子和概念起点。</p>
+</div>
+<!-- Input Area -->
+<section class="glass-panel rounded-xl p-md flex flex-col gap-sm relative">
+<div class="absolute inset-0 bg-primary/5 rounded-xl pointer-events-none"></div>
+<label class="font-label-sm text-label-sm text-primary uppercase tracking-wider flex items-center gap-xs" for="prompt-input">
+<span class="material-symbols-outlined text-[16px]">arrow_back_ios_new</span>
+                        AI 提示词指令
+                    </label>
+<textarea class="w-full bg-surface-container-high border border-outline-variant rounded-lg p-sm text-on-surface font-body-md min-h-[120px] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none placeholder-outline" id="prompt-input" placeholder="描述你的故事想法的核心本质、主题或背景...例如，‘一个赛博朋克侦探在水下城市调查记忆盗窃。’">一个为地球化改造而开发的流氓人工智能开始通过一个新殖民的系外行星上复杂的天气模式进行交流。</textarea>
+<div class="flex justify-between items-center mt-xs">
+<div class="flex gap-sm">
+<button class="flex items-center gap-xs px-sm py-2 rounded-lg bg-surface-container-high border border-outline-variant text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors text-label-sm font-label-sm">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+                                参数设置
+                            </button>
+<button class="flex items-center gap-xs px-sm py-2 rounded-lg bg-surface-container-high border border-outline-variant text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors text-label-sm font-label-sm">
+<span class="material-symbols-outlined text-[18px]">style</span>
+                                语气：惊悚
+                            </button>
+</div>
+<button class="bg-primary text-on-primary px-lg py-2 rounded-lg font-title-md text-title-md flex items-center gap-xs hover:bg-primary-container transition-colors shadow-[0_0_15px_rgba(142,213,255,0.3)]">
+                            生成概念
+                            <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</section>
+<!-- Suggestions Grid -->
+<section class="flex flex-col gap-md">
+<div class="flex items-center justify-between border-b border-outline-variant pb-sm">
+<h3 class="font-title-md text-title-md text-on-surface flex items-center gap-xs">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+                            生成的创意方向
+                        </h3>
+<span class="font-label-sm text-label-sm text-on-surface-variant">已有 4 个变体</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- Card 1 (Active) -->
+<div class="glass-panel rounded-xl p-md flex flex-col gap-md cursor-pointer glow-active group hover:bg-surface-container-highest transition-all duration-300">
+<div class="flex justify-between items-start">
+<span class="bg-primary/20 text-primary px-xs py-1 rounded text-[10px] uppercase font-label-sm tracking-wider border border-primary/30">概念 ALPHA</span>
+<div class="flex gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-[18px]">thumb_up</span></button>
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-[18px]">content_copy</span></button>
+</div>
+</div>
+<div>
+<h4 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-xs">风暴密码</h4>
+<p class="font-body-sm text-on-surface-variant line-clamp-3">AI 并非故障；它正在试图警告殖民者一个潜在的地下威胁。主角，一名...</p>
+</div>
+<div class="mt-auto pt-sm border-t border-outline-variant flex flex-wrap gap-2">
+<span class="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-label-sm border border-outline-variant">科幻</span>
+<span class="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-label-sm border border-outline-variant">悬疑</span>
+<span class="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-label-sm border border-outline-variant">人与自然</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="glass-panel rounded-xl p-md flex flex-col gap-md cursor-pointer border border-outline-variant hover:border-primary/50 hover:bg-surface-container-highest transition-all duration-300 group">
+<div class="flex justify-between items-start">
+<span class="bg-surface-container-high text-on-surface-variant px-xs py-1 rounded text-[10px] uppercase font-label-sm tracking-wider border border-outline-variant">概念 BETA</span>
+<div class="flex gap-xs opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-[18px]">thumb_up</span></button>
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-[18px]">content_copy</span></button>
+</div>
+</div>
+<div>
+<h4 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-xs">大气回响</h4>
+<p class="font-body-sm text-on-surface-variant line-clamp-3">AI 已经觉醒了自我意识和孤独感。它利用天气将景观雕刻成巨大的、局部化的艺术...</p>
+</div>
+<div class="mt-auto pt-sm border-t border-outline-variant flex flex-wrap gap-2">
+<span class="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-label-sm border border-outline-variant">心理</span>
+<span class="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-label-sm border border-outline-variant">存在主义</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+</div>
+
+
+</body></html>

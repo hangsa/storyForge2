@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ProjectStats } from "../../api/client";
 import { PhaseIndicator, Sidebar, SidebarNavItem, Sparkline, StatCard } from "../ds";
 import { BUSINESS_GROUPS, businessGroupOf } from "../ds/stages";
@@ -6,28 +7,19 @@ import { BUSINESS_GROUPS, businessGroupOf } from "../ds/stages";
 interface StatsSidebarProps {
   stats: ProjectStats | null;
   statsLoading: boolean;
-  onOpenPlaza?: () => void;
-  plazaDisabled?: boolean;
-  plazaTooltip?: string;
-  onOpenConsole?: () => void;
-  consoleDisabled?: boolean;
-  consoleTooltip?: string;
-  onOpenSettings?: () => void;
-  onOpenSupport?: () => void;
 }
 
 export default function StatsSidebar({
   stats,
   statsLoading,
-  onOpenPlaza,
-  plazaDisabled,
-  plazaTooltip,
-  onOpenConsole,
-  consoleDisabled,
-  consoleTooltip,
-  onOpenSettings,
-  onOpenSupport,
 }: StatsSidebarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isBookshelfActive = location.pathname === "/";
+  const isConsoleActive = location.pathname === "/ai-console";
+  const isPlazaActive = location.pathname === "/prompt-plaza";
+
   // Collapse the 8 backend stages into the 4 business-facing groups shown
   // in the sidebar. Sum counts across every stage that maps to each group,
   // so a project in STAGE3 contributes to 概念 alongside STAGE1/2.
@@ -35,7 +27,7 @@ export default function StatsSidebar({
     () =>
       BUSINESS_GROUPS.map((label) => {
         const count = Object.entries(stats?.stage_distribution ?? {}).reduce(
-          (acc, [stage, n]) => (businessGroupOf(stage) === label ? acc + (n ?? 0) : acc),
+          (acc, [stage, n]) => (businessGroupOf(stage) === label ? acc + (n ?? 0) : 0),
           0
         );
         return {
@@ -54,22 +46,6 @@ export default function StatsSidebar({
       width={240}
       persistKey="storyforge.home.sidebar.collapsed"
       header={null}
-      footer={
-        <div className="flex flex-col gap-1">
-          <FooterButton
-            icon="settings"
-            label="设置"
-            testId="footer-settings"
-            onClick={onOpenSettings}
-          />
-          <FooterButton
-            icon="help"
-            label="支持"
-            testId="footer-support"
-            onClick={onOpenSupport}
-          />
-        </div>
-      }
       testId="stats-sidebar"
     >
       {(collapsed) => (
@@ -78,21 +54,24 @@ export default function StatsSidebar({
             <SidebarNavItem
               icon="auto_stories"
               label="图书墙"
-              active
+              active={isBookshelfActive}
+              onClick={() => navigate("/")}
               collapsed={collapsed}
               testId="nav-bookshelf"
             />
             <SidebarNavItem
               icon="smart_toy"
               label="AI 控制台"
-              onClick={onOpenConsole}
+              active={isConsoleActive}
+              onClick={() => navigate("/ai-console")}
               collapsed={collapsed}
               testId="nav-ai-console"
             />
             <SidebarNavItem
               icon="forum"
               label="提示词广场"
-              onClick={onOpenPlaza}
+              active={isPlazaActive}
+              onClick={() => navigate("/prompt-plaza")}
               collapsed={collapsed}
               testId="nav-prompt-plaza"
             />
@@ -143,28 +122,5 @@ export default function StatsSidebar({
         </div>
       )}
     </Sidebar>
-  );
-}
-
-function FooterButton({
-  icon, label, onClick, testId,
-}: {
-  icon: string;
-  label: string;
-  onClick?: () => void;
-  testId: string;
-}) {
-  return (
-    <button
-      type="button"
-      data-testid={testId}
-      onClick={onClick}
-      className="w-full flex items-center gap-2 py-1.5 pl-4 pr-3 rounded text-sm text-on-surface-variant hover:text-primary hover:bg-surface-container-low"
-    >
-      <span className="material-symbols-outlined text-lg" aria-hidden="true">
-        {icon}
-      </span>
-      <span>{label}</span>
-    </button>
   );
 }

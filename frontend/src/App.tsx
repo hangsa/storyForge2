@@ -1,7 +1,10 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, useParams, Navigate } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
+import HomeLayout from "./components/layout/HomeLayout";
 import HomePage from "./pages/HomePage";
+import AIConsolePage from "./pages/AIConsolePage";
+import PromptPlazaPage from "./pages/PromptPlazaPage";
 import StageErrorBoundary from "./components/shared/StageErrorBoundary";
 import { ToastProvider } from "./hooks/useToast";
 import ToastContainer from "./components/shared/ToastContainer";
@@ -52,7 +55,11 @@ function App() {
   return (
     <ToastProvider>
       <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route element={<HomeLayout />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/ai-console" element={<AIConsolePage />} />
+        <Route path="/prompt-plaza" element={<PromptPlazaPage />} />
+      </Route>
       <Route
         path="/project/:projectId/wizard"
         element={

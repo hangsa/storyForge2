@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import HomeLayout from "../components/layout/HomeLayout";
 import HomePage from "../pages/HomePage";
 import { ToastProvider } from "../hooks/useToast";
 
@@ -30,12 +32,18 @@ function mockEmptyProjectEndpoints() {
   });
 }
 
-// HomePage now calls useToast for the placeholder 设置/支持 footer handlers,
-// so it must render inside a ToastProvider like the real App shell does.
-function renderHome() {
+// HomePage now reads project state from HomeLayout via Outlet context, so we
+// render the full HomeLayout shell (same as the real /  route in App.tsx).
+function renderHome(initialPath = "/") {
   return render(
     <ToastProvider>
-      <HomePage />
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route element={<HomeLayout />}>
+            <Route path="/" element={<HomePage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
     </ToastProvider>
   );
 }
@@ -76,5 +84,24 @@ describe("HomePage", () => {
     await waitFor(() => {
       expect(screen.getByText(/还没有项目/)).toBeInTheDocument();
     });
+  });
+
+  it("renders 设置/用户/支持 icon buttons in the top bar in that order", async () => {
+    mockEmptyProjectEndpoints();
+    renderHome();
+    await waitFor(() => screen.getByTestId("home-top-bar"));
+
+    const settings = screen.getByTestId("header-settings");
+    const user = screen.getByTestId("header-user");
+    const support = screen.getByTestId("header-support");
+    expect(settings).toHaveAttribute("aria-label", "设置");
+    expect(user).toHaveAttribute("aria-label", "用户");
+    expect(support).toHaveAttribute("aria-label", "支持");
+
+    const topBar = screen.getByTestId("home-top-bar");
+    const order = Array.from(
+      topBar.querySelectorAll('[data-testid^="header-"]')
+    ).map((el) => el.getAttribute("data-testid"));
+    expect(order).toEqual(["header-settings", "header-user", "header-support"]);
   });
 });

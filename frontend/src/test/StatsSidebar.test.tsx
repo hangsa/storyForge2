@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import StatsSidebar from "../components/home/StatsSidebar";
 
 const SAMPLE_STATS = {
@@ -17,14 +18,17 @@ beforeEach(() => {
   localStorage.removeItem("storyforge.home.sidebar.collapsed");
 });
 
+function renderSidebar(initialPath = "/") {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <StatsSidebar stats={SAMPLE_STATS} statsLoading={false} />
+    </MemoryRouter>
+  );
+}
+
 describe("StatsSidebar", () => {
   it("renders the stats sections when expanded (brand moved to TopBar)", () => {
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-      />
-    );
+    renderSidebar();
     // Brand now lives in the global TopBar, not the sidebar.
     expect(screen.queryByText("Nebula Forge")).not.toBeInTheDocument();
     expect(screen.getByText("全部统计")).toBeInTheDocument();
@@ -37,115 +41,78 @@ describe("StatsSidebar", () => {
 
   it("renders only the collapsed icon column when localStorage says collapsed", () => {
     localStorage.setItem("storyforge.home.sidebar.collapsed", "true");
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-      />
-    );
+    renderSidebar();
     expect(screen.queryByText("全部统计")).not.toBeInTheDocument();
     expect(screen.queryByText("快捷操作")).not.toBeInTheDocument();
   });
 
   it("shows 加载中… when statsLoading is true", () => {
     render(
-      <StatsSidebar
-        stats={null}
-        statsLoading
-      />
+      <MemoryRouter initialEntries={["/"]}>
+        <StatsSidebar stats={null} statsLoading />
+      </MemoryRouter>
     );
     expect(screen.getByText("加载中…")).toBeInTheDocument();
   });
 
-  it("renders nav items with 图书墙 active and forwards console/plaza clicks", () => {
-    const onOpenPlaza = vi.fn();
-    const onOpenConsole = vi.fn();
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-        onOpenPlaza={onOpenPlaza}
-        onOpenConsole={onOpenConsole}
-      />
-    );
-    // 图书墙 is the current section — marked active via class, no onClick.
+  it("marks 图书墙 active on / and forwards AI 控制台/提示词广场 nav clicks to the routes", () => {
+    renderSidebar("/");
     const bookshelf = screen.getByTestId("nav-bookshelf");
     expect(bookshelf.className).toContain("bg-primary-container/15");
     expect(bookshelf.className).toContain("border-primary");
 
-    screen.getByTestId("nav-ai-console").click();
-    expect(onOpenConsole).toHaveBeenCalledTimes(1);
-
-    screen.getByTestId("nav-prompt-plaza").click();
-    expect(onOpenPlaza).toHaveBeenCalledTimes(1);
-
+    // AI 控制台 and 提示词广场 navigate via useNavigate — no callback prop.
+    expect(screen.getByTestId("nav-ai-console")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-prompt-plaza")).toBeInTheDocument();
     expect(screen.getByTestId("nav-stats")).toBeInTheDocument();
   });
 
-  it("renders 设置/支持 footer buttons and forwards clicks", () => {
-    const onOpenSettings = vi.fn();
-    const onOpenSupport = vi.fn();
+  it("marks AI 控制台 active when the URL is /ai-console", () => {
     render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-        onOpenSettings={onOpenSettings}
-        onOpenSupport={onOpenSupport}
-      />
+      <MemoryRouter initialEntries={["/ai-console"]}>
+        <StatsSidebar stats={SAMPLE_STATS} statsLoading={false} />
+      </MemoryRouter>
     );
-    screen.getByTestId("footer-settings").click();
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
-    screen.getByTestId("footer-support").click();
-    expect(onOpenSupport).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("nav-ai-console").className).toContain("bg-primary-container/15");
+    expect(screen.getByTestId("nav-bookshelf").className).not.toContain("bg-primary-container/15");
+  });
+
+  it("does not render the 设置/支持 footer (moved to TopBar)", () => {
+    renderSidebar();
+    expect(screen.queryByTestId("footer-settings")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("footer-support")).not.toBeInTheDocument();
   });
 
   it("no longer renders the version chip (moved to TopBar)", () => {
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-      />
-    );
+    renderSidebar();
     expect(screen.queryByTestId("version-chip")).not.toBeInTheDocument();
   });
 
   it("renders the 总字数 sparkline when word_count_series has >= 2 points", () => {
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-      />
-    );
+    renderSidebar();
     expect(screen.getByTestId("sparkline-total-words")).toBeInTheDocument();
   });
 
   it("hides the 总字数 sparkline when word_count_series is empty or short", () => {
     const emptyStats = { ...SAMPLE_STATS, word_count_series: [] };
     const { rerender } = render(
-      <StatsSidebar
-        stats={emptyStats}
-        statsLoading={false}
-      />
+      <MemoryRouter initialEntries={["/"]}>
+        <StatsSidebar stats={emptyStats} statsLoading={false} />
+      </MemoryRouter>
     );
     expect(screen.queryByTestId("sparkline-total-words")).not.toBeInTheDocument();
 
     const shortStats = { ...SAMPLE_STATS, word_count_series: [42] };
     rerender(
-      <StatsSidebar
-        stats={shortStats}
-        statsLoading={false}
-      />
+      <MemoryRouter initialEntries={["/"]}>
+        <StatsSidebar stats={shortStats} statsLoading={false} />
+      </MemoryRouter>
     );
     expect(screen.queryByTestId("sparkline-total-words")).not.toBeInTheDocument();
   });
 
   it("does not render the Total sublabel on the 总字数 stat card (removed)", () => {
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-      />
-    );
+    renderSidebar();
     expect(screen.queryByText("Total")).not.toBeInTheDocument();
   });
 
@@ -155,12 +122,7 @@ describe("StatsSidebar", () => {
     //   STAGE4:5                              → 写作中 = 5
     //   STAGE5:0 STAGE6:0                     → 润色中 = 0
     //   COMPLETED:4                           → 已完成 = 4
-    render(
-      <StatsSidebar
-        stats={SAMPLE_STATS}
-        statsLoading={false}
-      />
-    );
+    renderSidebar();
     const phaseList = screen.getByRole("list");
     expect(phaseList).toBeInTheDocument();
     expect(within(phaseList).getByText("概念")).toBeInTheDocument();

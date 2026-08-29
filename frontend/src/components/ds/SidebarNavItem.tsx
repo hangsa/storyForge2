@@ -16,8 +16,14 @@ export default function SidebarNavItem({
   collapsed = false,
   testId,
 }: SidebarNavItemProps) {
+  const layoutClass = collapsed
+    ? "w-full flex items-center justify-center py-2 text-sm transition border-l-2 border-transparent"
+    : "w-full flex items-center gap-2 py-2 pl-4 pr-3 text-sm transition border-l-2 border-transparent";
+
   const activeClass = active
-    ? "bg-primary-container/15 text-primary border-l-2 border-primary -ml-0.5 pl-3.5"
+    ? collapsed
+      ? "bg-primary-container/15 text-primary border-primary"
+      : "bg-primary-container/15 text-primary border-l-2 border-primary -ml-0.5 pl-3.5"
     : "text-on-surface-variant hover:text-primary hover:bg-surface-container-low";
 
   return (
@@ -25,7 +31,7 @@ export default function SidebarNavItem({
       type="button"
       data-testid={testId}
       onClick={onClick}
-      className={`w-full flex items-center gap-2 py-2 pl-4 pr-3 text-sm transition border-l-2 border-transparent ${activeClass}`}
+      className={`${layoutClass} ${activeClass}`}
     >
       <span className="material-symbols-outlined" aria-hidden="true">
         {icon}

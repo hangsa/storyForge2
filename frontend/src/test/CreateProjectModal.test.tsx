@@ -39,4 +39,43 @@ describe("CreateProjectModal", () => {
     );
     expect(container.firstChild).toBeNull();
   });
+
+  it("renders the title-required marker and disabled submit when title empty", () => {
+    render(
+      <CreateProjectModal
+        isOpen
+        submitting={false}
+        error={null}
+        onSubmit={async () => {}}
+        onClose={() => {}}
+      />
+    );
+    const labels = screen.getAllByText("项目名称");
+    expect(labels.length).toBeGreaterThanOrEqual(1);
+    expect(labels[0].parentElement?.textContent).toContain("*");
+    const submit = screen.getByTestId("create-submit") as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
+  it("enables submit and calls onSubmit with title when filled", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { default: userEventLib } = await import("@testing-library/user-event");
+    const user = userEventLib.setup();
+    render(
+      <CreateProjectModal
+        isOpen
+        submitting={false}
+        error={null}
+        onSubmit={onSubmit}
+        onClose={() => {}}
+      />
+    );
+    await user.type(screen.getByTestId("title-input"), "我的新项目");
+    const submit = screen.getByTestId("create-submit") as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+    await user.click(submit);
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "我的新项目" })
+    );
+  });
 });

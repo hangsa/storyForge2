@@ -13,7 +13,6 @@ interface CreateProjectModalProps {
   submitting: boolean;
   error: string | null;
   onSubmit: (data: {
-    intent: string;
     title?: string;
     genre: string;
     min_words: number;
@@ -31,7 +30,6 @@ export default function CreateProjectModal({
   onClose,
 }: CreateProjectModalProps) {
   const genres = useGenres(true);
-  const [intent, setIntent] = useState("");
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("cool_novel");
   const [lengthIdx, setLengthIdx] = useState(DEFAULT_LENGTH_INDEX); // default: 标准商业连载
@@ -44,10 +42,9 @@ export default function CreateProjectModal({
   const chapterCount = Math.max(1, Math.round(targetTotalWords / WORDS_PER_CHAPTER));
 
   const submit = async () => {
-    if (!intent.trim() || submitting) return;
+    if (!title.trim() || submitting) return;
     await onSubmit({
-      intent: intent.trim(),
-      title: title.trim() || undefined,
+      title: title.trim(),
       genre,
       min_words: WORDS_PER_CHAPTER,
       target_total_words: targetTotalWords,
@@ -78,30 +75,17 @@ export default function CreateProjectModal({
         </header>
 
         <div className="p-6 space-y-4 overflow-y-auto">
-          <div>
-            <label className="block font-mono text-on-surface-variant mb-1 text-xs">
-              创作意图 <span className="text-error">*</span>
-            </label>
-            <textarea
-              data-testid="intent-input"
-              value={intent}
-              onChange={(e) => setIntent(e.target.value)}
-              placeholder="例如：一个被家族抛弃的少年，在异世界觉醒了隐藏的血脉之力..."
-              className="w-full h-28 bg-surface-container border border-outline-variant rounded-lg px-4 py-3
-                         text-sm text-primary placeholder:text-on-surface-variant/50
-                         focus:outline-none focus:border-primary resize-none"
-            />
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block font-mono text-on-surface-variant mb-1 text-xs">项目名称</label>
+              <label className="block font-mono text-on-surface-variant mb-1 text-xs">
+                项目名称 <span className="text-error">*</span>
+              </label>
               <input
                 data-testid="title-input"
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={intent.slice(0, 30) || "可留空，自动从意图截取"}
+                placeholder="为这个项目起一个名字"
                 className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2
                            text-sm text-primary placeholder:text-on-surface-variant/50
                            focus:outline-none focus:border-primary"
@@ -211,7 +195,7 @@ export default function CreateProjectModal({
           <button
             type="button"
             onClick={submit}
-            disabled={!intent.trim() || submitting}
+            disabled={!title.trim() || submitting}
             data-testid="create-submit"
             className="px-5 py-2 bg-primary text-on-primary text-sm
                        rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"

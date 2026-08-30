@@ -3,14 +3,16 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.services import _file_manager  # adjust per project conventions
+from backend.config import settings
 
 @pytest.fixture
-def project(tmp_path):
+def project(tmp_path, monkeypatch):
     pid = "proj_test_cd"
     (tmp_path / pid).mkdir()
-    fm = _file_manager()
-    fm.projects_dir = tmp_path  # patch per project_api_file_manager_pattern
+    # _file_manager() is now a per-call factory that reads settings.projects_dir
+    # fresh each invocation (sibling pattern from stage2_world_char.py), so
+    # patch settings rather than a singleton attribute.
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
     return pid
 
 @pytest.fixture
@@ -41,7 +43,7 @@ def test_select_writes_concept_and_marks_source(client, project):
     assert sel.status_code == 200
     payload = sel.json()["concept_payload"]
     assert {"title", "genre", "premise", "tone", "theme"} <= set(payload.keys())
-    cd = json.loads((_file_manager().projects_dir / project / "concept_and_dna.json").read_text())
+    cd = json.loads((settings.projects_dir / project / "concept_and_dna.json").read_text())
     assert cd["concept"]["source"] == "creative_divergence"
     assert cd["concept"]["source_variant_id"] == variant_id
 

@@ -17,6 +17,7 @@ beforeEach(() => {
 
 function makeData(overrides: Partial<WizardData> = {}): WizardData {
   return {
+    creative_divergence: null,
     concept: null,
     story_dna: null,
     world: null,
@@ -444,16 +445,16 @@ describe("WizardContext", () => {
     // Seed story_dna first via hydrate (covers the realistic path: user
     // resumes from saved files, then edits concept only).
     act(() =>
-      result.current.hydrateFromFiles([1], {
+      result.current.hydrateFromFiles([2], {
         story_dna: {
           core_contradiction: { statement: "旧矛盾", side_a: "A", side_b: "B" },
           value_stack: [],
         },
       })
     );
-    act(() => result.current.startStep(1));
+    act(() => result.current.startStep(2));
     act(() =>
-      result.current.saveStep(1, {
+      result.current.saveStep(2, {
         concept: {
           title: "新标题",
           genre: "cool_novel",

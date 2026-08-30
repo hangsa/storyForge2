@@ -27,6 +27,10 @@ export type WizardRegenerateState =
   | { kind: "failure"; target: string; message: string; at: number };
 
 export interface WizardData {
+  creative_divergence: {
+    variants: Array<{ id: string; label: string; title: string; description: string; tags: string[]; created_at: string }>;
+    selected_id: string | null;
+  } | null;
   concept: Concept | null;
   story_dna: StoryDNA | null;
   world: World | null;
@@ -34,7 +38,7 @@ export interface WizardData {
   novel_outline: NovelOutline | null;
   chapter1_outline: Outline | null;
   /**
-   * Mid-batch progress for step 6 (chapter-outline generation). Non-null when
+   * Mid-batch progress for step 7 (chapter-outline generation). Non-null when
    * the user paused mid-batch — ChapterOutlineStep renders a "继续生成" CTA
    * from this, then clears it on completion or fresh auto-trigger. Shape:
    *   - done: number of chapters already generated and persisted to disk.
@@ -51,9 +55,10 @@ export interface WizardData {
   } | null;
 }
 
-export const TOTAL_STEPS = 6;
+export const TOTAL_STEPS = 7;
 
 const EMPTY_DATA: WizardData = {
+  creative_divergence: null,
   concept: null,
   story_dna: null,
   world: null,
@@ -66,19 +71,20 @@ const EMPTY_DATA: WizardData = {
 // Maps each wizard data key to the step that owns it. step 4 (Map) owns no
 // data. Used by the STEP_COMPLETED reducer to clear downstream keys on resave.
 const STEP_DATA_KEY_TO_STEP: Partial<Record<keyof WizardData, number>> = {
-  concept: 1,
-  story_dna: 1,
-  world: 2,
-  characters: 3,
-  novel_outline: 5,
-  chapter1_outline: 6,
-  // Mid-batch progress for step 6's chapter-outline generation. Lives in
+  creative_divergence: 1,
+  concept: 2,
+  story_dna: 2,
+  world: 3,
+  characters: 4,
+  novel_outline: 6,
+  chapter1_outline: 7,
+  // Mid-batch progress for step 7's chapter-outline generation. Lives in
   // wizard.data so it survives navigation; must be cleared on resave of any
-  // step ≤ 5 so a stale "3/10 done" from a previous run doesn't leak into
+  // step ≤ 6 so a stale "3/10 done" from a previous run doesn't leak into
   // the next attempt. Without this entry, the resave branch's
   // `ownerStep === undefined` fallback would treat this key as unmapped and
   // preserve it.
-  chapter_outline_progress: 6,
+  chapter_outline_progress: 7,
 };
 
 interface WizardState {

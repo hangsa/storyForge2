@@ -5,11 +5,41 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["creative-divergence"])
+
+
+DEPRECATION_HEADERS = {
+    "Deprecation": "true",
+    "Sunset": "2026-12-31",
+    "Link": '</api/v1/projects/{project_id}/creative/diverge/state>; rel="successor-version"',
+}
+
+
+class DeprecationHeadersMiddleware(BaseHTTPMiddleware):
+    """Adds Deprecation/Sunset/Link headers to Path B /creative-divergence/* responses.
+
+    Per PRD §8.1 Phase 1: Path B endpoints still serve requests but signal deprecation.
+    v1.3 will convert to 301 redirect.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if "/creative-divergence" in request.url.path:
+            project_id = request.path_params.get("project_id", "")
+            for k, v in DEPRECATION_HEADERS.items():
+                if "{project_id}" in v:
+                    v = v.replace("{project_id}", project_id)
+                response.headers[k] = v
+        return response
+
+
+__all__ = ["router", "DeprecationHeadersMiddleware"]
 
 
 def _file_manager() -> FileManager:

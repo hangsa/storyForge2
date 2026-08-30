@@ -72,6 +72,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(creative_divergence.DeprecationHeadersMiddleware)
 
 app.include_router(project.router)
 app.include_router(conductor.router)

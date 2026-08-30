@@ -301,7 +301,14 @@ frontend/src/
 backend/api/creative_canvas.py           (1,675 行, 11 路由)
 backend/api/characters.py                (CharacterStep 后端)
 backend/api/world.py                     (WorldStep 后端)
-backend/api/concept.py                   (ConceptStep 后端)
+backend/api/concept.py                   (ConceptStep 后端 — 新增 source/source_variant_id 字段)
+backend/api/creative_divergence.py       (NEW — 4 路由：list/generate/select/prefill)
 backend/api/outline.py                   (Outline + ChapterOutline 后端)
 backend/api/stage4_writing.py            (Workspace 写作后端)
 ```
+
+---
+
+## 9. Workspace 融合完成（2026-08-30）
+
+InitWizardModal 的六个步骤已合并到 `/project/:id/workspace?tab=settings` 的 `<WorkspaceWizardPanel>` 内 —— WorkspacePage 顶层 Tab 拆为「项目设定」与「正文手稿」：前者承载 7 步向导（创意发散 / 概念 DNA / 世界观 / 角色设计 / 地图系统 / 全文大纲 / 章节大纲），后者保持原写作流程。顶部「正文手稿」Tab 在所有 7 步完成后自动启用。`<WizardDeepLinkPage>` 已退化为 `/workspace?tab=settings` 的瞬时跳转；旧的 `InitWizardModal` 与 `WizardSteps` 标 DEPRECATED 但保留以便后续清理。新增的 `concept.source` 字段让 ConceptStep 可识别来自创意发散候选的预填，并在用户手动编辑时自动翻转为 `manual`。Workspace 右栏的 5 个编辑器 Tab 已合并移除（概念/世界观/角色/大纲/章节大纲），右栏仅保留诊断/导出。详见 `docs/superpowers/specs/2026-08-30-workspace-wizard-design.md` 与 `docs/superpowers/plans/2026-08-30-workspace-wizard.md`。

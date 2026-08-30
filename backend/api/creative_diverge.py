@@ -1923,6 +1923,117 @@ def _risk_from_distance(distance: int) -> str:
     return "high"
 
 
+def _mutation_op_from_type(t: str):
+    """Map a mutation_type string to a MutationOp enum value.
+
+    Returns None for unknown types (e.g., 'custom' from /contradict PUT).
+    Callers should default to INVERSION (or any fallback) when None.
+    """
+    from backend.models.creative_os import MutationOp
+    return {
+        "inversion": MutationOp.INVERSION,
+        "fusion": MutationOp.FUSION,
+        "escalation": MutationOp.ESCALATION,
+        "subversion": MutationOp.SUBVERSION,
+    }.get(t)
+
+
+@router.post("/mutate/{node_id}/regenerate")
+async def regenerate_variant(project_id: str, node_id: str):
+    """Re-run mutation for a single idea_variant; preserves ID + increments regenerated_count.
+
+    PRD §3.3 — the user clicks "重新生成" on a single idea card and the system
+    produces a fresh MutationResult for the same variant. The original ID and
+    an incremented regenerated_count are stamped onto the result so the UI can
+    still reference this specific card.
+
+    MutationEngine is constructed lazily — if no router is configured the
+    endpoint falls back to a synthesized minimal variant (preserves the same
+    count/ID semantics) so CI and dev environments without an LLM still work.
+    """
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化",
+                "detail": {},
+            },
+        )
+
+    variants = canvas.get("idea_variants", []) or []
+    variant = next((v for v in variants if v.get("id") == node_id), None)
+    if variant is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "INVALID_NODE_ID",
+                "message": f"variant {node_id} 不存在",
+                "detail": {},
+            },
+        )
+
+    from backend.models.creative_os import MutationOp, Trope
+    from backend.creative_os.mutation_engine import MutationEngine
+
+    op = _mutation_op_from_type(variant.get("mutation_type", ""))
+    if op is None:
+        # Unknown / custom mutation_type (e.g., 'custom' from /contradict PUT).
+        # Default to INVERSION so we still emit a coherent variant.
+        op = MutationOp.INVERSION
+
+    trope = Trope(
+        id=f"variant:{node_id}",
+        name=variant.get("title", "regen") or "regen",
+        category="variant",
+        description=variant.get("premise_one_line", "") or "",
+        market_saturation=0.5,
+    )
+
+    new_variant: Optional[dict] = None
+    try:
+        mutation_engine = MutationEngine()
+        result = await mutation_engine.mutate(
+            trope, op, context=variant.get("premise_one_line", "") or ""
+        )
+        new_variant = _mutation_to_idea_variant(result, "", "")
+    except NotImplementedError as exc:
+        # No LLM router — synthesize a minimal variant so the endpoint still
+        # returns 200 with an incremented regenerated_count.
+        logger.info("MutationEngine.mutate unavailable (no LLM): %s", exc)
+    except Exception as exc:
+        logger.warning("MutationEngine.mutate failed: %s", exc)
+
+    if new_variant is None:
+        new_variant = {
+            "id": node_id,
+            "title": f"{variant.get('title', '')} (重生成)",
+            "premise_one_line": variant.get("premise_one_line", ""),
+            "mutation_type": op.value,
+            "mutation_logic": f"基于 {op.value} 的重新生成",
+            "estimated_novelty": variant.get("estimated_novelty", 0.7),
+            "trope_tags": list(variant.get("trope_tags", []) or []),
+            "regenerated_count": 0,
+        }
+
+    # Preserve ID + count from original. The LLM path of _mutation_to_idea_variant
+    # mints a new ID and starts count at 0; overwrite them here so the same card
+    # in the UI is updated in place.
+    new_variant["id"] = node_id
+    new_variant["regenerated_count"] = int(variant.get("regenerated_count", 0)) + 1
+
+    canvas["idea_variants"] = [
+        dict(new_variant) if v.get("id") == node_id else v
+        for v in variants
+    ]
+    canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _write_canvas(project_id, canvas)
+    return {"variant": new_variant}
+
+
 @router.post("/fuse")
 async def fuse_genres(project_id: str, request: FuseRequest):
     """Cross-genre fusion with distance-based risk grading (PRD §3.4).

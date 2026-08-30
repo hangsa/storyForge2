@@ -13,7 +13,7 @@ interface CreateProjectModalProps {
   submitting: boolean;
   error: string | null;
   onSubmit: (data: {
-    title?: string;
+    title: string;
     genre: string;
     min_words: number;
     target_total_words: number;

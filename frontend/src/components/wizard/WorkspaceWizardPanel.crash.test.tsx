@@ -1,0 +1,102 @@
+import { render, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import WorkspaceWizardPanel from "./WorkspaceWizardPanel";
+
+// Use console-aware spy pattern: capture React error-overlay error output.
+function captureReactErrors() {
+  const errors: Array<{ messages: string[] }> = [];
+  const errSpy = vi.spyOn(console, "error").mockImplementation((...args) => {
+    // React emits error overlay with: console.error("...", componentStack)
+    // Capture only React-shaped messages.
+    const messages = args.map((a) =>
+      typeof a === "string" ? a : a instanceof Error ? `${a.name}: ${a.message}` : String(a),
+    );
+    if (messages.some((m) => m.includes("Cannot read") || m.includes("TypeError"))) {
+      errors.push({ messages });
+    }
+  });
+  return { errors, errSpy };
+}
+
+// Scenario from the bug report:
+//   - Step 1 default → CreativeDivergenceStep mounts → calls
+//     listCreativeDivergenceVariants → fails with 404 (the 6 wizard-data
+//     prefill endpoints also reject, but CreativeDivergenceStep only sees
+//     listCreativeDivergenceVariants).
+//
+// Variant A: 404 envelope. When `Promise.allSettled` resolves (because the
+// server returned an envelope shape the request wrapper accepts), cd.value is
+// a string "Not Found" or null. hasContent guards on string/null. But...
+
+vi.mock("../../api/client", () => ({
+  default: {
+    getCreativeDivergencePrefill: vi.fn().mockResolvedValue("Not Found"),
+    getConcept: vi.fn().mockResolvedValue({}),
+    getWorld: vi.fn().mockResolvedValue({}),
+    getCharacter: vi.fn().mockResolvedValue({}),
+    getNovelOutline: vi.fn().mockResolvedValue({}),
+    getOutline: vi.fn().mockResolvedValue({}),
+    listCreativeDivergenceVariants: vi.fn().mockResolvedValue("Not Found"),
+    generateCreativeDivergenceVariants: vi.fn().mockResolvedValue({ variants: [] }),
+    selectCreativeDivergenceVariant: vi.fn().mockResolvedValue({ concept_payload: {} }),
+  },
+}));
+
+describe("WorkspaceWizardPanel crash repro", () => {
+  it("renders without crashing with 404-shaped prefill envelope", async () => {
+    const { errors, errSpy } = captureReactErrors();
+    render(<WorkspaceWizardPanel projectId="proj_test" />);
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="wizard-sidebar"]')).toBeInTheDocument();
+    });
+
+    if (errors.length > 0) {
+      console.log("=== Captured React errors ===");
+      errors.forEach((e, idx) => {
+        console.log(`[${idx}]`);
+        e.messages.forEach((m) => console.log(" ", m));
+      });
+    } else {
+      console.log("=== No React errors captured ===");
+    }
+    errSpy.mockRestore();
+    expect(errors.length).toBe(0);
+  });
+
+  it("renders without crashing when variants API returns null body", async () => {
+    vi.resetModules();
+    // Reset mock for fresh scenario
+    const { errors, errSpy } = captureReactErrors();
+
+    // Re-mock with null body
+    vi.doMock("../../api/client", () => ({
+      default: {
+        getCreativeDivergencePrefill: vi.fn().mockResolvedValue(null),
+        getConcept: vi.fn().mockResolvedValue(null),
+        getWorld: vi.fn().mockResolvedValue(null),
+        getCharacter: vi.fn().mockResolvedValue(null),
+        getNovelOutline: vi.fn().mockResolvedValue(null),
+        getOutline: vi.fn().mockResolvedValue(null),
+        listCreativeDivergenceVariants: vi.fn().mockResolvedValue(null),
+      },
+    }));
+
+    const { default: FreshPanel } = await import("./WorkspaceWizardPanel");
+    render(<FreshPanel projectId="proj_test" />);
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="wizard-sidebar"]')).toBeInTheDocument();
+    });
+
+    if (errors.length > 0) {
+      console.log("=== Captured React errors (variants=null) ===");
+      errors.forEach((e, idx) => {
+        console.log(`[${idx}]`);
+        e.messages.forEach((m) => console.log(" ", m));
+      });
+    }
+    errSpy.mockRestore();
+    expect(errors.length).toBe(0);
+  });
+});

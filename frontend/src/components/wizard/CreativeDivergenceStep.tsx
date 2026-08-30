@@ -23,7 +23,19 @@ export default function CreativeDivergenceStep({ projectId }: CreativeDivergence
   useEffect(() => {
     let cancelled = false;
     api.listCreativeDivergenceVariants(projectId)
-      .then((r) => { if (!cancelled) setVariants(r.variants); })
+      .then((r) => {
+        // Defensive: backend can return a non-object payload when the route
+        // 404s (request() unwraps {"detail":"Not Found"} → "Not Found", or
+        // returns null on an empty body). Reading .variants on a string/null
+        // throws "Cannot read properties of undefined (reading 'length')"
+        // downstream in the render. Without this guard, navigating to
+        // /project/:id/workspace?tab=settings with the prefill router prefix
+        // mismatch (bug filed separately) crashes the entire settings tab.
+        const list = r && typeof r === "object" && Array.isArray((r as { variants?: unknown }).variants)
+          ? (r as { variants: Variant[] }).variants
+          : [];
+        if (!cancelled) setVariants(list);
+      })
       .catch(() => { /* empty list is fine */ });
     return () => { cancelled = true; };
   }, [projectId]);

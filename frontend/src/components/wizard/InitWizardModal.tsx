@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
-import { useWizard, WizardProvider, TOTAL_STEPS, type WizardData, type WizardRegenerateState } from "./WizardContext";
+import { useWizard, WizardProvider, type WizardData } from "./WizardContext";
 import WizardSteps from "./WizardSteps";
 import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
@@ -9,6 +9,7 @@ import CharacterStep from "./CharacterStep";
 import MapStep from "./MapStep";
 import OutlineStep from "./OutlineStep";
 import ChapterOutlineStep from "./ChapterOutlineStep";
+import RegenerateStatusBadge from "./RegenerateStatusBadge";
 
 interface InitWizardModalProps {
   projectId: string;
@@ -32,88 +33,6 @@ const STEP_TITLES: Record<number, string> = {
   5: "全书大纲",
   6: "章节大纲",
 };
-
-/**
- * Inline footer badge for the section regenerate status. Three states:
- *   - busy:    spinner + "正在重新生成 {target}" — sits beside 上一步 so the
- *               user sees in-flight feedback without their eyes leaving the
- *               button row. Auto-resolves on success/failure.
- *   - success: check icon + "{target} 已重新生成" — auto-fades after a few
- *               seconds, otherwise the badge would compete for attention
- *               with any subsequent regen.
- *   - failure: error icon + "重新生成失败: {msg}" — same auto-fade. The
- *               in-form red banner above is the durable error indicator;
- *               this badge gives an immediate catch-up signal that the user
- *               didn't miss anything.
- *
- * Auto-clear is owned here (not in WizardContext) so the component controls
- * its own fade timing and a remount-with-stale-state path won't keep the
- * badge stuck on screen.
- */
-function RegenerateStatusBadge({ state }: { state: WizardRegenerateState }) {
-  const clear = useWizard().clearRegenerateState;
-  useEffect(() => {
-    if (state.kind === "idle") return;
-    const ttl = state.kind === "busy" ? 30_000 : 3500;
-    // Long TTL for busy is a safety net — success/failure should always
-    // dispatch within seconds. If somehow stuck in busy, clear after 30s.
-    const t = setTimeout(clear, ttl);
-    return () => clearTimeout(t);
-  }, [state, clear]);
-
-  if (state.kind === "idle") return null;
-
-  if (state.kind === "busy") {
-    return (
-      <div
-        data-testid="wizard-regenerate-status"
-        data-status="busy"
-        role="status"
-        aria-live="polite"
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-container/10 text-primary-container font-body text-body-md text-xs"
-      >
-        <span
-          data-testid="wizard-regenerate-status-spinner"
-          aria-hidden="true"
-          className="material-symbols-outlined text-[14px] animate-spin inline-block"
-        >
-          progress_activity
-        </span>
-        正在重新生成 {state.target}…
-      </div>
-    );
-  }
-
-  if (state.kind === "success") {
-    return (
-      <div
-        data-testid="wizard-regenerate-status"
-        data-status="success"
-        role="status"
-        aria-live="polite"
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary-container/15 text-primary-container font-body text-body-md text-xs"
-      >
-        <span aria-hidden="true" className="material-symbols-outlined text-[14px]">check</span>
-        {state.target} 已重新生成
-      </div>
-    );
-  }
-
-  // failure
-  return (
-    <div
-      data-testid="wizard-regenerate-status"
-      data-status="failure"
-      role="status"
-      aria-live="assertive"
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-error-container/30 text-error font-body text-body-md text-xs max-w-[40ch] truncate"
-      title={`重新生成失败: ${state.message}`}
-    >
-      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">error</span>
-      重新生成失败: {state.message}
-    </div>
-  );
-}
 
 function hasContent(v: unknown): boolean {
   if (!v || typeof v !== "object") return false;

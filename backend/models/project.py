@@ -3,11 +3,6 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-class InitialIntent(BaseModel):
-    free_text: str = ""
-    inspiration_source: Optional[str] = None
-
-
 class StageTransition(BaseModel):
     from_stage: str
     to_stage: str
@@ -24,7 +19,6 @@ class Project(BaseModel):
     # chapter count is derived as target_total_words / min_words.
     target_total_words: int = 1_000_000
     target_length_category: str = "标准商业连载"
-    initial_intent: InitialIntent = Field(default_factory=InitialIntent)
     current_stage: str = "INIT"
     stage_history: list[StageTransition] = []
     genre_thresholds: Optional[dict] = None

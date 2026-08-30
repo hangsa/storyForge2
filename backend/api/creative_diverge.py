@@ -17,6 +17,7 @@ Provides thin orchestration endpoints for the Creative Canvas frontend:
 
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -953,7 +954,6 @@ async def apply_mutation(project_id: str, data: dict):
     # Use mutation_result.core_premise as the new node's content.
     # Tag it with the operation for traceability. Stash the full
     # mutation_result on mutation_context so /commit can pass it to the LLM.
-    import uuid
     new_id = f"mu_{uuid.uuid4().hex[:8]}"
     new_node = WhatIfNode(
         id=new_id,
@@ -1856,3 +1856,191 @@ async def confirm_contradiction(project_id: str, request: ConfirmContradictReque
     _write_canvas(project_id, canvas)
 
     return {"core_contradiction": canvas["core_contradiction"]}
+
+
+# ---------------------------------------------------------------------------
+# /fuse — PRD §3.4 (S0-B 跨体裁融合)
+# ---------------------------------------------------------------------------
+
+
+class FuseRequest(BaseModel):
+    """Request body for POST /fuse: cross-genre fusion with distance grading."""
+
+    genre_primary: str
+    genre_secondary: str
+    prompt: str = ""
+
+
+def _genre_to_trope(genre: str, prompt: str):
+    """Construct a synthetic Trope for a genre name.
+
+    /fuse combines genres abstractly (not from real catalog entries), so we
+    build a Trope on the fly rather than going through TropePool.get_by_genre
+    (which does not exist in this codebase).
+    """
+    from backend.models.creative_os import Trope
+
+    return Trope(
+        id=f"genre:{genre}",
+        name=genre,
+        category="genre",
+        description=prompt or f"{genre} 体裁",
+        market_saturation=0.5,
+    )
+
+
+def _mutation_to_idea_variant(result, genre_a: str, genre_b: str) -> dict:
+    """Adapt a MutationResult into the idea_variant schema persisted on the canvas.
+
+    The v3 canvas's idea_variants list is consumed by /commit's LLM prompt as
+    candidate concepts; mapping MutationResult → variant here keeps the schema
+    consistent with what /apply-mutation already writes.
+    """
+    return {
+        "id": f"var-{uuid.uuid4().hex[:8]}",
+        "title": (result.core_premise or "")[:30],
+        "premise_one_line": result.core_premise,
+        "mutation_type": result.operation.value,
+        "mutation_logic": result.core_conflict,
+        "estimated_novelty": 0.7,
+        "trope_tags": [genre_a, genre_b],
+        "regenerated_count": 0,
+    }
+
+
+def _risk_from_distance(distance: int) -> str:
+    """Map BFS distance (0-3+) to a risk_level per PRD §3.4.
+
+      - 0 (same genre)        → low
+      - 1 (one-hop neighbor)  → low
+      - 2 (medium traversal)  → medium
+      - 3+ (far/unrelated)    → high
+    """
+    if distance <= 1:
+        return "low"
+    if distance == 2:
+        return "medium"
+    return "high"
+
+
+@router.post("/fuse")
+async def fuse_genres(project_id: str, request: FuseRequest):
+    """Cross-genre fusion with distance-based risk grading (PRD §3.4).
+
+    Combines GenreFusionEngine.compute_distance (BFS distance over the genre
+    graph) with MutationEngine.fuse (LLM-driven fusion of two Trope objects
+    constructed from the genre names). Returns risk_level (low/medium/high)
+    derived from the BFS distance and persists the fused variant onto
+    canvas_state.idea_variants.
+
+    The MutationEngine call is wrapped in a try/except so the endpoint still
+    returns a synthesized minimal variant when the LLM backend is unavailable
+    (CI / no router). Distance + risk_level are always computable since they
+    don't require an LLM.
+    """
+    _ensure_project(project_id)
+
+    from backend.creative_os.genre_fusion_engine import GenreFusionEngine
+    from backend.creative_os.mutation_engine import MutationEngine
+
+    fusion_engine = GenreFusionEngine()
+    distance = fusion_engine.compute_distance(
+        request.genre_primary, request.genre_secondary
+    )
+    compatibility = fusion_engine.get_compatibility(
+        request.genre_primary, request.genre_secondary
+    )
+    risk_level = _risk_from_distance(distance)
+
+    trope_a = _genre_to_trope(request.genre_primary, request.prompt)
+    trope_b = _genre_to_trope(request.genre_secondary, request.prompt)
+
+    variant: Optional[dict] = None
+    try:
+        mutation_engine = MutationEngine()
+        mutation_result = await mutation_engine.fuse(trope_a, trope_b)
+        variant = _mutation_to_idea_variant(
+            mutation_result, request.genre_primary, request.genre_secondary
+        )
+    except NotImplementedError as exc:
+        # LLM backend not available (no model_router). Synthesize a minimal
+        # variant from the genres + distance so the endpoint still works in
+        # CI / dev environments without a real LLM.
+        logger.info("MutationEngine.fuse unavailable (no LLM): %s", exc)
+    except Exception as exc:
+        logger.warning("MutationEngine.fuse failed: %s", exc)
+
+    if variant is None:
+        variant = {
+            "id": f"var-{uuid.uuid4().hex[:8]}",
+            "title": f"{request.genre_primary}×{request.genre_secondary}",
+            "premise_one_line": f"{request.genre_primary} 与 {request.genre_secondary} 融合",
+            "mutation_type": "fusion",
+            "mutation_logic": f"跨 {distance} 跳距离的体裁融合",
+            "estimated_novelty": 0.7,
+            "trope_tags": [request.genre_primary, request.genre_secondary],
+            "regenerated_count": 0,
+        }
+
+    # Persist to canvas_state.idea_variants. If the canvas doesn't exist yet
+    # (user fused before /init), seed a minimal v3 canvas with just the
+    # variant. This keeps the endpoint usable in isolation while still being
+    # safe to call after /init.
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        # Fresh project (no canvas_state.json) — seed a minimal v3 canvas with
+        # a root node so canvas invariants (non-empty selected_path, root_node_id
+        # set, chain linear) pass when _write_canvas re-validates.
+        now_iso = datetime.now(timezone.utc).isoformat()
+        root_id = "wi_001_00"
+        canvas = {
+            "schema_version": 3,
+            "root_node_id": root_id,
+            "nodes": {
+                root_id: {
+                    "id": root_id,
+                    "depth": 0,
+                    "parent_id": None,
+                    "content": "",
+                    "dimension": "角色动机",
+                    "novelty_score": 0,
+                    "trope_tags": [],
+                    "saturation_warning": False,
+                    "mutation_context": None,
+                    "children_ids": [],
+                    "is_expanded": False,
+                    "branch_status": "active",
+                },
+            },
+            "edges": [],
+            "selected_path": [root_id],
+            "branch_choices": {},
+            "evaluations": {},
+            "created_at": now_iso,
+            "updated_at": now_iso,
+            "committed_at": None,
+            "committed_concept_ref": None,
+            "idea_variants": [],
+            "core_contradiction": None,
+            "novelty_scores": None,
+            "raw_intent": None,
+            "session_metadata": {
+                "created_at": now_iso,
+                "last_modified_at": now_iso,
+                "elapsed_seconds": 0,
+                "operation_count": 0,
+                "ab_test_bucket": "control",
+            },
+        }
+    canvas.setdefault("idea_variants", []).append(variant)
+    canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _write_canvas(project_id, canvas)
+
+    return {
+        "variants": [variant],
+        "fusion_distance": {
+            "distance": distance,
+            "compatibility": compatibility,
+        },
+        "risk_level": risk_level,
+    }

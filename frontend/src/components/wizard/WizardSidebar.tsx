@@ -17,15 +17,15 @@ interface WizardSidebarProps {
 export default function WizardSidebar({ currentStep, completedSteps, onJump }: WizardSidebarProps) {
   return (
     <nav data-testid="wizard-sidebar"
-         className="bg-surface-container dark:bg-surface-container sticky top-16 self-start h-[calc(100vh-64px)] w-[240px] shrink-0 border-r border-outline-variant dark:border-outline-variant flex flex-col py-md px-sm z-20">
-      <div className="flex-1 space-y-xs overflow-y-auto pr-xs custom-scrollbar">
+         className="bg-surface-container dark:bg-surface-container sticky top-16 self-start h-[calc(100vh-64px)] w-[200px] shrink-0 border-r border-outline-variant dark:border-outline-variant flex flex-col py-6 px-3 z-20">
+      <div className="flex-1 flex flex-col items-center gap-2 overflow-y-auto pr-0 custom-scrollbar">
         {STEPS.map(({ num, label, icon }) => {
           const completed = completedSteps.includes(num);
           const current = currentStep === num;
           const reachable = completed || current;
-          const baseCls = "flex items-center gap-sm px-md py-xs rounded-lg transition-colors";
+          const baseCls = "flex items-center justify-start gap-2 px-3 py-2 rounded-lg transition-colors w-[160px]";
           const stateCls = current
-            ? "bg-secondary-container text-on-secondary-container font-bold scale-95 transition-transform duration-150"
+            ? "bg-secondary-container text-on-secondary-container font-bold scale-[0.98] transition-transform duration-150"
             : "text-on-surface-variant hover:bg-surface-variant dark:hover:bg-surface-variant";
           return (
             <button
@@ -38,14 +38,14 @@ export default function WizardSidebar({ currentStep, completedSteps, onJump }: W
               className={`${baseCls} ${stateCls} ${!reachable ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
             >
               <span
-                className="material-symbols-outlined"
+                className="material-symbols-outlined text-[20px] leading-none"
                 style={{ fontVariationSettings: current ? '"FILL" 1' : '"FILL" 0' }}
               >
                 {icon}
               </span>
-              <span className="font-body-md text-body-md">{label}</span>
+              <span className="font-body-md text-sm whitespace-nowrap">{label}</span>
               {completed && !current && (
-                <span aria-hidden="true" className="material-symbols-outlined ml-auto text-[16px] text-primary">
+                <span aria-hidden="true" className="material-symbols-outlined text-[14px] leading-none text-primary ml-auto">
                   check
                 </span>
               )}

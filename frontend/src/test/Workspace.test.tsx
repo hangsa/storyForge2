@@ -96,6 +96,19 @@ vi.mock("../api/client", () => ({
     stopAutopilotSession: mockedStopAutopilotSession,
     getSceneDrafts: mockedGetSceneDrafts,
     repairProgress: mockedRepairProgress,
+    // v2.x (Plan Task 12, 2026-08-30): WorkspacePage now runs a 6-endpoint
+    // preflight to decide whether the wizard is "done". These mocks make
+    // every endpoint resolve with content so the manuscript tab is
+    // unlocked — otherwise the page would route to <WorkspaceWizardPanel>
+    // instead of the writing panel these tests exercise.
+    getCreativeDivergencePrefill: vi
+      .fn()
+      .mockResolvedValue({ exists: true, has_selection: true }),
+    listCreativeDivergenceVariants: vi.fn().mockResolvedValue({ variants: [] }),
+    generateCreativeDivergenceVariants: vi
+      .fn()
+      .mockResolvedValue({ variants: [] }),
+    selectCreativeDivergenceVariant: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
 
@@ -155,8 +168,18 @@ const stopFn = vi.fn(async () => {
 });
 
 function setup(initialPath: string) {
+  // v2.x (Plan Task 12, 2026-08-30): WorkspacePage now hosts a tab switcher
+  // and renders <WorkspaceWizardPanel> by default (when the wizard hasn't
+  // been completed). Existing tests for the manuscript writing panel add
+  // ?tab=manuscript to the URL to force the panel mount. We transparently
+  // inject it here when the caller didn't already specify a tab so that
+  // legacy paths like "/project/p1/workspace" keep landing on the
+  // manuscript tab in tests.
+  const path = initialPath.includes("tab=")
+    ? initialPath
+    : `${initialPath}${initialPath.includes("?") ? "&" : "?"}tab=manuscript`;
   const view = render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         {/* WorkspacePage reads useParams<{ projectId }> — declare the route
             with a :projectId segment so MemoryRouter populates params. The
@@ -314,7 +337,7 @@ describe("Workspace integration", () => {
     // post-promise-resolve snapshot the real hook would have produced.
     await new Promise((r) => setTimeout(r, 50));
     rerender(
-      <MemoryRouter initialEntries={["/project/p1/workspace"]}>
+      <MemoryRouter initialEntries={["/project/p1/workspace?tab=manuscript"]}>
         <Routes>
           <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /></ToastProvider>} />
         </Routes>
@@ -614,7 +637,7 @@ describe("Workspace integration", () => {
     // strip anymore (that surface was removed when the cockpit absorbed it).
     mockSession = { ...mockSession, state: "running", current_task: { description: "writing ch7" } };
     rerender(
-      <MemoryRouter initialEntries={["/project/p1/workspace"]}>
+      <MemoryRouter initialEntries={["/project/p1/workspace?tab=manuscript"]}>
         <Routes>
           <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /></ToastProvider>} />
         </Routes>
@@ -636,7 +659,7 @@ describe("Workspace integration", () => {
       { event: "circuit_close", data: {}, id: 5 },
     ];
     rerender(
-      <MemoryRouter initialEntries={["/project/p1/workspace"]}>
+      <MemoryRouter initialEntries={["/project/p1/workspace?tab=manuscript"]}>
         <Routes>
           <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /></ToastProvider>} />
         </Routes>
@@ -650,7 +673,7 @@ describe("Workspace integration", () => {
     // Step 4: switch to dashboard tab — queue and event stats appear.
     mockSession = { ...mockSession, queue: [{ id: "q1", description: "review" }] };
     rerender(
-      <MemoryRouter initialEntries={["/project/p1/workspace"]}>
+      <MemoryRouter initialEntries={["/project/p1/workspace?tab=manuscript"]}>
         <Routes>
           <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /></ToastProvider>} />
         </Routes>
@@ -666,7 +689,7 @@ describe("Workspace integration", () => {
       { event: "task_fail", data: { reason: "x" }, id: 6 },
     ];
     rerender(
-      <MemoryRouter initialEntries={["/project/p1/workspace"]}>
+      <MemoryRouter initialEntries={["/project/p1/workspace?tab=manuscript"]}>
         <Routes>
           <Route path="/project/:projectId/workspace" element={<ToastProvider><WorkspacePage /></ToastProvider>} />
         </Routes>

@@ -243,7 +243,13 @@ class TestEndpointWiring:
 
         for mod in (stage1_concept, stage2_world_char, stage3_outline, stage4_writing):
             monkeypatch.setattr(mod, "StageStateMachine", _StubSM, raising=False)
-        monkeypatch.setattr(stage1_concept.fm, "read_json", lambda *a, **k: {"initial_intent": {"free_text": "x"}, "current_stage": "STAGE4", "genre": "cool_novel"}, raising=False)
+
+        def _stage1_read_json(pid, fn, *a, **k):
+            if fn == "creative_divergence.json":
+                return {"prompt": "一个复仇故事"}
+            return {"initial_intent": {"free_text": "x"}, "current_stage": "STAGE4", "genre": "cool_novel"}
+
+        monkeypatch.setattr(stage1_concept.fm, "read_json", _stage1_read_json, raising=False)
         monkeypatch.setattr(stage2_world_char.fm, "read_json", lambda *a, **k: {"concept": {"title": "t"}, "story_dna": {"core_contradiction": {"statement": "s"}}, "current_stage": "STAGE4", "genre": "cool_novel"}, raising=False)
         monkeypatch.setattr(stage3_outline.fm, "read_json", lambda *a, **k: {"concept": {}, "story_dna": {}, "characters": {"characters": []}, "current_stage": "STAGE4", "genre": "cool_novel"}, raising=False)
         monkeypatch.setattr(stage4_writing.fm, "read_json", lambda *a, **k: None, raising=False)

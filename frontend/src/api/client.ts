@@ -809,6 +809,39 @@ export const api = {
   updateConcept: (projectId: string, concept: Concept, storyDna: StoryDNA) =>
     request<void>("PUT", "/stage1/concept", { project_id: projectId, concept, story_dna: storyDna }),
 
+  listCreativeDivergenceVariants: (projectId: string) =>
+    request<{
+      variants: Array<{ id: string; label: string; title: string; description: string; tags: string[]; created_at: string }>;
+      selected_id: string | null;
+    }>("GET", `/projects/${encodeURIComponent(projectId)}/creative-divergence`),
+
+  generateCreativeDivergenceVariants: (
+    projectId: string,
+    req: { prompt: string; count?: number; params?: { tone?: string; genre_tags?: string[] } },
+  ) =>
+    request<{
+      variants: Array<{ id: string; label: string; title: string; description: string; tags: string[]; created_at: string }>;
+    }>("POST", `/projects/${encodeURIComponent(projectId)}/creative-divergence/generate`, req),
+
+  selectCreativeDivergenceVariant: (projectId: string, variantId: string) =>
+    request<{
+      concept_payload: {
+        title: string;
+        genre: string;
+        premise: string;
+        tone: string;
+        theme: string;
+        source: string;
+        source_variant_id: string;
+      };
+    }>("POST", `/projects/${encodeURIComponent(projectId)}/creative-divergence/select`, { variant_id: variantId }),
+
+  getCreativeDivergencePrefill: (projectId: string) =>
+    request<{ exists: boolean; has_selection: boolean }>(
+      "GET",
+      `/projects/${encodeURIComponent(projectId)}/creative-divergence/prefill-check`,
+    ),
+
   generateWorld: (projectId: string, userModifications: string = "") =>
     request<World>("POST", "/stage2/generate-world", { project_id: projectId, user_modifications: userModifications }),
 

@@ -522,6 +522,11 @@ function WorkspaceWritingPanel({
     }
   };
 
+  // TODO(followup): ContextPanel no longer renders the "outline" tab (it
+  // moved to the wizard's 项目设定 step in Plan Task 13, 2026-08-30). This
+  // currently routes to a panel value that renders no body, so the
+  // "前往生成大纲" button is a no-op. Replace with a navigation to the
+  // wizard's outline step (e.g., setPanel("wizard") + a sub-step param).
   const goToOutlinePanel = () => {
     setPanel("outline");
   };

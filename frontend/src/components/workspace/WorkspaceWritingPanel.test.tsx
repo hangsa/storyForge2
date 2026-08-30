@@ -24,6 +24,14 @@ vi.mock("../../api/client", () => ({
     getConcept: vi.fn().mockResolvedValue({ concept: null, story_dna: null }),
     getWorld: vi.fn().mockResolvedValue({}),
     getCharacter: vi.fn().mockResolvedValue({ characters: [] }),
+    // Plan Task 13 (2026-08-30): ContextPanel now mounts DiagnosisSummary
+    // directly (no per-tab fetches). Stub both endpoints so the panel
+    // mounts without crashing.
+    getDiagnosis: vi.fn().mockRejectedValue(new Error("no diagnosis yet")),
+    runDiagnosis: vi.fn().mockResolvedValue({
+      project_id: "proj_x", total_chapters: 0, issues: [],
+      summary: { p0_count: 0, p1_count: 0, p2_count: 0 },
+    }),
   },
 }));
 

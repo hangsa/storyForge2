@@ -47,6 +47,14 @@ vi.mock("../api/client", () => ({
     // panel's first-paint effects still run with these endpoints missing.
     getSceneDrafts: vi.fn().mockResolvedValue({ chapter_number: 0, scenes: [] }),
     getSceneDraft: vi.fn().mockResolvedValue({ draft_text: "" }),
+    // Plan Task 13 (2026-08-30): ContextPanel renders DiagnosisSummary for
+    // the manuscript-tab landing. Tab-routing tests don't exercise the
+    // diagnosis UI; stub both endpoints so DiagnosisSummary mounts cleanly.
+    getDiagnosis: vi.fn().mockRejectedValue(new Error("no diagnosis yet")),
+    runDiagnosis: vi.fn().mockResolvedValue({
+      project_id: "p", total_chapters: 0, issues: [],
+      summary: { p0_count: 0, p1_count: 0, p2_count: 0 },
+    }),
   },
 }));
 

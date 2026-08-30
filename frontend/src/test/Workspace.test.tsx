@@ -109,6 +109,16 @@ vi.mock("../api/client", () => ({
       .fn()
       .mockResolvedValue({ variants: [] }),
     selectCreativeDivergenceVariant: vi.fn().mockResolvedValue({ ok: true }),
+    // Plan Task 13 (2026-08-30): ContextPanel renders DiagnosisSummary for
+    // the default (?panel=concept → unknown, body falls through to diagnosis)
+    // and explicit diagnosis/export panels. The tests don't exercise the
+    // diagnosis UI, so we stub both endpoints to safe defaults that match
+    // DiagnosisSummary's no-report state.
+    getDiagnosis: vi.fn().mockRejectedValue(new Error("no diagnosis yet")),
+    runDiagnosis: vi.fn().mockResolvedValue({
+      project_id: "p", total_chapters: 0, issues: [],
+      summary: { p0_count: 0, p1_count: 0, p2_count: 0 },
+    }),
   },
 }));
 
@@ -277,7 +287,11 @@ describe("Workspace integration", () => {
   // v1.9: workspace now defaults to manual mode on entry (was: managed).
   // Users explicitly opt into managed (autopilot) via the top-bar switcher.
   it("default mode renders ChapterTreePanel + WritingArea + ContextPanel (manual)", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    // Plan Task 13 (2026-08-30): ContextPanel no longer calls api.getConcept
+    // (etc.) on mount, so WorkspaceWritingPanel's getOutline call now runs
+    // *first* — both it and WorkspacePage.preflight need populated chapters,
+    // so use mockResolvedValue (persistent) instead of once.
+    mockedGetOutline.mockResolvedValue({
       chapters: [{ chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] }],
     });
     setup("/project/p1/workspace?chapter=1&scene=1-1");
@@ -292,7 +306,7 @@ describe("Workspace integration", () => {
   // after getOutline resolves, instead of rendering the empty state and
   // forcing the user to click into the chapter tree.
   it("no URL params: defaults to chapter 1 + scene 1-1 after outline loads", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [{ chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] }],
     });
     setup("/project/p1/workspace");
@@ -351,7 +365,7 @@ describe("Workspace integration", () => {
   });
 
   it("?mode=manual renders ChapterTreePanel + WritingArea + ContextPanel", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         {
           chapter_number: 1,
@@ -384,7 +398,7 @@ describe("Workspace integration", () => {
       precheck_result: { precheck_passed: true, suggestions: [], tokens_used: 0, skipped_reason: "" },
     });
 
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -423,7 +437,7 @@ describe("Workspace integration", () => {
     updateSceneDraftSpy.mockReset();
     updateSceneDraftSpy.mockResolvedValue({ chapter_number: 1, scene_number: 1 });
 
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -458,7 +472,7 @@ describe("Workspace integration", () => {
       coherence_score: 60,
     });
 
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -498,7 +512,7 @@ describe("Workspace integration", () => {
       coherence_score: 0,
     });
 
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         {
           chapter_number: 1,
@@ -586,7 +600,7 @@ describe("Workspace integration", () => {
     // The unified ChapterTreePanel renders chapters from manualChapters
     // (outline.json), not from progress.json. So chapter 4 must be in the
     // outline too, otherwise the row won't render.
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [{ chapter_number: 4, title: "第四章", scene_plan: [{ scene_number: 1 }] }],
     });
     setup("/project/p1/workspace?mode=managed");
@@ -603,7 +617,7 @@ describe("Workspace integration", () => {
     mockedGetStage4Progress.mockResolvedValueOnce({ chapters: chapter4, total_chapters: 7 });
     // Take-over drills down into the chapter tree (manual mode) — chapter 4
     // must be in the outline so the unified tree shows it.
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 4, title: "第四章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -743,7 +757,7 @@ describe("Workspace integration", () => {
   });
 
   it("manual mode renders chapter tree from getOutline (1 chapter, 4 scenes)", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         {
           chapter_number: 1,
@@ -792,7 +806,7 @@ describe("Workspace integration", () => {
         total_chapters: 7,
       })
       .mockRejectedValueOnce(new Error("network down"));
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
         { chapter_number: 2, title: "第二章", scene_plan: [{ scene_number: 1 }] },
@@ -814,7 +828,7 @@ describe("Workspace integration", () => {
   // Bug 1 fix regression — clicking "+ 新章节" on the manual-mode tree
   // toolbar must open the AddChaptersModal (previously a no-op).
   it("'manual mode' + 新章节 opens AddChaptersModal", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         {
           chapter_number: 1,
@@ -823,7 +837,7 @@ describe("Workspace integration", () => {
         },
       ],
     });
-    mockedGetNovelOutline.mockResolvedValueOnce({
+    mockedGetNovelOutline.mockResolvedValue({
       volumes: [{ name: "v1", chapter_range: "1-30", summary: "", key_events: [] }],
       mc_growth_arc: [],
       key_plot_points: [],
@@ -848,7 +862,7 @@ describe("Workspace integration", () => {
     const generateSpy = api.generateOutline as ReturnType<typeof vi.fn>;
     generateSpy.mockReset();
     generateSpy.mockResolvedValue({ chapters: [] });
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         {
           chapter_number: 1,
@@ -857,7 +871,7 @@ describe("Workspace integration", () => {
         },
       ],
     });
-    mockedGetNovelOutline.mockResolvedValueOnce({
+    mockedGetNovelOutline.mockResolvedValue({
       volumes: [{ name: "v1", chapter_range: "1-10", summary: "", key_events: [] }],
       mc_growth_arc: [],
       key_plot_points: [],
@@ -881,7 +895,7 @@ describe("Workspace integration", () => {
   // the old "(占位)" placeholder). The theme renders as a labeled row
   // `writing-chapter-theme` inside `writing-outline-block` for v1.8.
   it("manual-mode writing area renders chapter theme above the editor (not 占位)", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         {
           chapter_number: 1,
@@ -901,7 +915,7 @@ describe("Workspace integration", () => {
   // field existed should still surface the selected scene's goal so the
   // header isn't silently empty.
   it("manual-mode writing area falls back to scene goal when chapter theme is missing", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         {
           chapter_number: 1,
@@ -920,14 +934,14 @@ describe("Workspace integration", () => {
   // novel_outline.volumes[].chapter_range strings. Each volume renders as a
   // header with its name + range.
   it("manual-mode chapter tree groups chapters by novel_outline volumes", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "卷一第一章", scene_plan: [{ scene_number: 1 }] },
         { chapter_number: 5, title: "卷一第五章", scene_plan: [{ scene_number: 1 }] },
         { chapter_number: 35, title: "卷二第一章", scene_plan: [{ scene_number: 1 }] },
       ],
     });
-    mockedGetNovelOutline.mockResolvedValueOnce({
+    mockedGetNovelOutline.mockResolvedValue({
       volumes: [
         { name: "第一卷", chapter_range: "1-30", summary: "初入江湖", key_events: [] },
         { name: "第二卷", chapter_range: "31-60", summary: "卷入纷争", key_events: [] },
@@ -952,7 +966,7 @@ describe("Workspace integration", () => {
 
   it("manual-mode chapter tree falls back to '未分组' when no novel_outline exists", async () => {
     // Default mockedGetNovelOutline already returns { volumes: [] }.
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -968,7 +982,7 @@ describe("Workspace integration", () => {
   // bare confirm-dialog). Without the modal gate, a power user clicking
   // 重新生成 after typing for 10 minutes would silently lose their work.
   it("重新生成 with unsaved changes opens the RegenerateModal (writeScene is NOT yet called)", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -1003,7 +1017,7 @@ describe("Workspace integration", () => {
     const writeSceneSpy = api.writeScene as ReturnType<typeof vi.fn>;
     writeSceneSpy.mockClear();
 
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -1025,7 +1039,7 @@ describe("Workspace integration", () => {
   // v1.9 — cancelling the RegenerateModal must NOT call writeScene, and
   // the editor content must be preserved exactly as the user left it.
   it("cancelling the regenerate modal does NOT call writeScene", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -1052,7 +1066,7 @@ describe("Workspace integration", () => {
     updateSceneDraftSpy.mockReset();
     updateSceneDraftSpy.mockResolvedValue({ chapter_number: 1, scene_number: 1 });
 
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
       ],
@@ -1077,7 +1091,7 @@ describe("Workspace integration", () => {
       ],
       total_chapters: 2,
     });
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
         { chapter_number: 2, title: "第二章", scene_plan: [{ scene_number: 1 }] },
@@ -1093,7 +1107,7 @@ describe("Workspace integration", () => {
   // v1.10: switching chapters refetches scene-drafts and updates the
   // scene-status dots accordingly.
   it("manual mode refetches scene drafts when currentChapter changes", async () => {
-    mockedGetOutline.mockResolvedValueOnce({
+    mockedGetOutline.mockResolvedValue({
       chapters: [
         { chapter_number: 1, title: "第一章", scene_plan: [
           { scene_number: 1 }, { scene_number: 2 },
@@ -1139,7 +1153,7 @@ describe("Workspace integration", () => {
         repaired_chapters: [13],
         current_chapter: 14,
       });
-      mockedGetOutline.mockResolvedValueOnce({
+      mockedGetOutline.mockResolvedValue({
         chapters: [
           { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
         ],
@@ -1165,7 +1179,7 @@ describe("Workspace integration", () => {
         repaired_chapters: [],
         current_chapter: 1,
       });
-      mockedGetOutline.mockResolvedValueOnce({
+      mockedGetOutline.mockResolvedValue({
         chapters: [
           { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
         ],
@@ -1185,7 +1199,7 @@ describe("Workspace integration", () => {
 
     it("shows error toast when repairProgress rejects, but still triggers reload", async () => {
       mockedRepairProgress.mockRejectedValueOnce(new Error("disk full"));
-      mockedGetOutline.mockResolvedValueOnce({
+      mockedGetOutline.mockResolvedValue({
         chapters: [
           { chapter_number: 1, title: "第一章", scene_plan: [{ scene_number: 1 }] },
         ],

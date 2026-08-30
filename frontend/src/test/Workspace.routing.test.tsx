@@ -27,6 +27,16 @@ vi.mock("../api/client", () => ({
     listCreativeDivergenceVariants: vi.fn().mockResolvedValue({ variants: [] }),
     generateCreativeDivergenceVariants: vi.fn().mockResolvedValue({ variants: [] }),
     selectCreativeDivergenceVariant: vi.fn().mockResolvedValue({ ok: true }),
+    // Plan Task 13 (2026-08-30): ContextPanel now renders DiagnosisSummary for
+    // the default landing (?panel=concept → unknown panel, body falls through
+    // to diagnosis) and explicit diagnosis/export mounts. Routing tests don't
+    // exercise the diagnosis UI; stub both endpoints so DiagnosisSummary
+    // mounts without crashing.
+    getDiagnosis: vi.fn().mockRejectedValue(new Error("no diagnosis yet")),
+    runDiagnosis: vi.fn().mockResolvedValue({
+      project_id: "p", total_chapters: 0, issues: [],
+      summary: { p0_count: 0, p1_count: 0, p2_count: 0 },
+    }),
   },
 }));
 

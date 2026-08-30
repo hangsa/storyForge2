@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from backend.config import settings
 from backend.utils.file_manager import FileManager
 
-router = APIRouter(prefix="/projects/{project_id}", tags=["creative-divergence"])
+router = APIRouter(prefix="/api/projects/{project_id}", tags=["creative-divergence"])
 
 
 def _file_manager() -> FileManager:

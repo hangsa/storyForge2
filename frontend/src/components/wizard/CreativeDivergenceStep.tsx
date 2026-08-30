@@ -45,8 +45,23 @@ export default function CreativeDivergenceStep({ projectId }: CreativeDivergence
     setBusy(true); setError(null);
     try {
       const r = await api.generateCreativeDivergenceVariants(projectId, { prompt, count: 4, params: { tone } });
+      // Defensive: a 200 response with the wrong shape (e.g. proxy unwrapped
+      // {"detail": "..."} or backend schema drift) used to crash the entire
+      // settings tab — setVariants(undefined) → next render reads .length.
+      // Per spec §6, a failed generate must surface a banner and preserve the
+      // user's prompt; we keep the existing variants too.
+      if (!r || !Array.isArray(r.variants)) {
+        setError("生成失败：响应格式异常，请重试或换一个提示词。");
+        return;
+      }
       setVariants(r.variants);
-      setSelectedId(null);
+      // Default-select the first variant so the "确认选中并继续" button is
+      // enabled. The card row already shows the first variant as visually
+      // active via the `selectedId === null && i === 0` fallback, but the
+      // confirm button is disabled when selectedId is null — without this
+      // default the user has to click a card before confirm becomes usable,
+      // which contradicts the visual "first card highlighted by default".
+      setSelectedId(r.variants[0]?.id ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -59,23 +74,32 @@ export default function CreativeDivergenceStep({ projectId }: CreativeDivergence
     setBusy(true); setError(null);
     try {
       const r = await api.selectCreativeDivergenceVariant(projectId, selectedId);
+      // Defensive: same pattern as handleGenerate — a missing concept_payload
+      // (schema drift, empty proxy pass-through) used to throw on .title and
+      // crash the entire settings tab. Bail with a banner instead of jumping
+      // to step 2 with broken state.
+      const cp = r && typeof r === "object" ? r.concept_payload : null;
+      if (!cp || typeof cp !== "object") {
+        setError("选中失败：响应格式异常，请重试。");
+        return;
+      }
       // Backend returns a partial Concept (6 fields). Fill the rest with empty
       // strings so the downstream ConceptStep can hydrate without type errors;
       // the user edits them there before saving.
       const concept: Concept = {
-        title: r.concept_payload.title,
-        genre: r.concept_payload.genre,
-        premise: r.concept_payload.premise,
-        tone: r.concept_payload.tone,
-        theme: r.concept_payload.theme,
+        title: typeof cp.title === "string" ? cp.title : "",
+        genre: typeof cp.genre === "string" ? cp.genre : "",
+        premise: typeof cp.premise === "string" ? cp.premise : "",
+        tone: typeof cp.tone === "string" ? cp.tone : "",
+        theme: typeof cp.theme === "string" ? cp.theme : "",
         target_audience: "",
         style_template: "",
         // Preserve the provenance fields the backend writes so ConceptStep
         // can show the "由创意发散自动生成，可手动修改" banner (Task 14).
         // Without these, ConceptStep would never see source="creative_divergence"
         // and the banner would never appear.
-        source: r.concept_payload.source,
-        source_variant_id: r.concept_payload.source_variant_id,
+        source: cp.source,
+        source_variant_id: cp.source_variant_id,
       };
       wizard.markStepGenerated(1, {
         creative_divergence: { variants, selected_id: selectedId },
@@ -164,7 +188,7 @@ export default function CreativeDivergenceStep({ projectId }: CreativeDivergence
                     <h4 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-xs">{v.title}</h4>
                     <p className="font-body-md text-body-md text-on-surface-variant line-clamp-3">{v.description}</p>
                   </div>
-                  {v.tags.length > 0 && (
+                  {Array.isArray(v.tags) && v.tags.length > 0 && (
                     <div className="mt-auto pt-sm border-t border-outline-variant flex flex-wrap gap-2">
                       {v.tags.map((t) => (
                         <span key={t} className="px-2 py-1 bg-surface-container text-on-surface-variant rounded text-[10px] font-label-sm border border-outline-variant">{t}</span>

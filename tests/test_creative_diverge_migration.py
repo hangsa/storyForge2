@@ -1,5 +1,5 @@
 """Tests for canvas_state.json v1 → v2 migration."""
-from backend.api.creative_canvas import _migrate_v1_to_v2
+from backend.api.creative_diverge import _migrate_v1_to_v2
 
 
 def test_v1_with_dimension_field_drops_it():

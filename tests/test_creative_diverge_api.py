@@ -50,7 +50,7 @@ def client(temp_dir):
         encoding="utf-8",
     )
 
-    from backend.api.creative_canvas import router
+    from backend.api.creative_diverge import router
     from fastapi import FastAPI
     app = FastAPI()
     app.include_router(router)
@@ -64,7 +64,7 @@ class TestCanvasStateEndpoint:
 
     def test_get_state(self, client):
         response = client.get(
-            "/api/v1/projects/test_project/creative/canvas/state"
+            "/api/v1/projects/test_project/creative/diverge/state"
         )
         assert response.status_code == 200
         data = response.json()
@@ -74,7 +74,7 @@ class TestCanvasStateEndpoint:
 
     def test_get_state_no_project(self, client):
         response = client.get(
-            "/api/v1/projects/nonexistent/creative/canvas/state"
+            "/api/v1/projects/nonexistent/creative/diverge/state"
         )
         assert response.status_code == 404
 
@@ -97,7 +97,7 @@ class TestCanvasInitEndpoint:
             mock_engine.return_value = mock_instance
 
             response = client.post(
-                "/api/v1/projects/test_project/creative/canvas/init",
+                "/api/v1/projects/test_project/creative/diverge/init",
                 json={"premise": "测试前提"},
             )
             assert response.status_code == 200
@@ -114,7 +114,7 @@ class TestCanvasExpandEndpoint:
         render as fully-active siblings of the chosen one, causing
         'expanding one node makes siblings appear to expand' UX confusion."""
         import asyncio
-        from backend.api.creative_canvas import _read_canvas
+        from backend.api.creative_diverge import _read_canvas
 
         project_dir = temp_dir / "test_project"
         creative_os_dir = project_dir / "creative_os"
@@ -184,7 +184,7 @@ class TestCanvasExpandEndpoint:
                         return_value=""
                     )
                     response = client.post(
-                        "/api/v1/projects/test_project/creative/canvas/expand",
+                        "/api/v1/projects/test_project/creative/diverge/expand",
                         json={"node_id": "wi_001_00"},
                     )
 
@@ -348,7 +348,7 @@ class TestCanvasExpandEndpoint:
             ) as MockDir:
                 MockDir.return_value.suggest_direction = AsyncMock(return_value="")
                 response = client.post(
-                    "/api/v1/projects/test_project/creative/canvas/expand",
+                    "/api/v1/projects/test_project/creative/diverge/expand",
                     json={"node_id": "wi_1_002_01"},
                 )
 
@@ -365,7 +365,7 @@ class TestCanvasExpandEndpoint:
 
         # 2. Reload canvas from disk; original grandchildren must still
         #    belong to wi_1_001_00 and still be dimmed.
-        from backend.api.creative_canvas import _read_canvas
+        from backend.api.creative_diverge import _read_canvas
         canvas = _read_canvas("test_project")
         original_grandchildren = {
             "wi_2_001_00", "wi_2_002_01", "wi_2_003_02"
@@ -432,7 +432,7 @@ class TestCanvasExpandEndpoint:
             encoding="utf-8",
         )
 
-        response = client.get("/api/v1/projects/test_project/creative/canvas/state")
+        response = client.get("/api/v1/projects/test_project/creative/diverge/state")
         assert response.status_code == 200
         edges = response.json()["detail"]["edges"]
         assert {"from": "wi_001_00", "to": "wi_1_001_00"} in edges
@@ -445,7 +445,7 @@ class TestCanvasMutateEndpoint:
     def test_mutate_returns_recommendation(self, client, temp_dir):
         """Regression: /mutate should call CreativeDirector and return a
         text recommendation (no longer the placeholder message)."""
-        from backend.api.creative_canvas import _read_canvas
+        from backend.api.creative_diverge import _read_canvas
 
         # Seed a canvas with an active parent + 3 active children,
         # one of which is the chosen branch.
@@ -488,7 +488,7 @@ class TestCanvasMutateEndpoint:
                 return_value="推荐 Inversion 反转：把废柴逆袭反转为天才陨落"
             )
             response = client.post(
-                "/api/v1/projects/test_project/creative/canvas/mutate",
+                "/api/v1/projects/test_project/creative/diverge/mutate",
                 json={"node_id": "wi_002_00"},
             )
 
@@ -539,7 +539,7 @@ class TestCanvasMutateEndpoint:
         )
 
         response = client.post(
-            "/api/v1/projects/test_project/creative/canvas/mutate",
+            "/api/v1/projects/test_project/creative/diverge/mutate",
             json={"node_id": "wi_002_01"},
         )
         assert response.status_code == 400
@@ -551,7 +551,7 @@ class TestCanvasApplyMutationEndpoint:
     def test_apply_mutation_creates_sibling_node(self, client, temp_dir):
         """Apply inversion: original node becomes dimmed, new active
         sibling is added under the same parent, branch_choices updated."""
-        from backend.api.creative_canvas import _read_canvas
+        from backend.api.creative_diverge import _read_canvas
 
         creative_os_dir = temp_dir / "test_project" / "creative_os"
         creative_os_dir.mkdir(parents=True, exist_ok=True)
@@ -608,7 +608,7 @@ class TestCanvasApplyMutationEndpoint:
             return_value=FakeEngine(),
         ):
             response = client.post(
-                "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+                "/api/v1/projects/test_project/creative/diverge/apply-mutation",
                 json={"node_id": "wi_002_00", "operation": "inversion"},
             )
 
@@ -665,7 +665,7 @@ class TestCanvasApplyMutationEndpoint:
         )
 
         response = client.post(
-            "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+            "/api/v1/projects/test_project/creative/diverge/apply-mutation",
             json={"node_id": "wi_001_00", "operation": "inversion"},
         )
         assert response.status_code == 400
@@ -705,7 +705,7 @@ class TestCanvasApplyMutationEndpoint:
         )
 
         response = client.post(
-            "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+            "/api/v1/projects/test_project/creative/diverge/apply-mutation",
             json={"node_id": "wi_002_00", "operation": "bogus_op"},
         )
         assert response.status_code == 400
@@ -747,7 +747,7 @@ class TestCanvasApplyMutationEndpoint:
         )
 
         response = client.post(
-            "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+            "/api/v1/projects/test_project/creative/diverge/apply-mutation",
             json={"node_id": "wi_002_00", "operation": "fusion"},
         )
         assert response.status_code == 400

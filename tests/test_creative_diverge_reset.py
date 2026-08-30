@@ -1,4 +1,4 @@
-"""Tests for DELETE /creative/canvas/state endpoint."""
+"""Tests for DELETE /creative/diverge/state endpoint."""
 import json
 import tempfile
 from pathlib import Path
@@ -48,7 +48,7 @@ def client(temp_dir):
 
 
 def test_delete_canvas_removes_state_file(client):
-    response = client.delete("/api/v1/projects/proj_test/creative/canvas/state")
+    response = client.delete("/api/v1/projects/proj_test/creative/diverge/state")
     assert response.status_code == 200
     data = response.json()
     assert data["error"] is False
@@ -65,7 +65,7 @@ def test_delete_canvas_on_uninitialized_project_is_idempotent(client):
     if canvas_file.exists():
         canvas_file.unlink()
 
-    response = client.delete("/api/v1/projects/proj_test/creative/canvas/state")
+    response = client.delete("/api/v1/projects/proj_test/creative/diverge/state")
     assert response.status_code == 200
     assert response.json()["code"] == "OK"
 
@@ -78,7 +78,7 @@ def test_delete_canvas_on_unknown_project_returns_404():
 
         from backend.main import app
         with TestClient(app) as c:
-            response = c.delete("/api/v1/projects/proj_unknown/creative/canvas/state")
+            response = c.delete("/api/v1/projects/proj_unknown/creative/diverge/state")
             assert response.status_code == 404
 
         settings.projects_dir = original

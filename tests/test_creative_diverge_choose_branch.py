@@ -1,4 +1,4 @@
-"""Tests for POST /api/v1/projects/{id}/creative/canvas/choose-branch."""
+"""Tests for POST /api/v1/projects/{id}/creative/diverge/choose-branch."""
 import json
 import tempfile
 from pathlib import Path
@@ -96,7 +96,7 @@ def test_choose_branch_switches_active_path(client, temp_dir):
         mock_dir.return_value.evaluate_path = AsyncMock(return_value="OK")
 
         resp = client.post(
-            "/api/v1/projects/proj_test/creative/canvas/choose-branch",
+            "/api/v1/projects/proj_test/creative/diverge/choose-branch",
             json={"parent_node_id": "a", "chosen_child_id": "c"},
         )
 
@@ -119,7 +119,7 @@ def test_choose_branch_validates_child_in_parent_children(client, temp_dir):
     _setup_with_expanded_root(temp_dir)
 
     resp = client.post(
-        "/api/v1/projects/proj_test/creative/canvas/choose-branch",
+        "/api/v1/projects/proj_test/creative/diverge/choose-branch",
         json={"parent_node_id": "a", "chosen_child_id": "ghost"},
     )
 
@@ -139,7 +139,7 @@ def test_choose_branch_rejects_unexpanded_parent(client, temp_dir):
     )
 
     resp = client.post(
-        "/api/v1/projects/proj_test/creative/canvas/choose-branch",
+        "/api/v1/projects/proj_test/creative/diverge/choose-branch",
         json={"parent_node_id": "a", "chosen_child_id": "b"},
     )
 
@@ -167,7 +167,7 @@ def test_choose_branch_clears_descendant_choices_below_new_active(
     with patch("backend.agents.creative_director.CreativeDirector") as mock_dir:
         mock_dir.return_value.evaluate_path = AsyncMock(return_value="OK")
         resp = client.post(
-            "/api/v1/projects/proj_test/creative/canvas/choose-branch",
+            "/api/v1/projects/proj_test/creative/diverge/choose-branch",
             json={"parent_node_id": "a", "chosen_child_id": "c"},
         )
 
@@ -186,7 +186,7 @@ def test_choose_branch_404_on_unknown_parent(client, temp_dir):
     _setup_with_expanded_root(temp_dir)
 
     resp = client.post(
-        "/api/v1/projects/proj_test/creative/canvas/choose-branch",
+        "/api/v1/projects/proj_test/creative/diverge/choose-branch",
         json={"parent_node_id": "ghost", "chosen_child_id": "b"},
     )
 
@@ -196,7 +196,7 @@ def test_choose_branch_404_on_unknown_parent(client, temp_dir):
 
 def test_choose_branch_400_when_canvas_uninitialized(client, temp_dir):
     resp = client.post(
-        "/api/v1/projects/proj_test/creative/canvas/choose-branch",
+        "/api/v1/projects/proj_test/creative/diverge/choose-branch",
         json={"parent_node_id": "a", "chosen_child_id": "b"},
     )
 

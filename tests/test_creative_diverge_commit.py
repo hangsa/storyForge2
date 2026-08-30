@@ -35,7 +35,7 @@ def client(temp_dir):
     creative_os_dir = project_dir / "creative_os"
     creative_os_dir.mkdir(parents=True)
 
-    from backend.api.creative_canvas import router
+    from backend.api.creative_diverge import router
     from fastapi import FastAPI
     app = FastAPI()
     app.include_router(router)
@@ -112,19 +112,19 @@ def _seed_existing_concept_and_dna(project_dir: Path, source: str) -> None:
 
 
 class TestCanvasCommitEndpoint:
-    """Tests for POST /api/v1/projects/<id>/creative/canvas/commit."""
+    """Tests for POST /api/v1/projects/<id>/creative/diverge/commit."""
 
     def test_commit_returns_400_when_canvas_not_initialized(self, client):
         c, project_dir = client
         # No canvas_state.json exists
-        response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+        response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
         assert response.status_code == 400
         assert response.json()["detail"]["code"] == "CANVAS_NOT_INITIALIZED"
 
     def test_commit_returns_400_when_path_too_short(self, client):
         c, project_dir = client
         _seed_canvas(project_dir, selected_path_length=1)
-        response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+        response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
         assert response.status_code == 400
         assert response.json()["detail"]["code"] == "INSUFFICIENT_PATH"
         assert response.json()["detail"]["detail"]["selected_path_length"] == 1
@@ -148,7 +148,7 @@ class TestCanvasCommitEndpoint:
                 MagicMock(),
             ))
             mock_agent_cls.return_value = mock_instance
-            response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+            response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
         assert response.status_code == 200
         body = response.json()
         assert body["code"] == "OK"
@@ -173,7 +173,7 @@ class TestCanvasCommitEndpoint:
                 MagicMock(),
             ))
             mock_agent_cls.return_value = mock_instance
-            response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+            response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
         assert response.status_code == 200
 
         # Verify concept_and_dna.json was written with source/snapshot
@@ -201,7 +201,7 @@ class TestCanvasCommitEndpoint:
                 MagicMock(),
             ))
             mock_agent_cls.return_value = mock_instance
-            c.post("/api/v1/projects/test_project/creative/canvas/commit")
+            c.post("/api/v1/projects/test_project/creative/diverge/commit")
         canvas = json.loads(
             (project_dir / "creative_os" / "canvas_state.json").read_text(encoding="utf-8")
         )
@@ -223,7 +223,7 @@ class TestCanvasCommitEndpoint:
                 MagicMock(),
             ))
             mock_agent_cls.return_value = mock_instance
-            response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+            response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
         assert response.status_code == 503
         assert response.json()["detail"]["code"] == "LLM_OUTPUT_INVALID"
         # The raw output should be in detail for the UI to display
@@ -242,7 +242,7 @@ class TestCanvasCommitEndpoint:
                 MagicMock(),
             ))
             mock_agent_cls.return_value = mock_instance
-            response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+            response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
         assert response.status_code == 503
         assert response.json()["detail"]["code"] == "LLM_BACKEND_UNAVAILABLE"
         # And nothing was written — canvas still has no committed_at,
@@ -286,7 +286,7 @@ class TestCanvasCommitEndpoint:
                 return real_write(self, project_id, filename, data)
 
             with patch.object(FileManager, "write_json", maybe_fail):
-                response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+                response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
 
         # The endpoint itself should have errored
         assert response.status_code >= 500
@@ -306,7 +306,7 @@ class TestCanvasCommitEndpoint:
                 side_effect=ValueError("JSON parse failed")
             )
             mock_agent_cls.return_value = mock_instance
-            response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+            response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
         assert response.status_code == 503
         assert response.json()["detail"]["code"] == "LLM_GENERATION_FAILED"
         assert "JSON parse failed" in response.json()["detail"]["message"]
@@ -329,7 +329,7 @@ class TestCanvasCommitEndpoint:
                 MagicMock(),
             ))
             mock_agent_cls.return_value = mock_instance
-            response = c.post("/api/v1/projects/test_project/creative/canvas/commit")
+            response = c.post("/api/v1/projects/test_project/creative/diverge/commit")
         assert response.status_code == 200
         data = json.loads(
             (project_dir / "concept_and_dna.json").read_text(encoding="utf-8")
@@ -342,7 +342,7 @@ class TestFormatCanvasSummary:
     """Unit tests for the canvas summary formatter."""
 
     def test_format_includes_depth_and_tags(self):
-        from backend.api.creative_canvas import _format_canvas_summary
+        from backend.api.creative_diverge import _format_canvas_summary
         nodes = {
             "a": {"depth": 0, "content": "根前提", "trope_tags": ["x"], "novelty_score": 80,
                   "mutation_context": None},
@@ -366,7 +366,7 @@ class TestFormatCanvasSummary:
         assert "自洽检查: 自洽Z" in text
 
     def test_format_handles_missing_node(self):
-        from backend.api.creative_canvas import _format_canvas_summary
+        from backend.api.creative_diverge import _format_canvas_summary
         text = _format_canvas_summary(["missing"], {})
         assert "[深度 0]" in text
         assert "（无内容）" in text
@@ -375,7 +375,7 @@ class TestFormatCanvasSummary:
         """W3: nodes longer than MAX_NODE_CONTENT_CHARS are truncated with
         a marker so the LLM prompt doesn't blow past max_tokens silently.
         """
-        from backend.api.creative_canvas import _format_canvas_summary
+        from backend.api.creative_diverge import _format_canvas_summary
         huge = "x" * (10_000)
         nodes = {
             "a": {"depth": 0, "content": "short", "trope_tags": [],
@@ -394,7 +394,7 @@ class TestFormatCanvasSummary:
         Each node's content stays under MAX_NODE_CONTENT_CHARS so per-node
         truncation doesn't fire — only the total-length cap does.
         """
-        from backend.api.creative_canvas import _format_canvas_summary, MAX_SUMMARY_CHARS
+        from backend.api.creative_diverge import _format_canvas_summary, MAX_SUMMARY_CHARS
         # 5 nodes × 7,000 chars = 35,000 chars of node content, each under
         # the 8,000-char per-node cap. Plus ~100 chars of depth/label
         # overhead per node, so total >> MAX_SUMMARY_CHARS (32,000).

@@ -28,8 +28,8 @@ from backend.models.creative_os import WhatIfNode, NoveltyScore, BRANCH_STATUS_A
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/projects/{project_id}/creative/canvas",
-    tags=["creative_canvas"],
+    prefix="/api/v1/projects/{project_id}/creative/diverge",
+    tags=["creative_diverge"],
 )
 
 

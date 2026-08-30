@@ -329,7 +329,7 @@ class PlannerAgent(BaseAgent):
     ) -> tuple[dict, LLMResponse]:
         """Translate a finalized canvas selected_path into a concept + story_dna.
 
-        Used by /api/v1/projects/<id>/creative/canvas/commit. The summary
+        Used by /api/v1/projects/<id>/creative/diverge/commit. The summary
         is the selected_path nodes pre-formatted (content + trope_tags +
         novelty_score + mutation_context) by the endpoint.
         """

@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from backend.api import (
     project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing,
     stage5_diagnosis, stage6_export, style_extractor, conductor, storyos,
-    settings_api, creative_canvas, growth_workshop, style_sandbox, autopilot,
+    settings_api, creative_diverge, growth_workshop, style_sandbox, autopilot,
     stage4_fact_guard, prompt_plaza, prompt_defaults,
     llm_config_api, creative_divergence,
 )
@@ -85,7 +85,7 @@ app.include_router(stage5_diagnosis.router)
 app.include_router(stage6_export.router)
 app.include_router(style_extractor.router)
 app.include_router(settings_api.router)
-app.include_router(creative_canvas.router)
+app.include_router(creative_diverge.router)
 app.include_router(growth_workshop.router)
 app.include_router(style_sandbox.router)
 app.include_router(stage3_outline.branch_router)

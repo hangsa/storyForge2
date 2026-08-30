@@ -1,7 +1,7 @@
 """Tests for the 6 canvas invariants enforced before write."""
 import pytest
 
-from backend.api.creative_canvas import (
+from backend.api.creative_diverge import (
     _validate_canvas_invariants,
     CanvasInvariantError,
 )

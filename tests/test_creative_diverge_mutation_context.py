@@ -55,7 +55,7 @@ def client(temp_dir):
         encoding="utf-8",
     )
 
-    from backend.api.creative_canvas import router
+    from backend.api.creative_diverge import router
     from fastapi import FastAPI
     app = FastAPI()
     app.include_router(router)
@@ -85,7 +85,7 @@ class TestMutationContextStamped:
             mock_instance.mutate = AsyncMock(return_value=mr)
             mock_engine_cls.return_value = mock_instance
             response = c.post(
-                "/api/v1/projects/test_project/creative/canvas/apply-mutation",
+                "/api/v1/projects/test_project/creative/diverge/apply-mutation",
                 json={"node_id": "wi_child", "operation": "inversion"},
             )
         assert response.status_code == 200
@@ -127,7 +127,7 @@ class TestCommittedMarkerLifecycle:
         # and wi_child is the only child, so choose-branch to a different child
         # would fail. Easiest: trigger a write via /select with the same path.
         response = c.post(
-            "/api/v1/projects/test_project/creative/canvas/select",
+            "/api/v1/projects/test_project/creative/diverge/select",
             json={"path_node_ids": ["wi_root", "wi_child"]},
         )
         assert response.status_code == 200
@@ -158,7 +158,7 @@ class TestCommittedMarkerLifecycle:
             ))
             mock_agent_cls.return_value = mock_instance
             response = c.post(
-                "/api/v1/projects/test_project/creative/canvas/commit",
+                "/api/v1/projects/test_project/creative/diverge/commit",
             )
         assert response.status_code == 200
 

@@ -71,7 +71,7 @@ def test_select_persists_evaluation_to_canvas_state(client_with_canvas):
         mock_director.evaluate_path = AsyncMock(return_value="TEST_EVALUATION_TEXT")
 
         response = client.post(
-            "/api/v1/projects/proj_test/creative/canvas/select",
+            "/api/v1/projects/proj_test/creative/diverge/select",
             json={"path_node_ids": ["wi_001_00", "wi_002_00"]},
         )
 
@@ -97,7 +97,7 @@ def test_select_rejects_path_through_dimmed_node(client_with_canvas):
     canvas_file.write_text(json.dumps(canvas), encoding="utf-8")
 
     response = client.post(
-        "/api/v1/projects/proj_test/creative/canvas/select",
+        "/api/v1/projects/proj_test/creative/diverge/select",
         json={"path_node_ids": ["wi_001_00", "wi_002_00"]},
     )
     assert response.status_code == 400
@@ -111,7 +111,7 @@ def test_select_accepts_active_path(client_with_canvas):
         mock_director.evaluate_path = AsyncMock(return_value="ACTIVE_OK")
 
         response = client.post(
-            "/api/v1/projects/proj_test/creative/canvas/select",
+            "/api/v1/projects/proj_test/creative/diverge/select",
             json={"path_node_ids": ["wi_001_00", "wi_002_00"]},
         )
 

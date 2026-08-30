@@ -11,6 +11,12 @@ import OutlineStep from "./OutlineStep";
 import ChapterOutlineStep from "./ChapterOutlineStep";
 import RegenerateStatusBadge from "./RegenerateStatusBadge";
 
+// DEPRECATED — replaced by <WorkspaceWizardPanel>. Kept for backward-compatible
+// imports in legacy code (frontend/src/components/layout/HomeLayout.tsx still
+// references this for the homepage's new-project flow); no active route
+// renders this modal as of v2.x.
+// See docs/superpowers/specs/2026-08-30-workspace-wizard-design.md §3.3.
+
 interface InitWizardModalProps {
   projectId: string;
   /** Called when the wizard finishes or the user closes the modal. */

@@ -1,3 +1,5 @@
+// DEPRECATED — replaced by <WizardSidebar>. Kept for legacy reference.
+
 const STEP_LABELS = ["概念讨论", "世界观", "角色设计", "地图系统", "全书大纲", "章节大纲"];
 
 interface WizardStepsProps {

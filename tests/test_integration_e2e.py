@@ -19,8 +19,6 @@ def project_data():
         "title": "测试小说",
         "genre": "cool_novel",
         "min_words": 4000,
-        "free_text": "一个少年在异世界觉醒能力，踏上强者之路",
-        "inspiration_source": "web_novel",
     }
 
 
@@ -52,8 +50,15 @@ class TestProjectLifecycle:
         assert data["detail"]["id"].startswith("proj_")
 
     def test_create_project_validation(self, client):
-        resp = client.post("/api/project/create", json={"title": "", "free_text": ""})
+        resp = client.post("/api/project/create", json={"title": ""})
         assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
+        assert resp.json()["detail"]["message"] == "项目名称必填"
+
+    def test_create_project_missing_title(self, client):
+        resp = client.post("/api/project/create", json={"genre": "cool_novel"})
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
 
     def test_get_project_status(self, client, project_data):
         create_resp = client.post("/api/project/create", json=project_data)

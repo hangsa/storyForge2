@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from backend.config import settings
 from backend.conductor.state_machine import ProjectNotFoundError, StageStateMachine
-from backend.models.project import Project, InitialIntent
+from backend.models.project import Project
 from backend.utils.file_manager import FileManager
 
 router = APIRouter(prefix="/api/project", tags=["project"])
@@ -115,8 +115,20 @@ async def list_projects():
 
 @router.post("/create")
 async def create_project(data: dict):
-    intent = data.get("intent", "")
-    title = data.get("title", "") or (intent[:30] + "..." if len(intent) > 30 else intent)
+    # Title is the only free-text identity we capture at create time.
+    # Creative intent is collected later in the init wizard step 1
+    # (CreativeDivergenceStep) and lives in `creative_divergence.json`.
+    title = (data.get("title") or "").strip()
+    if not title:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "VALIDATION_ERROR",
+                "message": "项目名称必填",
+                "detail": {},
+            },
+        )
     genre = data.get("genre", "cool_novel")
     # Per-chapter target is uniform across the new length options (短篇快穿 /
     # 标准商业连载 / 宏大史诗巨著), each ~2000 字/章 — see CreateProjectCard.tsx.
@@ -124,19 +136,6 @@ async def create_project(data: dict):
     min_words = data.get("min_words", 2000)
     target_total_words = data.get("target_total_words", 1_000_000)
     target_length_category = data.get("target_length_category", "标准商业连载")
-    free_text = data.get("free_text", "") or intent
-    inspiration_source = data.get("inspiration_source")
-
-    if not free_text:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": True,
-                "code": "VALIDATION_ERROR",
-                "message": "intent 或 free_text 不能为空",
-                "detail": {},
-            },
-        )
 
     project_id = f"proj_{uuid.uuid4().hex[:8]}"
     project = Project(
@@ -146,10 +145,6 @@ async def create_project(data: dict):
         min_words=min_words,
         target_total_words=target_total_words,
         target_length_category=target_length_category,
-        initial_intent=InitialIntent(
-            free_text=free_text,
-            inspiration_source=inspiration_source,
-        ),
         current_stage="INIT",
         created_at=datetime.utcnow().isoformat(),
     )

@@ -102,7 +102,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   busyRef.current = busy;
 
   const handleStart = async (userModifications: string = "") => {
-    wizard.startStep(2);
+    wizard.startStep(wizard.currentStep);
     setBusy(true);
     try {
       const result = await api.generateWorld(projectId, userModifications);
@@ -110,7 +110,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       setWorld(merged);
       // v1.8.4: mark generated so step 2 stays reachable in the indicator
       // when the user navigates away before clicking "下一步".
-      wizard.markStepGenerated(2, { world: merged });
+      wizard.markStepGenerated(wizard.currentStep, { world: merged });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "世界观生成失败");
     } finally {
@@ -122,7 +122,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     setBusy(true);
     try {
       await api.updateWorld(projectId, worldRef.current);
-      wizard.saveStep(2, { world: worldRef.current });
+      wizard.saveStep(wizard.currentStep, { world: worldRef.current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "世界观保存失败");
     } finally {
@@ -134,7 +134,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
     setBusy(true);
     try {
       await api.updateWorld(projectId, worldRef.current);
-      wizard.markStepGenerated(2, { world: worldRef.current });
+      wizard.markStepGenerated(wizard.currentStep, { world: worldRef.current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "世界观保存失败");
     } finally {
@@ -149,7 +149,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       const result = await api.regenerateWorldSection(projectId, section, mods);
       const merged = normalizeLegacyWorld({ ...EMPTY_WORLD, ...result });
       setWorld(merged);
-      wizard.markStepGenerated(2, { world: merged });
+      wizard.markStepGenerated(wizard.currentStep, { world: merged });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "板块重新生成失败";
       wizard.setStatus("error", msg);
@@ -163,7 +163,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
       const result = await api.regeneratePowerSystemItem(projectId, index, mods);
       const merged = normalizeLegacyWorld(result.world);
       setWorld(merged);
-      wizard.markStepGenerated(2, { world: merged });
+      wizard.markStepGenerated(wizard.currentStep, { world: merged });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "体系重新生成失败";
       wizard.setStatus("error", msg);

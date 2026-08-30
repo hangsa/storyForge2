@@ -143,6 +143,40 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allStepsDone]);
 
+  // v2.x: when the manuscript tab becomes active (i.e. the wizard is fully
+  // done and the user has just entered the writing cockpit for the first
+  // time), advance the project stage from INIT to STAGE4 so the writing
+  // pipeline picks up the right state. The spec §3.1 moved this trigger
+  // out of InitWizardModal and into the workspace shell so it runs on the
+  // deep-link landing path too (e.g. an existing project where the wizard
+  // was finished in a previous session).
+  //
+  // One-shot per manuscript-tab activation (reset on leave so a deliberate
+  // round-trip through the wizard re-fires). Best-effort: a failed advance
+  // (e.g. server precondition) is logged but does not block the page.
+  const advanceTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (activeTab !== "manuscript") {
+      advanceTriggeredRef.current = false;
+      return;
+    }
+    if (!allStepsDone || !projectId) return;
+    if (advanceTriggeredRef.current) return;
+    advanceTriggeredRef.current = true;
+    try {
+      api
+        .advance(projectId, "STAGE4")
+        .catch((err: unknown) => {
+          // eslint-disable-next-line no-console
+          console.warn("advance to STAGE4 failed", err);
+        });
+    } catch (err) {
+      // Some test mocks omit api.advance — don't blow up the page.
+      // eslint-disable-next-line no-console
+      console.warn("advance to STAGE4 unavailable", err);
+    }
+  }, [activeTab, allStepsDone, projectId]);
+
   const handleTabChange = (next: WorkspaceTab) => {
     // Hard guard: never let the user click into a locked manuscript tab.
     // TopBar already disables the button, but belt-and-suspenders.

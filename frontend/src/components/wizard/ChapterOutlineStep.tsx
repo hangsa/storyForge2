@@ -78,7 +78,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
     fromChapter: number = 1,
   ) => {
     const scope = computeOutlineScope(wizard.data.novel_outline);
-    wizard.startStep(6);
+    wizard.startStep(wizard.currentStep);
     setBusy(true);
     setProgress({ done: fromChapter - 1, total: scope });
     setAttempt(1);
@@ -135,7 +135,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
         // when the user navigates away before clicking "完成 → 进入工作台".
         // Clear any prior paused-progress so a future "重新生成" starts
         // fresh from chapter 1 instead of resuming from the old position.
-        wizard.markStepGenerated(6, {
+        wizard.markStepGenerated(wizard.currentStep, {
           chapter1_outline: latest,
           chapter_outline_progress: null,
         });
@@ -239,7 +239,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
     setBusy(true);
     try {
       await api.updateOutline(projectId, current);
-      wizard.saveStep(6, { chapter1_outline: current });
+      wizard.saveStep(wizard.currentStep, { chapter1_outline: current });
       onFinishRef.current();
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "章节大纲保存失败");
@@ -254,7 +254,7 @@ export default function ChapterOutlineStep({ projectId, onFinish }: ChapterOutli
     setBusy(true);
     try {
       await api.updateOutline(projectId, current);
-      wizard.markStepGenerated(6, { chapter1_outline: current });
+      wizard.markStepGenerated(wizard.currentStep, { chapter1_outline: current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "章节大纲保存失败");
     } finally {

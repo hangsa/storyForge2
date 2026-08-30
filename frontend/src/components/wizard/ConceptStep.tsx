@@ -33,7 +33,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
   dnaRef.current = dna;
 
   const handleStart = async (userModifications: string = "") => {
-    wizard.startStep(1);
+    wizard.startStep(wizard.currentStep);
     setBusy(true);
     try {
       const result = await api.generateConcept(projectId, userModifications);
@@ -41,7 +41,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       setDna(result.story_dna);
       // v1.8.4: mark generated so step 1 stays reachable in the indicator
       // when the user navigates away before clicking "下一步".
-      wizard.markStepGenerated(1, { concept: result.concept, story_dna: result.story_dna });
+      wizard.markStepGenerated(wizard.currentStep, { concept: result.concept, story_dna: result.story_dna });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念生成失败");
     } finally {
@@ -64,7 +64,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       } catch {
         // best-effort: preconditions may not be met if user goes back and re-saves
       }
-      wizard.saveStep(1, { concept: conceptToSave, story_dna: dnaRef.current });
+      wizard.saveStep(wizard.currentStep, { concept: conceptToSave, story_dna: dnaRef.current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念保存失败");
     } finally {
@@ -86,7 +86,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
         source: "manual",
       };
       await api.updateConcept(projectId, conceptToSave, dnaRef.current);
-      wizard.markStepGenerated(1, { concept: conceptToSave, story_dna: dnaRef.current });
+      wizard.markStepGenerated(wizard.currentStep, { concept: conceptToSave, story_dna: dnaRef.current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念保存失败");
     } finally {
@@ -99,10 +99,10 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       const result = await api.regenerateConceptSection(projectId, section, mods);
       if (section === "concept" && result.concept) {
         setConcept(result.concept);
-        wizard.markStepGenerated(1, { concept: result.concept, story_dna: dnaRef.current });
+        wizard.markStepGenerated(wizard.currentStep, { concept: result.concept, story_dna: dnaRef.current });
       } else if (section === "dna" && result.story_dna) {
         setDna(result.story_dna);
-        wizard.markStepGenerated(1, { concept: conceptRef.current, story_dna: result.story_dna });
+        wizard.markStepGenerated(wizard.currentStep, { concept: conceptRef.current, story_dna: result.story_dna });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "板块重新生成失败";

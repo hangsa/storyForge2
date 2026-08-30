@@ -75,7 +75,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   const [regeneratingExamplesIds, setRegeneratingExamplesIds] = useState<Set<string>>(() => new Set());
 
   const handleBatchStart = async (userModifications: string = "") => {
-    wizard.startStep(3);
+    wizard.startStep(wizard.currentStep);
     setBusy(true);
     try {
       // Sequential, not parallel: the backend's generate-character is a
@@ -93,7 +93,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       setCharacters(next);
       // v1.8.4: mark generated so step 3 stays reachable in the indicator
       // when the user navigates away before clicking "下一步".
-      wizard.markStepGenerated(3, { characters: next });
+      wizard.markStepGenerated(wizard.currentStep, { characters: next });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色生成失败");
     } finally {
@@ -133,7 +133,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     try {
       await api.updateCharacter(projectId, current);
       await api.advance(projectId, "STAGE3");
-      wizard.saveStep(3, { characters: current });
+      wizard.saveStep(wizard.currentStep, { characters: current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色保存失败");
     } finally {
@@ -147,7 +147,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     setBusy(true);
     try {
       await api.updateCharacter(projectId, current);
-      wizard.markStepGenerated(3, { characters: current });
+      wizard.markStepGenerated(wizard.currentStep, { characters: current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色保存失败");
     } finally {
@@ -169,7 +169,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
         current: current && current.id !== targetId ? current : list[0],
       };
       setCharacters(next);
-      wizard.saveStep(3, { characters: next });
+      wizard.saveStep(wizard.currentStep, { characters: next });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色删除失败");
     }
@@ -279,7 +279,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       const list = (charactersRef.current?.characters ?? []).map((c) =>
         c.id === characterId ? { ...c, ...updated } : c,
       );
-      wizard.markStepGenerated(3, {
+      wizard.markStepGenerated(wizard.currentStep, {
         characters: { characters: list, current: charactersRef.current?.current ?? list[0] },
       });
     } catch (e) {

@@ -1,3 +1,10 @@
+// DEPRECATED — replaced by <WorkspaceWizardPanel> in 2026-08-30 (spec §3.3).
+// The init wizard now lives inside /project/:id/workspace?tab=settings; this
+// file is kept only so legacy test files (ConceptStep.test.tsx,
+// InitWizardModal.test.tsx, ChapterOutlineStep.test.tsx,
+// CharacterStep.behavior_examples.test.tsx) keep compiling. Do NOT mount
+// this component from any active route.
+
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";

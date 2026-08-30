@@ -33,7 +33,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
   outlineRef.current = outline;
 
   const handleStart = async (userModifications: string = "") => {
-    wizard.startStep(5);
+    wizard.startStep(wizard.currentStep);
     setBusy(true);
     setAttempt(1);
     try {
@@ -45,7 +45,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
       setOutline(result);
       // v1.8.4: mark generated so step 5 stays reachable in the indicator
       // when the user navigates away before clicking "下一步".
-      wizard.markStepGenerated(5, { novel_outline: result });
+      wizard.markStepGenerated(wizard.currentStep, { novel_outline: result });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "全书大纲生成失败");
     } finally {
@@ -57,7 +57,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
     setBusy(true);
     try {
       const saved = await api.updateNovelOutline(projectId, outlineRef.current);
-      wizard.saveStep(5, { novel_outline: saved });
+      wizard.saveStep(wizard.currentStep, { novel_outline: saved });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "大纲保存失败");
     } finally {
@@ -69,7 +69,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
     setBusy(true);
     try {
       const saved = await api.updateNovelOutline(projectId, outlineRef.current);
-      wizard.markStepGenerated(5, { novel_outline: saved });
+      wizard.markStepGenerated(wizard.currentStep, { novel_outline: saved });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "大纲保存失败");
     } finally {
@@ -83,7 +83,7 @@ export default function OutlineStep({ projectId }: OutlineStepProps) {
     try {
       const result = await api.regenerateNovelOutlineSection(projectId, section, mods);
       setOutline(result);
-      wizard.markStepGenerated(5, { novel_outline: result });
+      wizard.markStepGenerated(wizard.currentStep, { novel_outline: result });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "板块重新生成失败";
       wizard.setStatus("error", msg);

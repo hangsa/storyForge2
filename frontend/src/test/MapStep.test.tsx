@@ -20,7 +20,7 @@ describe("MapStep", () => {
     expect(screen.queryByTestId("map-start")).not.toBeInTheDocument();
   });
 
-  it("clicking '跳过' marks step as skipped and advances to step 5", () => {
+  it("clicking '跳过' marks the current step as skipped and advances", () => {
     function Harness() {
       const wizard = useWizard();
       return (
@@ -31,13 +31,25 @@ describe("MapStep", () => {
         </>
       );
     }
+    // v2.x: MapStep is step 5 in the 7-step wizard (legacy 6-step had it on
+    // step 4). Pre-seed sessionStorage so the modal lands on step 5.
+    sessionStorage.setItem(
+      "storyforge.wizard.state.proj_x",
+      JSON.stringify({
+        currentStep: 5,
+        completedSteps: [1, 2, 3, 4],
+        status: "idle",
+        data: {},
+        errorMessage: null,
+      }),
+    );
     render(
       <WizardProvider projectId="proj_x">
         <Harness />
       </WizardProvider>
     );
     act(() => screen.getByTestId("map-skip").click());
-    expect(screen.getByTestId("cur").textContent).toBe("5");
-    expect(screen.getByTestId("done").textContent).toBe("4");
+    expect(screen.getByTestId("cur").textContent).toBe("6");
+    expect(screen.getByTestId("done").textContent).toBe("1,2,3,4,5");
   });
 });

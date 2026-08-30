@@ -14,7 +14,7 @@ export default function MapStep() {
       </div>
       <button
         data-testid="map-skip"
-        onClick={() => wizard.skipStep(4)}
+        onClick={() => wizard.skipStep(wizard.currentStep)}
         className="px-5 py-2 bg-surface-container text-primary text-sm rounded-lg border border-outline-variant hover:border-primary-container transition-colors"
       >
         跳过

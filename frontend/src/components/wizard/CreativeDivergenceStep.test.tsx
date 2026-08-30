@@ -36,6 +36,17 @@ describe("CreativeDivergenceStep", () => {
     expect(screen.getByText("生成概念")).toBeInTheDocument();
   });
 
+  it("labels the prompt input as 创作意图", () => {
+    renderStep();
+    expect(screen.getByText("创作意图")).toBeInTheDocument();
+  });
+
+  it("disables generate button until prompt is filled", () => {
+    renderStep();
+    const gen = screen.getByTestId("cd-generate") as HTMLButtonElement;
+    expect(gen.disabled).toBe(true);
+  });
+
   it("renders placeholder when no variants exist", async () => {
     renderStep();
     await waitFor(() => expect(api.listCreativeDivergenceVariants).toHaveBeenCalled());

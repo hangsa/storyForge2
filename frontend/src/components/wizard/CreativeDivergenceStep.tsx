@@ -117,14 +117,14 @@ export default function CreativeDivergenceStep({ projectId }: CreativeDivergence
     <div data-testid="creative-divergence-step" className="flex flex-col gap-lg">
       <header className="flex flex-col gap-xs">
         <h2 className="font-display-lg text-display-lg text-on-surface">创意发散</h2>
-        <p className="font-body-lg text-body-lg text-on-surface-variant">为你的叙事生成主题钩子和概念起点。</p>
+        <p className="font-body-lg text-body-lg text-on-surface-variant">为你的叙事生成主题钩子和概念起点。在此处填写你的创作意图。</p>
       </header>
 
       <section className="glass-panel rounded-xl p-md flex flex-col gap-sm relative">
         <div className="absolute inset-0 bg-primary/5 rounded-xl pointer-events-none" />
         <label className="font-label-sm text-label-sm text-primary uppercase tracking-wider flex items-center gap-xs" htmlFor="prompt-input">
-          <span className="material-symbols-outlined text-[16px]">arrow_back_ios_new</span>
-          AI 提示词指令
+          <span className="material-symbols-outlined text-[16px]">edit_note</span>
+          创作意图 <span className="text-error normal-case">*</span>
         </label>
         <textarea
           id="prompt-input"
@@ -132,7 +132,7 @@ export default function CreativeDivergenceStep({ projectId }: CreativeDivergence
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           className="w-full bg-surface-container-high border border-outline-variant rounded-lg p-sm text-on-surface font-body-md min-h-[120px] focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none placeholder-outline"
-          placeholder="描述你的故事想法的核心本质、主题或背景..."
+          placeholder="例如：一个被家族抛弃的少年，在异世界觉醒了隐藏的血脉之力…"
         />
         <div className="flex justify-between items-center mt-xs">
           <div className="flex gap-sm">

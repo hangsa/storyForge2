@@ -255,28 +255,29 @@ describe("WizardContext", () => {
 
   it("resave (step already in completedSteps) keeps completedSteps ≤ saved step and clears data keys for steps > saved step", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    // First-time saves for 1..6, then a resave of step 3.
-    act(() => result.current.saveStep(1, {
+    // First-time saves for 2..7, then a resave of step 4.
+    act(() => result.current.saveStep(2, {
       concept: { title: "C", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
       story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
     }));
-    act(() => result.current.saveStep(2, { world: {
+    act(() => result.current.saveStep(3, { world: {
       era: "W", geography: "G",
       power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     }}));
-    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
-    act(() => result.current.skipStep(4));
-    act(() => result.current.saveStep(5, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
-    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
-    // Resave step 3 with new patch data.
-    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "y" }], current: null } }));
-    expect(result.current.completedSteps).toEqual([1, 2, 3]);
-    expect(result.current.data.world?.era).toBe("W");                  // step 2 preserved
-    expect(result.current.data.characters?.characters?.[0]?.id).toBe("y"); // step 3 patch applied
-    expect(result.current.data.novel_outline).toBeNull();              // step 5 cleared
-    expect(result.current.data.chapter1_outline).toBeNull();           // step 6 cleared
-    expect(result.current.currentStep).toBe(4);
+    act(() => result.current.saveStep(4, { characters: { characters: [{ id: "x" }], current: null } }));
+    act(() => result.current.skipStep(5));
+    act(() => result.current.saveStep(6, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
+    act(() => result.current.saveStep(7, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
+    // Resave step 4 with new patch data.
+    act(() => result.current.saveStep(4, { characters: { characters: [{ id: "y" }], current: null } }));
+    expect(result.current.completedSteps).toEqual([2, 3, 4]);
+    expect(result.current.data.world?.era).toBe("W");                  // step 3 preserved
+    expect(result.current.data.characters?.characters?.[0]?.id).toBe("y"); // step 4 patch applied
+    expect(result.current.data.novel_outline).toBeNull();              // step 6 cleared
+    expect(result.current.data.chapter1_outline).toBeNull();           // step 7 cleared
+    expect(result.current.data.chapter_outline_progress).toBeNull();   // step 7 cleared
+    expect(result.current.currentStep).toBe(5);
   });
 
   it("resave of step 5 clears step 6 chapter_outline_progress (regression: missing from STEP_DATA_KEY_TO_STEP)", () => {
@@ -308,49 +309,50 @@ describe("WizardContext", () => {
     expect(result.current.data.chapter1_outline).toBeNull();
   });
 
-  it("resave of step 1 clears data for steps 2..6 and keeps only concept/story_dna", () => {
+  it("resave of step 2 clears data for steps 3..7 and keeps only concept/story_dna", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.saveStep(1, {
+    act(() => result.current.saveStep(2, {
       concept: { title: "C", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
       story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
     }));
-    act(() => result.current.saveStep(2, { world: {
+    act(() => result.current.saveStep(3, { world: {
       era: "W", geography: "G",
       power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     }}));
-    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
-    act(() => result.current.saveStep(5, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
-    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
-    act(() => result.current.saveStep(1, {
+    act(() => result.current.saveStep(4, { characters: { characters: [{ id: "x" }], current: null } }));
+    act(() => result.current.saveStep(6, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
+    act(() => result.current.saveStep(7, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
+    act(() => result.current.saveStep(2, {
       concept: { title: "C2", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
       story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
     }));
-    expect(result.current.completedSteps).toEqual([1]);
+    expect(result.current.completedSteps).toEqual([2]);
     expect(result.current.data.concept?.title).toBe("C2");
     expect(result.current.data.world).toBeNull();
     expect(result.current.data.characters).toBeNull();
     expect(result.current.data.novel_outline).toBeNull();
     expect(result.current.data.chapter1_outline).toBeNull();
+    expect(result.current.data.chapter_outline_progress).toBeNull();
   });
 
-  it("resave of the last step (6) is benign — no subsequent steps to clear", () => {
+  it("resave of the last step (7) is benign — no subsequent steps to clear", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.saveStep(1, {
+    act(() => result.current.saveStep(2, {
       concept: { title: "C", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
       story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
     }));
-    act(() => result.current.saveStep(2, { world: {
+    act(() => result.current.saveStep(3, { world: {
       era: "W", geography: "G",
       power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     }}));
-    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
-    act(() => result.current.skipStep(4));
-    act(() => result.current.saveStep(5, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
-    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
-    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T2", scene_plan: [] }] } }));
-    expect(result.current.completedSteps).toEqual([1, 2, 3, 4, 5, 6]);
+    act(() => result.current.saveStep(4, { characters: { characters: [{ id: "x" }], current: null } }));
+    act(() => result.current.skipStep(5));
+    act(() => result.current.saveStep(6, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
+    act(() => result.current.saveStep(7, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
+    act(() => result.current.saveStep(7, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T2", scene_plan: [] }] } }));
+    expect(result.current.completedSteps).toEqual([2, 3, 4, 5, 6, 7]);
     expect(result.current.data.chapter1_outline?.chapters?.[0]?.title).toBe("T2");
   });
 
@@ -359,7 +361,7 @@ describe("WizardContext", () => {
   it("hydrateFromFiles preserves top-level story_dna independent of concept", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     act(() =>
-      result.current.hydrateFromFiles([1], {
+      result.current.hydrateFromFiles([2], {
         concept: {
           title: "X",
           genre: "cool_novel",

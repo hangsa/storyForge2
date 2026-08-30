@@ -68,9 +68,9 @@ def _derive_edges_from_nodes(nodes: dict) -> list:
 def _read_canvas(project_id: str) -> Optional[dict]:
     """Read canvas_state.json. Returns None if not initialized.
 
-    Migrates v1 → v2 transparently. When a v1 file is encountered, the
-    migrated v2 form is written back atomically so subsequent reads skip
-    the migration step.
+    Migrates v1 → v2 → v3 transparently. After any migration, the upgraded
+    form is written back atomically so subsequent reads skip the migration
+    step.
 
     Always returns a canvas whose `edges` field reflects the current
     `children_ids` on every node (derived at read time).
@@ -80,15 +80,23 @@ def _read_canvas(project_id: str) -> Optional[dict]:
         return None
     with open(path, "r", encoding="utf-8") as f:
         canvas = json.load(f)
-    if canvas.get("schema_version") != 2:
-        migrated = _migrate_v1_to_v2(canvas)
-        migrated["edges"] = _derive_edges_from_nodes(migrated.get("nodes", {}))
-        # Persist migrated form so future reads skip the migration step.
+    needs_persist = False
+    schema_version = canvas.get("schema_version")
+    # v1 → v2: pre-v2 schema lacked schema_version=2 tag
+    if schema_version != 2 and schema_version != 3:
+        canvas = _migrate_v1_to_v2(canvas)
+        schema_version = 2
+        needs_persist = True
+    # v2 → v3: introduce idea_variants / core_contradiction / novelty_scores
+    # / raw_intent / session_metadata
+    if schema_version == 2:
+        canvas = _migrate_v2_to_v3(canvas)
+        needs_persist = True
+    if needs_persist:
         tmp = path.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(migrated, f, ensure_ascii=False, indent=2)
+            json.dump(canvas, f, ensure_ascii=False, indent=2)
         tmp.replace(path)
-        return migrated
     canvas["edges"] = _derive_edges_from_nodes(canvas.get("nodes", {}))
     return canvas
 
@@ -234,6 +242,54 @@ def _migrate_v1_to_v2(canvas: dict) -> dict:
             migrated["branch_choices"][parent] = child
 
     return migrated
+
+
+def _migrate_v2_to_v3(canvas: dict) -> dict:
+    """One-shot migration from v2 to v3 schema.
+
+    v3 introduces:
+      - idea_variants: list of {id, title, premise_one_line, mutation_type,
+        mutation_logic, estimated_novelty, trope_tags, regenerated_count}
+        extracted from nodes with a non-empty mutation_context.mut.
+      - core_contradiction: None (will be filled by /commit when LLM completes)
+      - novelty_scores: None (will be filled by S0-D / WhatIf expansion)
+      - raw_intent: None (user must re-supply via S0-A; v2 had no equivalent)
+      - session_metadata: {created_at, last_modified_at, elapsed_seconds,
+        operation_count, ab_test_bucket}
+
+    Idempotent: passing a v3 canvas through returns it unchanged.
+    """
+    if canvas.get("schema_version") == 3:
+        return canvas
+
+    idea_variants = []
+    for node in (canvas.get("nodes") or {}).values():
+        mc = node.get("mutation_context") or {}
+        if mc.get("mut"):
+            idea_variants.append({
+                "id": node["id"],
+                "title": (node.get("content") or "")[:20],
+                "premise_one_line": node.get("content") or "",
+                "mutation_type": mc.get("mut"),
+                "mutation_logic": mc.get("logic", ""),
+                "estimated_novelty": float(node.get("novelty_score") or 0.0),
+                "trope_tags": list(node.get("trope_tags") or []),
+                "regenerated_count": 0,
+            })
+
+    canvas["idea_variants"] = idea_variants
+    canvas["core_contradiction"] = None
+    canvas["novelty_scores"] = None
+    canvas["raw_intent"] = None
+    canvas["session_metadata"] = {
+        "created_at": canvas.get("created_at", ""),
+        "last_modified_at": canvas.get("updated_at", ""),
+        "elapsed_seconds": 0,
+        "operation_count": 0,
+        "ab_test_bucket": "control",
+    }
+    canvas["schema_version"] = 3
+    return canvas
 
 
 class CanvasInvariantError(Exception):

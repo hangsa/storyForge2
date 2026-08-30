@@ -134,7 +134,6 @@ export interface Project {
   min_words: number;
   target_total_words: number;
   target_length_category: string;
-  initial_intent: { free_text: string; inspiration_source?: string };
   current_stage: string;
   stage_history: Array<{ from: string; to: string; timestamp: string }>;
   created_at: string;
@@ -781,12 +780,11 @@ export const api = {
     request<ProjectStats>("GET", "/project/stats"),
 
   createProject: (data: {
-    intent: string;
+    title: string;
     genre: string;
     min_words: number;
     target_total_words: number;
     target_length_category: string;
-    title?: string;
   }) => request<Project>("POST", "/project/create", data),
 
   getProjectStatus: (id: string) =>

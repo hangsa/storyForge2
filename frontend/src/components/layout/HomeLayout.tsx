@@ -58,8 +58,7 @@ export default function HomeLayout() {
 
   const handleCreate = useCallback(
     async (data: {
-      intent: string;
-      title?: string;
+      title: string;
       genre: string;
       min_words: number;
       target_total_words: number;
@@ -69,12 +68,11 @@ export default function HomeLayout() {
       setCreateError(null);
       try {
         const project = await api.createProject({
-          intent: data.intent,
+          title: data.title,
           genre: data.genre,
           min_words: data.min_words,
           target_total_words: data.target_total_words,
           target_length_category: data.target_length_category,
-          title: data.title,
         });
         try {
           await api.advance(project.id, "STAGE1");

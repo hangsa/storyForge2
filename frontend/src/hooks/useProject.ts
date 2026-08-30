@@ -1,12 +1,20 @@
 import { useState, useCallback } from "react";
 import api, { Project, ProjectStatus, ApiError } from "../api/client";
 
+interface CreateProjectParams {
+  title: string;
+  genre: string;
+  min_words: number;
+  target_total_words: number;
+  target_length_category: string;
+}
+
 interface UseProjectReturn {
   project: Project | null;
   projectStatus: ProjectStatus | null;
   loading: boolean;
   error: string | null;
-  createProject: (intent: string, genre: string, minWords: number, title?: string) => Promise<Project>;
+  createProject: (params: CreateProjectParams) => Promise<Project>;
   loadProjectStatus: (projectId: string) => Promise<void>;
   clearError: () => void;
 }
@@ -18,16 +26,11 @@ export function useProject(): UseProjectReturn {
   const [error, setError] = useState<string | null>(null);
 
   const createProject = useCallback(
-    async (intent: string, genre: string, minWords: number, title?: string): Promise<Project> => {
+    async (params: CreateProjectParams): Promise<Project> => {
       setLoading(true);
       setError(null);
       try {
-        const result = await api.createProject({
-          intent,
-          genre,
-          min_words: minWords,
-          title: title || undefined,
-        });
+        const result = await api.createProject(params);
         setProject(result);
         return result;
       } catch (e) {

@@ -1,24 +1,27 @@
-import { useParams, Navigate, useNavigate } from "react-router-dom";
-import InitWizardModal from "../components/wizard/InitWizardModal";
+import { useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
+/**
+ * Redirect-only shell. The init wizard now lives inside the workspace as
+ * <WorkspaceWizardPanel> on /project/:projectId/workspace?tab=settings, so the
+ * legacy /project/:projectId/wizard deep link just forwards there.
+ *
+ * Navigation is SPA-only (never window.location.assign): a hard reload here
+ * used to race finishWizard's navigate(...workspace...) and dump users on "/".
+ */
 export default function WizardDeepLinkPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  if (!projectId) return <Navigate to="/" replace />;
 
-  return (
-    <div className="min-h-screen bg-canvas-bg">
-      <InitWizardModal
-        projectId={projectId}
-        resume
-        onDismiss={() => {
-          // SPA navigation, NOT window.location.assign: the latter is a hard
-          // reload and races against finishWizard's navigate(/workspace) call.
-          // When onDismiss fired during step-6 completion, the hard reload
-          // won and users landed on "/" instead of the workspace.
-          navigate("/", { replace: true });
-        }}
-      />
-    </div>
-  );
+  useEffect(() => {
+    if (projectId) {
+      navigate(`/project/${encodeURIComponent(projectId)}/workspace?tab=settings`, {
+        replace: true,
+      });
+    } else {
+      navigate("/", { replace: true });
+    }
+  }, [projectId, navigate]);
+
+  return null;
 }

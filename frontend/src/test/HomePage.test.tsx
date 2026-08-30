@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import HomeLayout from "../components/layout/HomeLayout";
 import HomePage from "../pages/HomePage";
 import { ToastProvider } from "../hooks/useToast";
+import api from "../api/client";
 
 vi.mock("../hooks/useGenres", () => ({
   useGenres: () => [
@@ -34,7 +35,10 @@ function mockEmptyProjectEndpoints() {
 
 // HomePage now reads project state from HomeLayout via Outlet context, so we
 // render the full HomeLayout shell (same as the real /  route in App.tsx).
-function renderHome(initialPath = "/") {
+// `withWorkspaceStub` also registers a stub element at /project/:projectId/workspace
+// so we can assert that create / resume navigation lands there.
+function renderHome(initialPath = "/", options: { withWorkspaceStub?: boolean } = {}) {
+  const { withWorkspaceStub = false } = options;
   return render(
     <ToastProvider>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -42,6 +46,12 @@ function renderHome(initialPath = "/") {
           <Route element={<HomeLayout />}>
             <Route path="/" element={<HomePage />} />
           </Route>
+          {withWorkspaceStub && (
+            <Route
+              path="/project/:projectId/workspace"
+              element={<div data-testid="workspace-stub">workspace</div>}
+            />
+          )}
         </Routes>
       </MemoryRouter>
     </ToastProvider>
@@ -75,6 +85,33 @@ describe("HomePage", () => {
     button.click();
     await waitFor(() => {
       expect(screen.getByTestId("create-project-modal")).toBeInTheDocument();
+    });
+  });
+
+  // v2.x (workspace-wizard fusion, 2026-08-30): create + resume no longer
+  // open the InitWizardModal overlay. They navigate to
+  // /project/:id/workspace?tab=settings where the wizard panel lives.
+  it("navigates to /project/:id/workspace?tab=settings after creating a project", async () => {
+    mockEmptyProjectEndpoints();
+    vi.spyOn(api, "createProject").mockResolvedValue({
+      id: "proj_new", title: "新书", genre: "cool_novel",
+      current_stage: "STAGE1", created_at: "2026-08-30T00:00:00Z",
+      updated_at: 0, min_words: 2000, target_total_words: 100000,
+      target_length_category: "标准连载",
+    });
+    vi.spyOn(api, "advance").mockResolvedValue({
+      success: true, stage: "STAGE1", error: null,
+    });
+    renderHome("/", { withWorkspaceStub: true });
+    await waitFor(() => screen.getByText("+ 新建项目"));
+    fireEvent.click(screen.getByText("+ 新建项目"));
+    await waitFor(() => screen.getByTestId("create-project-modal"));
+    fireEvent.input(screen.getByTestId("intent-input"), {
+      target: { value: "一个被家族抛弃的少年，在异世界觉醒血脉之力" },
+    });
+    fireEvent.click(screen.getByTestId("create-submit"));
+    await waitFor(() => {
+      expect(screen.getByTestId("workspace-stub")).toBeInTheDocument();
     });
   });
 

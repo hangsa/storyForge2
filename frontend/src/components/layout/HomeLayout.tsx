@@ -1,9 +1,8 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { useState, useCallback, useEffect } from "react";
 import api, { type ProjectSummary } from "../../api/client";
 import StatsSidebar from "../home/StatsSidebar";
 import CreateProjectModal from "../home/CreateProjectModal";
-import InitWizardModal from "../wizard/InitWizardModal";
 import { useProjectStats } from "../../hooks/useProjectStats";
 import { useToast } from "../../hooks/useToast";
 import { BrandHeader } from "../ds";
@@ -20,9 +19,9 @@ export interface HomeOutletContext {
 export default function HomeLayout() {
   const { stats, loading: statsLoading } = useProjectStats();
   const toast = useToast();
+  const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [wizardProjectId, setWizardProjectId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   // v1.8.2: single source of truth for the project list. BookShelf used to
@@ -82,20 +81,20 @@ export default function HomeLayout() {
         } catch {
           // proceed even if advance fails (mirrors prior behavior)
         }
-        setWizardProjectId(project.id);
         setCreateOpen(false);
+        navigate(`/project/${encodeURIComponent(project.id)}/workspace?tab=settings`);
       } catch (e) {
         setCreateError(e instanceof Error ? e.message : "创建项目失败");
       } finally {
         setSubmitting(false);
       }
     },
-    []
+    [navigate]
   );
 
   const handleResumeWizard = useCallback((projectId: string) => {
-    setWizardProjectId(projectId);
-  }, []);
+    navigate(`/project/${encodeURIComponent(projectId)}/workspace?tab=settings`);
+  }, [navigate]);
 
   const handleOpenCreate = useCallback(() => {
     setCreateError(null);
@@ -191,12 +190,6 @@ export default function HomeLayout() {
         onSubmit={handleCreate}
         onClose={handleCloseCreate}
       />
-      {wizardProjectId && (
-        <InitWizardModal
-          projectId={wizardProjectId}
-          onDismiss={() => setWizardProjectId(null)}
-        />
-      )}
     </div>
   );
 }

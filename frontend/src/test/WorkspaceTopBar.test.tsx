@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import WorkspaceTopBar from "../components/workspace/WorkspaceTopBar";
 
 // Mock the api client so the component never hits the network.
@@ -38,6 +39,24 @@ const mockedUseAutopilotSession = useAutopilotSession as unknown as ReturnType<
   typeof vi.fn
 >;
 
+// Wrap WorkspaceTopBar with sensible defaults for the tab switcher props
+// added in 2026-08-30 (Plan Task 10). Existing assertions don't care about
+// tab behavior, so a stub `onTabChange` and `manuscriptLocked={false}` is fine.
+type TopBarProps = ComponentProps<typeof WorkspaceTopBar>;
+function renderTopBar(overrides: Partial<TopBarProps> = {}) {
+  const defaultProps: TopBarProps = {
+    projectId: "p",
+    projectName: "X",
+    mode: "managed",
+    onModeChange: () => {},
+    activeTab: "settings",
+    onTabChange: vi.fn(),
+    manuscriptLocked: false,
+    ...overrides,
+  };
+  return render(<WorkspaceTopBar {...defaultProps} />);
+}
+
 describe("WorkspaceTopBar", () => {
   beforeEach(() => {
     mockedGetStage4Progress.mockReset();
@@ -54,14 +73,7 @@ describe("WorkspaceTopBar", () => {
   });
 
   it("shows project name", async () => {
-    render(
-      <WorkspaceTopBar
-        projectId="p"
-        projectName="The Book"
-        mode="manual"
-        onModeChange={() => {}}
-      />,
-    );
+    renderTopBar({ projectName: "The Book", mode: "manual" });
     await waitFor(() => {
       expect(screen.getByTestId("topbar-project-name")).toHaveTextContent(
         "The Book",
@@ -70,14 +82,7 @@ describe("WorkspaceTopBar", () => {
   });
 
   it("shows manual badge in manual mode", async () => {
-    render(
-      <WorkspaceTopBar
-        projectId="p"
-        projectName="X"
-        mode="manual"
-        onModeChange={() => {}}
-      />,
-    );
+    renderTopBar({ mode: "manual" });
     await waitFor(() => {
       expect(
         screen.getByTestId("topbar-mode-badge").textContent,
@@ -86,14 +91,7 @@ describe("WorkspaceTopBar", () => {
   });
 
   it("shows managed badge in managed mode", async () => {
-    render(
-      <WorkspaceTopBar
-        projectId="p"
-        projectName="X"
-        mode="managed"
-        onModeChange={() => {}}
-      />,
-    );
+    renderTopBar();
     await waitFor(() => {
       expect(
         screen.getByTestId("topbar-mode-badge").textContent,
@@ -103,14 +101,7 @@ describe("WorkspaceTopBar", () => {
 
   it("forwards mode switcher changes to onModeChange", async () => {
     const onModeChange = vi.fn();
-    render(
-      <WorkspaceTopBar
-        projectId="p"
-        projectName="X"
-        mode="managed"
-        onModeChange={onModeChange}
-      />,
-    );
+    renderTopBar({ onModeChange });
     await waitFor(() => {
       fireEvent.click(screen.getByTestId("mode-manual"));
     });
@@ -125,14 +116,7 @@ describe("WorkspaceTopBar", () => {
       writable: true,
     });
     try {
-      render(
-        <WorkspaceTopBar
-          projectId="p"
-          projectName="X"
-          mode="managed"
-          onModeChange={() => {}}
-        />,
-      );
+      renderTopBar();
       await waitFor(() => {
         expect(screen.getByTestId("topbar-progress")).toBeInTheDocument();
       });
@@ -155,15 +139,7 @@ describe("WorkspaceTopBar", () => {
 
   it("AI-tools dropdown opens on click and exposes 提示词广场 menu item", async () => {
     const onOpenPlaza = vi.fn();
-    render(
-      <WorkspaceTopBar
-        projectId="p"
-        projectName="X"
-        mode="managed"
-        onModeChange={() => {}}
-        onOpenPlaza={onOpenPlaza}
-      />,
-    );
+    renderTopBar({ onOpenPlaza });
     await waitFor(() => {
       expect(screen.getByTestId("topbar-progress")).toBeInTheDocument();
     });
@@ -187,6 +163,9 @@ describe("WorkspaceTopBar", () => {
           projectName="X"
           mode="managed"
           onModeChange={() => {}}
+          activeTab="settings"
+          onTabChange={() => {}}
+          manuscriptLocked={false}
         />
       </div>,
     );
@@ -215,14 +194,7 @@ describe("WorkspaceTopBar", () => {
       circuit_breaker_events: [],
     });
 
-    render(
-      <WorkspaceTopBar
-        projectId="p"
-        projectName="X"
-        mode="managed"
-        onModeChange={() => {}}
-      />,
-    );
+    renderTopBar();
 
     await waitFor(() => {
       expect(screen.getByTestId("topbar-progress")).toHaveTextContent(
@@ -248,14 +220,7 @@ describe("WorkspaceTopBar", () => {
       circuit_breaker_events: [],
     });
 
-    render(
-      <WorkspaceTopBar
-        projectId="p"
-        projectName="X"
-        mode="managed"
-        onModeChange={() => {}}
-      />,
-    );
+    renderTopBar();
 
     await waitFor(() => {
       expect(screen.getByTestId("topbar-progress")).toHaveTextContent(
@@ -283,14 +248,7 @@ describe("WorkspaceTopBar", () => {
       circuit_breaker_events: [],
     });
 
-    render(
-      <WorkspaceTopBar
-        projectId="p"
-        projectName="X"
-        mode="managed"
-        onModeChange={() => {}}
-      />,
-    );
+    renderTopBar();
 
     await waitFor(() => {
       expect(screen.getByTestId("topbar-progress")).toHaveTextContent(
@@ -322,14 +280,7 @@ describe("WorkspaceTopBar", () => {
         events: [],
       });
 
-      render(
-        <WorkspaceTopBar
-          projectId="p"
-          projectName="X"
-          mode="manual"
-          onModeChange={() => {}}
-        />,
-      );
+      renderTopBar({ mode: "manual" });
 
       // Wait for the progress element to render at all (avoid asserting on
       // a stale "—" from the pre-fetch state).
@@ -356,14 +307,7 @@ describe("WorkspaceTopBar", () => {
         events: [],
       });
 
-      render(
-        <WorkspaceTopBar
-          projectId="p"
-          projectName="X"
-          mode="managed"
-          onModeChange={() => {}}
-        />,
-      );
+      renderTopBar();
 
       await waitFor(() => {
         expect(screen.getByTestId("topbar-progress").textContent ?? "").toContain(
@@ -397,14 +341,7 @@ describe("WorkspaceTopBar", () => {
         circuit_breaker_events: [],
       });
 
-      render(
-        <WorkspaceTopBar
-          projectId="p"
-          projectName="X"
-          mode="manual"
-          onModeChange={() => {}}
-        />,
-      );
+      renderTopBar({ mode: "manual" });
 
       await waitFor(() => {
         expect(screen.getByTestId("topbar-progress")).toHaveTextContent(

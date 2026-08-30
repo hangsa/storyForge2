@@ -513,6 +513,12 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
 
   return (
     <div data-testid="workspace-page" className="h-screen flex flex-col bg-canvas-bg">
+      {/*
+        TopBar tab switcher placeholder (Plan Task 10, 2026-08-30):
+        Plan Task 12 wires real `activeTab` state + routes between
+        <WorkspaceWizardPanel> and <WorkspaceWritingPanel>. For now we pass
+        stub defaults so the TopBar's required props typecheck cleanly.
+      */}
       <WorkspaceTopBar
         projectId={projectId}
         projectName={projectName}
@@ -520,6 +526,9 @@ export default function WorkspacePage({ projectId: projectIdProp }: { projectId?
         onModeChange={handleModeChange}
         onOpenPlaza={() => setPlazaOpen(true)}
         onOpenConsole={() => setConsoleOpen(true)}
+        activeTab="settings"
+        onTabChange={() => {}}
+        manuscriptLocked={false}
       />
 
       <WorkspaceLayout

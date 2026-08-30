@@ -27,6 +27,9 @@ interface Props {
   onModeChange: (m: WorkspaceMode) => void;
   onOpenPlaza?: () => void;
   onOpenConsole?: () => void;
+  activeTab: "settings" | "manuscript";
+  onTabChange: (t: "settings" | "manuscript") => void;
+  manuscriptLocked: boolean;
 }
 
 export default function WorkspaceTopBar({
@@ -36,6 +39,9 @@ export default function WorkspaceTopBar({
   onModeChange,
   onOpenPlaza,
   onOpenConsole,
+  activeTab,
+  onTabChange,
+  manuscriptLocked,
 }: Props) {
   const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const { session } = useAutopilotSession(projectId);
@@ -139,6 +145,27 @@ export default function WorkspaceTopBar({
           {progressText}
         </span>
       </div>
+
+      <nav className="flex items-center gap-6 font-body-md text-body-md ml-8">
+        <button
+          type="button"
+          data-testid="topbar-tab-settings"
+          onClick={() => onTabChange("settings")}
+          className={`transition-colors ${activeTab === "settings" ? "text-primary font-semibold border-b-2 border-primary py-1" : "text-on-surface-variant hover:text-on-surface"}`}
+        >
+          项目设定
+        </button>
+        <button
+          type="button"
+          data-testid="topbar-tab-manuscript"
+          disabled={manuscriptLocked}
+          title={manuscriptLocked ? "完成所有项目设定后可进入正文手稿" : undefined}
+          onClick={() => !manuscriptLocked && onTabChange("manuscript")}
+          className={`transition-colors ${activeTab === "manuscript" ? "text-primary font-semibold border-b-2 border-primary py-1" : "text-on-surface-variant hover:text-on-surface"} ${manuscriptLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          正文手稿
+        </button>
+      </nav>
 
       <div className="flex items-center gap-2 shrink-0">
         <div className="relative" ref={toolsRef}>

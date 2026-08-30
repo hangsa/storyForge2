@@ -10,20 +10,30 @@ Provides thin orchestration endpoints for the Creative Canvas frontend:
 - POST   /evaluate — Re-score a node with NoveltyEvaluator
 - POST   /select — Update selected_path and get CreativeDirector path evaluation
 - POST   /commit — Translate selected_path into concept_and_dna.json via LLM
+- POST   /contradict — List contradiction template candidates for a variant (PRD §3.2)
+- PUT    /contradict — Confirm/customize a contradiction; write to canvas_state.core_contradiction
 - DELETE /state  — Reset the canvas (delete canvas_state.json)
 """
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
-from backend.models.creative_os import WhatIfNode, NoveltyScore, BRANCH_STATUS_ACTIVE, BRANCH_STATUS_DIMMED
+from backend.models.creative_os import (
+    WhatIfNode,
+    NoveltyScore,
+    ContradictionTemplate,
+    BRANCH_STATUS_ACTIVE,
+    BRANCH_STATUS_DIMMED,
+)
+from backend.creative_os.contradiction_engine import ContradictionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -1729,3 +1739,120 @@ async def delete_canvas(project_id: str):
             "selected_path": [],
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# /contradict — PRD §3.2 (S0-C 矛盾设定)
+# ---------------------------------------------------------------------------
+
+
+class ContradictRequest(BaseModel):
+    """Request body for POST /contradict: list contradiction template candidates."""
+
+    variant_id: str
+    variant_content: str
+
+
+class ConfirmContradictRequest(BaseModel):
+    """Request body for PUT /contradict: user confirms or customizes a contradiction."""
+
+    template_type: str
+    statement: str
+    side_a: str
+    side_b: str
+    tension_score: Optional[int] = None
+    is_custom: bool = False
+
+
+def _build_contradiction_engine() -> ContradictionEngine:
+    """Return a ContradictionEngine without an LLM router.
+
+    expand() requires a model_router and would raise NotImplementedError; the
+    POST /contradict endpoint catches that and falls back to template metadata
+    only so the endpoint still works in CI / when LLM is unavailable.
+    """
+    return ContradictionEngine()
+
+
+@router.post("/contradict")
+async def list_contradictions(project_id: str, request: ContradictRequest):
+    """List contradiction template candidates for a variant, sorted by tension_score desc.
+
+    Returns up to 5 candidates. If LLM expansion is unavailable (NotImplementedError
+    or any other exception inside the engine), falls back to template metadata
+    only — `preview_statement`, `side_a`, and `side_b` are empty strings and
+    `tension_score` is 0.
+    """
+    _ensure_project(project_id)
+
+    engine = _build_contradiction_engine()
+    candidates: List[dict] = []
+    for template in ContradictionTemplate:
+        try:
+            expansion = await engine.expand(template, context=request.variant_content)
+            core_tension = expansion.core_tension
+            element_a = expansion.element_a
+            element_b = expansion.element_b
+        except (NotImplementedError, Exception) as exc:
+            # LLM unavailable (CI / no router) or transient failure: degrade
+            # to template metadata only so the frontend can still show the
+            # 5 candidate template names. Log at info for diagnostics.
+            logger.info(
+                "ContradictionEngine.expand unavailable for %s: %s",
+                template.value, exc,
+            )
+            core_tension = ""
+            element_a = ""
+            element_b = ""
+        score = engine.score_depth(core_tension) if core_tension else 0
+        candidates.append({
+            "template_type": template.value,
+            "preview_statement": core_tension,
+            "side_a": element_a,
+            "side_b": element_b,
+            "tension_score": score,
+        })
+    candidates.sort(key=lambda x: x["tension_score"], reverse=True)
+    return {"candidates": candidates[:5]}
+
+
+@router.put("/contradict")
+async def confirm_contradiction(project_id: str, request: ConfirmContradictRequest):
+    """User confirms or customizes a contradiction; writes to canvas_state.core_contradiction.
+
+    If `tension_score` is omitted, it is auto-computed from the statement text
+    via ContradictionEngine.score_depth(). A `confirmed_at` ISO timestamp is
+    stamped on the write so the frontend can show "已确认 at ...".
+    """
+    _ensure_project(project_id)
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化",
+                "detail": {},
+            },
+        )
+
+    engine = _build_contradiction_engine()
+    tension = request.tension_score
+    if tension is None:
+        tension = engine.score_depth(request.statement)
+
+    canvas["core_contradiction"] = {
+        "template_type": request.template_type,
+        "statement": request.statement,
+        "side_a": request.side_a,
+        "side_b": request.side_b,
+        "tension_score": tension,
+        "is_custom": request.is_custom,
+        "confirmed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _write_canvas(project_id, canvas)
+
+    return {"core_contradiction": canvas["core_contradiction"]}

@@ -121,7 +121,7 @@ async def generate_concept(data: dict):
     }
 
 
-ALLOWED_CONCEPT_SOURCES = {"manual", "creative_divergence"}
+ALLOWED_CONCEPT_SOURCES = {"manual", "creative_divergence", "canvas", "canvas_edited"}
 
 
 @router.put("/concept")
@@ -166,19 +166,33 @@ async def update_concept(data: dict):
     merged_concept = dict(existing_concept)
     merged_concept.update(concept)
 
-    # Clear source_variant_id when source flips back to manual (provenance
-    # is now human, the variant-id no longer applies). Preserve it when
-    # the caller doesn't touch source at all.
+    # Source upgrade logic (preserves audit trail per PRD §6.2):
+    #   manual                  → clears source_variant_id (provenance is human)
+    #   creative_divergence     → preserves source_variant_id
+    #   canvas                  → upgrades to canvas_edited on first edit
+    #   canvas_edited           → preserves as-is
+    # When source is omitted from the request, preserve whatever was on disk.
     if "source" in concept:
-        if concept["source"] == "manual":
+        src = concept["source"]
+        if src == "manual":
             merged_concept["source_variant_id"] = None
-        elif (
-            concept["source"] == "creative_divergence"
-            and "source_variant_id" not in concept
-        ):
-            merged_concept["source_variant_id"] = existing_concept.get(
-                "source_variant_id"
-            )
+        elif src == "creative_divergence":
+            if "source_variant_id" not in concept:
+                merged_concept["source_variant_id"] = existing_concept.get(
+                    "source_variant_id"
+                )
+        elif src == "canvas":
+            # First edit after canvas commit: upgrade to canvas_edited
+            merged_concept["source"] = "canvas_edited"
+            if "source_variant_id" not in concept:
+                merged_concept["source_variant_id"] = existing_concept.get(
+                    "source_variant_id"
+                )
+        elif src == "canvas_edited":
+            if "source_variant_id" not in concept:
+                merged_concept["source_variant_id"] = existing_concept.get(
+                    "source_variant_id"
+                )
 
     concept_and_dna = {"concept": merged_concept, "story_dna": story_dna}
     fm.write_json(project_id, "concept_and_dna.json", concept_and_dna)

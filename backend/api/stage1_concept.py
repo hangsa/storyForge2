@@ -96,6 +96,9 @@ async def generate_concept(data: dict):
     }
 
 
+ALLOWED_CONCEPT_SOURCES = {"manual", "creative_divergence"}
+
+
 @router.put("/concept")
 async def update_concept(data: dict):
     project_id = data.get("project_id", "")
@@ -114,7 +117,45 @@ async def update_concept(data: dict):
             detail={"error": True, "code": "PROJECT_NOT_FOUND", "message": f"项目 {project_id} 不存在", "detail": {}},
         )
 
-    concept_and_dna = {"concept": concept, "story_dna": story_dna}
+    # Validate `source` if the caller included it. creative-divergence
+    # (Task 1) writes source="creative_divergence" + source_variant_id; a
+    # manual ConceptStep edit sends source="manual" to mark provenance.
+    # When the caller omits source, we preserve whatever was already on
+    # disk so older frontends don't accidentally clobber provenance.
+    if "source" in concept:
+        src = concept["source"]
+        if src is not None and src not in ALLOWED_CONCEPT_SOURCES:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": True,
+                    "code": "VALIDATION_ERROR",
+                    "message": f"concept.source 必须是 {sorted(ALLOWED_CONCEPT_SOURCES)} 之一，收到 {src!r}",
+                    "detail": {"field": "concept.source", "value": src},
+                },
+            )
+
+    existing = fm.read_json(project_id, "concept_and_dna.json") or {}
+    existing_concept = existing.get("concept") or {}
+
+    merged_concept = dict(existing_concept)
+    merged_concept.update(concept)
+
+    # Clear source_variant_id when source flips back to manual (provenance
+    # is now human, the variant-id no longer applies). Preserve it when
+    # the caller doesn't touch source at all.
+    if "source" in concept:
+        if concept["source"] == "manual":
+            merged_concept["source_variant_id"] = None
+        elif (
+            concept["source"] == "creative_divergence"
+            and "source_variant_id" not in concept
+        ):
+            merged_concept["source_variant_id"] = existing_concept.get(
+                "source_variant_id"
+            )
+
+    concept_and_dna = {"concept": merged_concept, "story_dna": story_dna}
     fm.write_json(project_id, "concept_and_dna.json", concept_and_dna)
 
     return {

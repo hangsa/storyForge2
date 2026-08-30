@@ -17,7 +17,7 @@ interface WizardSidebarProps {
 export default function WizardSidebar({ currentStep, completedSteps, onJump }: WizardSidebarProps) {
   return (
     <nav data-testid="wizard-sidebar"
-         className="bg-surface-container dark:bg-surface-container fixed left-0 top-16 h-[calc(100%-64px)] w-[240px] border-r border-outline-variant dark:border-outline-variant flex flex-col py-md px-sm z-20">
+         className="bg-surface-container dark:bg-surface-container sticky top-16 self-start h-[calc(100vh-64px)] w-[240px] shrink-0 border-r border-outline-variant dark:border-outline-variant flex flex-col py-md px-sm z-20">
       <div className="flex-1 space-y-xs overflow-y-auto pr-xs custom-scrollbar">
         {STEPS.map(({ num, label, icon }) => {
           const completed = completedSteps.includes(num);

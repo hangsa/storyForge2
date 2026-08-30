@@ -215,7 +215,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
               data-testid="concept-title"
               value={concept.title}
               onChange={(e) => setConcept({ ...concept, title: e.target.value })}
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+              className={`w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container ${fromCreativeDivergence ? "opacity-60 italic" : ""}`}
             />
           </div>
           <div>
@@ -225,7 +225,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
               value={concept.premise}
               onChange={(e) => setConcept({ ...concept, premise: e.target.value })}
               rows={3}
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+              className={`w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y ${fromCreativeDivergence ? "opacity-60 italic" : ""}`}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -235,7 +235,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
                 data-testid="concept-tone"
                 value={concept.tone}
                 onChange={(e) => setConcept({ ...concept, tone: e.target.value })}
-                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+                className={`w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container ${fromCreativeDivergence ? "opacity-60 italic" : ""}`}
               />
             </div>
             <div>
@@ -244,7 +244,7 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
                 data-testid="concept-theme"
                 value={concept.theme}
                 onChange={(e) => setConcept({ ...concept, theme: e.target.value })}
-                className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container"
+                className={`w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container ${fromCreativeDivergence ? "opacity-60 italic" : ""}`}
               />
             </div>
           </div>

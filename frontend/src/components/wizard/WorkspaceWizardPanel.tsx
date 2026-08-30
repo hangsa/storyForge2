@@ -85,7 +85,7 @@ function Inner({ projectId }: Props) {
       <WizardSidebar currentStep={wizard.currentStep} completedSteps={wizard.completedSteps}
                      onJump={(s) => wizard.jumpToStep(s)} />
 
-      <div className="ml-[240px] flex-1 flex flex-col bg-background">
+      <div className="flex-1 flex flex-col bg-background min-w-0">
         <header className="flex items-center justify-between px-margin-desktop h-12 border-b border-outline-variant shrink-0">
           <h1 className="font-display text-primary text-lg">
             初始化向导 · <span className="text-primary-container">{STEP_TITLES[wizard.currentStep] ?? ""}</span>

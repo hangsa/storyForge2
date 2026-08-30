@@ -15,6 +15,31 @@ router = APIRouter(prefix="/api/stage1", tags=["stage1"])
 fm = FileManager(settings.projects_dir)
 
 
+def _read_creative_intent(project_id: str) -> str:
+    """Return the creative-intent prompt from the latest creative-divergence run.
+
+    Raises 400 INTENT_MISSING when no creative_divergence.json (or empty prompt)
+    exists — caller is expected to redirect the user back to wizard step 1
+    (CreativeDivergenceStep) to fill the intent. We do NOT fall back to any
+    legacy project.json.initial_intent.free_text: that field was removed in
+    v2.x; existing pre-removal projects without creative_divergence.json are
+    expected to revisit step 1.
+    """
+    cd = fm.read_json(project_id, "creative_divergence.json") or {}
+    prompt = (cd.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "INTENT_MISSING",
+                "message": "请先完成创意发散",
+                "detail": {},
+            },
+        )
+    return prompt
+
+
 @router.get("/concept")
 async def get_concept(project_id: str = Query(...)):
     if not project_id:
@@ -69,7 +94,7 @@ async def generate_concept(data: dict):
     try:
         user_modifications = str(data.get("user_modifications", ""))[:1700]
         result, response = await agent.generate_concept_and_dna(
-            initial_intent=project.get("initial_intent", {}).get("free_text", ""),
+            initial_intent=_read_creative_intent(project_id),
             genre=project.get("genre", "cool_novel"),
             user_modifications=user_modifications,
         )
@@ -207,7 +232,7 @@ async def regenerate_concept_section(
     )
     try:
         result, _resp = await agent.generate_concept_and_dna(
-            initial_intent=project.get("initial_intent", {}).get("free_text", ""),
+            initial_intent=_read_creative_intent(project_id),
             genre=project.get("genre", "cool_novel"),
             user_modifications=payload.user_modifications,
         )

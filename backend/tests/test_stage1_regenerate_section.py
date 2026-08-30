@@ -30,7 +30,14 @@ def _write_project(tmp_path: Path) -> None:
         json.dumps({
             "id": PROJ,
             "genre": "cool_novel",
-            "initial_intent": {"free_text": "一个少年在废墟里觉醒"},
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / PROJ / "creative_divergence.json").write_text(
+        json.dumps({
+            "prompt": "一个少年在废墟里觉醒",
+            "variants": [],
+            "selected_id": None,
         }, ensure_ascii=False),
         encoding="utf-8",
     )

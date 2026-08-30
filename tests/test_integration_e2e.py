@@ -212,6 +212,18 @@ class TestConductorStageTransitions:
         status_resp = client.get(f"/api/project/{proj_id}/status")
         assert status_resp.json()["detail"]["current_stage"] == "COMPLETED"
 
+    def test_stage1_generate_without_creative_divergence_returns_intent_missing(self, client, project_data):
+        create_resp = client.post("/api/project/create", json=project_data)
+        proj_id = create_resp.json()["detail"]["id"]
+        # advance to STAGE1
+        client.post("/api/conductor/advance", json={
+            "project_id": proj_id,
+            "target_stage": "STAGE1",
+        })
+        resp = client.post("/api/stage1/generate", json={"project_id": proj_id, "user_modifications": ""})
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "INTENT_MISSING"
+
 
 class TestStage1:
 

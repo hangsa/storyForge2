@@ -190,7 +190,7 @@ describe("stage4 exemptions + sf-log + precheck client", () => {
     let caught: unknown;
     try {
       await api.createProject({
-        intent: "x", genre: "cool_novel", min_words: 2000,
+        title: "测试项目", genre: "cool_novel", min_words: 2000,
         target_total_words: 1000000, target_length_category: "标准商业连载",
       });
     } catch (e) {

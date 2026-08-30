@@ -106,8 +106,8 @@ describe("HomePage", () => {
     await waitFor(() => screen.getByText("+ 新建项目"));
     fireEvent.click(screen.getByText("+ 新建项目"));
     await waitFor(() => screen.getByTestId("create-project-modal"));
-    fireEvent.input(screen.getByTestId("intent-input"), {
-      target: { value: "一个被家族抛弃的少年，在异世界觉醒血脉之力" },
+    fireEvent.input(screen.getByTestId("title-input"), {
+      target: { value: "新书测试" },
     });
     fireEvent.click(screen.getByTestId("create-submit"));
     await waitFor(() => {

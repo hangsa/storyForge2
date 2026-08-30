@@ -16,7 +16,8 @@ interface BookShelfProps {
   loading: boolean;
   onProjectsDeleted: (deletedIds: string[]) => void;
   /** Fires when the user clicks a row whose stage is pre-wizard (INIT/STAGE1-3).
-   *  HomePage uses this to re-open the InitWizardModal at the right step. */
+   *  HomePage uses this to navigate into the project's workspace with the
+   *  settings tab active, where the wizard panel now lives (v2.x fusion). */
   onResumeWizard?: (projectId: string) => void;
   /** Fires when the user clicks the "+ 新建项目" action button. */
   onOpenCreate?: () => void;

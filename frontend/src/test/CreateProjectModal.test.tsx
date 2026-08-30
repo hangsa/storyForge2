@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("../hooks/useGenres", () => ({
   useGenres: () => [
@@ -59,8 +60,7 @@ describe("CreateProjectModal", () => {
 
   it("enables submit and calls onSubmit with title when filled", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const { default: userEventLib } = await import("@testing-library/user-event");
-    const user = userEventLib.setup();
+    const user = userEvent.setup();
     render(
       <CreateProjectModal
         isOpen

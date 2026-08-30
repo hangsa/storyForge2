@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api, { ProjectSummary } from "../../api/client";
 import {
   DropdownSelect, GhostButton, LENGTH_CATEGORIES, PrimaryButton, ProjectTableRow,
@@ -32,6 +32,20 @@ const STAGE_OPTIONS = [
   ...Object.entries(STAGE_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
+const PAGE_SIZE_OPTIONS = [
+  { value: "15", label: "15 / 页" },
+  { value: "30", label: "30 / 页" },
+  { value: "50", label: "50 / 页" },
+  { value: "100", label: "100 / 页" },
+];
+
+const DEFAULT_PAGE_SIZE = 15;
+// Fixed height for the populated table card. Sized so the rows area scrolls
+// internally when its content exceeds the available space, while the
+// pagination footer stays anchored at the bottom of the card. The page
+// itself scrolls naturally — only the rows area is constrained.
+const CARD_HEIGHT = "640px";
+
 export default function BookShelf({ projects, loading, onProjectsDeleted, onResumeWizard, onOpenCreate, onRefresh }: BookShelfProps) {
   const genres = useGenres(false);
   const [search, setSearch] = useState("");
@@ -43,6 +57,8 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
 
   const genreOptions = useMemo(
     () => [
@@ -89,6 +105,21 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
     return list;
   }, [filtered, sortKey, sortDir]);
 
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+
+  // Clamp page whenever sorted shrinks or pageSize grows: if the user is on
+  // page 4 and a filter narrows the list to 2 pages total, snap back to the
+  // last valid page. Skip the first render so we don't fire the effect before
+  // page has settled on its initial value.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return sorted.slice(start, start + pageSize);
+  }, [sorted, page, pageSize]);
+
   function toggleSort(key: SortKey) {
     if (sortKey !== key) { setSortKey(key); setSortDir("asc"); return; }
     if (sortDir === "asc") setSortDir("desc");
@@ -98,25 +129,48 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
   const empty = !loading && projects.length === 0;
   const filteredEmpty = !loading && projects.length > 0 && sorted.length === 0;
 
-  // Select-all toggles every row currently visible (after search/filter/sort).
+  // Select-all toggles every row currently visible (on the current page).
   // The header checkbox's own checked state is binary: it only reflects
-  // "all rows checked" vs. "anything else" — partial selection just shows
-  // the unchecked state, per the design.
-  const allChecked = sorted.length > 0 && selectedIds.size === sorted.length;
+  // "all visible rows checked" vs. "anything else" — partial selection just
+  // shows the unchecked state, per the design.
+  const allChecked = paged.length > 0 && paged.every((p) => selectedIds.has(p.id));
   function toggleSelectAll() {
-    setSelectedIds(allChecked ? new Set() : new Set(sorted.map((p) => p.id)));
+    setSelectedIds((cur) => {
+      const next = new Set(cur);
+      if (allChecked) {
+        for (const p of paged) next.delete(p.id);
+      } else {
+        for (const p of paged) next.add(p.id);
+      }
+      return next;
+    });
+  }
+
+  function changePageSize(next: number) {
+    setPageSize(next);
+    setPage(1);
+  }
+
+  function resetAll() {
+    setSearch("");
+    setGenre("all");
+    setStage("all");
+    setLength("all");
+    setFiltersApplied(false);
+    setPage(1);
+  }
+
+  // Build a compact page navigator: first / prev / current / next / last.
+  // Always shown once pagination is active; for very short lists (<=1 page)
+  // we still render the footer so the page-size selector + total count stay
+  // visible per the spec.
+  function goPage(n: number) {
+    setPage(Math.min(totalPages, Math.max(1, n)));
   }
 
   return (
     <section data-testid="book-shelf" className="space-y-3">
-      <header className="flex items-center gap-3">
-        <h2 className="font-display text-headline-lg-mobile text-primary">书架</h2>
-        <span className="font-mono text-label-sm text-on-surface-variant">
-          {loading ? "加载中…" : `共 ${projects.length} 本`}
-        </span>
-      </header>
-
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="pl-4 flex items-center gap-3 flex-wrap shrink-0">
         <SearchInput value={search} onChange={setSearch} />
         <DropdownSelect label="题材" options={genreOptions} value={genre} onChange={setGenre} />
         <DropdownSelect label="阶段" options={STAGE_OPTIONS} value={stage} onChange={setStage} />
@@ -125,23 +179,12 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
           label="重置"
           icon="restart_alt"
           size="sm"
-          onClick={() => {
-            // Reset every filter condition to default — search empty,
-            // every dropdown at "all", and filtersApplied back to false so
-            // the table shows the full list. Does NOT fire onRefresh —
-            // the table is already showing server truth, and a reset
-            // shouldn't punish the user with a network round-trip.
-            setSearch("");
-            setGenre("all");
-            setStage("all");
-            setLength("all");
-            setFiltersApplied(false);
-          }}
+          onClick={resetAll}
           testId="reset-filters"
         />
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="pl-4 flex items-center gap-3 shrink-0">
         {onOpenCreate && (
           <PrimaryButton
             label="+ 新建项目"
@@ -171,40 +214,51 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
             // word_count) get stale the moment an autopilot loop ticks a
             // chapter.
             setFiltersApplied(true);
+            setPage(1);
             onRefresh?.();
           }}
         />
       </div>
 
       {loading ? (
-        <div className="text-center py-16 text-on-surface-variant">
-          <span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span>
-          <div className="mt-2 font-body text-body-md">正在加载项目…</div>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden flex items-center justify-center text-on-surface-variant py-16">
+          <div className="text-center">
+            <span className="material-symbols-outlined text-3xl animate-spin">progress_activity</span>
+            <div className="mt-2 font-body text-body-md">正在加载项目…</div>
+          </div>
         </div>
       ) : empty ? (
-        <div className="text-center py-16">
-          <span className="material-symbols-outlined text-5xl text-on-surface-variant/20 mb-3 block">
-            auto_stories
-          </span>
-          <p className="font-body text-body-md text-on-surface-variant">
-            还没有项目，点击「+ 新建项目」开始
-          </p>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden flex items-center justify-center py-16">
+          <div className="text-center">
+            <span className="material-symbols-outlined text-5xl text-on-surface-variant/20 mb-3 block">
+              auto_stories
+            </span>
+            <p className="font-body text-body-md text-on-surface-variant">
+              还没有项目，点击「+ 新建项目」开始
+            </p>
+          </div>
         </div>
       ) : filteredEmpty ? (
-        <div className="text-center py-16">
-          <span className="material-symbols-outlined text-5xl text-on-surface-variant/20 mb-3 block">
-            search_off
-          </span>
-          <p className="font-body text-body-md text-on-surface-variant mb-3">未找到匹配项目</p>
-          <GhostButton label="清空筛选" onClick={() => { setSearch(""); setGenre("all"); setStage("all"); setLength("all"); setFiltersApplied(false); }} />
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden flex items-center justify-center py-16">
+          <div className="text-center">
+            <span className="material-symbols-outlined text-5xl text-on-surface-variant/20 mb-3 block">
+              search_off
+            </span>
+            <p className="font-body text-body-md text-on-surface-variant mb-3">未找到匹配项目</p>
+            <GhostButton label="清空筛选" onClick={resetAll} />
+          </div>
         </div>
       ) : (
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
-          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center py-2 px-3 border-b border-outline-variant font-mono uppercase tracking-wider text-on-surface-variant text-sm">
+        <div
+          className="flex flex-col bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden"
+          style={{ height: CARD_HEIGHT }}
+          data-testid="bookshelf-card"
+        >
+          <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center py-2 px-3 border-b border-outline-variant font-mono uppercase tracking-wider text-on-surface-variant text-sm shrink-0">
             <TableCheckbox
               checked={allChecked}
               onChange={() => toggleSelectAll()}
-              disabled={sorted.length === 0}
+              disabled={paged.length === 0}
               ariaLabel="select all"
               testId="select-all"
             />
@@ -216,27 +270,105 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
             <button onClick={() => toggleSort("target_total_words")} className="text-center">篇幅</button>
             <button onClick={() => toggleSort("updated_at")} className="text-right">最后编辑</button>
           </div>
-          {sorted.map((p) => (
-            <ProjectTableRow
-              key={p.id}
-              project={p}
-              selected={selectedIds.has(p.id)}
-              onClick={() => {
-                if (isPreWizardStage(p.current_stage)) {
-                  onResumeWizard?.(p.id);
-                } else {
-                  window.location.assign(`/project/${p.id}/stage4`);
-                }
-              }}
-              onSelectChange={(sel) => {
-                setSelectedIds((prev) => {
-                  const next = new Set(prev);
-                  if (sel) next.add(p.id); else next.delete(p.id);
-                  return next;
-                });
-              }}
-            />
-          ))}
+          <div
+            data-testid="bookshelf-rows"
+            className="flex-1 min-h-0 overflow-y-auto"
+          >
+            {paged.map((p) => (
+              <ProjectTableRow
+                key={p.id}
+                project={p}
+                selected={selectedIds.has(p.id)}
+                testId={`row-select-${p.id}`}
+                onClick={() => {
+                  if (isPreWizardStage(p.current_stage)) {
+                    onResumeWizard?.(p.id);
+                  } else {
+                    window.location.assign(`/project/${p.id}/stage4`);
+                  }
+                }}
+                onSelectChange={(sel) => {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (sel) next.add(p.id); else next.delete(p.id);
+                    return next;
+                  });
+                }}
+              />
+            ))}
+          </div>
+
+          <div
+            data-testid="bookshelf-footer"
+            className="flex items-center justify-between gap-3 px-3 py-2 border-t border-outline-variant bg-surface-container-lowest shrink-0"
+          >
+            <div className="flex items-center gap-3">
+              <DropdownSelect
+                label="每页"
+                options={PAGE_SIZE_OPTIONS}
+                value={String(pageSize)}
+                onChange={(v) => changePageSize(Number(v))}
+                direction="up"
+              />
+              <span
+                data-testid="bookshelf-total"
+                className="font-mono text-label-sm text-on-surface-variant"
+              >
+                共 {sorted.length} 本
+              </span>
+            </div>
+            <div
+              data-testid="bookshelf-pager"
+              className="flex items-center gap-1 font-mono text-sm"
+            >
+              <button
+                type="button"
+                onClick={() => goPage(1)}
+                disabled={page === 1}
+                className="px-2 py-1 rounded hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="first page"
+                data-testid="pager-first"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => goPage(page - 1)}
+                disabled={page === 1}
+                className="px-2 py-1 rounded hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="previous page"
+                data-testid="pager-prev"
+              >
+                ‹
+              </button>
+              <span
+                data-testid="pager-current"
+                className="px-2 text-on-surface-variant"
+              >
+                {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => goPage(page + 1)}
+                disabled={page === totalPages}
+                className="px-2 py-1 rounded hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="next page"
+                data-testid="pager-next"
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                onClick={() => goPage(totalPages)}
+                disabled={page === totalPages}
+                className="px-2 py-1 rounded hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="last page"
+                data-testid="pager-last"
+              >
+                »
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

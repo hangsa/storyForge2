@@ -131,7 +131,7 @@ export default function HomeLayout() {
     <div className="min-h-screen bg-canvas-bg flex flex-col">
       <header
         data-testid="home-top-bar"
-        className="shrink-0 border-b border-outline-variant bg-canvas-bg px-4 py-3 flex items-center"
+        className="shrink-0 border-b border-outline-variant bg-canvas-bg px-4 py-2 flex items-center"
       >
         <BrandHeader
           brandName="Nebula Forge"

@@ -5,6 +5,11 @@ export interface DropdownSelectProps {
   options: Array<{ value: string; label: string }>;
   value: string;
   onChange: (v: string) => void;
+  /** Which way the menu opens. Use "up" when the trigger sits near the
+   *  bottom of an overflow-hidden container (e.g. BookShelf's pagination
+   *  footer inside a rounded card) so the menu isn't clipped. Default
+   *  "down" preserves the prior behavior for every other call site. */
+  direction?: "down" | "up";
 }
 
 export default function DropdownSelect({
@@ -12,6 +17,7 @@ export default function DropdownSelect({
   options,
   value,
   onChange,
+  direction = "down",
 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -26,6 +32,7 @@ export default function DropdownSelect({
   }, [open]);
 
   const currentLabel = options.find((o) => o.value === value)?.label ?? "";
+  const isUp = direction === "up";
 
   return (
     <div className="relative" ref={ref}>
@@ -47,7 +54,11 @@ export default function DropdownSelect({
         </span>
       </button>
       {open && (
-        <div className="absolute z-10 mt-1 w-full bg-surface-container-high border border-outline-variant rounded shadow-lg">
+        <div
+          className={`absolute z-20 w-full bg-surface-container-high border border-outline-variant rounded shadow-lg ${
+            isUp ? "bottom-full mb-1" : "top-full mt-1"
+          }`}
+        >
           {options.map((opt) => (
             <button
               key={opt.value}

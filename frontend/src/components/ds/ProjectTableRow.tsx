@@ -8,6 +8,9 @@ export interface ProjectTableRowProps {
   selected?: boolean;
   onClick?: () => void;
   onSelectChange?: (selected: boolean) => void;
+  /** Forwarded to the row's checkbox so tests can target individual rows
+   *  without depending on render order. */
+  testId?: string;
 }
 
 function formatWordCount(n: number): string {
@@ -30,6 +33,7 @@ export default function ProjectTableRow({
   selected = false,
   onClick,
   onSelectChange,
+  testId,
 }: ProjectTableRowProps) {
   const genres = useGenres(false);
   const genreLabel = genres.find((g) => g.id === project.genre)?.label_zh ?? project.genre;
@@ -50,6 +54,7 @@ export default function ProjectTableRow({
         onChange={(v) => onSelectChange?.(v)}
         stopRowClickPropagation
         ariaLabel="select row"
+        testId={testId}
       />
       <div className="flex items-center gap-2 min-w-0">
         <span className="material-symbols-outlined text-primary-container shrink-0" aria-hidden="true">

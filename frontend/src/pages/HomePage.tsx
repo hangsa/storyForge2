@@ -13,7 +13,7 @@ export default function HomePage() {
   } = useOutletContext<HomeOutletContext>();
 
   return (
-    <div className="flex-1 min-w-0 px-8 py-8">
+    <div className="flex-1 min-w-0 pt-4 pb-8">
       <BookShelf
         projects={projects}
         loading={projectsLoading}

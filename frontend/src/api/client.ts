@@ -148,6 +148,17 @@ export interface Concept {
   theme: string;
   target_audience: string;
   style_template: string;
+  /**
+   * Provenance of the concept content. "creative_divergence" means the
+   * title/genre/premise/tone/theme were prefilled from the Creative
+   * Divergence step's selected variant (Task 8); "manual" means a human
+   * typed them. Absent on older projects. Used by ConceptStep to render
+   * the "由创意发散自动生成，可手动修改" banner + flip back to "manual" on
+   * the first user edit (Task 14).
+   */
+  source?: string;
+  /** ID of the creative-divergence variant this concept was seeded from. */
+  source_variant_id?: string;
 }
 
 export interface StoryDNA {

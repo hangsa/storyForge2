@@ -58,6 +58,12 @@ export default function CreativeDivergenceStep({ projectId }: CreativeDivergence
         theme: r.concept_payload.theme,
         target_audience: "",
         style_template: "",
+        // Preserve the provenance fields the backend writes so ConceptStep
+        // can show the "由创意发散自动生成，可手动修改" banner (Task 14).
+        // Without these, ConceptStep would never see source="creative_divergence"
+        // and the banner would never appear.
+        source: r.concept_payload.source,
+        source_variant_id: r.concept_payload.source_variant_id,
       };
       wizard.markStepGenerated(1, {
         creative_divergence: { variants, selected_id: selectedId },

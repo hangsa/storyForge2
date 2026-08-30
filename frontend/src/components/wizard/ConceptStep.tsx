@@ -52,13 +52,19 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
   const handleNext = async () => {
     setBusy(true);
     try {
-      await api.updateConcept(projectId, conceptRef.current, dnaRef.current);
+      // Task 14: flip source to "manual" on any save/advance — see handleSave
+      // doc for the why.
+      const conceptToSave: Concept = {
+        ...conceptRef.current,
+        source: "manual",
+      };
+      await api.updateConcept(projectId, conceptToSave, dnaRef.current);
       try {
         await api.advance(projectId, "STAGE2");
       } catch {
         // best-effort: preconditions may not be met if user goes back and re-saves
       }
-      wizard.saveStep(1, { concept: conceptRef.current, story_dna: dnaRef.current });
+      wizard.saveStep(1, { concept: conceptToSave, story_dna: dnaRef.current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念保存失败");
     } finally {
@@ -69,8 +75,18 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
   const handleSave = async () => {
     setBusy(true);
     try {
-      await api.updateConcept(projectId, conceptRef.current, dnaRef.current);
-      wizard.markStepGenerated(1, { concept: conceptRef.current, story_dna: dnaRef.current });
+      // Task 14: any user-initiated save flips source to "manual". The
+      // backend clears source_variant_id when source goes manual (see
+      // backend/api/stage1_concept.py `merged_concept["source_variant_id"]`).
+      // Without this flip, the "由创意发散自动生成" banner would persist
+      // forever after the user rewords a single field, which misrepresents
+      // provenance (the user is now the author).
+      const conceptToSave: Concept = {
+        ...conceptRef.current,
+        source: "manual",
+      };
+      await api.updateConcept(projectId, conceptToSave, dnaRef.current);
+      wizard.markStepGenerated(1, { concept: conceptToSave, story_dna: dnaRef.current });
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "概念保存失败");
     } finally {
@@ -97,6 +113,13 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
       throw new Error(msg);
     }
   };
+
+  // Task 14: derive `fromCreativeDivergence` from the live local concept
+  // (preferred) so user edits that flip source still hide the banner.
+  // Falls back to wizard.data.concept when local is empty (very first render
+  // before the prefill useEffect runs). Read the ref so handlers registered
+  // elsewhere see fresh values without re-registering.
+  const fromCreativeDivergence = (conceptRef.current.source ?? wizard.data.concept?.source) === "creative_divergence";
 
   // Sync local `concept`/`dna` state from wizard.data when prefill lands.
   // Only overwrite if the user hasn't typed anything yet (local state still
@@ -168,6 +191,13 @@ export default function ConceptStep({ projectId }: ConceptStepProps) {
 
       {(wizard.status === "completed" || wizard.data.concept) && (
         <div data-testid="concept-form" className="space-y-3">
+          {fromCreativeDivergence && (
+            <div data-testid="concept-prefill-banner"
+                 className="px-md py-2 rounded-lg bg-primary-container/15 text-primary-container text-body-md flex items-center gap-xs">
+              <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+              由创意发散自动生成，可手动修改
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
               概念信息

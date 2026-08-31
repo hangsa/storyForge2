@@ -57,10 +57,7 @@ const INITIAL: DivergenceState = {
 // SubStage ordering for compare: A < B < C < D < E.
 const SUB_STAGE_ORDER: SubStage[] = ["A", "B", "C", "D", "E"];
 
-export function clearedDownstream(
-  prev: DivergenceState,
-  current: SubStage,
-): Partial<DivergenceState> {
+export function clearDownstream(current: SubStage): Partial<DivergenceState> {
   const idx = SUB_STAGE_ORDER.indexOf(current);
   if (idx < 0) return {};
   const cleared: Partial<DivergenceState> = {};
@@ -75,6 +72,63 @@ export function clearedDownstream(
     // E is terminal and owns no DivergenceState field.
   }
   return cleared;
+}
+
+// Pure merge helpers that mirror what each S0* onComplete callback does
+// internally — spread `prev`, then spread cleared-downstream fields, then set
+// the just-completed field + advance `subStage`. Extracted so tests can
+// assert spread order without driving setState via React.
+//
+// Spread order matters: if `...prev` were placed after `...clearDownstream(...)`,
+// the cleared fields would be re-applied with stale data and downstream edits
+// (variants, coreContradiction, selectedPath) would survive an upstream resave —
+// exactly the bug 9da1b89 fixed.
+export function nextAfterA(
+  prev: DivergenceState,
+  rawIntent: RawIntent,
+): DivergenceState {
+  return {
+    ...prev,
+    ...clearDownstream("A"),
+    rawIntent,
+    subStage: "B",
+  };
+}
+
+export function nextAfterB(
+  prev: DivergenceState,
+  variants: IdeaVariant[],
+): DivergenceState {
+  return {
+    ...prev,
+    ...clearDownstream("B"),
+    variants,
+    subStage: "C",
+  };
+}
+
+export function nextAfterC(
+  prev: DivergenceState,
+  coreContradiction: CoreContradiction,
+): DivergenceState {
+  return {
+    ...prev,
+    ...clearDownstream("C"),
+    coreContradiction,
+    subStage: prev.quickMode ? "E" : "D",
+  };
+}
+
+export function nextAfterD(
+  prev: DivergenceState,
+  path: string[],
+): DivergenceState {
+  return {
+    ...prev,
+    ...clearDownstream("D"),
+    selectedPath: path,
+    subStage: "E",
+  };
 }
 
 // Infer the current SubStage from /creative/diverge/state payload. The
@@ -163,12 +217,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
   // Quick mode → skip D, jump C → E directly. The check is repeated here so
   // jumping back from E still respects the saved flag.
   const onCComplete = (coreContradiction: CoreContradiction) =>
-    setState((prev) => ({
-      ...prev,
-      ...clearedDownstream(prev, "C"),
-      coreContradiction,
-      subStage: prev.quickMode ? "E" : "D",
-    }));
+    setState((prev) => nextAfterC(prev, coreContradiction));
 
   const onEBack = () =>
     setState((prev) => ({
@@ -197,12 +246,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             projectId={projectId}
             initial={state.rawIntent}
             onComplete={(rawIntent) =>
-              setState((prev) => ({
-                ...prev,
-                ...clearedDownstream(prev, "A"),
-                rawIntent,
-                subStage: "B",
-              }))
+              setState((prev) => nextAfterA(prev, rawIntent))
             }
           />
         )}
@@ -214,12 +258,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             }
             initial={state.variants}
             onComplete={(variants) =>
-              setState((prev) => ({
-                ...prev,
-                ...clearedDownstream(prev, "B"),
-                variants,
-                subStage: "C",
-              }))
+              setState((prev) => nextAfterB(prev, variants))
             }
             onBack={() =>
               setState((prev) => ({ ...prev, subStage: "A" }))
@@ -242,12 +281,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             projectId={projectId}
             rootNode={buildRootNode(state.coreContradiction)}
             onComplete={(path) =>
-              setState((prev) => ({
-                ...prev,
-                ...clearedDownstream(prev, "D"),
-                selectedPath: path,
-                subStage: "E",
-              }))
+              setState((prev) => nextAfterD(prev, path))
             }
             onBack={() =>
               setState((prev) => ({ ...prev, subStage: "C" }))

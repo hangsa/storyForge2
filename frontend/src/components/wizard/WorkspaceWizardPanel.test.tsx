@@ -5,8 +5,15 @@ import api from "../../api/client";
 
 vi.mock("../../api/client", () => ({
   default: {
-    getCreativeDivergencePrefill: vi.fn().mockResolvedValue({ exists: false, has_selection: false }),
-    listCreativeDivergenceVariants: vi.fn().mockResolvedValue({ variants: [], selected_id: null }),
+    // The wizard's prefill effect (Plan Task 25, 2026-08-30) no longer calls
+    // any creative-divergence endpoint — CreativeDivergenceStep infers its
+    // own SubStage from /state on mount.
+    getDivergeState: vi.fn().mockResolvedValue({
+      raw_intent: null,
+      idea_variants: [],
+      core_contradiction: null,
+      selected_path: [],
+    }),
     getConcept: vi.fn().mockRejectedValue(new Error("404")),
     getWorld: vi.fn().mockRejectedValue(new Error("404")),
     getCharacter: vi.fn().mockRejectedValue(new Error("404")),
@@ -24,10 +31,9 @@ describe("WorkspaceWizardPanel", () => {
     await waitFor(() => expect(screen.getAllByText("创意发散").length).toBeGreaterThanOrEqual(1));
   });
 
-  it("calls 6 prefill endpoints on mount", async () => {
+  it("calls the remaining prefill endpoints on mount", async () => {
     render(<WorkspaceWizardPanel projectId="proj_test" />);
     await waitFor(() => {
-      expect(api.getCreativeDivergencePrefill).toHaveBeenCalledWith("proj_test");
       expect(api.getConcept).toHaveBeenCalled();
       expect(api.getWorld).toHaveBeenCalled();
       expect(api.getCharacter).toHaveBeenCalled();

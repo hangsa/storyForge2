@@ -20,25 +20,22 @@ function captureReactErrors() {
 
 // Scenario from the bug report:
 //   - Step 1 default → CreativeDivergenceStep mounts → calls
-//     listCreativeDivergenceVariants → fails with 404 (the 6 wizard-data
-//     prefill endpoints also reject, but CreativeDivergenceStep only sees
-//     listCreativeDivergenceVariants).
+//     getDivergeState. When /state returns a 404-shaped or null body the
+//     component must NOT crash the panel.
 //
-// Variant A: 404 envelope. When `Promise.allSettled` resolves (because the
-// server returned an envelope shape the request wrapper accepts), cd.value is
-// a string "Not Found" or null. hasContent guards on string/null. But...
+// After the Plan-Task-25 cleanup WorkspaceWizardPanel's prefill effect
+// no longer calls any creative-divergence endpoint itself; the inner
+// CreativeDivergenceStep fetches /state on its own and tolerates the
+// failure path (fall through to SubStage A).
 
 vi.mock("../../api/client", () => ({
   default: {
-    getCreativeDivergencePrefill: vi.fn().mockResolvedValue("Not Found"),
+    getDivergeState: vi.fn().mockResolvedValue("Not Found"),
     getConcept: vi.fn().mockResolvedValue({}),
     getWorld: vi.fn().mockResolvedValue({}),
     getCharacter: vi.fn().mockResolvedValue({}),
     getNovelOutline: vi.fn().mockResolvedValue({}),
     getOutline: vi.fn().mockResolvedValue({}),
-    listCreativeDivergenceVariants: vi.fn().mockResolvedValue("Not Found"),
-    generateCreativeDivergenceVariants: vi.fn().mockResolvedValue({ variants: [] }),
-    selectCreativeDivergenceVariant: vi.fn().mockResolvedValue({ concept_payload: {} }),
   },
 }));
 
@@ -64,7 +61,7 @@ describe("WorkspaceWizardPanel crash repro", () => {
     expect(errors.length).toBe(0);
   });
 
-  it("renders without crashing when variants API returns null body", async () => {
+  it("renders without crashing when state API returns null body", async () => {
     vi.resetModules();
     // Reset mock for fresh scenario
     const { errors, errSpy } = captureReactErrors();
@@ -72,13 +69,12 @@ describe("WorkspaceWizardPanel crash repro", () => {
     // Re-mock with null body
     vi.doMock("../../api/client", () => ({
       default: {
-        getCreativeDivergencePrefill: vi.fn().mockResolvedValue(null),
+        getDivergeState: vi.fn().mockResolvedValue(null),
         getConcept: vi.fn().mockResolvedValue(null),
         getWorld: vi.fn().mockResolvedValue(null),
         getCharacter: vi.fn().mockResolvedValue(null),
         getNovelOutline: vi.fn().mockResolvedValue(null),
         getOutline: vi.fn().mockResolvedValue(null),
-        listCreativeDivergenceVariants: vi.fn().mockResolvedValue(null),
       },
     }));
 
@@ -90,7 +86,7 @@ describe("WorkspaceWizardPanel crash repro", () => {
     });
 
     if (errors.length > 0) {
-      console.log("=== Captured React errors (variants=null) ===");
+      console.log("=== Captured React errors (state=null) ===");
       errors.forEach((e, idx) => {
         console.log(`[${idx}]`);
         e.messages.forEach((m) => console.log(" ", m));

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
-import { WizardProvider, useWizard, TOTAL_STEPS, type WizardData } from "./WizardContext";
+import { WizardProvider, useWizard, type WizardData } from "./WizardContext";
 import WizardSidebar from "./WizardSidebar";
 import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
@@ -12,11 +12,6 @@ import CreativeDivergenceStep from "./CreativeDivergenceStep";
 import RegenerateStatusBadge from "./RegenerateStatusBadge";
 
 interface Props { projectId: string }
-
-const STEP_TITLES: Record<number, string> = {
-  1: "创意发散", 2: "概念 DNA", 3: "世界观", 4: "角色设计",
-  5: "地图系统", 6: "全文大纲", 7: "章节大纲",
-};
 
 function hasContent(v: unknown): boolean {
   if (!v || typeof v !== "object") return false;
@@ -41,10 +36,14 @@ function Inner({ projectId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    // Step 1 (creative divergence) is no longer pre-checked here. The new
+    // CreativeDivergenceStep fetches /creative/diverge/state on mount and
+    // infers its own SubStage (A/B/C/D/E). Marking step 1 complete from
+    // outside was redundant — the only signal we needed (a saved draft) is
+    // now surfaced via the step's ContinueBanner instead.
     (async () => {
       try {
-        const [cd, concept, world, chars, novel, outline] = await Promise.allSettled([
-          api.getCreativeDivergencePrefill(projectId),
+        const [concept, world, chars, novel, outline] = await Promise.allSettled([
           api.getConcept(projectId),
           api.getWorld(projectId),
           api.getCharacter(projectId),
@@ -54,10 +53,6 @@ function Inner({ projectId }: Props) {
         if (cancelled) return;
         const completed: number[] = [];
         const data: Partial<WizardData> = {};
-        if (cd.status === "fulfilled" && cd.value.exists) {
-          completed.push(1);
-          // We don't have variant list here; the step component will reload
-        }
         const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
         if (conceptPayload && hasContent(conceptPayload)) {
           completed.push(2);
@@ -86,15 +81,8 @@ function Inner({ projectId }: Props) {
                      onJump={(s) => wizard.jumpToStep(s)} />
 
       <div className="flex-1 flex flex-col bg-background min-w-0">
-        <header className="flex items-center justify-between px-margin-desktop h-12 border-b border-outline-variant shrink-0">
-          <h1 className="font-display text-primary text-lg">
-            初始化向导 · <span className="text-primary-container">{STEP_TITLES[wizard.currentStep] ?? ""}</span>
-          </h1>
-          <span className="text-on-surface-variant text-xs">步骤 {wizard.currentStep} / {TOTAL_STEPS}</span>
-        </header>
-
-        <main className="flex-1 overflow-y-auto pt-xl px-margin-desktop pb-xl flex justify-center">
-          <div className="w-full max-w-[800px] flex flex-col gap-lg">
+        <main className="flex-1 overflow-y-auto">
+          <div className="w-full flex flex-col">
             {wizard.currentStep === 1 && <CreativeDivergenceStep projectId={projectId} />}
             {wizard.currentStep === 2 && <ConceptStep projectId={projectId} />}
             {wizard.currentStep === 3 && <WorldStep projectId={projectId} />}

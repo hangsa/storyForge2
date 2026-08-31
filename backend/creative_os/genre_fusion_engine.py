@@ -70,6 +70,46 @@ class GenreFusionEngine:
                     queue.append((neighbor, dist + 1))
         return 3
 
+    @staticmethod
+    def get_risk_level(distance: int) -> str:
+        """Map BFS distance (0-3) to risk_level.
+
+        Bands (per PRD §3.4):
+          - 0 (same genre)     → low
+          - 1 (near-related)   → low
+          - 2 (medium)         → medium
+          - 3+ (far/unrelated) → high
+        """
+        if distance <= 1:
+            return "low"
+        if distance == 2:
+            return "medium"
+        return "high"
+
+    def calculate_distance(self, genre_a: str, genre_b: str) -> dict:
+        """Wraps compute_distance; returns dict with distance + risk + explanation.
+
+        The existing compute_distance (returns int) is preserved for
+        backward compatibility — Task 7 (/fuse) uses it directly.
+        """
+        distance = self.compute_distance(genre_a, genre_b)
+        risk_level = self.get_risk_level(distance)
+        if genre_a == genre_b:
+            explanation = f"{genre_a} 与 {genre_b} 是同一类型,距离 0 跳,融合风险低"
+        elif distance == 1:
+            explanation = f"{genre_a} 与 {genre_b} 紧邻,1 跳可达,融合风险低"
+        elif distance == 2:
+            explanation = f"{genre_a} 与 {genre_b} 中等距离,2 跳可达,融合风险中等"
+        else:
+            explanation = f"{genre_a} 与 {genre_b} 距离遥远(>=3 跳)或不可达,融合风险高"
+        return {
+            "distance": distance,
+            "genre_a": genre_a,
+            "genre_b": genre_b,
+            "risk_level": risk_level,
+            "explanation": explanation,
+        }
+
     async def analyze_fusion(
         self, genre_a: str, genre_b: str, premise: str = ""
     ) -> FusionAnalysis:

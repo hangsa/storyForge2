@@ -48,7 +48,7 @@ describe("WorkspaceWizardPanel", () => {
     });
   });
 
-  it("prefills completedSteps=[1] when creative_divergence.json has a selection (proj_f0721bdc 2026-08-31)", async () => {
+  it("prefills completedSteps=[1] when creative_divergence.json has selected_at (Path B variant select)", async () => {
     (api.getCreativeDivergence as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       variants: [{ id: "v1", label: "ALPHA", title: "T", description: "D", tags: [], created_at: "2026-08-31T14:00:00Z" }],
       selected_id: "v1",
@@ -59,13 +59,31 @@ describe("WorkspaceWizardPanel", () => {
       concept: { title: "建木之囚", genre: "爽文", premise: "P", tone: "T", theme: "T", target_audience: "A", style_template: "" },
       story_dna: { core_contradiction: { statement: "S", side_a: "A", side_b: "B" }, value_stack: [] },
     });
-    render(<WorkspaceWizardPanel projectId="proj_f0721bdc" />);
+    render(<WorkspaceWizardPanel projectId="proj_test" />);
     await waitFor(() => {
       // Sidebar item 1 should NOT be disabled once prefill completes.
       expect(screen.getByTestId("wizard-sidebar-item-1")).not.toHaveAttribute("disabled");
-      // Sidebar item 3 (世界 outline step), 4 (character), etc., are still
-      // disabled because we didn't mock a world.json here.
+      // Sidebar item 3 (world), 4 (character), etc., are still disabled
+      // because we didn't mock a world.json here.
       expect(screen.getByTestId("wizard-sidebar-item-3")).toHaveAttribute("disabled");
+    });
+  });
+
+  it("prefills completedSteps=[1] when selected_id is null but selected_at is set (Path A canvas source — proj_f0721bdc)", async () => {
+    // Regression for the proj_f0721bdc 2026-08-31 case where source="canvas"
+    // dual-write at /commit_canvas sets selected_at=now but selected_id=None
+    // (no Path B variant was chosen). The earlier `has_selection &&
+    // selected_at` guard missed step 1 for canvas-source projects. The
+    // current guard is `selected_at` alone, which both paths satisfy.
+    (api.getCreativeDivergence as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      variants: [],
+      selected_id: null,
+      has_selection: false,
+      selected_at: "2026-08-31T14:00:05.164787",
+    });
+    render(<WorkspaceWizardPanel projectId="proj_f0721bdc" />);
+    await waitFor(() => {
+      expect(screen.getByTestId("wizard-sidebar-item-1")).not.toHaveAttribute("disabled");
     });
   });
 });

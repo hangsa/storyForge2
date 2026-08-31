@@ -56,8 +56,17 @@ function Inner({ projectId }: Props) {
         // 2026-08-31 regression. CreativeDivergenceStep re-fetches its own
         // state via getDivergeState on mount, so we don't need to populate
         // `data.creative_divergence`; we only need the completion marker.
+        // Step 1 is "completed" once the divergence flow has stamped
+        // `selected_at`. The Path A canvas /commit endpoint dual-writes a
+        // compat payload with `selected_at=now` and `selected_id=None`
+        // (no variant chosen on Path B), so we gate on `selected_at`
+        // alone — both source="canvas" and source="creative_divergence"
+        // paths land on it. proj_f0721bdc 2026-08-31 was a canvas-source
+        // project where the existing `has_selection && selected_at`
+        // check missed step 1; this is the one true signal that the
+        // user finished the divergence flow.
         const cdPayload = cd.status === "fulfilled" ? cd.value : null;
-        if (cdPayload && cdPayload.has_selection && cdPayload.selected_at) {
+        if (cdPayload && cdPayload.selected_at) {
           completed.push(1);
         }
         const conceptPayload = concept.status === "fulfilled" ? concept.value : null;

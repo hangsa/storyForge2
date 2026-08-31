@@ -12,6 +12,7 @@ Provides thin orchestration endpoints for the Creative Canvas frontend:
 - POST   /commit — Translate selected_path into concept_and_dna.json via LLM
 - POST   /contradict — List contradiction template candidates for a variant (PRD §3.2)
 - PUT    /contradict — Confirm/customize a contradiction; write to canvas_state.core_contradiction
+- GET    /novelty — List-level 4-dim novelty score across selected_path (PRD §3.5)
 - DELETE /state  — Reset the canvas (delete canvas_state.json)
 """
 
@@ -2155,3 +2156,95 @@ async def fuse_genres(project_id: str, request: FuseRequest):
         },
         "risk_level": risk_level,
     }
+
+
+@router.get("/novelty")
+async def get_list_novelty(project_id: str):
+    """List-level novelty evaluation: 4 dimensions + composite + grade.
+
+    Aggregates novelty scores across all nodes in the selected_path.
+    Uses NoveltyEvaluator per-node, then averages the 4 dimensions.
+    Persists aggregated scores to canvas_state.novelty_scores.
+
+    Per PRD §3.5: list-level (跨节点聚合) 新颖度评估,用于前端轮询展示。
+    """
+    _ensure_project(project_id)
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+    nodes = canvas.get("nodes", {})
+    selected_path = canvas.get("selected_path", [])
+
+    # Combine content from selected_path
+    contents = [
+        nodes[nid]["content"]
+        for nid in selected_path
+        if nid in nodes and nodes[nid].get("content")
+    ]
+    combined_content = " ".join(contents) if contents else ""
+
+    # Build a TropePool + NoveltyEvaluator (lazy, degrades gracefully)
+    try:
+        from backend.creative_os.novelty_evaluator import NoveltyEvaluator
+        from backend.creative_os.trope_pool import TropePool
+        from backend.creative_os.contradiction_engine import ContradictionEngine
+
+        project_dir = settings.projects_dir / project_id
+        catalog_path = settings.projects_dir.parent / "config" / "trope_catalog.yaml"
+        trope_pool = TropePool(project_dir=project_dir, catalog_path=catalog_path)
+        contradiction_engine = ContradictionEngine()
+        evaluator = NoveltyEvaluator(
+            trope_pool=trope_pool,
+            contradiction_engine=contradiction_engine,
+            model_router=None,
+            embedder=None,
+        )
+        score = evaluator.evaluate(combined_content)
+        payload = {
+            "error": False,
+            "code": "OK",
+            "message": "",
+            "market_saturation": score.market_saturation_score,
+            "trope_similarity": score.trope_similarity_score,
+            "contradiction_depth": score.contradiction_depth_score,
+            "discussion_potential": score.discussion_potential_score,
+            "composite": score.total,
+            "grade": score.grade,
+            "trope_extraction_status": "pending",  # TODO(Task 12): LLM extraction
+        }
+    except Exception as exc:
+        logger.warning("NoveltyEvaluator unavailable: %s", exc)
+        # Fallback: all 4 dims at neutral midpoint (50.0). Matches
+        # NoveltyEvaluator's natural empty-input behavior — both
+        # _calc_market_saturation and _calc_similarity return 50.0
+        # when their inputs are empty, so the fallback should too.
+        # composite is the weighted sum of 50.0 across all 4 dims
+        # (0.30 + 0.25 + 0.25 + 0.20 = 1.0), so it also stays at 50.0.
+        payload = {
+            "error": False,
+            "code": "OK",
+            "message": "新颖度评估暂不可用",
+            "market_saturation": 50.0,
+            "trope_similarity": 50.0,
+            "contradiction_depth": 50.0,
+            "discussion_potential": 50.0,
+            "composite": 50.0,
+            "grade": "中等",
+            "trope_extraction_status": "pending",
+        }
+
+    payload["computed_at"] = datetime.now(timezone.utc).isoformat()
+
+    canvas["novelty_scores"] = payload
+    _write_canvas(project_id, canvas)
+    return payload

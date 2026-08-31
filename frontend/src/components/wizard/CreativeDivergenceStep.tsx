@@ -26,6 +26,14 @@ interface DivergenceState {
   selectedPath: string[];
   quickMode: boolean;
   loading: boolean;
+  /**
+   * Highest sub-stage the user has ever reached during this session.
+   * Monotonic — only `nextAfterX` advances it. StepIndicator uses this
+   * (not `subStage`) to compute clickable stages so the user can navigate
+   * back without losing access to later stages. Initialized in the
+   * mount effect from `inferSubStage(backend-state)`.
+   */
+  maxReachedSubStage: SubStage;
 }
 
 const INITIAL: DivergenceState = {
@@ -36,6 +44,7 @@ const INITIAL: DivergenceState = {
   selectedPath: [],
   quickMode: false,
   loading: true,
+  maxReachedSubStage: "A",
 };
 
 // Returns a DivergenceState patch with strictly-downstream fields cleared.
@@ -83,6 +92,17 @@ export function clearDownstream(current: SubStage): Partial<DivergenceState> {
 // the cleared fields would be re-applied with stale data and downstream edits
 // (variants, coreContradiction, selectedPath) would survive an upstream resave —
 // exactly the bug 9da1b89 fixed.
+
+// Monotonic "highest stage reached" tracker. Independent of `subStage` (the
+// current position) so navigating back via StepIndicator doesn't drop later
+// stages from the clickable set. Internal-only — every call site is a
+// `nextAfterX` helper, which already has the new target stage in scope.
+function advanceMaxReached(prev: SubStage, next: SubStage): SubStage {
+  return SUB_STAGE_ORDER.indexOf(prev) >= SUB_STAGE_ORDER.indexOf(next)
+    ? prev
+    : next;
+}
+
 export function nextAfterA(
   prev: DivergenceState,
   rawIntent: RawIntent,
@@ -92,6 +112,7 @@ export function nextAfterA(
     ...clearDownstream("A"),
     rawIntent,
     subStage: "B",
+    maxReachedSubStage: advanceMaxReached(prev.maxReachedSubStage, "B"),
   };
 }
 
@@ -104,6 +125,7 @@ export function nextAfterB(
     ...clearDownstream("B"),
     variants,
     subStage: "C",
+    maxReachedSubStage: advanceMaxReached(prev.maxReachedSubStage, "C"),
   };
 }
 
@@ -111,11 +133,13 @@ export function nextAfterC(
   prev: DivergenceState,
   coreContradiction: CoreContradiction,
 ): DivergenceState {
+  const nextSub = prev.quickMode ? "E" : "D";
   return {
     ...prev,
     ...clearDownstream("C"),
     coreContradiction,
-    subStage: prev.quickMode ? "E" : "D",
+    subStage: nextSub,
+    maxReachedSubStage: advanceMaxReached(prev.maxReachedSubStage, nextSub),
   };
 }
 
@@ -128,6 +152,7 @@ export function nextAfterD(
     ...clearDownstream("D"),
     selectedPath: path,
     subStage: "E",
+    maxReachedSubStage: advanceMaxReached(prev.maxReachedSubStage, "E"),
   };
 }
 
@@ -150,12 +175,20 @@ function inferSubStage(state: {
 
 // SubStage A is always "fresh"; everything before the user's current stage
 // has been completed and is therefore clickable from StepIndicator.
-function completedFor(subStage: SubStage): SubStage[] {
-  if (subStage === "A") return [];
-  if (subStage === "B") return ["A"];
-  if (subStage === "C") return ["A", "B"];
-  if (subStage === "D") return ["A", "B", "C"];
-  return ["A", "B", "C", "D"];
+//
+// Was: pure function on subStage only. Now: takes the persisted maxReached
+// value (independent of current subStage), so navigating back to C
+// doesn't drop D and E from the clickable set.
+//
+// Example: prev maxReached="E", user clicks indicator-3 (C). subStage="C",
+// maxReachedSubStage remains "E". completedFor(E) returns ["A","B","C","D"]
+// — D and E stay clickable.
+export function completedFor(maxReached: SubStage): SubStage[] {
+  if (maxReached === "A") return [];
+  if (maxReached === "B") return ["A"];
+  if (maxReached === "C") return ["A", "B"];
+  if (maxReached === "D") return ["A", "B", "C"];
+  return ["A", "B", "C", "D"]; // E
 }
 
 // Wraps a WhatIfNode-compatible "root" for S0D from the chosen
@@ -184,13 +217,17 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
         const variants = response?.idea_variants ?? [];
         const core = response?.core_contradiction ?? null;
         const path = response?.selected_path ?? [];
+        const inferred = inferSubStage({
+          raw_intent: rawIntent,
+          idea_variants: variants,
+          core_contradiction: core,
+          selected_path: path,
+        });
         setState({
-          subStage: inferSubStage({
-            raw_intent: rawIntent,
-            idea_variants: variants,
-            core_contradiction: core,
-            selected_path: path,
-          }),
+          subStage: inferred,
+          // A user re-entering at subStage=E has actually reached E, so all
+          // earlier stages are reachable. Same value as subStage initially.
+          maxReachedSubStage: inferred,
           rawIntent,
           variants,
           coreContradiction: core,
@@ -211,7 +248,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
     return <div className="p-6 text-on-surface-variant">加载中...</div>;
   }
 
-  const completed = completedFor(state.subStage);
+  const completed = completedFor(state.maxReachedSubStage);
   const showContinueBanner = !!state.rawIntent && state.subStage !== "A";
 
   // Quick mode → skip D, jump C → E directly. The check is repeated here so

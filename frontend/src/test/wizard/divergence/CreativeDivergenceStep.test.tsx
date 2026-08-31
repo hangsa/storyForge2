@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clearDownstream,
+  completedFor,
   nextAfterA,
   nextAfterB,
   nextAfterC,
@@ -19,6 +20,7 @@ function filledPrev(overrides: Partial<{
   selectedPath: string[];
   quickMode: boolean;
   loading: boolean;
+  maxReachedSubStage: SubStage;
 }> = {}) {
   return {
     subStage: "E" as SubStage,
@@ -28,6 +30,8 @@ function filledPrev(overrides: Partial<{
     selectedPath: ["root", "v1"],
     quickMode: false,
     loading: false,
+    // matches subStage in the "post-E" fixture — the user has reached E.
+    maxReachedSubStage: "E" as SubStage,
     ...overrides,
   };
 }
@@ -80,6 +84,8 @@ describe("nextAfterA", () => {
     // Sticky / unrelated fields pass through.
     expect(next.quickMode).toBe(false);
     expect(next.loading).toBe(false);
+    // maxReached is monotonic — A→B advances it; prev was E so it stays E.
+    expect(next.maxReachedSubStage).toBe("E");
   });
 });
 
@@ -95,6 +101,8 @@ describe("nextAfterB", () => {
     expect(next.selectedPath).toEqual([]);
     // rawIntent is upstream of B and must survive.
     expect(next.rawIntent).toBe(prev.rawIntent);
+    // maxReached is monotonic — prev was E so it stays E.
+    expect(next.maxReachedSubStage).toBe("E");
   });
 });
 
@@ -108,6 +116,9 @@ describe("nextAfterC", () => {
     expect(next.selectedPath).toEqual([]);
     expect(next.rawIntent).toBe(prev.rawIntent);
     expect(next.variants).toBe(prev.variants);
+    // maxReached is monotonic — prev was E so it stays E even though
+    // subStage jumped back to D.
+    expect(next.maxReachedSubStage).toBe("E");
   });
 
   it("clears selectedPath and advances to E when quickMode=true", () => {
@@ -117,6 +128,8 @@ describe("nextAfterC", () => {
     expect(next.coreContradiction).toBe(core);
     expect(next.subStage).toBe("E");
     expect(next.selectedPath).toEqual([]);
+    // maxReached is monotonic — quickMode path goes E→E.
+    expect(next.maxReachedSubStage).toBe("E");
   });
 });
 
@@ -131,5 +144,72 @@ describe("nextAfterD", () => {
     expect(next.rawIntent).toBe(prev.rawIntent);
     expect(next.variants).toBe(prev.variants);
     expect(next.coreContradiction).toBe(prev.coreContradiction);
+    // maxReached is monotonic — prev was E so it stays E.
+    expect(next.maxReachedSubStage).toBe("E");
+  });
+});
+
+// maxReachedSubStage stability across back-navigation. The bug we're fixing:
+// user reached E → clicked "3. 矛盾" in StepIndicator (no edit, no next click)
+// → subStage drops to C, completedFor(C)=[A,B], D and E go gray.
+// Fix uses a monotonic invariant in DivergenceState, computed by every
+// nextAfterX helper. The "user clicks StepIndicator without saving" path
+// doesn't touch any helper (the component just `setState({subStage: s})`),
+// so maxReached simply stays put — same value as the helper path produces.
+describe("maxReachedSubStage stability across back-navigation", () => {
+  it("advances monotonically: max(E) stays E after re-saving A (proj_f0721bdc 2026-09-01)", () => {
+    // User reached E. maxReachedSubStage="E". Saved everything (selectedPath filled).
+    const prev = filledPrev();
+    // User clicks indicator-3 (C), no edits, no next click. Simulate the
+    // "save happens again from a later stage" path via nextAfterC with the
+    // SAME coreContradiction so the spread order test still applies — the
+    // bug we're fixing is purely about maxReached not dropping when a
+    // helper runs at a "later" subStage value than the current maxReached.
+    const coreContradiction = prev.coreContradiction!;
+    const next = nextAfterC(prev, coreContradiction);
+    // maxReachedSubStage must remain E (advancing max(E, D) = E).
+    expect(next.maxReachedSubStage).toBe("E");
+    // subStage jumps back to D (filledPrev default quickMode=false).
+    expect(next.subStage).toBe("D");
+    // selectedPath is cleared by clearDownstream("C"), but the user's
+    // "no save" path doesn't run any helper — that's the component's
+    // setState({subStage: s}) which preserves everything.
+    // (This test pins the helper behavior, not the component behavior.)
+    expect(next.selectedPath).toEqual([]);
+  });
+
+  it("completedFor(E) keeps D and E clickable after navigating back to C", () => {
+    // Pin the contract that StepIndicator relies on: given the highest
+    // stage the user has reached, return everything strictly before it
+    // (those stages are clickable). This is the read-side of the fix.
+    expect(completedFor("E")).toEqual(["A", "B", "C", "D"]);
+    expect(completedFor("D")).toEqual(["A", "B", "C"]);
+    expect(completedFor("C")).toEqual(["A", "B"]);
+    expect(completedFor("B")).toEqual(["A"]);
+    expect(completedFor("A")).toEqual([]);
+  });
+
+  it("monotonic: nextAfterA from a fresh state (maxReached=A) advances to B", () => {
+    // Fresh user (no prior data). maxReachedSubStage starts at A.
+    const prev = filledPrev({ maxReachedSubStage: "A", subStage: "A" });
+    const rawIntent = { prompt: "new", genre_primary: "new" } as unknown as RawIntent;
+    const next = nextAfterA(prev, rawIntent);
+    expect(next.subStage).toBe("B");
+    expect(next.maxReachedSubStage).toBe("B");
+  });
+
+  it("monotonic: re-saving A after reaching C keeps maxReached at C", () => {
+    // User reached C, then navigated back to A, edited prompt, hit 下一步.
+    // The user has actually reached C in this session — they didn't lose
+    // that fact just because they went back. maxReached stays at C even
+    // though subStage moves to B (advanceMaxReached(C, B) = C because
+    // C >= B in SUB_STAGE_ORDER). Without this, navigating to C→A→save
+    // would silently demote maxReached to B, dropping C from clickable.
+    const prev = filledPrev({ maxReachedSubStage: "C", subStage: "A" });
+    const rawIntent = { prompt: "new", genre_primary: "new" } as unknown as RawIntent;
+    const next = nextAfterA(prev, rawIntent);
+    expect(next.subStage).toBe("B");
+    // maxReached stays at C — the user has actually reached C.
+    expect(next.maxReachedSubStage).toBe("C");
   });
 });

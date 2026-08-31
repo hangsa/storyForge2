@@ -474,4 +474,34 @@ describe("WizardContext", () => {
     expect(result.current.data.story_dna?.core_contradiction.side_a).toBe("A");
     expect(result.current.data.story_dna?.core_contradiction.side_b).toBe("B");
   });
+
+  // v1.2 (creative-divergence refactor): step 1 (Creative Divergence) is
+  // broken into 5 sequential sub-screens. The sub-step state is purely a
+  // sub-position inside step 1; changing it must NOT touch currentStep or
+  // any of the per-step wizard fields.
+  it("starts at sub-stage A", () => {
+    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    expect(result.current.creativeDivergenceSubStage).toBe("A");
+  });
+
+  it("setCreativeDivergenceSubStage changes sub-stage without touching currentStep", () => {
+    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    act(() => result.current.startStep(1));
+    act(() => result.current.setCreativeDivergenceSubStage("B"));
+    expect(result.current.creativeDivergenceSubStage).toBe("B");
+    expect(result.current.currentStep).toBe(1);
+    // Sanity: status is "generating" from startStep, not reset.
+    expect(result.current.status).toBe("generating");
+  });
+
+  it("jumpToCreativeDivergence atomically sets currentStep=1 and the sub-stage", () => {
+    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    // Move away from step 1 first.
+    act(() => result.current.startStep(3));
+    expect(result.current.currentStep).toBe(3);
+    // Jump back to step 1 at sub-stage D.
+    act(() => result.current.jumpToCreativeDivergence("D"));
+    expect(result.current.currentStep).toBe(1);
+    expect(result.current.creativeDivergenceSubStage).toBe("D");
+  });
 });

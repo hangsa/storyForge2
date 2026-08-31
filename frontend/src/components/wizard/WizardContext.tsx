@@ -26,6 +26,15 @@ export type WizardRegenerateState =
   | { kind: "success"; target: string; at: number }
   | { kind: "failure"; target: string; message: string; at: number };
 
+/**
+ * Within step 1 (Creative Divergence), the current sub-step position. Step 1
+ * is broken into 5 sequential screens: A (input), B (mutation), C
+ * (contradiction), D (expand), E (commit). The CreativeDivergenceStep
+ * component reads this to decide which sub-screen renders, and resets to "A"
+ * whenever the user enters step 1 fresh.
+ */
+export type CreativeDivergenceSubStage = "A" | "B" | "C" | "D" | "E";
+
 export interface WizardData {
   creative_divergence: {
     variants: Array<{ id: string; label: string; title: string; description: string; tags: string[]; created_at: string }>;
@@ -128,6 +137,7 @@ interface WizardState {
    */
   saveHandler: (() => void) | null;
   saveDisabled: boolean;
+  creativeDivergenceSubStage: CreativeDivergenceSubStage;
 }
 
 type WizardAction =
@@ -179,7 +189,9 @@ type WizardAction =
       type: "SET_SAVE_HANDLER";
       handler: (() => void) | null;
       disabled: boolean;
-    };
+    }
+  | { type: "SET_DIVERGENCE_SUBSTAGE"; subStage: CreativeDivergenceSubStage }
+  | { type: "JUMP_TO_CREATIVE_DIVERGENCE"; subStage: CreativeDivergenceSubStage };
 
 const initialState: WizardState = {
   currentStep: 1,
@@ -195,6 +207,7 @@ const initialState: WizardState = {
   regenerateDisabled: false,
   saveHandler: null,
   saveDisabled: false,
+  creativeDivergenceSubStage: "A",
 };
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
@@ -259,6 +272,14 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
         currentStep: action.step,
         status: state.completedSteps.includes(action.step) ? "completed" : "idle",
         errorMessage: null,
+      };
+    case "SET_DIVERGENCE_SUBSTAGE":
+      return { ...state, creativeDivergenceSubStage: action.subStage };
+    case "JUMP_TO_CREATIVE_DIVERGENCE":
+      return {
+        ...state,
+        currentStep: 1,
+        creativeDivergenceSubStage: action.subStage,
       };
     case "STATUS":
       return { ...state, status: action.status, errorMessage: action.errorMessage ?? null };
@@ -348,6 +369,10 @@ function loadPersisted(projectId: string): WizardState | null {
         regenerateDisabled: false,
         saveHandler: null,
         saveDisabled: false,
+        // Preserve the divergence sub-step the user was on. Default to "A"
+        // if a stale sessionStorage payload predates this field.
+        creativeDivergenceSubStage:
+          parsed.creativeDivergenceSubStage ?? "A",
       };
     }
     return null;
@@ -408,6 +433,17 @@ interface WizardContextValue extends WizardState {
   setRegenerateSuccess: (target: string) => void;
   setRegenerateFailure: (target: string, message: string) => void;
   clearRegenerateState: () => void;
+  /**
+   * Switch the divergence sub-step (A/B/C/D/E) without leaving step 1.
+   * Used by CreativeDivergenceStep's internal "next sub-screen" button.
+   */
+  setCreativeDivergenceSubStage: (subStage: CreativeDivergenceSubStage) => void;
+  /**
+   * Navigate to step 1 AND set the divergence sub-step in one atomic action.
+   * Used when an outside surface (e.g., a jump-back link in the wizard
+   * indicator) wants to land the user at a specific sub-step of step 1.
+   */
+  jumpToCreativeDivergence: (subStage: CreativeDivergenceSubStage) => void;
 }
 
 const WizardContext = createContext<WizardContextValue | null>(null);
@@ -456,6 +492,7 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
           status: state.status,
           data: state.data,
           errorMessage: state.errorMessage,
+          creativeDivergenceSubStage: state.creativeDivergenceSubStage,
         })
       );
     } catch {
@@ -490,6 +527,10 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
     setRegenerateFailure: (target, message) =>
       dispatch({ type: "REGENERATE_FAILURE", target, message }),
     clearRegenerateState: () => dispatch({ type: "REGENERATE_CLEAR" }),
+    setCreativeDivergenceSubStage: (subStage) =>
+      dispatch({ type: "SET_DIVERGENCE_SUBSTAGE", subStage }),
+    jumpToCreativeDivergence: (subStage) =>
+      dispatch({ type: "JUMP_TO_CREATIVE_DIVERGENCE", subStage }),
     reset: () => {
       try {
         sessionStorage.removeItem(getSessionKey(projectId));

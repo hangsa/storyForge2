@@ -440,20 +440,48 @@ def _build_trope_extraction_llm_client() -> Optional[Any]:
         return None
 
 
+# Module-level set that holds fire-and-forget trope-extraction tasks. Without
+# a strong reference, asyncio.create_task's coroutine may be garbage-collected
+# before its first await under specific event-loop timing (per Python docs).
+# Mirrors the project's existing pattern in backend/conductor/autopilot_loop.py
+# (self._tasks[project_id] = task). Each task removes itself on completion.
+_background_trope_tasks: set[asyncio.Task] = set()
+
+
 def _save_raw_intent_trope_tags(project_id: str, raw_intent: Optional[dict] = None) -> None:
     """Persist canvas["raw_intent"] (with the freshly-extracted trope_tags)
     back to canvas_state.json. Used as the save_callback for the fire-and-
     forget fill_trope_tags_async task — `raw_intent` is the same dict that
     fill_trope_tags_async mutated, so its in-place trope_tags update is
     what we want to write.
+
+    Performs an atomic targeted update: load → mutate ONLY raw_intent → write.
+    Avoids the read-modify-write race that would otherwise overwrite concurrent
+    writes from /expand, /choose-branch, /apply-mutation, etc. — we touch only
+    `canvas["raw_intent"]` and never re-stamp nodes / branch_choices / updated_at.
+
+    Also passes preserve_committed=True: this is a METADATA-ONLY backfill and
+    must NOT invalidate the /commit stamp. The fire-and-forget task fires
+    immediately after /init; users typically call /commit within 1-3 seconds,
+    and without preserve_committed the commit marker would be silently erased
+    once the background task completes (regression: see commit 2569bee review).
+
+    Best-effort by design: a stale read between _read_canvas and _write_canvas
+    still leaves a narrow loss-of-update window against concurrent writers
+    touching non-raw_intent fields. Full file-level locking / CRDT is out of
+    scope — this is the same best-effort guarantee the rest of the canvas
+    write path offers.
+
+    If raw_intent is None (callback fired without an arg), this is a no-op.
     """
+    if raw_intent is None:
+        return
     try:
         canvas = _read_canvas(project_id)
         if canvas is None:
             return
-        if raw_intent is not None:
-            canvas["raw_intent"] = raw_intent
-        _write_canvas(project_id, canvas)
+        canvas["raw_intent"] = raw_intent
+        _write_canvas(project_id, canvas, preserve_committed=True)
     except Exception as exc:
         logger.warning("Failed to persist trope tags for %s: %s", project_id, exc)
 
@@ -559,13 +587,18 @@ async def init_canvas(project_id: str, data: dict):
         llm_client = _build_trope_extraction_llm_client()
         if llm_client is not None:
             raw_intent_ref = canvas["raw_intent"]
-            asyncio.create_task(
+            task = asyncio.create_task(
                 evaluator.fill_trope_tags_async(
                     raw_intent=raw_intent_ref,
                     llm_client=llm_client,
                     save_callback=lambda ri: _save_raw_intent_trope_tags(project_id, ri),
                 )
             )
+            # Hold a strong reference; otherwise the task may be GC'd before
+            # its first await under specific event-loop timing. The
+            # add_done_callback drops it once the task is finished.
+            _background_trope_tasks.add(task)
+            task.add_done_callback(_background_trope_tasks.discard)
     except Exception as exc:
         logger.warning("Could not schedule trope extraction for %s: %s", project_id, exc)
 

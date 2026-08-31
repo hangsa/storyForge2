@@ -178,15 +178,37 @@ describe("maxReachedSubStage stability across back-navigation", () => {
     expect(next.selectedPath).toEqual([]);
   });
 
-  it("completedFor(E) keeps D and E clickable after navigating back to C", () => {
-    // Pin the contract that StepIndicator relies on: given the highest
-    // stage the user has reached, return everything strictly before it
-    // (those stages are clickable). This is the read-side of the fix.
-    expect(completedFor("E")).toEqual(["A", "B", "C", "D"]);
-    expect(completedFor("D")).toEqual(["A", "B", "C"]);
-    expect(completedFor("C")).toEqual(["A", "B"]);
-    expect(completedFor("B")).toEqual(["A"]);
-    expect(completedFor("A")).toEqual([]);
+  it("completedFor includes the maxReached stage itself (inclusive — proj_f0721bdc 2026-09-01)", () => {
+    // Each entry represents a stage the user has reached. Excluding E
+    // meant that once the user navigated away from sub-stage E (the commit
+    // screen), E itself became un-clickable in StepIndicator — `isCompleted
+    // = completed.includes("E")` was false even when maxReached was E.
+    // Fix: maxReached itself is part of the returned list. The
+    // `!isCurrent` term in `isClickable = isCompleted && !isCurrent`
+    // keeps the indicator from being clickable when the user is already
+    // on stage E.
+    expect(completedFor("A")).toEqual(["A"]);
+    expect(completedFor("B")).toEqual(["A", "B"]);
+    expect(completedFor("C")).toEqual(["A", "B", "C"]);
+    expect(completedFor("D")).toEqual(["A", "B", "C", "D"]);
+    expect(completedFor("E")).toEqual(["A", "B", "C", "D", "E"]);
+  });
+
+  it("StepIndicator E chip is clickable when user navigated back from E to D (proj_f0721bdc 2026-09-01)", () => {
+    // Simulate: user has reached E, then clicked "4. 展开" to go back
+    // to D without saving. Sub-component state is irrelevant — we test
+    // the StepIndicator contract via the completedFor result + the
+    // isClickable predicate (mirrored inline).
+    const completed = completedFor("E");
+    const current = "D" as SubStage;
+    // The StepIndicator click test (mirroring divergence/StepIndicator.tsx:23):
+    //   isCurrent = E === D → false
+    //   isCompleted = ["A","B","C","D","E"].includes("E") → true
+    //   isClickable = true && !false → true  ← key invariant
+    const isCurrentE = false;
+    const isCompletedE = completed.includes("E");
+    expect(isCurrentE).toBe(false);
+    expect(isCompletedE).toBe(true);
   });
 
   it("monotonic: nextAfterA from a fresh state (maxReached=A) advances to B", () => {

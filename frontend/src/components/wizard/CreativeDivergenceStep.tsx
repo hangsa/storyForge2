@@ -173,22 +173,34 @@ function inferSubStage(state: {
   return "E";
 }
 
-// SubStage A is always "fresh"; everything before the user's current stage
-// has been completed and is therefore clickable from StepIndicator.
+// Returns the set of subStages the user has reached and may revisit
+// from StepIndicator. Inclusive of `maxReached` itself.
 //
 // Was: pure function on subStage only. Now: takes the persisted maxReached
 // value (independent of current subStage), so navigating back to C
 // doesn't drop D and E from the clickable set.
 //
 // Example: prev maxReached="E", user clicks indicator-3 (C). subStage="C",
-// maxReachedSubStage remains "E". completedFor(E) returns ["A","B","C","D"]
-// — D and E stay clickable.
+// maxReachedSubStage remains "E". completedFor(E) returns
+// ["A","B","C","D","E"] — D and E stay clickable.
 export function completedFor(maxReached: SubStage): SubStage[] {
-  if (maxReached === "A") return [];
-  if (maxReached === "B") return ["A"];
-  if (maxReached === "C") return ["A", "B"];
-  if (maxReached === "D") return ["A", "B", "C"];
-  return ["A", "B", "C", "D"]; // E
+  // Inclusive of the maxReached stage itself. Each entry represents
+  // "a stage the user has reached and can revisit"; excluding E meant
+  // that once the user navigated away from sub-stage E (the commit
+  // screen), E itself became un-clickable in StepIndicator until they
+  // re-completed the entire flow. Without E in the list, the indicator
+  // chip stayed visually identical to "unvisited" even though the user
+  // had just submitted.
+  //
+  // Interaction with `isClickable = isCompleted && !isCurrent`:
+  // - subStage=E, completed=[..,"E"] → E is current → not clickable (already there)
+  // - subStage=D, completed=[..,"E"] → E is !current && in list → clickable
+  // - subStage=A, completed=["A"] → only A; user can revisit B/C/D/E etc.
+  if (maxReached === "A") return ["A"];
+  if (maxReached === "B") return ["A", "B"];
+  if (maxReached === "C") return ["A", "B", "C"];
+  if (maxReached === "D") return ["A", "B", "C", "D"];
+  return ["A", "B", "C", "D", "E"];
 }
 
 // Wraps a WhatIfNode-compatible "root" for S0D from the chosen

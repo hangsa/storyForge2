@@ -36,14 +36,10 @@ function Inner({ projectId }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    // Step 1 (creative divergence) is no longer pre-checked here. The new
-    // CreativeDivergenceStep fetches /creative/diverge/state on mount and
-    // infers its own SubStage (A/B/C/D/E). Marking step 1 complete from
-    // outside was redundant — the only signal we needed (a saved draft) is
-    // now surfaced via the step's ContinueBanner instead.
     (async () => {
       try {
-        const [concept, world, chars, novel, outline] = await Promise.allSettled([
+        const [cd, concept, world, chars, novel, outline] = await Promise.allSettled([
+          api.getCreativeDivergence(projectId),
           api.getConcept(projectId),
           api.getWorld(projectId),
           api.getCharacter(projectId),
@@ -53,6 +49,17 @@ function Inner({ projectId }: Props) {
         if (cancelled) return;
         const completed: number[] = [];
         const data: Partial<WizardData> = {};
+        // Step 1 (creative divergence) is "completed" once the user has
+        // committed a selection. Without this, the sidebar's `reachable =
+        // completed || current` test (WizardSidebar.tsx:25) keeps step 1
+        // grayed out even after a divergence run finishes — proj_f0721bdc
+        // 2026-08-31 regression. CreativeDivergenceStep re-fetches its own
+        // state via getDivergeState on mount, so we don't need to populate
+        // `data.creative_divergence`; we only need the completion marker.
+        const cdPayload = cd.status === "fulfilled" ? cd.value : null;
+        if (cdPayload && cdPayload.has_selection && cdPayload.selected_at) {
+          completed.push(1);
+        }
         const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
         if (conceptPayload && hasContent(conceptPayload)) {
           completed.push(2);

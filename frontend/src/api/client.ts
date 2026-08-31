@@ -961,6 +961,14 @@ export const api = {
       selected_id: string | null;
     }>("GET", `/projects/${encodeURIComponent(projectId)}/creative-divergence`),
 
+  getCreativeDivergence: (projectId: string) =>
+    request<{
+      variants: Array<{ id: string; label: string; title: string; description: string; tags: string[]; created_at: string }>;
+      selected_id: string | null;
+      has_selection: boolean;
+      selected_at: string | null;
+    }>("GET", `/projects/${encodeURIComponent(projectId)}/creative-divergence`),
+
   generateCreativeDivergenceVariants: (
     projectId: string,
     req: { prompt: string; count?: number; params?: { tone?: string; genre_tags?: string[] } },

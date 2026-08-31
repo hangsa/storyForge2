@@ -31,6 +31,12 @@ function captureReactErrors() {
 vi.mock("../../api/client", () => ({
   default: {
     getDivergeState: vi.fn().mockResolvedValue("Not Found"),
+    getCreativeDivergence: vi.fn().mockResolvedValue({
+      variants: [],
+      selected_id: null,
+      has_selection: false,
+      selected_at: null,
+    }),
     getConcept: vi.fn().mockResolvedValue({}),
     getWorld: vi.fn().mockResolvedValue({}),
     getCharacter: vi.fn().mockResolvedValue({}),
@@ -70,6 +76,12 @@ describe("WorkspaceWizardPanel crash repro", () => {
     vi.doMock("../../api/client", () => ({
       default: {
         getDivergeState: vi.fn().mockResolvedValue(null),
+        getCreativeDivergence: vi.fn().mockResolvedValue({
+          variants: [],
+          selected_id: null,
+          has_selection: false,
+          selected_at: null,
+        }),
         getConcept: vi.fn().mockResolvedValue(null),
         getWorld: vi.fn().mockResolvedValue(null),
         getCharacter: vi.fn().mockResolvedValue(null),

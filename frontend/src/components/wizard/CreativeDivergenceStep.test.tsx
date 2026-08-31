@@ -4,117 +4,148 @@ import CreativeDivergenceStep from "./CreativeDivergenceStep";
 import api from "../../api/client";
 import { WizardProvider } from "./WizardContext";
 
+// Tests for the 5-substage rewrite (Plan Task 24, 2026-08-30). The component
+// fetches /creative/diverge/state on mount, infers SubStage (A/B/C/D/E), and
+// conditionally renders the corresponding substep. ContinueBanner shows when
+// a draft already exists.
 vi.mock("../../api/client", () => ({
   default: {
-    listCreativeDivergenceVariants: vi.fn().mockResolvedValue({ variants: [], selected_id: null }),
-    generateCreativeDivergenceVariants: vi.fn().mockResolvedValue({
-      variants: [
-        { id: "v1", label: "概念 ALPHA", title: "风暴密码", description: "AI 试图...", tags: ["科幻", "悬疑"], created_at: "2026-08-30T00:00:00Z" },
-        { id: "v2", label: "概念 BETA", title: "大气回响", description: "AI 已经...", tags: ["心理"], created_at: "2026-08-30T00:00:01Z" },
-      ],
+    getDivergeState: vi.fn(),
+    postDivergeInit: vi.fn().mockResolvedValue({}),
+    postDivergeMutate: vi.fn().mockResolvedValue({
+      new_node: { id: "v1", title: "变体1" },
+      mutation_result: { core_premise: "变体1", novelty_hook: "x", operation: "inversion" },
     }),
-    selectCreativeDivergenceVariant: vi.fn().mockResolvedValue({
-      concept_payload: { title: "风暴密码", genre: "科幻", premise: "AI 试图...", tone: "惊悚", theme: "人与自然", source: "creative_divergence", source_variant_id: "v1" },
+    putDivergeContradict: vi.fn().mockResolvedValue({
+      core_contradiction: {
+        template_type: "T1",
+        statement: "矛盾",
+        side_a: "A",
+        side_b: "B",
+        tension_score: 80,
+        is_custom: false,
+        confirmed_at: "2026-08-30T00:00:00Z",
+      },
+    }),
+    postDivergeCommit: vi.fn().mockResolvedValue({
+      source: "creative_divergence",
+      committed_at: "2026-08-30T00:00:00Z",
     }),
   },
 }));
+
+const sampleEmpty = {
+  schema_version: 3,
+  root_node_id: null,
+  raw_intent: null,
+  nodes: {},
+  edges: [],
+  selected_path: [],
+  branch_choices: {},
+  core_contradiction: null,
+  novelty_scores: null,
+  idea_variants: [],
+};
 
 function renderStep() {
   return render(
     <WizardProvider projectId="proj_test">
       <CreativeDivergenceStep projectId="proj_test" />
-    </WizardProvider>
+    </WizardProvider>,
   );
 }
 
-describe("CreativeDivergenceStep", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("renders header + glass-panel input + generate button", () => {
-    renderStep();
-    expect(screen.getByText("创意发散")).toBeInTheDocument();
-    expect(screen.getByText("生成概念")).toBeInTheDocument();
-  });
-
-  it("labels the prompt input as 创作意图", () => {
-    renderStep();
-    expect(screen.getByText("创作意图")).toBeInTheDocument();
-  });
-
-  it("disables generate button until prompt is filled", () => {
-    renderStep();
-    const gen = screen.getByTestId("cd-generate") as HTMLButtonElement;
-    expect(gen.disabled).toBe(true);
-  });
-
-  it("renders placeholder when no variants exist", async () => {
-    renderStep();
-    await waitFor(() => expect(api.listCreativeDivergenceVariants).toHaveBeenCalled());
-    expect(screen.getByText(/点生成开始创意发散|暂无变体/i)).toBeInTheDocument();
-  });
-
-  it("clicking generate renders 4 variant cards", async () => {
-    renderStep();
-    fireEvent.change(screen.getByTestId("cd-prompt"), { target: { value: "AI 与自然的关系" } });
-    fireEvent.click(screen.getByText("生成概念"));
-    await waitFor(() => expect(screen.getByText("风暴密码")).toBeInTheDocument());
-    expect(screen.getByText("大气回响")).toBeInTheDocument();
-  });
-
-  // Regression: malformed generate response (e.g., backend returned {detail: "..."}
-  // because the proxy unwrapped an error) used to crash the whole settings tab —
-  // setVariants(undefined) → variants.length throws on next render. Now we must
-  // surface a banner and keep the prompt intact.
-  it("generate with malformed response ({}) shows error banner, does not crash", async () => {
-    (api.generateCreativeDivergenceVariants as ReturnType<typeof vi.fn>).mockResolvedValueOnce({});
-    renderStep();
-    fireEvent.change(screen.getByTestId("cd-prompt"), { target: { value: "AI 与自然的关系" } });
-    fireEvent.click(screen.getByTestId("cd-generate"));
-    const banner = await screen.findByTestId("cd-error");
-    expect(banner).toBeInTheDocument();
-    // Prompt must survive the failed generate
-    expect((screen.getByTestId("cd-prompt") as HTMLTextAreaElement).value).toBe("AI 与自然的关系");
-  });
-
-  it("generate with variants:null shows error banner", async () => {
-    (api.generateCreativeDivergenceVariants as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ variants: null });
-    renderStep();
-    fireEvent.change(screen.getByTestId("cd-prompt"), { target: { value: "x" } });
-    fireEvent.click(screen.getByTestId("cd-generate"));
-    expect(await screen.findByTestId("cd-error")).toBeInTheDocument();
-  });
-
-  // Regression: handleConfirm accessed r.concept_payload.X directly. A 200
-  // response without concept_payload (e.g., backend schema drift, mock
-  // returning empty) crashed the entire settings tab.
-  it("select with missing concept_payload shows error banner, does not crash or navigate", async () => {
-    (api.generateCreativeDivergenceVariants as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      variants: [
-        { id: "v1", label: "概念 ALPHA", title: "风暴密码", description: "AI 试图...", tags: ["科幻"], created_at: "2026-08-30T00:00:00Z" },
-      ],
+describe("CreativeDivergenceStep (5-substage container)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.getDivergeState as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...sampleEmpty,
     });
-    (api.selectCreativeDivergenceVariant as ReturnType<typeof vi.fn>).mockResolvedValueOnce({});
-    renderStep();
-    fireEvent.change(screen.getByTestId("cd-prompt"), { target: { value: "x" } });
-    fireEvent.click(screen.getByTestId("cd-generate"));
-    await screen.findByText("风暴密码");
-    fireEvent.click(screen.getByTestId("cd-confirm"));
-    expect(await screen.findByTestId("cd-error")).toBeInTheDocument();
-    // Should still be on step 1 (concept payload didn't arrive)
-    expect(screen.getByText("创意发散")).toBeInTheDocument();
   });
 
-  // Regression: variant cards with missing `tags` field used to throw
-  // "Cannot read properties of undefined (reading 'length')" on render.
-  it("renders a variant with missing tags without crashing", async () => {
-    (api.generateCreativeDivergenceVariants as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      variants: [
-        { id: "v1", label: "概念 ALPHA", title: "无 tag 变体", description: "desc", created_at: "2026-08-30T00:00:00Z" },
-      ],
+  it("renders StepIndicator at top", async () => {
+    renderStep();
+    await waitFor(() => {
+      expect(screen.getByTestId("step-A")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("step-B")).toBeInTheDocument();
+    expect(screen.getByTestId("step-C")).toBeInTheDocument();
+    expect(screen.getByTestId("step-D")).toBeInTheDocument();
+    expect(screen.getByTestId("step-E")).toBeInTheDocument();
+  });
+
+  it("defaults to S0A on first load (no state)", async () => {
+    renderStep();
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText(/用一句话描述你的故事想法/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("infers substage B when raw_intent present", async () => {
+    (api.getDivergeState as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ...sampleEmpty,
+      raw_intent: {
+        prompt: "一个完整的故事想法,够长够详细",
+        genre_primary: "修仙",
+      },
     });
     renderStep();
-    fireEvent.change(screen.getByTestId("cd-prompt"), { target: { value: "x" } });
-    fireEvent.click(screen.getByTestId("cd-generate"));
-    expect(await screen.findByText("无 tag 变体")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("创意变体")).toBeInTheDocument();
+    });
+  });
+
+  it("infers substage E when state is fully committed (draft exists)", async () => {
+    (api.getDivergeState as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ...sampleEmpty,
+      raw_intent: {
+        prompt: "一个完整的故事想法,够长够详细",
+        genre_primary: "修仙",
+      },
+      idea_variants: [
+        {
+          id: "v1",
+          title: "x",
+          premise_one_line: "y",
+          mutation_type: "inversion",
+          mutation_logic: "z",
+          estimated_novelty: 0.5,
+          trope_tags: [],
+          regenerated_count: 0,
+        },
+      ],
+      core_contradiction: {
+        template_type: "T1",
+        statement: "矛盾",
+        side_a: "A",
+        side_b: "B",
+        tension_score: 80,
+        is_custom: false,
+        confirmed_at: "2026-08-30T00:00:00Z",
+      },
+      selected_path: ["root", "node-1", "node-2"],
+    });
+    renderStep();
+    // Substage E renders S0ECommitStep's "新颖度评估与提交" header.
+    await waitFor(() => {
+      expect(screen.getByText("新颖度评估与提交")).toBeInTheDocument();
+    });
+    // ContinueBanner must be visible whenever a draft exists.
+    expect(screen.getByTestId("continue-banner")).toBeInTheDocument();
+  });
+
+  it("falls back to A when getDivergeState rejects", async () => {
+    (api.getDivergeState as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("网络错误"),
+    );
+    renderStep();
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText(/用一句话描述你的故事想法/),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("continue-banner")).not.toBeInTheDocument();
   });
 });

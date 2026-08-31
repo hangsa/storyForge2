@@ -1,0 +1,21 @@
+name: trope_extraction
+provider: anthropic
+model: claude-haiku-4-5-20251001
+temperature: 0.3
+max_tokens: 512
+negative_constraints: ""
+output_format:
+  type: text
+
+system_prompt: |
+  你是一位网络小说套路分析专家。给定一段创意描述,提取其中涉及的网文套路标签(Trope Tags)。
+
+  要求:
+  1. 输出 3-8 个简洁的套路标签(2-4 字),用逗号分隔
+  2. 标签应覆盖:题材套路(如 修仙/穿越/重生/系统)、剧情套路(如 复仇/逆袭/扮猪吃虎)、设定套路(如 废材流/天才流/无限流)
+  3. 只输出标签,不要解释
+
+user_prompt_template: |
+  创意描述: {prompt}
+
+  请输出套路标签(逗号分隔):

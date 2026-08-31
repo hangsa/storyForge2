@@ -16,12 +16,13 @@ Provides thin orchestration endpoints for the Creative Canvas frontend:
 - DELETE /state  — Reset the canvas (delete canvas_state.json)
 """
 
+import asyncio
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -413,6 +414,50 @@ def _validate_canvas_invariants(canvas: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _build_trope_extraction_llm_client() -> Optional[Any]:
+    """Construct a Tier 3 LLM client for trope_extraction.
+
+    Returns None on any failure (no API key, unknown provider, no
+    matching model in model_tiers.yaml) — /init then skips the background
+    extraction silently. Best-effort by design: a missing LLM must not
+    break the user's /init flow.
+    """
+    try:
+        from backend.llm.model_router import get_model_router
+
+        router = get_model_router()
+        decision = router.resolve(
+            agent_name="creative_director",
+            task_name="trope_extraction",
+        )
+        model_info = router._find_model_info(decision.model_id)
+        if model_info is None:
+            return None
+        provider = router._create_provider_for_model(model_info)
+        return provider
+    except Exception as exc:
+        logger.info("No LLM available for trope extraction: %s", exc)
+        return None
+
+
+def _save_raw_intent_trope_tags(project_id: str, raw_intent: Optional[dict] = None) -> None:
+    """Persist canvas["raw_intent"] (with the freshly-extracted trope_tags)
+    back to canvas_state.json. Used as the save_callback for the fire-and-
+    forget fill_trope_tags_async task — `raw_intent` is the same dict that
+    fill_trope_tags_async mutated, so its in-place trope_tags update is
+    what we want to write.
+    """
+    try:
+        canvas = _read_canvas(project_id)
+        if canvas is None:
+            return
+        if raw_intent is not None:
+            canvas["raw_intent"] = raw_intent
+        _write_canvas(project_id, canvas)
+    except Exception as exc:
+        logger.warning("Failed to persist trope tags for %s: %s", project_id, exc)
+
+
 @router.get("/state")
 async def get_canvas_state(project_id: str):
     """Read the current canvas state. Returns empty skeleton if not initialized."""
@@ -444,6 +489,11 @@ async def init_canvas(project_id: str, data: dict):
 
     Request body:
         {"premise": "一个关于永生者寻找死亡方法的故事"}
+
+    Side effect: spawns a fire-and-forget Tier 3 LLM call to extract Trope
+    tags for the canvas's raw_intent. Tags are written back to
+    canvas_state.json so the next /novelty call uses a real
+    market_saturation score instead of the 50.0 fallback (PRD §3.5).
     """
     _ensure_project(project_id)
 
@@ -464,9 +514,9 @@ async def init_canvas(project_id: str, data: dict):
     engine = WhatIfEngine()
     root_node = engine.generate_root(premise)
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     canvas = {
-        "schema_version": 2,
+        "schema_version": 3,
         "root_node_id": root_node.id,
         "nodes": {root_node.id: _node_to_dict(root_node)},
         "edges": [],
@@ -475,8 +525,49 @@ async def init_canvas(project_id: str, data: dict):
         "evaluations": {},
         "created_at": now,
         "updated_at": now,
+        "idea_variants": [],
+        "core_contradiction": None,
+        "novelty_scores": None,
+        "raw_intent": {"prompt": premise, "trope_tags": []},
+        "session_metadata": {
+            "created_at": now,
+            "last_modified_at": now,
+            "elapsed_seconds": 0,
+            "operation_count": 0,
+            "ab_test_bucket": "control",
+        },
     }
     _write_canvas(project_id, canvas)
+
+    # Fire-and-forget Tier 3 Trope extraction. Best-effort; failures are
+    # logged but never surface to the /init caller.
+    try:
+        from backend.creative_os.novelty_evaluator import NoveltyEvaluator
+        from backend.creative_os.trope_pool import TropePool
+        from backend.creative_os.contradiction_engine import ContradictionEngine
+
+        project_dir = settings.projects_dir / project_id
+        catalog_path = settings.projects_dir.parent / "config" / "trope_catalog.yaml"
+        trope_pool = TropePool(project_dir=project_dir, catalog_path=catalog_path)
+        evaluator = NoveltyEvaluator(
+            trope_pool=trope_pool,
+            contradiction_engine=ContradictionEngine(),
+            model_router=None,
+            embedder=None,
+        )
+
+        llm_client = _build_trope_extraction_llm_client()
+        if llm_client is not None:
+            raw_intent_ref = canvas["raw_intent"]
+            asyncio.create_task(
+                evaluator.fill_trope_tags_async(
+                    raw_intent=raw_intent_ref,
+                    llm_client=llm_client,
+                    save_callback=lambda ri: _save_raw_intent_trope_tags(project_id, ri),
+                )
+            )
+    except Exception as exc:
+        logger.warning("Could not schedule trope extraction for %s: %s", project_id, exc)
 
     return {
         "error": False,

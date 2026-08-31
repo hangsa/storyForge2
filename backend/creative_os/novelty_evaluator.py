@@ -1,7 +1,7 @@
 """Novelty Evaluator — 新颖度评估器 (4 维评分, 75% 确定性)."""
 
 import logging
-from typing import Optional
+from typing import Any, Callable
 
 import numpy as np
 
@@ -121,3 +121,62 @@ class NoveltyEvaluator:
             return "偏低"
         else:
             return "低"
+
+    async def fill_trope_tags_async(
+        self,
+        raw_intent: dict,
+        llm_client: Any,
+        save_callback: Callable[[dict], Any],
+    ) -> None:
+        """Best-effort Tier 3 Trope tag extraction for raw_intent.
+
+        Fires the trope_extraction prompt against `llm_client.generate(...)`,
+        parses the comma-separated response, writes the tags back into
+        `raw_intent["trope_tags"]`, and invokes `save_callback(raw_intent)` so
+        the caller can persist the canvas. Short-circuits when tags already
+        populated. All errors are logged + swallowed: a failed extraction
+        must never break the /init flow that triggered it.
+
+        Resolution order for the prompt template:
+            YAML (config/trope_extraction.yaml) → global override → project override
+        via `load_prompt_effective` (Correction 3). The resolved dict's
+        `user_prompt_template` is rendered with `{prompt}`; everything else
+        (`max_tokens`, `temperature`) is left to the caller's llm_client.
+        """
+        if raw_intent.get("trope_tags"):
+            return
+
+        prompt_text = (raw_intent.get("prompt") or "").strip()
+        if not prompt_text:
+            return
+
+        try:
+            from backend.services.prompt_override_store import load_prompt_effective
+
+            prompt_data = load_prompt_effective("trope_extraction")
+            system_prompt = prompt_data.get("system_prompt", "").strip()
+            user_template = prompt_data.get("user_prompt_template", "")
+            user_prompt = user_template.format(prompt=prompt_text)
+        except Exception as exc:
+            logger.warning("Failed to load trope_extraction prompt: %s", exc)
+            return
+
+        try:
+            response = await llm_client.generate(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
+        except Exception as exc:
+            logger.warning("Trope extraction LLM call failed: %s", exc)
+            return
+
+        text = getattr(response, "text", "") or ""
+        tags = [t.strip() for t in text.split(",") if t.strip()]
+        if not tags:
+            return
+
+        raw_intent["trope_tags"] = tags
+        try:
+            save_callback(raw_intent)
+        except Exception as exc:
+            logger.warning("save_callback raised after trope extraction: %s", exc)

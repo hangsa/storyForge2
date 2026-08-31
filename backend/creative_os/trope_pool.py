@@ -90,8 +90,22 @@ class TropePool:
     def get_saturation_by_tags(self, tags: list[str]) -> float:
         if not tags:
             return 0.5
-        sats = [self.get_saturation(t) for t in tags]
+        sats: list[float] = []
+        for t in tags:
+            trope = self._tropes.get(t)
+            if trope is None:
+                # Fall back to name match — LLM-extracted tags (from
+                # trope_extraction.yaml) are short trope names like "废柴逆袭",
+                # not trope_ids like "trope_001".
+                trope = self._find_by_name(t)
+            sats.append(trope.market_saturation if trope else 0.5)
         return sum(sats) / len(sats)
+
+    def _find_by_name(self, name: str) -> Optional["Trope"]:
+        for trope in self._tropes.values():
+            if trope.name == name:
+                return trope
+        return None
 
     def match_tropes(self, tags: list[str]) -> list[Trope]:
         results = []

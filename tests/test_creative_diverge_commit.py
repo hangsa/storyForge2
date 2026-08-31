@@ -142,7 +142,13 @@ class TestCanvasCommitEndpoint:
                     "story_dna": {
                         "core_contradiction": {"statement": "核心矛盾",
                                                 "side_a": "A", "side_b": "B"},
-                        "value_stack": [{"value_a": "a", "value_b": "b", "level": "l1"}],
+                        "value_stack": [
+                            {"value_a": "a", "value_b": "b", "level": "personal"},
+                            {"value_a": "a", "value_b": "b", "level": "social"},
+                            {"value_a": "a", "value_b": "b", "level": "philosophical"},
+                            {"value_a": "a", "value_b": "b", "level": "existential"},
+                        ],
+                        "style_template": "白描克制",
                     },
                 },
                 MagicMock(),
@@ -167,7 +173,13 @@ class TestCanvasCommitEndpoint:
                     "story_dna": {
                         "core_contradiction": {"statement": "核心矛盾",
                                                 "side_a": "A", "side_b": "B"},
-                        "value_stack": [],
+                        "value_stack": [
+                            {"value_a": "a", "value_b": "b", "level": "personal"},
+                            {"value_a": "a", "value_b": "b", "level": "social"},
+                            {"value_a": "a", "value_b": "b", "level": "philosophical"},
+                            {"value_a": "a", "value_b": "b", "level": "existential"},
+                        ],
+                        "style_template": "白描克制",
                     },
                 },
                 MagicMock(),
@@ -196,7 +208,13 @@ class TestCanvasCommitEndpoint:
                                 "tone": "t", "theme": "th", "target_audience": "ta"},
                     "story_dna": {"core_contradiction": {"statement": "X",
                                                           "side_a": "a", "side_b": "b"},
-                                  "value_stack": []},
+                                  "value_stack": [
+                                      {"value_a": "a", "value_b": "b", "level": "personal"},
+                                      {"value_a": "a", "value_b": "b", "level": "social"},
+                                      {"value_a": "a", "value_b": "b", "level": "philosophical"},
+                                      {"value_a": "a", "value_b": "b", "level": "existential"},
+                                  ],
+                                  "style_template": "白描克制"},
                 },
                 MagicMock(),
             ))
@@ -218,7 +236,13 @@ class TestCanvasCommitEndpoint:
                     "concept": {"title": "T", "premise": "P"},
                     "story_dna": {"core_contradiction": {"statement": "",
                                                           "side_a": "a", "side_b": "b"},
-                                  "value_stack": []},
+                                  "value_stack": [
+                                      {"value_a": "a", "value_b": "b", "level": "personal"},
+                                      {"value_a": "a", "value_b": "b", "level": "social"},
+                                      {"value_a": "a", "value_b": "b", "level": "philosophical"},
+                                      {"value_a": "a", "value_b": "b", "level": "existential"},
+                                  ],
+                                  "style_template": "白描克制"},
                 },
                 MagicMock(),
             ))
@@ -269,7 +293,13 @@ class TestCanvasCommitEndpoint:
                                 "tone": "t", "theme": "th", "target_audience": "ta"},
                     "story_dna": {"core_contradiction": {"statement": "S",
                                                           "side_a": "a", "side_b": "b"},
-                                  "value_stack": []},
+                                  "value_stack": [
+                                      {"value_a": "a", "value_b": "b", "level": "personal"},
+                                      {"value_a": "a", "value_b": "b", "level": "social"},
+                                      {"value_a": "a", "value_b": "b", "level": "philosophical"},
+                                      {"value_a": "a", "value_b": "b", "level": "existential"},
+                                  ],
+                                  "style_template": "白描克制"},
                 },
                 MagicMock(),
             ))
@@ -324,7 +354,13 @@ class TestCanvasCommitEndpoint:
                                 "tone": "t", "theme": "th", "target_audience": "ta"},
                     "story_dna": {"core_contradiction": {"statement": "NEW statement",
                                                           "side_a": "a", "side_b": "b"},
-                                  "value_stack": []},
+                                  "value_stack": [
+                                      {"value_a": "a", "value_b": "b", "level": "personal"},
+                                      {"value_a": "a", "value_b": "b", "level": "social"},
+                                      {"value_a": "a", "value_b": "b", "level": "philosophical"},
+                                      {"value_a": "a", "value_b": "b", "level": "existential"},
+                                  ],
+                                  "style_template": "白描克制"},
                 },
                 MagicMock(),
             ))

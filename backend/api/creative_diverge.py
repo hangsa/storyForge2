@@ -1798,6 +1798,56 @@ async def commit_canvas(project_id: str, data: dict = {}):
             },
         )
 
+    style_template = (story_dna.get("style_template") or "").strip()
+    if not style_template:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "LLM_OUTPUT_INVALID",
+                "message": (
+                    "LLM 输出缺少 story_dna.style_template,"
+                    " 无法满足 Task 13 契约"
+                ),
+                "detail": {"raw_output": result},
+            },
+        )
+
+    ALLOWED_VALUE_STACK_LEVELS = {"personal", "social", "philosophical", "existential"}
+    value_stack = story_dna.get("value_stack") or []
+    if len(value_stack) != 4:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "LLM_OUTPUT_INVALID",
+                "message": (
+                    f"LLM 输出 value_stack 长度必须为 4, "
+                    f"实际为 {len(value_stack)}"
+                ),
+                "detail": {"raw_output": result, "got_length": len(value_stack)},
+            },
+        )
+
+    invalid_levels = [
+        (i, vs.get("level"))
+        for i, vs in enumerate(value_stack)
+        if (vs.get("level") or "").strip() not in ALLOWED_VALUE_STACK_LEVELS
+    ]
+    if invalid_levels:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "LLM_OUTPUT_INVALID",
+                "message": (
+                    f"LLM 输出 value_stack 层级必须是 "
+                    f"{sorted(ALLOWED_VALUE_STACK_LEVELS)} 之一, 收到 {invalid_levels}"
+                ),
+                "detail": {"raw_output": result, "invalid_entries": invalid_levels},
+            },
+        )
+
     # Optional caller override: replace story_dna.value_stack with user-provided
     # layers (PRD §6.2 lets the user finalize the four-level value hierarchy
     # post-LLM). Applied AFTER gate validation so a malformed override can't

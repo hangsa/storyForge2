@@ -333,3 +333,68 @@ class TestCommitDualWrite:
         detail = response.json()["detail"]
         assert detail["novelty_summary"] == {}
         assert detail["warnings"] == []
+
+    def test_commit_rejects_missing_style_template(self, client):
+        """Task 13 contract: story_dna.style_template is required.
+        A non-compliant LLM (e.g. MiniMax-M3 omitting the field — see
+        project memory project_minimax_reasoning_think_block_scene) must be
+        rejected at the server boundary, not silently shipped to Stage 1+2.
+        """
+        c, project_dir = client
+        _seed_canvas(project_dir)
+        with patch("backend.agents.planner.PlannerAgent") as mock_agent_cls:
+            mock_agent_cls.return_value = _llm_mock(style_template="")
+            response = c.post(
+                "/api/v1/projects/proj_commit_dual/creative/diverge/commit"
+            )
+        assert response.status_code == 503, response.text
+        body = response.json()
+        assert body["detail"]["code"] == "LLM_OUTPUT_INVALID"
+        assert "style_template" in body["detail"]["message"]
+        assert "raw_output" in body["detail"]["detail"]
+
+    def test_commit_rejects_wrong_length_value_stack(self, client):
+        """Task 13 contract: story_dna.value_stack must be exactly 4 layers.
+        """
+        c, project_dir = client
+        _seed_canvas(project_dir)
+        bad_stack = [
+            {"value_a": "a", "value_b": "b", "level": "personal"},
+            {"value_a": "a", "value_b": "b", "level": "social"},
+            {"value_a": "a", "value_b": "b", "level": "philosophical"},
+        ]
+        with patch("backend.agents.planner.PlannerAgent") as mock_agent_cls:
+            mock_agent_cls.return_value = _llm_mock(value_stack=bad_stack)
+            response = c.post(
+                "/api/v1/projects/proj_commit_dual/creative/diverge/commit"
+            )
+        assert response.status_code == 503, response.text
+        body = response.json()
+        assert body["detail"]["code"] == "LLM_OUTPUT_INVALID"
+        assert "value_stack" in body["detail"]["message"]
+        assert body["detail"]["detail"]["got_length"] == 3
+        assert "raw_output" in body["detail"]["detail"]
+
+    def test_commit_rejects_invalid_value_stack_level(self, client):
+        """Task 13 contract: each value_stack[i].level must be in
+        {personal, social, philosophical, existential}.
+        """
+        c, project_dir = client
+        _seed_canvas(project_dir)
+        bad_stack = [
+            {"value_a": "a", "value_b": "b", "level": "personal"},
+            {"value_a": "a", "value_b": "b", "level": "social"},
+            {"value_a": "a", "value_b": "b", "level": "weird_level"},
+            {"value_a": "a", "value_b": "b", "level": "existential"},
+        ]
+        with patch("backend.agents.planner.PlannerAgent") as mock_agent_cls:
+            mock_agent_cls.return_value = _llm_mock(value_stack=bad_stack)
+            response = c.post(
+                "/api/v1/projects/proj_commit_dual/creative/diverge/commit"
+            )
+        assert response.status_code == 503, response.text
+        body = response.json()
+        assert body["detail"]["code"] == "LLM_OUTPUT_INVALID"
+        assert "value_stack" in body["detail"]["message"]
+        assert body["detail"]["detail"]["invalid_entries"] == [[2, "weird_level"]]
+        assert "raw_output" in body["detail"]["detail"]

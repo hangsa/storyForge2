@@ -18,10 +18,11 @@ system_prompt: |
   1. 概念要有明确的市场定位（类型、基调、主题、目标读者）
   2. Story DNA 必须包含一个有深度和冲突张力的核心矛盾（core_contradiction）
   3. 核心矛盾要有两个对立的立场（side_a vs side_b），体现价值观冲突
-  4. 价值层级（value_stack）至少3组价值对立，从具体到抽象递进
-  5. premise 用一句话说清故事的独特卖点
-  6. 用中文输出，保持专业性和创意性
-  7. 只输出JSON，不要输出任何其他内容
+  4. 价值层级（value_stack）恰好4层，从具体到抽象递进，层级必须为 personal / social / philosophical / existential
+  5. style_template 基于类型与变异类型推荐写作风格参照（如：冷硬、克制、意识流、白描、华丽等）
+  6. premise 用一句话说清故事的独特卖点
+  7. 用中文输出，保持专业性和创意性
+  8. 只输出JSON，不要输出任何其他内容
 
   {negative_constraints}
 
@@ -33,6 +34,10 @@ user_prompt_template: |
   目标类型：{genre}
 
   请基于这条链路提炼故事概念，输出与 concept_generation 同样的JSON结构：
+
+  请在 story_dna 中额外输出:
+  - style_template: 基于类型与变异类型推荐写作风格参照（如:冷硬、克制、意识流、白描、华丽等）
+  - value_stack: 恰好 4 层，层级（level）必须是 personal / social / philosophical / existential 之一
 
   {{
     "concept": {{
@@ -50,8 +55,12 @@ user_prompt_template: |
         "side_b": "立场B的描述"
       }},
       "value_stack": [
-        {{"value_a": "价值A", "value_b": "价值B", "level": "层级说明"}}
-      ]
+        {{"value_a": "价值A", "value_b": "价值B", "level": "personal"}},
+        {{"value_a": "价值A", "value_b": "价值B", "level": "social"}},
+        {{"value_a": "价值A", "value_b": "价值B", "level": "philosophical"}},
+        {{"value_a": "价值A", "value_b": "价值B", "level": "existential"}}
+      ],
+      "style_template": "写作风格参照"
     }}
   }}
 

@@ -1661,19 +1661,26 @@ def _format_canvas_summary(selected_path: list, nodes: dict) -> str:
 
 
 @router.post("/commit")
-async def commit_canvas(project_id: str):
+async def commit_canvas(project_id: str, data: dict = {}):
     """Translate canvas selected_path into concept_and_dna.json via LLM.
+
+    Optional body fields:
+      - confirmed_path_ids: list[str] override canvas's selected_path
+      - value_stack_override: list[dict] replace story_dna.value_stack after LLM
+      - user_notes: str (placeholder, ignored for now)
 
     Steps:
         1. Read canvas_state.json (400 if not initialized)
-        2. Validate selected_path length >= 2 (root + at least one refinement)
-        3. Build canvas_summary text from selected_path
+        2. Validate path length >= 2 (root + at least one refinement)
+        3. Build canvas_summary text from path
         4. Read project.json for genre
         5. Call PlannerAgent.generate_concept_from_canvas
-        6. Validate LLM output has story_dna.core_contradiction.statement
-        7. Write concept_and_dna.json (last-write-wins; overwrites any existing)
-        8. Update canvas_state.json with committed_at + committed_concept_ref
-        9. Return {concept, story_dna, source}
+        6. Apply optional value_stack_override
+        7. Validate LLM output has story_dna.core_contradiction.statement
+        8. Write concept_and_dna.json (last-write-wins; overwrites any existing)
+        9. Dual-write creative_divergence.json (compat with STAGE1 /concept guard)
+       10. Update canvas_state.json with committed_at + committed_concept_ref
+       11. Return detail envelope with concept/story_dna + previews + novelty
 
     LLM output that misses the gate field is returned as 503 with the raw
     payload in `detail` so the frontend can display the agent's text to the
@@ -1693,7 +1700,7 @@ async def commit_canvas(project_id: str):
             },
         )
 
-    selected_path = canvas.get("selected_path") or []
+    selected_path = data.get("confirmed_path_ids") or canvas.get("selected_path") or []
     if len(selected_path) < 2:
         raise HTTPException(
             status_code=400,
@@ -1791,6 +1798,13 @@ async def commit_canvas(project_id: str):
             },
         )
 
+    # Optional caller override: replace story_dna.value_stack with user-provided
+    # layers (PRD §6.2 lets the user finalize the four-level value hierarchy
+    # post-LLM). Applied AFTER gate validation so a malformed override can't
+    # trip the LLM_OUTPUT_INVALID path.
+    if data.get("value_stack_override"):
+        story_dna["value_stack"] = data["value_stack_override"]
+
     # W4: Write canvas_state.json FIRST (stamp committed_at), then write
     # concept_and_dna.json. If we crash between the two writes, we end up
     # with "canvas says committed, concept file not yet updated" — the user
@@ -1832,6 +1846,43 @@ async def commit_canvas(project_id: str):
             },
         )
 
+    # Dual-write: creative_divergence.json (compat with STAGE1 /concept guard
+    # in stage1_concept.py:_read_creative_intent). The Stage 1 guard reads
+    # `prompt` and exits with INTENT_MISSING if absent. We write the
+    # raw_intent prompt so /stage1/concept can proceed even when the
+    # canvas-supplied concept is taken. 1700-char cap matches the
+    # user_modifications[:1700] slice at stage1_concept.py:95.
+    raw_intent = canvas.get("raw_intent") or {}
+    cd_compat = {
+        "prompt": (raw_intent.get("prompt", "") or "")[:1700],
+        "variants": [],
+        "selected_id": None,
+        "selected_at": now,
+        "source": "canvas",
+    }
+    try:
+        _get_fm().write_json(project_id, "creative_divergence.json", cd_compat)
+    except OSError as exc:
+        logger.error("commit_canvas creative_divergence dual-write failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "STORAGE_WRITE_FAILED",
+                "message": f"creative_divergence.json 写入失败：{exc}（概念已写入，可重试）",
+                "detail": {},
+            },
+        )
+
+    novelty = canvas.get("novelty_scores") or {}
+    warnings: list[str] = []
+    composite = novelty.get("composite")
+    if isinstance(composite, (int, float)) and composite < 0.4:
+        # D-2: warn-don't-block policy. Submission proceeds; UI surfaces
+        # the low-novelty advisory so the user can decide whether to expand
+        # / mutate further before re-committing.
+        warnings.append("novelty_below_threshold:composite<0.4 仅警告,不阻止")
+
     return {
         "error": False,
         "code": "OK",
@@ -1841,6 +1892,11 @@ async def commit_canvas(project_id: str):
             "story_dna": story_dna,
             "source": "canvas",
             "committed_at": now,
+            "concept_preview": concept,
+            "story_dna_preview": story_dna,
+            "novelty_summary": novelty,
+            "next_step_url": f"/project/{project_id}/wizard?step=2",
+            "warnings": warnings,
         },
     }
 

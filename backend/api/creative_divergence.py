@@ -106,8 +106,25 @@ def _generate_variants(prompt: str, count: int) -> List[dict]:
 
 @router.get("/creative-divergence")
 def list_variants(project_id: str):
+    """List creative-divergence variants + selection marker.
+
+    The additional `has_selection` + `selected_at` fields let the workspace
+    wizard prefill pass detect "creative divergence completed" without
+    needing a second round-trip to a preflight-check endpoint. The
+    sidebar's `completed || current` reachability test in WizardSidebar.tsx
+    depends on completedSteps including 1 when creative_divergence.json
+    has selected_at populated — which the prefill pass now reads from this
+    payload (proj_f0721bdc 2026-08-31 regression where step 1 sidebar item
+    stayed grayed out after a complete divergence run).
+    """
     data = _read_cd(project_id)
-    return {"variants": data["variants"], "selected_id": data.get("selected_id")}
+    selected_at = data.get("selected_at")
+    return {
+        "variants": data["variants"],
+        "selected_id": data.get("selected_id"),
+        "has_selection": data.get("selected_id") is not None,
+        "selected_at": selected_at,
+    }
 
 
 @router.post("/creative-divergence/generate")

@@ -17,15 +17,23 @@ class ApiError extends Error {
   }
 }
 
-export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   let res: Response;
   try {
+    const mergedHeaders: Record<string, string> = body
+      ? { "Content-Type": "application/json", ...(headers ?? {}) }
+      : { ...(headers ?? {}) };
     res = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      headers: Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
@@ -548,6 +556,135 @@ export interface RollbackResult {
 }
 
 export type BranchStatus = "active" | "dimmed";
+
+// --- v1.2 Creative Divergence types ---
+
+export interface RawIntent {
+  prompt: string;
+  genre_primary: string;
+  genre_secondary?: string;
+  target_reader?: string;
+  reference_works?: string[];
+  forbidden_directions?: string[];
+  quick_mode?: boolean;
+  /** Trope tags filled in asynchronously by the /init endpoint's
+   *  fire-and-forget Tier 3 LLM call (PRD §3.5). May be absent until
+   *  background extraction completes. */
+  trope_tags?: string[];
+}
+
+export interface IdeaVariant {
+  id: string;
+  title: string;
+  premise_one_line: string;
+  mutation_type: string;
+  mutation_logic: string;
+  estimated_novelty: number;
+  trope_tags: string[];
+  regenerated_count: number;
+}
+
+export interface ContradictionCandidate {
+  template_type: string;
+  preview_statement: string;
+  side_a: string;
+  side_b: string;
+  tension_score: number;
+}
+
+export interface CoreContradiction {
+  template_type: string;
+  statement: string;
+  side_a: string;
+  side_b: string;
+  tension_score: number;
+  is_custom: boolean;
+  confirmed_at: string;
+}
+
+export interface ConfirmContradictRequest {
+  template_type: string;
+  statement: string;
+  side_a: string;
+  side_b: string;
+  tension_score?: number;
+  is_custom: boolean;
+}
+
+export interface WhatIfNode {
+  id: string;
+  parent_id: string | null;
+  content: string;
+  novelty_score: number | null;
+  children_ids: string[];
+}
+
+export interface NoveltyScores {
+  market_saturation: number;
+  trope_similarity: number;
+  contradiction_depth: number;
+  discussion_potential: number;
+  composite: number;
+  /** Letter grade derived from the composite score (e.g. "中等"). Optional
+   *  on older payloads — readers must tolerate absence. */
+  grade?: string;
+  computed_at: string;
+  trope_extraction_status: "pending" | "completed" | "failed";
+}
+
+export interface ValueStackLayer {
+  value_a: string;
+  value_b: string;
+  level: "personal" | "social" | "philosophical" | "existential";
+}
+
+export interface CommitRequest {
+  confirmed_path_ids?: string[];
+  user_notes?: string;
+  value_stack_override?: ValueStackLayer[];
+}
+
+export interface CommitResponse {
+  concept_preview?: Record<string, unknown>;
+  story_dna_preview?: Record<string, unknown>;
+  novelty_summary?: NoveltyScores;
+  next_step_url?: string;
+  warnings?: string[];
+  concept?: Record<string, unknown>;
+  story_dna?: Record<string, unknown>;
+  source: string;
+  committed_at: string;
+}
+
+export interface FuseRequest {
+  genre_primary: string;
+  genre_secondary: string;
+  prompt: string;
+}
+
+export interface FuseResponse {
+  variants: IdeaVariant[];
+  fusion_distance: { distance: number; compatibility: string };
+  risk_level: "low" | "medium" | "high";
+}
+
+export interface CanvasStateV3 {
+  schema_version: 3 | 2;
+  root_node_id: string | null;
+  raw_intent?: RawIntent | null;
+  nodes: Record<string, unknown>;
+  edges: unknown[];
+  selected_path: string[];
+  branch_choices: Record<string, string>;
+  core_contradiction: CoreContradiction | null;
+  novelty_scores: NoveltyScores | null;
+  idea_variants?: IdeaVariant[];
+  session_metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  committed_at?: string | null;
+  committed_concept_ref?: string | null;
+}
 
 // --- v1.7 Creative Canvas types ---
 
@@ -1238,6 +1375,117 @@ export const api = {
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/canvas/commit`,
       {}
+    ),
+
+  // --- v1.2 Creative Divergence ---
+  postDivergeInit: (projectId: string, premise: string) =>
+    request<CanvasStateV3>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/init`,
+      { premise },
+    ),
+
+  postDivergeMutate: (
+    projectId: string,
+    body: { node_id: string; operation: string },
+  ) =>
+    request<{
+      new_node: Record<string, unknown>;
+      mutation_result: Record<string, unknown>;
+      dimmed_count: number;
+    }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/apply-mutation`,
+      body,
+    ),
+
+  postDivergeMutateRegenerate: (projectId: string, nodeId: string, ifMatch?: string) =>
+    request<{ variant: IdeaVariant }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/mutate/${encodeURIComponent(nodeId)}/regenerate`,
+      undefined,
+      ifMatch ? { "If-Match": ifMatch } : undefined,
+    ),
+
+  postDivergeContradict: (
+    projectId: string,
+    body: { variant_id: string; variant_content: string },
+  ) =>
+    request<{ candidates: ContradictionCandidate[] }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/contradict`,
+      body,
+    ),
+
+  putDivergeContradict: (
+    projectId: string,
+    body: ConfirmContradictRequest,
+    ifMatch?: string,
+  ) =>
+    request<{ core_contradiction: CoreContradiction }>(
+      "PUT",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/contradict`,
+      body,
+      ifMatch ? { "If-Match": ifMatch } : undefined,
+    ),
+
+  postDivergeWhatIfExpand: (projectId: string, nodeId: string) =>
+    request<{
+      nodes: Record<string, unknown>;
+      scores: Record<string, unknown>;
+      suggestion: string;
+    }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/expand`,
+      { node_id: nodeId },
+    ),
+
+  putDivergeWhatIfSelect: (
+    projectId: string,
+    pathNodeIds: string[],
+    ifMatch?: string,
+  ) =>
+    request<{
+      selected_path: string[];
+      evaluation: string;
+      evaluated_at: string;
+    }>(
+      "PUT",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/select`,
+      { path_node_ids: pathNodeIds },
+      ifMatch ? { "If-Match": ifMatch } : undefined,
+    ),
+
+  getDivergeNovelty: (projectId: string) =>
+    request<NoveltyScores>(
+      "GET",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/novelty`,
+    ),
+
+  postDivergeCommit: (projectId: string, body: CommitRequest = {}) =>
+    request<CommitResponse>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/commit`,
+      body,
+    ),
+
+  getDivergeState: (projectId: string) =>
+    request<CanvasStateV3>(
+      "GET",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/state`,
+    ),
+
+  deleteDivergeState: (projectId: string) =>
+    request<{ root_node_id: string | null; nodes: Record<string, never>; edges: never[]; selected_path: never[] }>(
+      "DELETE",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/state`,
+    ),
+
+  postDivergeFuse: (projectId: string, body: FuseRequest) =>
+    request<FuseResponse>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/fuse`,
+      body,
     ),
 
   // --- v1.7 Branch Simulation ---

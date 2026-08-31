@@ -38,6 +38,45 @@ const INITIAL: DivergenceState = {
   loading: true,
 };
 
+// Returns a DivergenceState patch with strictly-downstream fields cleared.
+// When the user edits subStage X and clicks "下一步", we want fields past
+// X to be empty so each S0* component's auto-trigger rebuilds them instead
+// of seeing stale data from a prior run. Without this, the picker-list and
+// tree would show contradictions / what-if paths built from the old prompt
+// instead of the new one (the "you edited earlier and saved but the canvas
+// still shows the old expansion" bug).
+//
+// Field ownership map:
+//
+//   A → rawIntent         clears {variants, coreContradiction, selectedPath}
+//   B → variants          clears {coreContradiction, selectedPath}
+//   C → coreContradiction clears {selectedPath}
+//   D → selectedPath      no-op (last producing stage)
+//   E → terminal          not applicable
+//
+// SubStage ordering for compare: A < B < C < D < E.
+const SUB_STAGE_ORDER: SubStage[] = ["A", "B", "C", "D", "E"];
+
+export function clearedDownstream(
+  prev: DivergenceState,
+  current: SubStage,
+): Partial<DivergenceState> {
+  const idx = SUB_STAGE_ORDER.indexOf(current);
+  if (idx < 0) return {};
+  const cleared: Partial<DivergenceState> = {};
+  // We clear all fields owned by a later sub-stage, except `quickMode`
+  // (a sticky preference that survives edits) and `loading` / `subStage`
+  // (managed by the calling onComplete callbacks).
+  for (let later = idx + 1; later < SUB_STAGE_ORDER.length; later++) {
+    const laterStage = SUB_STAGE_ORDER[later];
+    if (laterStage === "B") cleared.variants = [];
+    else if (laterStage === "C") cleared.coreContradiction = null;
+    else if (laterStage === "D") cleared.selectedPath = [];
+    // E is terminal and owns no DivergenceState field.
+  }
+  return cleared;
+}
+
 // Infer the current SubStage from /creative/diverge/state payload. The
 // backend persists a partial state for every step the user has cleared, so
 // the largest "advanced" substage wins. Quick mode is read from the saved
@@ -126,6 +165,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
   const onCComplete = (coreContradiction: CoreContradiction) =>
     setState((prev) => ({
       ...prev,
+      ...clearedDownstream(prev, "C"),
       coreContradiction,
       subStage: prev.quickMode ? "E" : "D",
     }));
@@ -157,7 +197,12 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             projectId={projectId}
             initial={state.rawIntent}
             onComplete={(rawIntent) =>
-              setState((prev) => ({ ...prev, rawIntent, subStage: "B" }))
+              setState((prev) => ({
+                ...prev,
+                ...clearedDownstream(prev, "A"),
+                rawIntent,
+                subStage: "B",
+              }))
             }
           />
         )}
@@ -169,7 +214,12 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             }
             initial={state.variants}
             onComplete={(variants) =>
-              setState((prev) => ({ ...prev, variants, subStage: "C" }))
+              setState((prev) => ({
+                ...prev,
+                ...clearedDownstream(prev, "B"),
+                variants,
+                subStage: "C",
+              }))
             }
             onBack={() =>
               setState((prev) => ({ ...prev, subStage: "A" }))
@@ -194,6 +244,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             onComplete={(path) =>
               setState((prev) => ({
                 ...prev,
+                ...clearedDownstream(prev, "D"),
                 selectedPath: path,
                 subStage: "E",
               }))

@@ -11,6 +11,7 @@
 """
 
 from backend.creative_os.idea_pool import IdeaPool
+from backend.creative_os.idea_pool_importer import IdeaPoolImporter
 from backend.creative_os.trope_pool import TropePool
 from backend.creative_os.mutation_engine import MutationEngine
 from backend.creative_os.contradiction_engine import ContradictionEngine
@@ -20,6 +21,7 @@ from backend.creative_os.novelty_evaluator import NoveltyEvaluator
 
 __all__ = [
     "IdeaPool",
+    "IdeaPoolImporter",
     "TropePool",
     "MutationEngine",
     "ContradictionEngine",

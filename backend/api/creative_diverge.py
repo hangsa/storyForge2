@@ -17,6 +17,7 @@ Provides thin orchestration endpoints for the Creative Canvas frontend:
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import uuid
@@ -125,7 +126,16 @@ def _write_canvas(project_id: str, data: dict, preserve_committed: bool = False)
     invalidate the "已提交" chip on the frontend. Pass preserve_committed=True
     from /commit itself so the marker the endpoint just stamped survives
     the write.
+
+    Strips transient `_etag` before persisting so it never lands on disk;
+    it's recomputed on every read instead. Also bumps `updated_at` and
+    `session_metadata.operation_count` so audit consumers can see when the
+    canvas last changed.
     """
+    # Strip transient ETag BEFORE validation so we never try to validate an
+    # ETag field as canvas state. Recomputed at read time instead.
+    data.pop("_etag", None)
+
     try:
         _validate_canvas_invariants(data)
     except CanvasInvariantError as exc:
@@ -140,12 +150,65 @@ def _write_canvas(project_id: str, data: dict, preserve_committed: bool = False)
         data.pop("committed_at", None)
         data.pop("committed_concept_ref", None)
 
+    # Stamp updated_at + bump operation_count so the audit trail is accurate.
+    # Mirrors the convention used by /init and /contradict PUT (which use
+    # datetime.now(timezone.utc)) so ETag hashing sees stable timestamps.
+    now_iso = datetime.now(timezone.utc).isoformat()
+    data["updated_at"] = now_iso
+    session_metadata = data.setdefault("session_metadata", {})
+    session_metadata.setdefault("operation_count", 0)
+    session_metadata["operation_count"] += 1
+    session_metadata["last_modified_at"] = now_iso
+
     path = _get_canvas_path(project_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     tmp_path.replace(path)
+
+
+# ---------------------------------------------------------------------------
+# ETag / Optimistic Locking
+# ---------------------------------------------------------------------------
+
+
+def _compute_etag(canvas: dict) -> str:
+    """Compute deterministic MD5 of canonical JSON for optimistic lock.
+
+    Used to detect concurrent edits to the same canvas — return the first
+    16 hex chars (64 bits) to keep URLs/headers short. Collision probability
+    ~1 in 10^18 across realistic project volumes; acceptable for ETag.
+    """
+    # Strip transient fields before hashing so the on-disk state always
+    # corresponds to a stable hash. `_etag` itself must be excluded so the
+    # hash is reproducible regardless of how many times it's been computed.
+    payload = {k: v for k, v in canvas.items() if k != "_etag"}
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return hashlib.md5(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def _check_etag_or_409(canvas: dict, if_match: Optional[str]) -> None:
+    """Raise HTTPException(409) if If-Match header disagrees with canvas ETag.
+
+    No-op when if_match is None/empty (header absent → caller opted out of
+    the optimistic-lock check). Pass the canvas dict the read returned
+    (with `_etag` populated) so the comparison uses the same hash the GET
+    /state endpoint surfaced.
+    """
+    if not if_match:
+        return
+    expected = canvas.get("_etag", "")
+    if if_match != expected:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": True,
+                "code": "RACE_CONDITION",
+                "message": "你的画布已被其他设备更新,请刷新后重试",
+                "detail": {"current_etag": expected},
+            },
+        )
 
 
 def _ensure_project(project_id: str) -> None:
@@ -488,7 +551,13 @@ def _save_raw_intent_trope_tags(project_id: str, raw_intent: Optional[dict] = No
 
 @router.get("/state")
 async def get_canvas_state(project_id: str):
-    """Read the current canvas state. Returns empty skeleton if not initialized."""
+    """Read the current canvas state. Returns empty skeleton if not initialized.
+
+    Response includes `etag` (top-level field) — clients can submit it as
+    `If-Match` header to write endpoints for optimistic locking. The ETag is
+    an MD5 of the canonical-JSON serialization of the canvas (first 16 hex
+    chars); it changes whenever any persisted field changes.
+    """
     _ensure_project(project_id)
     canvas = _read_canvas(project_id)
     if canvas is None:
@@ -502,12 +571,15 @@ async def get_canvas_state(project_id: str):
                 "edges": [],
                 "selected_path": [],
             },
+            "etag": None,
         }
+    etag = _compute_etag(canvas)
     return {
         "error": False,
         "code": "OK",
         "message": "",
         "detail": canvas,
+        "etag": etag,
     }
 
 
@@ -1189,15 +1261,25 @@ async def apply_mutation(project_id: str, data: dict):
 
 
 @router.post("/merge")
-async def merge_nodes(project_id: str, data: dict):
+async def merge_nodes(project_id: str, data: dict, http_request: Request):
     """Placeholder: merge two WhatIf nodes into a new hybrid node.
 
     Request body:
         {"node_id_a": "wi_001_00", "node_id_b": "wi_002_00"}
 
     Requires full LLM backend integration.
+
+    Honors `If-Match` header for optimistic locking — when this endpoint is
+    upgraded to do a real canvas write, the ETag check will already be in
+    place to guard against concurrent overwrites.
     """
     _ensure_project(project_id)
+
+    canvas = _read_canvas(project_id)
+    if canvas is not None:
+        canvas["_etag"] = _compute_etag(canvas)
+        _check_etag_or_409(canvas, http_request.headers.get("If-Match"))
+
     return {
         "error": False,
         "code": "OK",
@@ -2048,12 +2130,15 @@ async def list_contradictions(project_id: str, request: ContradictRequest):
 
 
 @router.put("/contradict")
-async def confirm_contradiction(project_id: str, request: ConfirmContradictRequest):
+async def confirm_contradiction(project_id: str, request: ConfirmContradictRequest, http_request: Request):
     """User confirms or customizes a contradiction; writes to canvas_state.core_contradiction.
 
     If `tension_score` is omitted, it is auto-computed from the statement text
     via ContradictionEngine.score_depth(). A `confirmed_at` ISO timestamp is
     stamped on the write so the frontend can show "已确认 at ...".
+
+    Honors `If-Match` header for optimistic locking: if the supplied ETag
+    doesn't match the current canvas state, returns 409 RACE_CONDITION.
     """
     _ensure_project(project_id)
 
@@ -2069,6 +2154,11 @@ async def confirm_contradiction(project_id: str, request: ConfirmContradictReque
             },
         )
 
+    # Populate transient ETag and check against If-Match. Strip _etag before
+    # write so it never lands on disk.
+    canvas["_etag"] = _compute_etag(canvas)
+    _check_etag_or_409(canvas, http_request.headers.get("If-Match"))
+
     engine = _build_contradiction_engine()
     tension = request.tension_score
     if tension is None:
@@ -2083,7 +2173,6 @@ async def confirm_contradiction(project_id: str, request: ConfirmContradictReque
         "is_custom": request.is_custom,
         "confirmed_at": datetime.now(timezone.utc).isoformat(),
     }
-    canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
     _write_canvas(project_id, canvas)
 
     return {"core_contradiction": canvas["core_contradiction"]}
@@ -2170,7 +2259,7 @@ def _mutation_op_from_type(t: str):
 
 
 @router.post("/mutate/{node_id}/regenerate")
-async def regenerate_variant(project_id: str, node_id: str):
+async def regenerate_variant(project_id: str, node_id: str, http_request: Request):
     """Re-run mutation for a single idea_variant; preserves ID + increments regenerated_count.
 
     PRD §3.3 — the user clicks "重新生成" on a single idea card and the system
@@ -2181,6 +2270,8 @@ async def regenerate_variant(project_id: str, node_id: str):
     MutationEngine is constructed lazily — if no router is configured the
     endpoint falls back to a synthesized minimal variant (preserves the same
     count/ID semantics) so CI and dev environments without an LLM still work.
+
+    Honors `If-Match` header for optimistic locking.
     """
     canvas = _read_canvas(project_id)
     if canvas is None:
@@ -2193,6 +2284,11 @@ async def regenerate_variant(project_id: str, node_id: str):
                 "detail": {},
             },
         )
+
+    # Populate transient ETag and check against If-Match. Strip _etag before
+    # write so it never lands on disk.
+    canvas["_etag"] = _compute_etag(canvas)
+    _check_etag_or_409(canvas, http_request.headers.get("If-Match"))
 
     variants = canvas.get("idea_variants", []) or []
     variant = next((v for v in variants if v.get("id") == node_id), None)
@@ -2260,7 +2356,6 @@ async def regenerate_variant(project_id: str, node_id: str):
         dict(new_variant) if v.get("id") == node_id else v
         for v in variants
     ]
-    canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
     _write_canvas(project_id, canvas)
     return {"variant": new_variant}
 

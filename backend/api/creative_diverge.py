@@ -2493,6 +2493,30 @@ async def regenerate_variant(project_id: str, node_id: str, http_request: Reques
     return {"variant": new_variant}
 
 
+def _extract_fusion_metadata(canvas: dict) -> Optional[tuple[str, int]]:
+    """Pick (risk_level, distance) from the most recent fusion variant.
+
+    Returns None when no fusion variant exists on the canvas (so /commit
+    can decide whether to write fusion_meta or skip). Picks the LAST
+    fusion variant by list position — variants are appended in order, so
+    last == most recent.
+
+    Defaults ("low", 0) when a fusion variant exists but its metadata
+    fields are missing (defensive for legacy / partial canvas state).
+    """
+    variants = canvas.get("idea_variants", []) or []
+    fusions = [v for v in variants if v.get("mutation_type") == "fusion"]
+    if not fusions:
+        return None
+    fusion = fusions[-1]   # last = most recent (append-only invariant)
+    risk = (fusion.get("risk_level") or "low").strip() or "low"
+    try:
+        dist = int(fusion.get("fusion_distance") or 0)
+    except (TypeError, ValueError):
+        dist = 0
+    return (risk, dist)
+
+
 @router.post("/fuse")
 async def fuse_genres(project_id: str, request: FuseRequest):
     """Cross-genre fusion with distance-based risk grading (PRD §3.4).

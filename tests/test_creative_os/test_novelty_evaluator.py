@@ -8,7 +8,10 @@ import numpy as np
 import pytest
 
 from backend.creative_os.contradiction_engine import ContradictionEngine
-from backend.creative_os.novelty_evaluator import NoveltyEvaluator
+from backend.creative_os.novelty_evaluator import (
+    NoveltyEvaluator,
+    _parse_trope_tags,
+)
 from backend.creative_os.trope_pool import TropePool
 
 
@@ -105,3 +108,80 @@ class TestNoveltyEvaluator:
         content = "赛博修仙 非遗文化 克苏鲁 " * 10
         score = evaluator.evaluate(content)
         assert score.grade in {"高新颖度", "中等", "偏低", "低"}
+
+
+class TestParseTropeTags:
+    """_parse_trope_tags is the cleanup pass that runs after
+    fill_trope_tags_async gets the LLM response. Reasoning models (MiniMax-M3)
+    wrap their answer in <think>...</think> blocks; without the strip, naive
+    comma-splitting surfaces English self-review fragments as tags. These
+    tests pin the cleanup behavior so a regression reintroducing pollution
+    fails loud."""
+
+    def test_clean_comma_separated(self):
+        # No think-block, plain comma-separated answer. Direct path.
+        text = "修仙,异族入侵,反抗异族,神树降临,天道压制"
+        assert _parse_trope_tags(text) == [
+            "修仙", "异族入侵", "反抗异族", "神树降临", "天道压制",
+        ]
+
+    def test_full_width_comma(self):
+        # Chinese users sometimes type the full-width form.
+        assert _parse_trope_tags("修仙，异族入侵，反抗异族") == [
+            "修仙", "异族入侵", "反抗异族",
+        ]
+
+    def test_strips_think_block(self):
+        # Most important regression test: response with <think>...</think>
+        # containing English self-review must not leak English fragments
+        # into the saved tags. This is the pollution pattern that hit
+        # proj_f0721bdc on 2026-08-31.
+        text = (
+            "<think>"
+            "The user wants me to extract trope tags from this creative "
+            "description about a fantasy world where an otherworldly "
+            "invasion happened in ancient times and a divine tree called "
+            "Jianmu descended to suppress the heavenly dao.\n\n"
+            "Let me identify:\n- 异族入侵\n- 修仙\n"
+            "alien invasion"
+            "</think>"
+            "\n\n修仙,异族入侵,远古秘辛,神树降临,镇压天道,仙侠"
+        )
+        tags = _parse_trope_tags(text)
+        assert tags == ["修仙", "异族入侵", "远古秘辛", "神树降临", "镇压天道", "仙侠"]
+        # No English tokens leaked through.
+        assert all(all(ord(c) > 127 for c in t) for t in tags)
+
+    def test_strips_parenthetical_asides(self):
+        # Model leaves parenthetical English explanations inline.
+        assert _parse_trope_tags("异族入侵 (alien invasion), 修仙 (cultivation), 神树降临") == [
+            "异族入侵", "修仙", "神树降临",
+        ]
+
+    def test_answer_inside_think_block_falls_back_to_per_line(self):
+        # Failure mode observed on proj_1a7d7fcf 2026-08-23: model puts the
+        # whole answer inside the think block with no closing `</think>`.
+        # Per-line CJK-density filter recovers the tags.
+        text = (
+            "<think>\n"
+            "异族入侵\n"
+            "alien invasion review note\n"
+            "修仙,神树降临\n"
+            "End of analysis.\n"
+        )
+        assert _parse_trope_tags(text) == ["异族入侵", "修仙", "神树降临"]
+
+    def test_empty_and_whitespace(self):
+        assert _parse_trope_tags("") == []
+        assert _parse_trope_tags("   \n  ") == []
+
+    def test_deduplicates_preserving_order(self):
+        # The model occasionally repeats a tag at the start and end of its
+        # answer. First-seen order wins.
+        text = "修仙,异族入侵,修仙,异族入侵"
+        assert _parse_trope_tags(text) == ["修仙", "异族入侵"]
+
+    def test_trailing_punctuation(self):
+        # Trailing commas / periods are common. They should not become
+        # empty-string tags.
+        assert _parse_trope_tags("修仙，异族入侵，") == ["修仙", "异族入侵"]

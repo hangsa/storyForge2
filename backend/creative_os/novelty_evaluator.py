@@ -1,11 +1,24 @@
 """Novelty Evaluator — 新颖度评估器 (4 维评分, 75% 确定性)."""
 
 import logging
+import re
 from typing import Any, Callable
 
 import numpy as np
 
 from backend.models.creative_os import NoveltyScore
+
+# Reasoning models (MiniMax-M3 etc.) wrap their actual answer inside a
+# `...` block — when that chain-of-thought leaks through into a
+# downstream consumer, the "tags" end up polluted with English self-review and
+# parenthetical reasoning fragments. We strip the think-block before splitting
+# on commas so the saved trope_tags stay CJK-only. Per-line CJK-density fallback
+# (`_extract_prose_lines_from_think_block`) handles the case where the model
+# puts the entire answer INSIDE the think block with no markers (matches the
+# stage4_writing.py `_extract_prose_lines_from_think_block` heuristic, applied
+# here to short tag-style output).
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_CJK_RE = re.compile(r"[一-鿿]")
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +31,94 @@ PREDICTABILITY_KEYWORDS = [
     "打败", "获得了", "成功", "最终胜利", "变强", "升级",
     "碾压", "轻松", "顺利",
 ]
+
+
+def _parse_trope_tags(text: str) -> list[str]:
+    """Extract clean CJK trope tags from a reasoning-model response.
+
+    Two-step pipeline so reasoning pollution never reaches the saved tags:
+
+      1. Strip the `<think>...</think>` block. Reasoning models (MiniMax-M3
+         etc.) emit English self-review + parenthetical planning inside the
+         think block and put the actual comma-separated answer AFTER it. A
+         naive split-on-comma on the full response would surface fragments
+         like "异族入侵 (alien invasion)" with the parenthetical still
+         attached, or English review sentences as "tags".
+      2. If no `<think>` markers were present (model answered directly) AND
+         the residual text is mostly English self-review, fall back to a
+         per-line CJK-density filter that keeps only lines with cjk >= 2 and
+         cjk_pct >= 0.55. Handles the rare case where MiniMax-M3 emits the
+         whole answer INSIDE the think block with no closing marker.
+
+    Splits on both ASCII `,` and CJK `，` since the prompt example uses
+    ASCII comma but Chinese users sometimes type the full-width form.
+
+    Returns a deduplicated list preserving first-seen order.
+    """
+    if not text:
+        return []
+
+    # Step 1: drop the think block. Reasoning models put the actual answer
+    # AFTER `</think>`; everything inside is chain-of-thought noise. Detect
+    # whether the strip actually removed anything so we know which parser
+    # path to take next.
+    stripped, n_sub = _THINK_BLOCK_RE.subn("", text)
+    had_think_block = n_sub > 0
+    residual = stripped.strip()
+
+    candidates: list[str] = []
+
+    if had_think_block and residual:
+        # Path A: think block stripped cleanly, residual is the model's
+        # post-think answer. Comma-split with parenthetical cleanup.
+        for raw in re.split(r"[,，]", residual):
+            t = raw.strip()
+            if not t:
+                continue
+            # Drop parenthetical asides that the reasoning model left in:
+            # "异族入侵 (alien invasion)" → "异族入侵". Parenthetical
+            # stripping is a safety net, not the primary path.
+            t = re.sub(r"\s*[（(].*?[)）]\s*", "", t).strip()
+            if t:
+                candidates.append(t)
+    else:
+        # Path B (fallback): no think-block markers present, OR the strip
+        # left the residual empty. Walk each line and keep CJK-dense lines.
+        # Heuristic mirrors stage4_writing.py
+        # `_extract_prose_lines_from_think_block`.
+        for line in (residual or text).split("\n"):
+            s = line.strip().rstrip("。.,;:;：；")
+            if not s:
+                continue
+            # Strip parenthetical asides before density check so a line like
+            # "异族入侵 (alien invasion), 修仙 (cultivation)" still passes
+            # the CJK ratio filter. The cleaned text is what we also split
+            # on commas below, so this serves double duty.
+            s_clean = re.sub(r"\s*[（(].*?[)）]\s*", "", s).strip()
+            if s_clean:
+                s = s_clean
+            cjk = len(_CJK_RE.findall(s))
+            if cjk < 2:
+                continue
+            total_alpha = sum(1 for ch in s if ch.isascii() and ch.isalpha())
+            if cjk / max(cjk + total_alpha, 1) < 0.55:
+                continue
+            # Split on commas inside the line as well — the model sometimes
+            # packs multiple tags onto one line.
+            for raw in re.split(r"[,，]", s):
+                t = raw.strip()
+                t = re.sub(r"\s*[（(].*?[)）]\s*", "", t).strip()
+                if t:
+                    candidates.append(t)
+
+    # Deduplicate, preserve first-seen order.
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in candidates:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
 
 
 class NoveltyEvaluator:
@@ -171,7 +272,7 @@ class NoveltyEvaluator:
             return
 
         text = getattr(response, "text", "") or ""
-        tags = [t.strip() for t in text.split(",") if t.strip()]
+        tags = _parse_trope_tags(text)
         if not tags:
             return
 

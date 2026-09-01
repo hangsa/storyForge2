@@ -2,7 +2,7 @@ name: trope_extraction
 provider: anthropic
 model: claude-haiku-4-5-20251001
 temperature: 0.3
-max_tokens: 512
+max_tokens: 2000
 negative_constraints: ""
 output_format:
   type: text

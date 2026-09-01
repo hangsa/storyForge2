@@ -2329,8 +2329,19 @@ def _genre_to_trope(genre: str, prompt: str):
     )
 
 
-def _mutation_to_idea_variant(result, genre_a: str, genre_b: str) -> dict:
+def _mutation_to_idea_variant(
+    result,
+    genre_a: str,
+    genre_b: str,
+    *,
+    risk_level: str = "low",
+    distance: int = 0,
+) -> dict:
     """Adapt a MutationResult into the idea_variant schema persisted on the canvas.
+
+    For fusion variants, callers pass risk_level + distance (computed by
+    GenreFusionEngine.compute_distance + _risk_from_distance). Other mutation
+    ops use the defaults "low"/0.
 
     The v3 canvas's idea_variants list is consumed by /commit's LLM prompt as
     candidate concepts; mapping MutationResult → variant here keeps the schema
@@ -2343,8 +2354,10 @@ def _mutation_to_idea_variant(result, genre_a: str, genre_b: str) -> dict:
         "mutation_type": result.operation.value,
         "mutation_logic": result.core_conflict,
         "estimated_novelty": 0.7,
-        "trope_tags": [genre_a, genre_b],
+        "trope_tags": [genre_a, genre_b] if genre_a and genre_b else [],
         "regenerated_count": 0,
+        "risk_level": risk_level,
+        "fusion_distance": distance,
     }
 
 
@@ -2497,6 +2510,41 @@ async def fuse_genres(project_id: str, request: FuseRequest):
     """
     _ensure_project(project_id)
 
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化,请先调用 /init",
+                "detail": {},
+            },
+        )
+
+    raw_intent = canvas.get("raw_intent") or {}
+    if not raw_intent.get("genre_primary") or not request.genre_secondary:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "INTENT_INCOMPLETE",
+                "message": "raw_intent.genre_primary 与 genre_secondary 必须同时存在",
+                "detail": {},
+            },
+        )
+
+    if request.genre_primary == request.genre_secondary:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "FUSION_SAME_GENRE",
+                "message": "主类型与副类型不能相同",
+                "detail": {},
+            },
+        )
+
     from backend.creative_os.genre_fusion_engine import GenreFusionEngine
     from backend.creative_os.mutation_engine import MutationEngine
 
@@ -2517,7 +2565,11 @@ async def fuse_genres(project_id: str, request: FuseRequest):
         mutation_engine = MutationEngine()
         mutation_result = await mutation_engine.fuse(trope_a, trope_b)
         variant = _mutation_to_idea_variant(
-            mutation_result, request.genre_primary, request.genre_secondary
+            mutation_result,
+            request.genre_primary,
+            request.genre_secondary,
+            risk_level=risk_level,
+            distance=distance,
         )
     except NotImplementedError as exc:
         # LLM backend not available (no model_router). Synthesize a minimal
@@ -2537,58 +2589,13 @@ async def fuse_genres(project_id: str, request: FuseRequest):
             "estimated_novelty": 0.7,
             "trope_tags": [request.genre_primary, request.genre_secondary],
             "regenerated_count": 0,
+            "risk_level": risk_level,
+            "fusion_distance": distance,
         }
 
-    # Persist to canvas_state.idea_variants. If the canvas doesn't exist yet
-    # (user fused before /init), seed a minimal v3 canvas with just the
-    # variant. This keeps the endpoint usable in isolation while still being
-    # safe to call after /init.
-    canvas = _read_canvas(project_id)
-    if canvas is None:
-        # Fresh project (no canvas_state.json) — seed a minimal v3 canvas with
-        # a root node so canvas invariants (non-empty selected_path, root_node_id
-        # set, chain linear) pass when _write_canvas re-validates.
-        now_iso = datetime.now(timezone.utc).isoformat()
-        root_id = "wi_001_00"
-        canvas = {
-            "schema_version": 3,
-            "root_node_id": root_id,
-            "nodes": {
-                root_id: {
-                    "id": root_id,
-                    "depth": 0,
-                    "parent_id": None,
-                    "content": "",
-                    "dimension": "角色动机",
-                    "novelty_score": 0,
-                    "trope_tags": [],
-                    "saturation_warning": False,
-                    "mutation_context": None,
-                    "children_ids": [],
-                    "is_expanded": False,
-                    "branch_status": "active",
-                },
-            },
-            "edges": [],
-            "selected_path": [root_id],
-            "branch_choices": {},
-            "evaluations": {},
-            "created_at": now_iso,
-            "updated_at": now_iso,
-            "committed_at": None,
-            "committed_concept_ref": None,
-            "idea_variants": [],
-            "core_contradiction": None,
-            "novelty_scores": None,
-            "raw_intent": None,
-            "session_metadata": {
-                "created_at": now_iso,
-                "last_modified_at": now_iso,
-                "elapsed_seconds": 0,
-                "operation_count": 0,
-                "ab_test_bucket": "control",
-            },
-        }
+    # Persist to canvas_state.idea_variants. We read canvas at the top of this
+    # handler (after CANVAS_NOT_INITIALIZED check), so it's guaranteed to be
+    # non-None here — no fresh-project seeding branch needed.
     canvas.setdefault("idea_variants", []).append(variant)
     canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
     _write_canvas(project_id, canvas)

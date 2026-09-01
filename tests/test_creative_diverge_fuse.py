@@ -42,7 +42,13 @@ def project(tmp_path):
             "created_at": "2026-08-30T10:00:00", "updated_at": "2026-08-30T10:00:00",
             "committed_at": None, "committed_concept_ref": None,
             "idea_variants": [], "core_contradiction": None,
-            "novelty_scores": None, "raw_intent": None,
+            "novelty_scores": None,
+            "raw_intent": {
+                "prompt": "测试",
+                "genre_primary": "修仙",
+                "genre_secondary": "法庭推理",
+                "trope_tags": [],
+            },
             "session_metadata": {
                 "created_at": "2026-08-30T10:00:00",
                 "last_modified_at": "2026-08-30T10:00:00",
@@ -63,18 +69,14 @@ def client(project):
     return TestClient(app)
 
 
-def test_fuse_same_genre_low_risk(client, project):
-    """Same genre → distance 0 → risk_level = low."""
+def test_fuse_same_genre_returns_400(client, project):
+    """Same primary/secondary genre → 400 FUSION_SAME_GENRE (per Task 3 contract)."""
     r = client.post(
         f"/api/v1/projects/{project}/creative/diverge/fuse",
         json={"genre_primary": "修仙", "genre_secondary": "修仙", "prompt": "test"},
     )
-    assert r.status_code == 200
-    data = r.json()
-    assert "variants" in data
-    assert len(data["variants"]) == 1
-    assert data["fusion_distance"]["distance"] == 0
-    assert data["risk_level"] == "low"
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "FUSION_SAME_GENRE"
 
 
 def test_fuse_distinct_genres_returns_valid_response(client, project):
@@ -134,12 +136,12 @@ def test_fuse_graceful_when_llm_unavailable(client, project):
     assert variant["mutation_type"] in {"fusion", "FUSION"}
 
 
-def test_fuse_on_fresh_project_seeds_canvas(tmp_path):
-    """Verify /fuse works when no canvas_state.json exists.
+def test_fuse_on_fresh_project_returns_400_canvas_not_initialized(tmp_path):
+    """Verify /fuse returns 400 CANVAS_NOT_INITIALIZED when no canvas exists.
 
-    The endpoint must seed a minimal v3 canvas with a root node so that
-    canvas invariants (non-empty selected_path, root_node_id set, linear
-    chain) pass when _write_canvas re-validates. Previously this 500'd.
+    Task 3 contract: /fuse no longer seeds a fresh canvas — callers must
+    run /init first (the /fuse contract now mirrors other canvas endpoints
+    like /apply-mutation).
     """
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -151,12 +153,10 @@ def test_fuse_on_fresh_project_seeds_canvas(tmp_path):
     pid = "proj_fuse_fresh"
     project_dir = tmp_path / pid
     project_dir.mkdir()
-    # project.json is required for _ensure_project's FileManager.project_exists
     project_dir.joinpath("project.json").write_text(
         json.dumps({"id": pid, "genre": "cool_novel"}),
         encoding="utf-8",
     )
-    # NOTE: no canvas_state.json written — exercise the fresh-project path
     app = FastAPI()
     app.include_router(diverge_router)
     client = TestClient(app)
@@ -165,15 +165,9 @@ def test_fuse_on_fresh_project_seeds_canvas(tmp_path):
             f"/api/v1/projects/{pid}/creative/diverge/fuse",
             json={"genre_primary": "修仙", "genre_secondary": "法庭推理", "prompt": "test"},
         )
-        assert r.status_code == 200, r.text
-        on_disk = json.loads(
-            (settings.projects_dir / pid / "creative_os" / "canvas_state.json").read_text()
-        )
-        # Canvas was created with a valid root
-        assert on_disk["root_node_id"] is not None
-        assert len(on_disk["selected_path"]) > 0
-        assert on_disk["selected_path"][0] == on_disk["root_node_id"]
-        # Variant was appended
-        assert len(on_disk["idea_variants"]) == 1
+        assert r.status_code == 400, r.text
+        assert r.json()["detail"]["code"] == "CANVAS_NOT_INITIALIZED"
+        # No canvas should have been written either.
+        assert not (settings.projects_dir / pid / "creative_os" / "canvas_state.json").exists()
     finally:
         settings.projects_dir = original

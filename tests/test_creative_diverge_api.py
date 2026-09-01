@@ -98,7 +98,7 @@ class TestCanvasInitEndpoint:
 
             response = client.post(
                 "/api/v1/projects/test_project/creative/diverge/init",
-                json={"premise": "测试前提"},
+                json={"premise": "测试前提", "genre_primary": "修仙"},
             )
             assert response.status_code == 200
             data = response.json()

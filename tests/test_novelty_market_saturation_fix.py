@@ -406,7 +406,7 @@ def test_init_returns_200_when_trope_llm_client_builder_raises(tmp_path, monkeyp
     # /init must still return 200
     response = client.post(
         f"/api/v1/projects/{pid}/creative/diverge/init",
-        json={"premise": "测试前提"},
+        json={"premise": "测试前提", "genre_primary": "修仙"},
     )
     assert response.status_code == 200, response.text
     data = response.json()

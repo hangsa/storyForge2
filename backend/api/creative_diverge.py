@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
@@ -598,28 +598,35 @@ async def get_canvas_state(project_id: str):
     }
 
 
+class InitRequest(BaseModel):
+    """Request body for POST /init: canvas initialization + RawIntent capture."""
+
+    premise: str = Field(..., min_length=1, max_length=1700)
+    genre_primary: Optional[str] = None
+    genre_secondary: Optional[str] = None
+    target_reader: Optional[str] = None
+    reference_works: Optional[List[str]] = None
+    forbidden_directions: Optional[List[str]] = None
+    quick_mode: bool = False
+
+
 @router.post("/init")
-async def init_canvas(project_id: str, data: dict):
-    """Initialize the canvas with a root WhatIf node derived from `premise`.
+async def init_canvas(project_id: str, request: InitRequest):
+    """Initialize the canvas with a root WhatIf node from `premise`.
 
-    Request body:
-        {"premise": "一个关于永生者寻找死亡方法的故事"}
-
-    Side effect: spawns a fire-and-forget Tier 3 LLM call to extract Trope
-    tags for the canvas's raw_intent. Tags are written back to
-    canvas_state.json so the next /novelty call uses a real
-    market_saturation score instead of the 50.0 fallback (PRD §3.5).
+    Persists the full RawIntent (PRD §4.1) to canvas.raw_intent. Side
+    effect: spawns a fire-and-forget Tier 3 LLM call to extract Trope
+    tags for the canvas's raw_intent (per PRD §3.5).
     """
     _ensure_project(project_id)
 
-    premise = data.get("premise", "")
-    if not premise:
+    if not (request.genre_primary or "").strip():
         raise HTTPException(
             status_code=400,
             detail={
                 "error": True,
-                "code": "VALIDATION_ERROR",
-                "message": "premise 不能为空",
+                "code": "GENRE_MISSING",
+                "message": "请选择至少一个主类型",
                 "detail": {},
             },
         )
@@ -627,7 +634,7 @@ async def init_canvas(project_id: str, data: dict):
     from backend.creative_os.whatif_engine import WhatIfEngine
 
     engine = WhatIfEngine()
-    root_node = engine.generate_root(premise)
+    root_node = engine.generate_root(request.premise)
 
     now = datetime.now(timezone.utc).isoformat()
     canvas = {
@@ -643,7 +650,16 @@ async def init_canvas(project_id: str, data: dict):
         "idea_variants": [],
         "core_contradiction": None,
         "novelty_scores": None,
-        "raw_intent": {"prompt": premise, "trope_tags": []},
+        "raw_intent": {
+            "prompt": request.premise,
+            "genre_primary": request.genre_primary,
+            "genre_secondary": request.genre_secondary,
+            "target_reader": request.target_reader,
+            "reference_works": request.reference_works,
+            "forbidden_directions": request.forbidden_directions,
+            "quick_mode": request.quick_mode,
+            "trope_tags": [],
+        },
         "session_metadata": {
             "created_at": now,
             "last_modified_at": now,

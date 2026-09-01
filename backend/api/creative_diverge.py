@@ -2402,6 +2402,77 @@ def _risk_from_distance(distance: int) -> str:
     return "high"
 
 
+async def _compute_fusion_variant(
+    genre_primary: str,
+    genre_secondary: str,
+    prompt: str,
+    *,
+    title_suffix: str = "",
+) -> tuple[dict, int, str]:
+    """Build a fresh fusion idea_variant by calling /fuse code path.
+
+    Shared helper used by `/regenerate/raw-intent` (D10 fix) and (optionally)
+    `/fuse` itself. Runs GenreFusionEngine.compute_distance → risk_level →
+    MutationEngine.fuse → _mutation_to_idea_variant, falling back to a
+    synthesized minimal variant when the LLM backend is unavailable
+    (CI / dev environments without a router).
+
+    Args:
+        genre_primary: Main type. Must be non-empty (caller validates).
+        genre_secondary: Sub type. Must differ from primary (caller validates).
+        prompt: Raw prompt text, used as Trope description seed.
+        title_suffix: Optional suffix appended to the synthesized title
+            (e.g. " (重生成)") — only used by the fallback path.
+
+    Returns:
+        (variant_dict, distance, risk_level). The variant has a fresh ID,
+        mutation_type="fusion", and risk_level/fusion_distance metadata
+        consistent with /fuse's contract — so /commit's fusion_meta write
+        works on whatever calls this helper.
+    """
+    from backend.creative_os.genre_fusion_engine import GenreFusionEngine
+    from backend.creative_os.mutation_engine import MutationEngine
+
+    fusion_engine = GenreFusionEngine()
+    distance = fusion_engine.compute_distance(genre_primary, genre_secondary)
+    risk_level = _risk_from_distance(distance)
+
+    trope_a = _genre_to_trope(genre_primary, prompt)
+    trope_b = _genre_to_trope(genre_secondary, prompt)
+
+    variant: Optional[dict] = None
+    try:
+        mutation_engine = MutationEngine(model_router=_try_get_model_router())
+        mutation_result = await mutation_engine.fuse(trope_a, trope_b)
+        variant = _mutation_to_idea_variant(
+            mutation_result,
+            genre_primary,
+            genre_secondary,
+            risk_level=risk_level,
+            distance=distance,
+        )
+    except NotImplementedError as exc:
+        logger.info("MutationEngine.fuse unavailable (no LLM): %s", exc)
+    except Exception as exc:
+        logger.warning("MutationEngine.fuse failed: %s", exc)
+
+    if variant is None:
+        variant = {
+            "id": f"var-{uuid.uuid4().hex[:8]}",
+            "title": f"{genre_primary}×{genre_secondary}{title_suffix}",
+            "premise_one_line": f"{genre_primary} 与 {genre_secondary} 融合",
+            "mutation_type": "fusion",
+            "mutation_logic": f"跨 {distance} 跳距离的体裁融合",
+            "estimated_novelty": 0.7,
+            "trope_tags": [genre_primary, genre_secondary],
+            "regenerated_count": 0,
+            "risk_level": risk_level,
+            "fusion_distance": distance,
+        }
+
+    return variant, distance, risk_level
+
+
 def _mutation_op_from_type(t: str):
     """Map a mutation_type string to a MutationOp enum value.
 
@@ -2813,6 +2884,22 @@ async def regenerate_raw_intent(project_id: str, data: dict):
     # build fresh idea_variants from LLM responses. Mirrors S0B's client
     # chain (inversion, escalation, subversion — FUSION excluded).
     built: list[dict] = await _run_3op_mutate_chain(prompt)
+
+    # D10 fix: when raw_intent carries genre_secondary, re-run the /fuse code
+    # path and append a fresh fusion variant so the contract "主+副类型都触发融合"
+    # holds across /init, /regenerate/raw-intent, and S0B's 重新融合 button.
+    # Mirrors /fuse: GenreFusionEngine.compute_distance → risk_level →
+    # MutationEngine.fuse (with synthesized fallback when LLM unavailable).
+    genre_primary = (raw_intent.get("genre_primary") or "").strip()
+    genre_secondary = (raw_intent.get("genre_secondary") or "").strip()
+    if genre_primary and genre_secondary and genre_primary != genre_secondary:
+        try:
+            fusion_variant, _distance, _risk = await _compute_fusion_variant(
+                genre_primary, genre_secondary, prompt,
+            )
+            built.append(fusion_variant)
+        except Exception as exc:
+            logger.warning("regenerate_raw_intent fuse re-run failed: %s", exc)
 
     # Drop downstream fields, preserving the root's branch_choices entry
     # (Invariant 1 requires expanded active nodes to have a branch_choice).

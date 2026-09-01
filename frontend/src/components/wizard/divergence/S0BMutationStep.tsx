@@ -9,9 +9,13 @@ interface Props {
   onBack: () => void;
 }
 
-// Backend returns one node per mutate call; fan out to a small fixed set of
-// mutation operations to build a small selectable pool.
-const MUTATION_OPS = ["inversion", "fusion", "escalation", "constraint"] as const;
+// MutationEngine.MutationOp valid values: inversion | fusion | escalation
+// | subversion. /apply-mutation rejects FUSION (returns FUSION_NOT_SUPPORTED
+// because fusion needs two source nodes — use /merge instead, which is a
+// placeholder), so we drop it here. Each iteration dims its source, so the
+// chain must feed the previous new_node.id into the next call. See
+// backend/creative_diverge.py /apply-mutation.
+const MUTATION_OPS = ["inversion", "escalation", "subversion"] as const;
 
 function buildVariant(
   nodeId: string,
@@ -60,18 +64,36 @@ export default function S0BMutationStep({
     (async () => {
       setLoading(true);
       try {
-        // Fan out parallel mutate calls; the backend returns one variant per call.
-        const calls = MUTATION_OPS.map((op, idx) =>
-          api.postDivergeMutate(projectId, {
-            node_id: `seed_${idx}`,
+        // 1) Locate the root node from canvas state.
+        const state = await api.getDivergeState(projectId);
+        const rootId = state?.root_node_id as string | undefined;
+        if (!rootId) throw new Error("画布尚未初始化,请先完成 Step A");
+
+        // 2) Expand the root into depth-1 children. /expand sets only the
+        //    first child active (c0); the others (c1, c2) are dimmed by
+        //    /expand's invariant-5 pass.
+        const expandResult = await api.postDivergeWhatIfExpand(projectId, rootId);
+        const childIds = Object.keys(expandResult?.nodes ?? {});
+        if (childIds.length === 0) {
+          throw new Error("展开根节点失败,未生成子节点");
+        }
+        let cursorId = childIds[0];
+
+        // 3) Apply each mutation op sequentially. /apply-mutation dims its
+        //    source and sets the new sibling as the parent's active branch,
+        //    so the next iteration must mutate the latest new_node.id —
+        //    fan-out (Promise.all on the same source) would hit
+        //    DIMMED_NODE_CANNOT_MUTATE on the 2nd call.
+        const built: IdeaVariant[] = [];
+        for (const op of MUTATION_OPS) {
+          const r = await api.postDivergeMutate(projectId, {
+            node_id: cursorId,
             operation: op,
-          }),
-        );
-        const results = await Promise.all(calls);
+          });
+          built.push(buildVariant(cursorId, r.new_node, r.mutation_result));
+          cursorId = String((r.new_node as { id?: unknown }).id ?? cursorId);
+        }
         if (cancelled) return;
-        const built = results.map((r, idx) =>
-          buildVariant(`v${idx + 1}`, r.new_node, r.mutation_result),
-        );
         setVariants(built);
       } catch (e: unknown) {
         if (cancelled) return;

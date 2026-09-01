@@ -2465,6 +2465,73 @@ async def regenerate_variant(project_id: str, node_id: str, http_request: Reques
     from backend.models.creative_os import MutationOp, Trope
     from backend.creative_os.mutation_engine import MutationEngine
 
+    # D9 fix: fusion variants must be regenerated via the /fuse code path,
+    # not the generic mutate() path. MutationEngine.mutate() doesn't model
+    # fusion prompts (no FUSION entry in op_labels) and the synthesized
+    # fallback path drops risk_level + fusion_distance metadata — that
+    # breaks /commit's fusion_meta write. Branch out to a /fuse-shaped
+    # path that re-computes distance + risk and uses MutationEngine.fuse().
+    if variant.get("mutation_type") == "fusion":
+        raw_intent = canvas.get("raw_intent") or {}
+        genre_primary = (raw_intent.get("genre_primary") or "").strip()
+        genre_secondary = (raw_intent.get("genre_secondary") or "").strip()
+
+        if genre_primary and genre_secondary and genre_primary != genre_secondary:
+            from backend.creative_os.genre_fusion_engine import GenreFusionEngine
+
+            fusion_engine = GenreFusionEngine()
+            distance = fusion_engine.compute_distance(genre_primary, genre_secondary)
+            risk_level = _risk_from_distance(distance)
+
+            new_variant: Optional[dict] = None
+            try:
+                mutation_engine = MutationEngine()
+                trope_a = _genre_to_trope(genre_primary, raw_intent.get("prompt", ""))
+                trope_b = _genre_to_trope(genre_secondary, raw_intent.get("prompt", ""))
+                mutation_result = await mutation_engine.fuse(trope_a, trope_b)
+                new_variant = _mutation_to_idea_variant(
+                    mutation_result,
+                    genre_primary,
+                    genre_secondary,
+                    risk_level=risk_level,
+                    distance=distance,
+                )
+            except NotImplementedError as exc:
+                # LLM backend unavailable (CI / no router). Synthesize a minimal
+                # variant that still preserves fusion semantics + metadata.
+                logger.info("MutationEngine.fuse unavailable (no LLM): %s", exc)
+            except Exception as exc:
+                logger.warning("MutationEngine.fuse failed: %s", exc)
+
+            if new_variant is None:
+                new_variant = {
+                    "id": node_id,
+                    "title": f"{genre_primary}×{genre_secondary} (重生成)",
+                    "premise_one_line": variant.get("premise_one_line", ""),
+                    "mutation_type": "fusion",
+                    "mutation_logic": f"跨 {distance} 跳距离的体裁融合(重生成)",
+                    "estimated_novelty": variant.get("estimated_novelty", 0.7),
+                    "trope_tags": [genre_primary, genre_secondary],
+                    "regenerated_count": 0,
+                    "risk_level": risk_level,
+                    "fusion_distance": distance,
+                }
+
+            # Preserve ID + bump count (same semantics as non-fusion path).
+            new_variant["id"] = node_id
+            new_variant["regenerated_count"] = int(variant.get("regenerated_count", 0)) + 1
+
+            canvas["idea_variants"] = [
+                dict(new_variant) if v.get("id") == node_id else v
+                for v in variants
+            ]
+            _write_canvas(project_id, canvas)
+            return {"variant": new_variant}
+
+        # Fusion variant but raw_intent is missing or genres collapsed — fall
+        # through to the generic mutate path below (which preserves mutation_type
+        # via op.value) so the user still gets a regenerated card instead of a 500.
+
     op = _mutation_op_from_type(variant.get("mutation_type", ""))
     if op is None:
         # Unknown / custom mutation_type (e.g., 'custom' from /contradict PUT).

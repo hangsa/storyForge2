@@ -1858,9 +1858,29 @@ async def commit_canvas(project_id: str, data: dict = {}):
     nodes = canvas.get("nodes", {})
     canvas_summary = _format_canvas_summary(selected_path, nodes)
 
-    # Read genre from project.json
-    project = _get_fm().read_json(project_id, "project.json") or {}
-    genre = project.get("genre", "cool_novel")
+    # NEW: genre comes from raw_intent.genre_primary (catalog-resolvable),
+    # fallback to project.json.genre when raw_intent is missing fields.
+    raw_intent = canvas.get("raw_intent") or {}
+    genre_primary = (raw_intent.get("genre_primary") or "").strip()
+    genre_secondary = (raw_intent.get("genre_secondary") or "").strip()
+
+    if genre_primary:
+        genre = genre_primary
+    else:
+        project = _get_fm().read_json(project_id, "project.json") or {}
+        genre = project.get("genre", "cool_novel")
+
+    # fusion_meta: only when genre_secondary is set AND a fusion variant exists
+    fusion_meta_obj = None
+    if genre_secondary:
+        fusion_meta = _extract_fusion_metadata(canvas)
+        if fusion_meta is not None:
+            risk_level, distance = fusion_meta
+            fusion_meta_obj = {
+                "secondary_genre": genre_secondary,
+                "risk_level": risk_level,
+                "distance": distance,
+            }
 
     # LLM translation
     from backend.agents.planner import PlannerAgent
@@ -1993,6 +2013,12 @@ async def commit_canvas(project_id: str, data: dict = {}):
     # trip the LLM_OUTPUT_INVALID path.
     if data.get("value_stack_override"):
         story_dna["value_stack"] = data["value_stack_override"]
+
+    # Genre-fusion metadata: only written when raw_intent.genre_secondary is
+    # set AND the canvas carries a fusion variant. Skipping this branch leaves
+    # story_dna.fusion_meta absent (callers must treat it as optional).
+    if fusion_meta_obj is not None:
+        story_dna["fusion_meta"] = fusion_meta_obj
 
     # W4: Write canvas_state.json FIRST (stamp committed_at), then write
     # concept_and_dna.json. If we crash between the two writes, we end up

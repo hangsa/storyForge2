@@ -16,6 +16,11 @@ vi.mock("../../api/client", () => ({
       new_node: { id: "v1", title: "变体1" },
       mutation_result: { core_premise: "变体1", novelty_hook: "x", operation: "inversion" },
     }),
+    postDivergeWhatIfExpand: vi.fn().mockResolvedValue({
+      nodes: { c0: { id: "c0", content: "根展开的第一个子节点" } },
+      scores: {},
+      suggestion: "",
+    }),
     putDivergeContradict: vi.fn().mockResolvedValue({
       core_contradiction: {
         template_type: "T1",

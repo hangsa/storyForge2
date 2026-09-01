@@ -203,4 +203,40 @@ describe("S0CContradictionStep", () => {
     fireEvent.click(screen.getByTestId("s0c-back"));
     expect(onBack).toHaveBeenCalled();
   });
+
+  it("re-fetches candidates when navigated back with a previous empty contradiction", async () => {
+    // Regression test for proj_f0721bdc 2026-08-31: when the user committed
+    // an empty core_contradiction (LLM was down at the time), then navigated
+    // back from S0D/S0E to re-pick, the candidate list stayed empty because
+    // the useEffect bailed on `if (initial) return`. Now we always re-fetch
+    // so the user can pick a fresh contradiction.
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={sampleVariants}
+        initial={{
+          template_type: "目标×代价",
+          statement: "",
+          side_a: "",
+          side_b: "",
+          tension_score: 0,
+          is_custom: false,
+          confirmed_at: "2026-08-31T00:00:00Z",
+        }}
+        onComplete={() => {}}
+        onBack={() => {}}
+      />,
+    );
+    // postDivergeContradict MUST be called even though `initial` is set.
+    await waitFor(() => {
+      expect(api.postDivergeContradict).toHaveBeenCalledWith("p1", {
+        variant_id: "v1",
+        variant_content: "一个前提",
+      });
+    });
+    // And the candidate list must populate (so the warning banner clears).
+    await waitFor(() => {
+      expect(screen.getAllByTestId(/^candidate-/)).toHaveLength(3);
+    });
+  });
 });

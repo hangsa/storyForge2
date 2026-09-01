@@ -39,7 +39,16 @@ export default function S0CContradictionStep({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initial) return;
+    // Re-fetch candidates every time the step mounts, even when an `initial`
+    // contradiction was passed in. The previous guard `if (initial) return`
+    // caused a regression on proj_f0721bdc 2026-08-31: when the user
+    // committed an empty contradiction during the LLM outage, then
+    // navigated back from S0D/S0E to re-pick, the candidate list stayed
+    // empty (the early-exit skipped the fetch) and the warning banner
+    // could never clear. Fetching on every mount is one cheap LLM call and
+    // keeps the candidate list consistent regardless of how the user
+    // arrived at S0C. The `initial` prop still pre-selects the
+    // previously-chosen template below so the UI doesn't lose state.
     if (variants.length === 0) return;
     let cancelled = false;
     (async () => {
@@ -110,6 +119,15 @@ export default function S0CContradictionStep({
       {loading && (
         <div className="text-on-surface-variant">生成矛盾候选中...</div>
       )}
+      {!loading && candidates.length > 0 &&
+        candidates.every((c) => !c.preview_statement.trim()) && (
+        <div
+          data-testid="warning-contradiction-degraded"
+          className="bg-warning/10 border border-warning rounded-lg px-4 py-3 text-sm"
+        >
+          AI 矛盾展开暂不可用,模板卡片无内容。请使用「自定义矛盾」手写。
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-3">
         {candidates.map((c) => (
           <div
@@ -158,7 +176,7 @@ export default function S0CContradictionStep({
               placeholder="手写矛盾陈述"
               value={customStatement}
               onChange={(e) => setCustomStatement(e.target.value)}
-              className="w-full mt-2 p-2 border border-outline-variant rounded-lg"
+              className="w-full mt-2 p-2 bg-surface-container border border-outline-variant rounded-lg text-primary text-sm placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary resize-none"
             />
           )}
         </div>

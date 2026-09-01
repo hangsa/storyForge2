@@ -61,7 +61,7 @@ export default function S0AInputStep({
       <h2 className="text-xl font-medium">灵感输入</h2>
       <textarea
         placeholder="用一句话描述你的故事想法"
-        className="w-full h-32 p-3 border border-outline-variant rounded-lg resize-none"
+        className="w-full h-32 p-3 bg-surface-container border border-outline-variant rounded-lg resize-none text-primary text-sm placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
       />
@@ -77,7 +77,7 @@ export default function S0AInputStep({
       <div className="flex gap-3">
         <select
           data-testid="genre-primary"
-          className="flex-1 p-2 border border-outline-variant rounded-lg"
+          className="flex-1 p-2 bg-surface-container border border-outline-variant rounded-lg text-primary text-sm focus:outline-none focus:border-primary"
           value={genrePrimary}
           onChange={(e) => setGenrePrimary(e.target.value)}
         >
@@ -90,7 +90,7 @@ export default function S0AInputStep({
         </select>
         <select
           data-testid="genre-secondary"
-          className="flex-1 p-2 border border-outline-variant rounded-lg"
+          className="flex-1 p-2 bg-surface-container border border-outline-variant rounded-lg text-primary text-sm focus:outline-none focus:border-primary"
           value={genreSecondary}
           onChange={(e) => setGenreSecondary(e.target.value)}
         >

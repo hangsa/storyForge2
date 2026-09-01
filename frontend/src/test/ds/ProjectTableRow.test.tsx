@@ -78,4 +78,12 @@ describe("ProjectTableRow", () => {
     expect(cb!.className).not.toMatch(/opacity-0/);
     expect(cb!.className).not.toMatch(/group-hover/);
   });
+
+  it("formats updated_at as YYYY-MM-DD HH:MM:SS in local time", () => {
+    // Local-time output — the test runs in whatever zone the host is set
+    // to, so we match the shape rather than the exact digits.
+    render(<ProjectTableRow project={PROJECT} />);
+    const cell = screen.getByText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+    expect(cell).toBeInTheDocument();
+  });
 });

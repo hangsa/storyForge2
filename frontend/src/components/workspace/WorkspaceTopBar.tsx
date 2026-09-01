@@ -146,7 +146,7 @@ export default function WorkspaceTopBar({
         </span>
       </div>
 
-      <nav className="flex items-center gap-6 font-body-md text-body-md ml-8">
+      <nav className="flex items-center gap-6 font-body-md text-sm ml-8">
         <button
           type="button"
           data-testid="topbar-tab-settings"

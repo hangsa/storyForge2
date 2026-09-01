@@ -173,7 +173,7 @@ export default function S0ECommitStep({
                   placeholder="value_a, value_b"
                   defaultValue={`${v.value_a}${v.value_b ? ", " + v.value_b : ""}`}
                   onChange={(e) => updateLayer(v.level, e.target.value)}
-                  className="w-full px-2 py-1 border border-outline-variant rounded"
+                  className="w-full px-3 py-2 bg-surface-container border border-outline-variant rounded text-primary text-sm placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary"
                 />
               </div>
             ))}

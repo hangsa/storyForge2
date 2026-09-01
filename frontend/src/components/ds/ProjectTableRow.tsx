@@ -25,7 +25,10 @@ function formatDate(unixSeconds: number | string): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  const HH = String(d.getHours()).padStart(2, "0");
+  const MM = String(d.getMinutes()).padStart(2, "0");
+  const SS = String(d.getSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${HH}:${MM}:${SS}`;
 }
 
 export default function ProjectTableRow({
@@ -77,7 +80,7 @@ export default function ProjectTableRow({
       <div className="text-center font-mono text-label-sm text-on-surface-variant">
         {project.target_length_category}
       </div>
-      <div className="text-right font-mono text-label-sm text-on-surface-variant">
+      <div className="text-right font-mono text-label-sm text-on-surface-variant whitespace-nowrap">
         {formatDate(project.updated_at)}
       </div>
     </div>

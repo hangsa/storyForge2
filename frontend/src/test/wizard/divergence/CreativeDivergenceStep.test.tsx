@@ -7,6 +7,7 @@ import {
   nextAfterC,
   nextAfterD,
 } from "@/components/wizard/CreativeDivergenceStep";
+import type { PersistedCandidates } from "@/components/wizard/CreativeDivergenceStep";
 import type { CoreContradiction, IdeaVariant, RawIntent } from "@/api/client";
 import type { SubStage } from "@/components/wizard/divergence/StepIndicator";
 
@@ -16,6 +17,8 @@ function filledPrev(overrides: Partial<{
   subStage: SubStage;
   rawIntent: RawIntent | null;
   variants: IdeaVariant[];
+  selectedVariantIds: string[];
+  contradictionCandidates: PersistedCandidates | null;
   coreContradiction: CoreContradiction | null;
   selectedPath: string[];
   quickMode: boolean;
@@ -26,6 +29,8 @@ function filledPrev(overrides: Partial<{
     subStage: "E" as SubStage,
     rawIntent: { prompt: "old", genre_primary: "old" } as unknown as RawIntent,
     variants: [{ id: "v1" } as unknown as IdeaVariant],
+    selectedVariantIds: ["v1"],
+    contradictionCandidates: null,
     coreContradiction: { id: "c1" } as unknown as CoreContradiction,
     selectedPath: ["root", "v1"],
     quickMode: false,
@@ -37,16 +42,22 @@ function filledPrev(overrides: Partial<{
 }
 
 describe("clearDownstream", () => {
-  it("clears {variants, coreContradiction, selectedPath} for stage A", () => {
+  it("clears {variants, selectedVariantIds, contradictionCandidates, coreContradiction, selectedPath} for stage A", () => {
     expect(clearDownstream("A")).toEqual({
       variants: [],
+      selectedVariantIds: [],
+      contradictionCandidates: null,
       coreContradiction: null,
       selectedPath: [],
     });
   });
 
-  it("clears {coreContradiction, selectedPath} for stage B", () => {
+  it("clears {contradictionCandidates, coreContradiction, selectedPath} for stage B", () => {
+    // contradictionCandidates is cleared on B-regen because the variants
+    // they're keyed by are being replaced (regen B re-rolls the 3-op
+    // mutate chain). C-regen clears via /regenerate/contradiction itself.
     expect(clearDownstream("B")).toEqual({
+      contradictionCandidates: null,
       coreContradiction: null,
       selectedPath: [],
     });
@@ -93,8 +104,10 @@ describe("nextAfterB", () => {
   it("clears downstream fields and advances to C", () => {
     const prev = filledPrev();
     const variants: IdeaVariant[] = [];
-    const next = nextAfterB(prev, variants);
+    const selectedIds = ["v1", "v2"];
+    const next = nextAfterB(prev, variants, selectedIds);
     expect(next.variants).toBe(variants);
+    expect(next.selectedVariantIds).toBe(selectedIds);
     expect(next.subStage).toBe("C");
     // coreContradiction and selectedPath must be cleared (downstream of B).
     expect(next.coreContradiction).toBeNull();

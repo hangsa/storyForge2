@@ -4,13 +4,31 @@ import api, {
   type CoreContradiction,
   type IdeaVariant,
 } from "@/api/client";
+import { RegenerateModal } from "../../shared/RegenerateModal";
+import type { PersistedCandidates } from "../CreativeDivergenceStep";
 
 interface Props {
   projectId: string;
   variants: IdeaVariant[];
   initial?: CoreContradiction | null;
+  /**
+   * Persisted 5-candidate list from the last /contradict POST. S0C uses
+   * these on mount when `variant_id` matches `variants[0]?.id`, avoiding
+   * a redundant LLM round-trip when the user navigates back from D/E
+   * without changing anything upstream. When the cache is stale (variant
+   * id changed, or this is a fresh mount), the effect below calls
+   * /contradict as before and the backend overwrites the canvas cache.
+   */
+  initialCandidates?: PersistedCandidates | null;
   onComplete: (core: CoreContradiction) => void;
   onBack: () => void;
+  /**
+   * Called after /diverge/regenerate/contradiction clears the saved
+   * core_contradiction + selected_path on canvas. Parent re-reads state so
+   * S0C's `initial` prop becomes null and the parent stops pretending the
+   * user has a contradiction saved.
+   */
+  onCanvasMutated?: () => void;
 }
 
 const CUSTOM_KEY = "__custom__";
@@ -25,8 +43,10 @@ export default function S0CContradictionStep({
   projectId,
   variants,
   initial,
+  initialCandidates,
   onComplete,
   onBack,
+  onCanvasMutated,
 }: Props) {
   const [candidates, setCandidates] = useState<ContradictionCandidate[]>([]);
   const [selected, setSelected] = useState<string | null>(
@@ -37,6 +57,14 @@ export default function S0CContradictionStep({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  // Bumped after a successful /regenerate/contradiction so the candidate
+  // fetch effect re-runs with a fresh set of candidates. /regenerate/
+  // contradiction only clears the saved core_contradiction on canvas — it
+  // does NOT generate new candidates, so we have to re-run postDiverge
+  // Contradict ourselves after the regen call lands.
+  const [regenKey, setRegenKey] = useState(0);
 
   useEffect(() => {
     // Re-fetch candidates every time the step mounts, even when an `initial`
@@ -50,15 +78,46 @@ export default function S0CContradictionStep({
     // arrived at S0C. The `initial` prop still pre-selects the
     // previously-chosen template below so the UI doesn't lose state.
     if (variants.length === 0) return;
+
+    // Fast-path: use the persisted candidate set from the last /contradict
+    // POST when its variant_id matches the current variants[0]. Avoids
+    // re-running the LLM on C→D→back-to-C navigation. variant_content is
+    // best-effort compared too — if the backend returns a richer version
+    // (e.g. trope_tags arrived after TropeExtractor finished), prefer the
+    // fresh variant_content over the cache's snapshot. Strict match keeps
+    // us from showing stale candidates after a /regenerate/variants call
+    // (which re-rolls the 3-op chain but keeps the variant_id format).
+    const primary = variants[0];
+    if (
+      initialCandidates &&
+      initialCandidates.variant_id === primary.id &&
+      initialCandidates.candidates.length > 0
+    ) {
+      setCandidates(initialCandidates.candidates);
+      if (!selected && initialCandidates.candidates.length > 0) {
+        setSelected(initialCandidates.candidates[0].template_type);
+      }
+      return;
+    }
+
     let cancelled = false;
+    // Step-local AbortController so we can race the fetch against a UX
+    // timeout. /contradict calls all 5 template expansions sequentially in
+    // the backend; on proj_f0721bdc 2026-09-01 that took ~80s end-to-end
+    // (after gather: ~15-20s; before gather: 80s+). The shared TIMEOUT_MS
+    // in api/client.ts is 600s, which means the spinner just sits there.
+    // 45s is enough buffer for the post-gather case while giving the user
+    // a "try again or use custom" affordance quickly on the pre-gather one.
+    const controller = new AbortController();
+    const timeoutMs = 45_000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     (async () => {
       setLoading(true);
       try {
-        const primary = variants[0];
         const result = await api.postDivergeContradict(projectId, {
           variant_id: primary.id,
           variant_content: primary.premise_one_line,
-        });
+        }, { signal: controller.signal });
         if (cancelled) return;
         setCandidates(result.candidates);
         if (result.candidates.length > 0 && !selected) {
@@ -66,16 +125,23 @@ export default function S0CContradictionStep({
         }
       } catch (e: unknown) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "生成失败");
+        if (e instanceof DOMException && e.name === "AbortError") {
+          setError(`生成超时(>${timeoutMs / 1000}s),请重试或使用「自定义矛盾」手写`);
+        } else {
+          setError(e instanceof Error ? e.message : "生成失败");
+        }
       } finally {
+        clearTimeout(timer);
         if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, variants, initial]);
+  }, [projectId, variants, initial, initialCandidates, regenKey]);
 
   async function submit() {
     if (!selected) return;
@@ -112,12 +178,66 @@ export default function S0CContradictionStep({
     }
   }
 
+  async function handleRegenerate(userModifications: string) {
+    setShowRegenerateModal(false);
+    setRegenerating(true);
+    setError(null);
+    try {
+      // /regenerate/contradiction clears core_contradiction + selected_path
+      // on canvas. It does NOT generate new candidates — the effect below
+      // re-runs postDivergeContradict after regenKey bumps to fetch a
+      // fresh set, and onCanvasMutated syncs the parent's DivergenceState.
+      await api.postDivergeRegenerateContradiction(projectId, {
+        user_modifications: userModifications,
+      });
+      setSelected(null);
+      setCustomStatement("");
+      setRegenKey((k) => k + 1);
+      onCanvasMutated?.();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "重新生成失败");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   return (
     <div className="p-6 space-y-4">
-      <h2 className="text-xl font-medium">核心矛盾</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-medium">核心矛盾</h2>
+        <button
+          type="button"
+          data-testid="s0c-regenerate"
+          onClick={() => setShowRegenerateModal(true)}
+          disabled={regenerating || loading}
+          aria-label="重新生成 — 核心矛盾"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded border border-outline-variant text-on-surface text-sm hover:bg-surface-container hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <span
+            className={`material-symbols-outlined text-[16px]${regenerating ? " animate-spin" : ""}`}
+            data-testid={regenerating ? "s0c-regenerate-spinner" : undefined}
+          >
+            {regenerating ? "progress_activity" : "refresh"}
+          </span>
+          重新生成
+        </button>
+      </div>
       {error && <div className="text-error text-sm">{error}</div>}
       {loading && (
         <div className="text-on-surface-variant">生成矛盾候选中...</div>
+      )}
+      {/* A previously-committed contradiction with an empty `statement`
+          means the user confirmed one of the LLM-degraded candidates.
+          The /contradict PUT endpoint now rejects empty statements, so
+          the only way to reach this state is from a canvas_state.json
+          written by an older backend. Prompt the user to re-pick. */}
+      {initial && !initial.statement.trim() && (
+        <div
+          data-testid="warning-stale-empty-contradiction"
+          className="bg-warning/10 border border-warning rounded-lg px-4 py-3 text-sm"
+        >
+          之前保存的核心矛盾内容为空,请重新选择一个候选项,或使用「自定义矛盾」手写。
+        </div>
       )}
       {!loading && candidates.length > 0 &&
         candidates.every((c) => !c.preview_statement.trim()) && (
@@ -200,6 +320,14 @@ export default function S0CContradictionStep({
           下一步:展开叙事
         </button>
       </div>
+      <RegenerateModal
+        open={showRegenerateModal}
+        target="核心矛盾"
+        placeholder="例如:换一个矛盾方向 / 让张力更聚焦 / 加入现实压力层……"
+        busy={regenerating}
+        onConfirm={handleRegenerate}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
     </div>
   );
 }

@@ -1,10 +1,19 @@
 import { useState } from "react";
 import api, { type RawIntent } from "@/api/client";
+import { RegenerateModal } from "../../shared/RegenerateModal";
 
 interface Props {
   projectId: string;
   onComplete: (rawIntent: RawIntent) => void;
   initial?: RawIntent | null;
+  /**
+   * Called after a successful /diverge/regenerate/raw-intent call so the
+   * parent re-reads canvas state and the new variants surface when the user
+   * navigates to S0B. /regenerate/raw-intent clears downstream (variants /
+   * contradiction / selected_path) and writes new idea_variants, so without
+   * this callback the parent's DivergenceState.variants stays stale.
+   */
+  onCanvasMutated?: () => void;
 }
 
 const GENRES = [
@@ -24,6 +33,7 @@ export default function S0AInputStep({
   projectId,
   onComplete,
   initial,
+  onCanvasMutated,
 }: Props) {
   const [prompt, setPrompt] = useState(initial?.prompt || "");
   const [genrePrimary, setGenrePrimary] = useState(
@@ -33,7 +43,9 @@ export default function S0AInputStep({
     initial?.genre_secondary || "",
   );
   const [submitting, setSubmitting] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
 
   const canSubmit =
     prompt.trim().length >= 10 && !!genrePrimary && !submitting;
@@ -56,12 +68,54 @@ export default function S0AInputStep({
     }
   }
 
+  async function handleRegenerate(userModifications: string) {
+    setShowRegenerateModal(false);
+    setRegenerating(true);
+    setError(null);
+    try {
+      // /regenerate/raw-intent re-runs the 3-op mutate chain against the
+      // existing prompt (raw_intent isn't modified) and writes new
+      // idea_variants. Downstream fields (core_contradiction, selected_path)
+      // are cleared on the canvas.
+      await api.postDivergeRegenerateRawIntent(projectId, {
+        user_modifications: userModifications,
+      });
+      onCanvasMutated?.();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "重新生成失败");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   return (
     <div className="p-6 space-y-4">
-      <h2 className="text-xl font-medium">灵感输入</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-medium">灵感输入</h2>
+        {/* /regenerate/raw-intent only writes new variants (clears downstream)
+            — it does NOT change raw_intent itself. Disable until the user has
+            a saved prompt to regenerate against; otherwise the user clicks
+            and the UI offers no feedback. */}
+        <button
+          type="button"
+          data-testid="s0a-regenerate"
+          onClick={() => setShowRegenerateModal(true)}
+          disabled={!initial || regenerating}
+          aria-label="重新生成 — 灵感输入"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded border border-outline-variant text-on-surface text-sm hover:bg-surface-container hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <span
+            className={`material-symbols-outlined text-[16px]${regenerating ? " animate-spin" : ""}`}
+            data-testid={regenerating ? "s0a-regenerate-spinner" : undefined}
+          >
+            {regenerating ? "progress_activity" : "refresh"}
+          </span>
+          重新生成
+        </button>
+      </div>
       <textarea
         placeholder="用一句话描述你的故事想法"
-        className="w-full h-32 p-3 bg-surface-container border border-outline-variant rounded-lg resize-none text-primary text-sm placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary"
+        className="w-full h-44 p-3 bg-surface-container border border-outline-variant rounded-lg resize-none text-primary text-sm placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
       />
@@ -70,8 +124,8 @@ export default function S0AInputStep({
         {prompt.length > 0 && prompt.length < 10 && (
           <span className="text-error">至少 10 字</span>
         )}
-        {prompt.length > 200 && (
-          <span className="text-warning">超过 200 字将自动摘要</span>
+        {prompt.length > 1700 && (
+          <span className="text-warning">超过 1700 字将被截断（后端硬上限）</span>
         )}
       </div>
       <div className="flex gap-3">
@@ -103,15 +157,25 @@ export default function S0AInputStep({
         </select>
       </div>
       {error && <div className="text-error text-sm">{error}</div>}
-      <button
-        data-testid="s0a-submit"
-        type="button"
-        disabled={!canSubmit}
-        onClick={submit}
-        className="px-5 py-2 bg-primary text-on-primary rounded-lg disabled:opacity-40"
-      >
-        {submitting ? "提交中..." : "下一步:生成变体"}
-      </button>
+      <div className="flex justify-end">
+        <button
+          data-testid="s0a-submit"
+          type="button"
+          disabled={!canSubmit}
+          onClick={submit}
+          className="px-5 py-2 bg-primary text-on-primary rounded-lg disabled:opacity-40"
+        >
+          {submitting ? "提交中..." : "下一步:生成变体"}
+        </button>
+      </div>
+      <RegenerateModal
+        open={showRegenerateModal}
+        target="灵感输入"
+        placeholder="例如:换一个更悬疑的题材方向 / 加入科幻元素……"
+        busy={regenerating}
+        onConfirm={handleRegenerate}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
     </div>
   );
 }

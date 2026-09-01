@@ -6,6 +6,7 @@ import api from "@/api/client";
 vi.mock("@/api/client", () => ({
   default: {
     postDivergeInit: vi.fn(),
+    postDivergeRegenerateRawIntent: vi.fn(),
   },
 }));
 
@@ -14,6 +15,10 @@ describe("S0AInputStep", () => {
     (api.postDivergeInit as unknown as ReturnType<typeof vi.fn>).mockReset();
     (api.postDivergeInit as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
       { premise: "test" },
+    );
+    (api.postDivergeRegenerateRawIntent as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (api.postDivergeRegenerateRawIntent as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      { variants: [], user_modifications_received: true },
     );
   });
 
@@ -87,6 +92,38 @@ describe("S0AInputStep", () => {
     fireEvent.click(screen.getByTestId("s0a-submit"));
     await waitFor(() => {
       expect(screen.getByText("网络错误")).toBeInTheDocument();
+    });
+  });
+
+  it("disables regen button when no initial raw_intent", () => {
+    render(<S0AInputStep projectId="p1" onComplete={() => {}} />);
+    expect(screen.getByTestId("s0a-regenerate")).toBeDisabled();
+  });
+
+  it("regen button opens modal and calls API on confirm", async () => {
+    const onCanvasMutated = vi.fn();
+    render(
+      <S0AInputStep
+        projectId="p1"
+        initial={{ prompt: "现有故事", genre_primary: "修仙" }}
+        onComplete={() => {}}
+        onCanvasMutated={onCanvasMutated}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("s0a-regenerate"));
+    await waitFor(() => {
+      expect(screen.getByTestId("regenerate-modal")).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText("修改意见"), {
+      target: { value: "换成更悬疑的方向" },
+    });
+    fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+    await waitFor(() => {
+      expect(api.postDivergeRegenerateRawIntent).toHaveBeenCalledWith(
+        "p1",
+        { user_modifications: "换成更悬疑的方向" },
+      );
+      expect(onCanvasMutated).toHaveBeenCalled();
     });
   });
 });

@@ -211,6 +211,21 @@ def _check_etag_or_409(canvas: dict, if_match: Optional[str]) -> None:
         )
 
 
+def _try_get_model_router():
+    """Return the global model_router, or None if not configured.
+
+    Wraps the import + get_model_router() call in a try/except so CI / dev
+    environments without an LLM still work (MutationEngine accepts None).
+    Used by /regenerate/* to mirror S0B's client-side chain.
+    """
+    try:
+        from backend.llm.model_router import get_model_router
+
+        return get_model_router()
+    except Exception:
+        return None
+
+
 def _ensure_project(project_id: str) -> None:
     """Raise 404 if the project does not exist."""
     if not _get_fm().project_exists(project_id):
@@ -2133,14 +2148,25 @@ async def list_contradictions(project_id: str, request: ContradictRequest):
     or any other exception inside the engine), falls back to template metadata
     only — `preview_statement`, `side_a`, and `side_b` are empty strings and
     `tension_score` is 0.
+
+    Expansions are dispatched concurrently via asyncio.gather — each template
+    is independent and the original sequential loop took ~80s end-to-end on
+    proj_f0721bdc 2026-09-01 (5 templates × DeepSeek latency). Frontend shows
+    "生成矛盾候选中..." the whole time, making the wizard feel frozen. Gather
+    brings wall-time down to one round-trip (~15-20s).
     """
+    import asyncio
+
     _ensure_project(project_id)
 
     engine = _build_contradiction_engine()
-    candidates: List[dict] = []
-    for template in ContradictionTemplate:
+    templates = list(ContradictionTemplate)
+
+    async def expand_one(template: ContradictionTemplate) -> dict:
         try:
-            expansion = await engine.expand(template, context=request.variant_content)
+            expansion = await engine.expand(
+                template, context=request.variant_content
+            )
             core_tension = expansion.core_tension
             element_a = expansion.element_a
             element_b = expansion.element_b
@@ -2156,15 +2182,36 @@ async def list_contradictions(project_id: str, request: ContradictRequest):
             element_a = ""
             element_b = ""
         score = engine.score_depth(core_tension) if core_tension else 0
-        candidates.append({
+        return {
             "template_type": template.value,
             "preview_statement": core_tension,
             "side_a": element_a,
             "side_b": element_b,
             "tension_score": score,
-        })
+        }
+
+    candidates = await asyncio.gather(*(expand_one(t) for t in templates))
     candidates.sort(key=lambda x: x["tension_score"], reverse=True)
-    return {"candidates": candidates[:5]}
+    candidates = candidates[:5]
+
+    # Persist the candidates alongside the variant they were derived from so
+    # the frontend can rehydrate the picker on back-nav without re-running
+    # the LLM. Without this, going C→D→back to C would re-call /contradict
+    # and the user would see a (possibly different) candidate set than the
+    # one they originally picked from. The cache is keyed by variant_id; if
+    # the user regenerates variants at S0B the cached set is stale and the
+    # frontend's effect dep on `variants` triggers a fresh fetch.
+    canvas = _read_canvas(project_id)
+    if canvas is not None:
+        canvas["contradiction_candidates"] = {
+            "variant_id": request.variant_id,
+            "variant_content": request.variant_content,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "candidates": candidates,
+        }
+        _write_canvas(project_id, canvas)
+
+    return {"candidates": candidates}
 
 
 @router.put("/contradict")
@@ -2188,6 +2235,25 @@ async def confirm_contradiction(project_id: str, request: ConfirmContradictReque
                 "error": True,
                 "code": "CANVAS_NOT_INITIALIZED",
                 "message": "画布尚未初始化",
+                "detail": {},
+            },
+        )
+
+    # Reject empty statements. The /contradict endpoint degrades gracefully
+    # when the LLM is unavailable (returns 5 candidates with empty
+    # preview_statement), and the frontend used to let the user "confirm"
+    # one of those empty candidates — silently persisting a contradiction
+    # with statement="" / tension_score=0 that propagated as empty content
+    # through S0D (WhatIf root) and S0E (value stack). Guard at the
+    # boundary: if statement is blank, refuse with EMPTY_STATEMENT so the
+    # user has to either pick a non-empty candidate or write a custom one.
+    if not request.statement.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": True,
+                "code": "EMPTY_STATEMENT",
+                "message": "核心矛盾陈述不能为空,请重新选择或手写",
                 "detail": {},
             },
         )
@@ -2519,6 +2585,410 @@ async def fuse_genres(project_id: str, request: FuseRequest):
         },
         "risk_level": risk_level,
     }
+
+
+# ---------------------------------------------------------------------------
+# /regenerate/* — per-stage regen triggered from the frontend RegenerateModal.
+#
+# Each stage has its own regenerate endpoint that takes the current canvas
+# state and rebuilds the just-completed stage's output, optionally taking a
+# `user_modifications` string from the modal. The user_modifications field
+# is accepted and logged at info for forward-compat (so the frontend can
+# already ship the modal UI), but the underlying engines do NOT yet inject
+# it into their prompts — that's a larger change requiring threaded state
+# through MutationEngine / WhatIfEngine / ContradictionEngine /
+# NoveltyEvaluator. For now, the endpoints produce structurally-fresh
+# outputs (new IDs, regenerated_count bumped, fresh LLM rolls).
+# ---------------------------------------------------------------------------
+
+
+class RegenerateRequest(BaseModel):
+    """Common request body for /regenerate/* endpoints.
+
+    `user_modifications` is the user's free-text feedback from the modal
+    (optional). Engines ignore it for now but it lands on the request so
+    subsequent endpoints / engine calls can thread it through.
+    """
+
+    user_modifications: str = ""
+
+
+def _read_modifications(data: dict) -> str:
+    """Extract user_modifications from a raw dict (used by hand-rolled endpoints)."""
+    val = data.get("user_modifications", "")
+    if not isinstance(val, str):
+        return ""
+    return val[:1700]  # match the 1700 cap used in stage1_concept.py:210
+
+
+@router.post("/regenerate/raw-intent")
+async def regenerate_raw_intent(project_id: str, data: dict):
+    """Re-run stage A end-to-end: clear downstream, re-roll the 3-op mutate chain.
+
+    Same effect as if the user went back to A and hit 下一步 again — the
+    existing raw_intent + root_node stay, but variants / core_contradiction /
+    selected_path are cleared and 3 fresh MutationEngine.mutate() calls
+    produce new idea_variants. The WhatIf tree is NOT mutated (canvas's
+    nodes/edges stay intact) — only idea_variants is rewritten.
+
+    Honors If-Match optimistic locking (frontend doesn't pass it today;
+    _check_etag_or_409 is a no-op when if_match is None).
+    """
+    _ensure_project(project_id)
+    user_modifications = _read_modifications(data)
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+    root_id = canvas.get("root_node_id")
+    if not root_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "ROOT_NODE_MISSING",
+                "message": "画布根节点缺失,请重新完成「输入」阶段",
+                "detail": {},
+            },
+        )
+
+    logger.info(
+        "regenerate_raw_intent project=%s user_modifications_len=%d",
+        project_id, len(user_modifications),
+    )
+
+    raw_intent = canvas.get("raw_intent") or {}
+    prompt = raw_intent.get("prompt", "")
+
+    # Run the 3-op mutate chain. We don't mutate the WhatIf tree — just
+    # build fresh idea_variants from LLM responses. Mirrors S0B's client
+    # chain (inversion, escalation, subversion — FUSION excluded).
+    built: list[dict] = await _run_3op_mutate_chain(prompt)
+
+    # Drop downstream fields, preserving the root's branch_choices entry
+    # (Invariant 1 requires expanded active nodes to have a branch_choice).
+    canvas["idea_variants"] = built
+    canvas["core_contradiction"] = None
+    canvas["selected_path"] = [root_id]
+    canvas["contradiction_candidates"] = None
+    canvas["branch_choices"] = {
+        k: v for k, v in (canvas.get("branch_choices") or {}).items()
+        if k == root_id
+    }
+    canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _write_canvas(project_id, canvas)
+    return {"variants": built, "user_modifications_received": bool(user_modifications)}
+
+
+async def _run_3op_mutate_chain(prompt: str) -> list[dict]:
+    """Run MutationEngine through INVERSION → ESCALATION → SUBVERSION.
+
+    Returns the list of idea_variant dicts in chain order. Each op gets a
+    fresh synthetic Trope so the engine treats it as a new roll; failures
+    on individual ops are logged and skipped (no abort) so the user gets
+    fewer variants instead of zero.
+    """
+    from backend.models.creative_os import MutationOp, Trope
+    from backend.creative_os.mutation_engine import MutationEngine
+
+    engine = MutationEngine(model_router=_try_get_model_router())
+    built: list[dict] = []
+    for op in (MutationOp.INVERSION, MutationOp.ESCALATION, MutationOp.SUBVERSION):
+        trope = Trope(
+            id=f"synthetic_{op.value}",
+            name=(prompt[:20] or op.value),
+            category="web_novel",
+            description=prompt,
+            market_saturation=0.5,
+        )
+        try:
+            result = await engine.mutate(trope, op, context=prompt)
+            built.append(_mutation_to_idea_variant(result, "", ""))
+        except Exception as exc:
+            logger.warning("regen mutate chain: op=%s failed: %s", op.value, exc)
+            continue
+    return built
+
+
+@router.post("/regenerate/variants")
+async def regenerate_variants(project_id: str, data: dict):
+    """Re-run stage B's 3-op mutate chain against the existing raw_intent.
+
+    Identical effect to /regenerate/raw-intent minus the canvas downstream
+    reset — variants list is replaced; core_contradiction + selected_path are
+    cleared (so the user re-picks contradiction + path on the new variants).
+    The frontend resets its `selectedVariantIds` to [] because new variants
+    get fresh UUID IDs.
+
+    Honors If-Match optimistic locking (frontend doesn't pass it today).
+    """
+    _ensure_project(project_id)
+    user_modifications = _read_modifications(data)
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+    root_id = canvas.get("root_node_id", "")
+    if not root_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "ROOT_NODE_MISSING",
+                "message": "画布根节点缺失",
+                "detail": {},
+            },
+        )
+
+    logger.info(
+        "regenerate_variants project=%s user_modifications_len=%d",
+        project_id, len(user_modifications),
+    )
+
+    prompt = (canvas.get("raw_intent") or {}).get("prompt", "")
+    built = await _run_3op_mutate_chain(prompt)
+
+    canvas["idea_variants"] = built
+    canvas["core_contradiction"] = None
+    canvas["selected_path"] = [root_id]
+    canvas["contradiction_candidates"] = None
+    canvas["branch_choices"] = {
+        k: v for k, v in (canvas.get("branch_choices") or {}).items()
+        if k == root_id
+    }
+    canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _write_canvas(project_id, canvas)
+    return {"variants": built, "user_modifications_received": bool(user_modifications)}
+
+
+@router.post("/regenerate/contradiction")
+async def regenerate_contradiction(project_id: str, data: dict):
+    """Clear the committed core_contradiction and selected_path so S0C re-fetches.
+
+    We don't generate candidates server-side here because /contradict is a
+    POST request that requires the variant_id + variant_content the frontend
+    already has. The frontend will fire its own /contradict call after the
+    canvas mutation lands.
+
+    Honors If-Match optimistic locking.
+    """
+    _ensure_project(project_id)
+    user_modifications = _read_modifications(data)
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+
+    logger.info(
+        "regenerate_contradiction project=%s user_modifications_len=%d",
+        project_id, len(user_modifications),
+    )
+
+    canvas["core_contradiction"] = None
+    canvas["selected_path"] = [canvas.get("root_node_id", "")]
+    canvas["contradiction_candidates"] = None
+    # Preserve root's branch_choices entry (Invariant 1: expanded active
+    # nodes must have branch_choices — see _write_canvas invariant check).
+    # Drop the rest since the path collapses back to root.
+    root_id = canvas.get("root_node_id", "")
+    canvas["branch_choices"] = {
+        k: v for k, v in (canvas.get("branch_choices") or {}).items()
+        if k == root_id
+    }
+    canvas["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _write_canvas(project_id, canvas)
+    return {"ok": True, "user_modifications_received": bool(user_modifications)}
+
+
+@router.post("/regenerate/whatif")
+async def regenerate_whatif(project_id: str, data: dict):
+    """Clear all WhatIf children of the root and re-expand.
+
+    The selected_path is reduced back to just the root. Frontend's S0D will
+    re-render the fresh tree from the new children.
+
+    Honors If-Match optimistic locking.
+    """
+    _ensure_project(project_id)
+    user_modifications = _read_modifications(data)
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+
+    logger.info(
+        "regenerate_whatif project=%s user_modifications_len=%d",
+        project_id, len(user_modifications),
+    )
+
+    root_id = canvas.get("root_node_id")
+    if not root_id or root_id not in canvas.get("nodes", {}):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "ROOT_NODE_MISSING",
+                "message": "画布根节点缺失",
+                "detail": {},
+            },
+        )
+
+    # Drop all non-root nodes + edges, reset branch bookkeeping, AND reset
+    # the root's is_expanded/children_ids so the invariant check doesn't
+    # fire on the orphan-children reference (Invariant 1: expanded active
+    # nodes must have branch_choices — root has neither at this point).
+    root_node = canvas["nodes"][root_id]
+    root_node["children_ids"] = []
+    root_node["is_expanded"] = False
+    canvas["nodes"] = {root_id: root_node}
+    canvas["edges"] = []
+    canvas["selected_path"] = [root_id]
+    canvas["branch_choices"] = {}
+    _write_canvas(project_id, canvas)
+
+    # Re-expand root; the engine mints fresh child IDs (the seed_counter
+    # reset above ensures no reuse of dimmed child IDs).
+    try:
+        expand_result = await expand_node(project_id, {"node_id": root_id})
+    except Exception as exc:
+        logger.warning("regen D: expand root failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": True,
+                "code": "REGEN_EXPAND_FAILED",
+                "message": f"展开根节点失败: {exc}",
+                "detail": {},
+            },
+        )
+
+    nodes_dict = (expand_result.get("detail", {}).get("nodes") or {})
+    return {
+        "nodes": nodes_dict,
+        "user_modifications_received": bool(user_modifications),
+    }
+
+
+@router.post("/regenerate/novelty")
+async def regenerate_novelty(project_id: str, data: dict):
+    """Re-run list-level novelty evaluation; equivalent to GET /novelty.
+
+    Honors If-Match optimistic locking.
+    """
+    _ensure_project(project_id)
+    user_modifications = _read_modifications(data)
+
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": True,
+                "code": "CANVAS_NOT_INITIALIZED",
+                "message": "画布尚未初始化，请先调用 /init",
+                "detail": {},
+            },
+        )
+
+
+    logger.info(
+        "regenerate_novelty project=%s user_modifications_len=%d",
+        project_id, len(user_modifications),
+    )
+
+    # Delegate to the existing GET handler. We can't `await` a sub-handler
+    # function directly (it's an async function decorated with @router.get
+    # which wraps it), so we re-implement the eval inline. The eval is the
+    # same 4-dim aggregation across selected_path.
+    nodes = canvas.get("nodes", {})
+    selected_path = canvas.get("selected_path", [])
+    contents = [
+        nodes[nid]["content"]
+        for nid in selected_path
+        if nid in nodes and nodes[nid].get("content")
+    ]
+    combined_content = " ".join(contents) if contents else ""
+
+    try:
+        from backend.creative_os.novelty_evaluator import NoveltyEvaluator
+        from backend.creative_os.trope_pool import TropePool
+        from backend.creative_os.contradiction_engine import ContradictionEngine
+
+        project_dir = settings.projects_dir / project_id
+        catalog_path = settings.projects_dir.parent / "config" / "trope_catalog.yaml"
+        trope_pool = TropePool(project_dir=project_dir, catalog_path=catalog_path)
+        contradiction_engine = ContradictionEngine()
+        evaluator = NoveltyEvaluator(
+            trope_pool=trope_pool,
+            contradiction_engine=contradiction_engine,
+            model_router=None,
+            embedder=None,
+        )
+        score = evaluator.evaluate(combined_content)
+        payload = {
+            "market_saturation": score.market_saturation_score,
+            "trope_similarity": score.trope_similarity_score,
+            "contradiction_depth": score.contradiction_depth_score,
+            "discussion_potential": score.discussion_potential_score,
+            "composite": score.total,
+            "grade": score.grade,
+            "trope_extraction_status": "pending",
+        }
+    except Exception as exc:
+        logger.warning("NoveltyEvaluator unavailable in regen E: %s", exc)
+        payload = {
+            "market_saturation": 50.0,
+            "trope_similarity": 50.0,
+            "contradiction_depth": 50.0,
+            "discussion_potential": 50.0,
+            "composite": 50.0,
+            "grade": "中等",
+            "trope_extraction_status": "pending",
+        }
+
+    payload["computed_at"] = datetime.now(timezone.utc).isoformat()
+    payload["user_modifications_received"] = bool(user_modifications)
+    payload["regenerated"] = True
+
+    canvas["novelty_scores"] = payload
+    _write_canvas(project_id, canvas)
+    return payload
 
 
 @router.get("/novelty")

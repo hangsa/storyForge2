@@ -8,6 +8,7 @@ vi.mock("@/api/client", () => ({
   default: {
     postDivergeContradict: vi.fn(),
     putDivergeContradict: vi.fn(),
+    postDivergeRegenerateContradiction: vi.fn(),
   },
 }));
 
@@ -58,6 +59,11 @@ describe("S0CContradictionStep", () => {
         is_custom: false,
         confirmed_at: "2026-08-31T00:00:00Z",
       },
+    });
+    (api.postDivergeRegenerateContradiction as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (api.postDivergeRegenerateContradiction as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      user_modifications_received: true,
     });
   });
 
@@ -135,10 +141,11 @@ describe("S0CContradictionStep", () => {
       />,
     );
     await waitFor(() => screen.getAllByTestId(/^candidate-/));
-    expect(api.postDivergeContradict).toHaveBeenCalledWith("p1", {
-      variant_id: "v1",
-      variant_content: "一个前提",
-    });
+    expect(api.postDivergeContradict).toHaveBeenCalledWith(
+      "p1",
+      { variant_id: "v1", variant_content: "一个前提" },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it("supports custom contradiction entry", async () => {
@@ -229,14 +236,113 @@ describe("S0CContradictionStep", () => {
     );
     // postDivergeContradict MUST be called even though `initial` is set.
     await waitFor(() => {
-      expect(api.postDivergeContradict).toHaveBeenCalledWith("p1", {
-        variant_id: "v1",
-        variant_content: "一个前提",
-      });
+      expect(api.postDivergeContradict).toHaveBeenCalledWith(
+        "p1",
+        { variant_id: "v1", variant_content: "一个前提" },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
     // And the candidate list must populate (so the warning banner clears).
     await waitFor(() => {
       expect(screen.getAllByTestId(/^candidate-/)).toHaveLength(3);
+    });
+  });
+
+  it("regen button clears saved contradiction and re-fetches candidates", async () => {
+    const onCanvasMutated = vi.fn();
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={sampleVariants}
+        onComplete={() => {}}
+        onBack={() => {}}
+        onCanvasMutated={onCanvasMutated}
+      />,
+    );
+    // Wait for the initial candidate fetch so we know the baseline.
+    await waitFor(() => screen.getAllByTestId(/^candidate-/));
+    const callsBefore = (api.postDivergeContradict as unknown as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    fireEvent.click(screen.getByTestId("s0c-regenerate"));
+    await waitFor(() => {
+      expect(screen.getByTestId("regenerate-modal")).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText("修改意见"), {
+      target: { value: "换个矛盾方向" },
+    });
+    fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+
+    await waitFor(() => {
+      expect(api.postDivergeRegenerateContradiction).toHaveBeenCalledWith(
+        "p1",
+        { user_modifications: "换个矛盾方向" },
+      );
+      expect(onCanvasMutated).toHaveBeenCalled();
+    });
+    // /regenerate/contradiction only clears the saved contradiction; the
+    // child re-fetches candidates via the regenKey effect dep.
+    await waitFor(() => {
+      expect((api.postDivergeContradict as unknown as ReturnType<typeof vi.fn>).mock.calls.length)
+        .toBeGreaterThan(callsBefore);
+    });
+  });
+
+  it("uses persisted candidates when initialCandidates.variant_id matches variants[0].id", async () => {
+    // Fast-path: when the user navigates back from a later stage without
+    // changing anything upstream, the canvas already has the candidate set
+    // the user originally picked from. S0C reads it instead of re-running
+    // the LLM. Asserting that postDivergeContradict is NOT called proves
+    // the cache short-circuit fired.
+    const onCanvasMutated = vi.fn();
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={sampleVariants}
+        initialCandidates={{
+          variant_id: "v1",
+          variant_content: "一个前提",
+          generated_at: "2026-09-01T00:00:00Z",
+          candidates,
+        }}
+        onComplete={() => {}}
+        onBack={() => {}}
+        onCanvasMutated={onCanvasMutated}
+      />,
+    );
+    await waitFor(() => screen.getAllByTestId(/^candidate-/));
+    // The cached set is 3 (2 candidates + 1 custom). Both template cards
+    // must be present without any LLM call.
+    expect(screen.getByTestId("candidate-能力×限制")).toBeInTheDocument();
+    expect(screen.getByTestId("candidate-目标×代价")).toBeInTheDocument();
+    expect(api.postDivergeContradict).not.toHaveBeenCalled();
+    // Sanity: parent hasn't been told to mutate canvas (no LLM round-trip).
+    expect(onCanvasMutated).not.toHaveBeenCalled();
+  });
+
+  it("re-fetches when initialCandidates.variant_id does NOT match variants[0].id", async () => {
+    // After a /regenerate/variants call, variants[0].id is new but the
+    // persisted candidates are stale (still keyed by the old variant_id).
+    // The fast-path should NOT fire — we need a fresh /contradict call.
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={[{ ...sampleVariants[0], id: "v99" }, ...sampleVariants]}
+        initialCandidates={{
+          variant_id: "v1",  // stale — variants[0].id is now v99
+          variant_content: "old premise",
+          generated_at: "2026-09-01T00:00:00Z",
+          candidates,
+        }}
+        onComplete={() => {}}
+        onBack={() => {}}
+      />,
+    );
+    await waitFor(() => {
+      expect(api.postDivergeContradict).toHaveBeenCalledWith(
+        "p1",
+        { variant_id: "v99", variant_content: "一个前提" },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
   });
 });

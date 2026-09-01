@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api, {
+  type ContradictionCandidate,
   type CoreContradiction,
   type IdeaVariant,
   type RawIntent,
@@ -18,10 +19,37 @@ interface Props {
   projectId: string;
 }
 
+/**
+ * Persisted snapshot of the 5 contradiction candidates returned by
+ * /contradict POST. Keyed by the variant they were derived from so a
+ * C→D→back-to-C navigation can rehydrate the picker without re-running
+ * the LLM (the candidates are non-deterministic — they may differ across
+ * runs depending on LLM temperature/state). On variant change the cache
+ * becomes stale and the frontend effect re-fetches.
+ */
+export interface PersistedCandidates {
+  variant_id: string;
+  variant_content: string;
+  generated_at: string;
+  candidates: ContradictionCandidate[];
+}
+
 interface DivergenceState {
   subStage: SubStage;
   rawIntent: RawIntent | null;
   variants: IdeaVariant[];
+  /**
+   * IDs of variants the user previously selected in S0B. Tracked separately
+   * from `variants` so back-nav from C/D/E rehydrates the visual selection
+   * (a Set is local component state and lost on remount).
+   */
+  selectedVariantIds: string[];
+  /**
+   * Last /contradict POST result, persisted by the backend on canvas.
+   * S0C uses this to avoid re-running the LLM when the user navigates
+   * back to C without changing anything upstream.
+   */
+  contradictionCandidates: PersistedCandidates | null;
   coreContradiction: CoreContradiction | null;
   selectedPath: string[];
   quickMode: boolean;
@@ -40,6 +68,8 @@ const INITIAL: DivergenceState = {
   subStage: "A",
   rawIntent: null,
   variants: [],
+  selectedVariantIds: [],
+  contradictionCandidates: null,
   coreContradiction: null,
   selectedPath: [],
   quickMode: false,
@@ -57,11 +87,19 @@ const INITIAL: DivergenceState = {
 //
 // Field ownership map:
 //
-//   A → rawIntent         clears {variants, coreContradiction, selectedPath}
-//   B → variants          clears {coreContradiction, selectedPath}
+//   A → rawIntent         clears {variants, contradictionCandidates,
+//                          coreContradiction, selectedPath}
+//   B → variants          clears {contradictionCandidates, coreContradiction,
+//                          selectedPath}
 //   C → coreContradiction clears {selectedPath}
 //   D → selectedPath      no-op (last producing stage)
 //   E → terminal          not applicable
+//
+// `contradictionCandidates` is cleared on A/B regen because the variants
+// they're keyed by are being replaced (regen A re-rolls raw_intent which
+// produces new variants; regen B re-rolls all 3 variants). The picker
+// must rebuild from a fresh LLM call. C-regen clears the candidates via
+// its own /regenerate/contradiction call.
 //
 // SubStage ordering for compare: A < B < C < D < E.
 const SUB_STAGE_ORDER: SubStage[] = ["A", "B", "C", "D", "E"];
@@ -75,8 +113,17 @@ export function clearDownstream(current: SubStage): Partial<DivergenceState> {
   // (managed by the calling onComplete callbacks).
   for (let later = idx + 1; later < SUB_STAGE_ORDER.length; later++) {
     const laterStage = SUB_STAGE_ORDER[later];
-    if (laterStage === "B") cleared.variants = [];
-    else if (laterStage === "C") cleared.coreContradiction = null;
+    if (laterStage === "B") {
+      cleared.variants = [];
+      cleared.selectedVariantIds = [];
+    }
+    else if (laterStage === "C") {
+      // contradictionCandidates is owned by C (it's C's input — the
+      // 5 options S0C asks the user to pick from). Clearing it on B-regen
+      // ensures the picker re-fetches against the new variants.
+      cleared.contradictionCandidates = null;
+      cleared.coreContradiction = null;
+    }
     else if (laterStage === "D") cleared.selectedPath = [];
     // E is terminal and owns no DivergenceState field.
   }
@@ -119,11 +166,13 @@ export function nextAfterA(
 export function nextAfterB(
   prev: DivergenceState,
   variants: IdeaVariant[],
+  selectedIds: string[],
 ): DivergenceState {
   return {
     ...prev,
     ...clearDownstream("B"),
     variants,
+    selectedVariantIds: selectedIds,
     subStage: "C",
     maxReachedSubStage: advanceMaxReached(prev.maxReachedSubStage, "C"),
   };
@@ -218,50 +267,80 @@ function buildRootNode(core: CoreContradiction | null): WhatIfNode {
 
 export default function CreativeDivergenceStep({ projectId }: Props) {
   const [state, setState] = useState<DivergenceState>(INITIAL);
+  // `canvasVersion` is a tick that we bump after a child triggers a regen
+  // (A/B/C/D regen endpoints mutate canvas downstream). The mount effect
+  // depends on it so re-running `loadCanvas` from the regen callback picks
+  // up the new canvas state — the parent's DivergenceState.variants /
+  // .coreContradiction / .selectedPath stay in sync with what the child
+  // stages will see on next mount/navigation.
+  const [canvasVersion, setCanvasVersion] = useState(0);
+
+  const loadCanvas = useCallback(async () => {
+    try {
+      const response = await api.getDivergeState(projectId);
+      const rawIntent = response?.raw_intent ?? null;
+      const variants = response?.idea_variants ?? [];
+      const core = response?.core_contradiction ?? null;
+      const path = response?.selected_path ?? [];
+      // /state returns the full canvas object — contradiction_candidates is
+      // the same shape we POST to /contradict (variant_id + variant_content
+      // + generated_at + candidates). Older projects may lack the field
+      // entirely (added 2026-09-01); treat missing as null.
+      const persisted =
+        (response as { contradiction_candidates?: PersistedCandidates | null })
+          ?.contradiction_candidates ?? null;
+      const inferred = inferSubStage({
+        raw_intent: rawIntent,
+        idea_variants: variants,
+        core_contradiction: core,
+        selected_path: path,
+      });
+      setState((prev) => ({
+        subStage: inferred,
+        maxReachedSubStage: inferred,
+        rawIntent,
+        variants,
+        // Same as the mount path: hard reload resets selection. Live
+        // back-nav reads the current `selectedVariantIds` from `prev`
+        // (only refreshed by `nextAfterB`, never by loadCanvas).
+        selectedVariantIds:
+          prev.rawIntent === rawIntent ? prev.selectedVariantIds : [],
+        contradictionCandidates: persisted,
+        coreContradiction: core,
+        selectedPath: path,
+        quickMode: rawIntent?.quick_mode ?? false,
+        loading: false,
+      }));
+    } catch {
+      setState((prev) => ({ ...prev, loading: false }));
+    }
+  }, [projectId]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const response = await api.getDivergeState(projectId);
-        if (cancelled) return;
-        const rawIntent = response?.raw_intent ?? null;
-        const variants = response?.idea_variants ?? [];
-        const core = response?.core_contradiction ?? null;
-        const path = response?.selected_path ?? [];
-        const inferred = inferSubStage({
-          raw_intent: rawIntent,
-          idea_variants: variants,
-          core_contradiction: core,
-          selected_path: path,
-        });
-        setState({
-          subStage: inferred,
-          // A user re-entering at subStage=E has actually reached E, so all
-          // earlier stages are reachable. Same value as subStage initially.
-          maxReachedSubStage: inferred,
-          rawIntent,
-          variants,
-          coreContradiction: core,
-          selectedPath: path,
-          quickMode: rawIntent?.quick_mode ?? false,
-          loading: false,
-        });
-      } catch {
-        if (!cancelled) setState({ ...INITIAL, loading: false });
-      }
+      await loadCanvas();
+      if (cancelled) return;
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, canvasVersion, loadCanvas]);
+
+  // After a child calls a /regenerate/* endpoint (which mutates canvas
+  // downstream), bump the version so loadCanvas re-runs and the parent's
+  // DivergenceState catches up. The child stages own their own local state
+  // for the immediate UI update; this callback just keeps the parent's
+  // "what's saved on canvas" view consistent.
+  const onCanvasMutated = useCallback(() => {
+    setCanvasVersion((v) => v + 1);
+  }, []);
 
   if (state.loading) {
     return <div className="p-6 text-on-surface-variant">加载中...</div>;
   }
 
   const completed = completedFor(state.maxReachedSubStage);
-  const showContinueBanner = !!state.rawIntent && state.subStage !== "A";
 
   // Quick mode → skip D, jump C → E directly. The check is repeated here so
   // jumping back from E still respects the saved flag.
@@ -276,19 +355,13 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
 
   return (
     <div data-testid="creative-divergence-step" className="flex flex-col h-full">
-      <StepIndicator
-        current={state.subStage}
-        completed={completed}
-        onJump={(s) => setState((prev) => ({ ...prev, subStage: s }))}
-      />
-      {showContinueBanner && (
-        <div
-          data-testid="continue-banner"
-          className="bg-tertiary-container text-on-tertiary-container px-4 py-2 text-sm"
-        >
-          检测到草稿,继续从 {state.subStage} 开始。
-        </div>
-      )}
+      <div className="sticky top-0 z-10 bg-surface">
+        <StepIndicator
+          current={state.subStage}
+          completed={completed}
+          onJump={(s) => setState((prev) => ({ ...prev, subStage: s }))}
+        />
+      </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {state.subStage === "A" && (
           <S0AInputStep
@@ -297,6 +370,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             onComplete={(rawIntent) =>
               setState((prev) => nextAfterA(prev, rawIntent))
             }
+            onCanvasMutated={onCanvasMutated}
           />
         )}
         {state.subStage === "B" && (
@@ -306,12 +380,14 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
               state.rawIntent ?? { prompt: "", genre_primary: "" }
             }
             initial={state.variants}
-            onComplete={(variants) =>
-              setState((prev) => nextAfterB(prev, variants))
+            selectedIds={state.selectedVariantIds}
+            onComplete={(variants, selectedIds) =>
+              setState((prev) => nextAfterB(prev, variants, selectedIds))
             }
             onBack={() =>
               setState((prev) => ({ ...prev, subStage: "A" }))
             }
+            onCanvasMutated={onCanvasMutated}
           />
         )}
         {state.subStage === "C" && (
@@ -319,10 +395,12 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             projectId={projectId}
             variants={state.variants}
             initial={state.coreContradiction}
+            initialCandidates={state.contradictionCandidates}
             onComplete={onCComplete}
             onBack={() =>
               setState((prev) => ({ ...prev, subStage: "B" }))
             }
+            onCanvasMutated={onCanvasMutated}
           />
         )}
         {state.subStage === "D" && !state.quickMode && (
@@ -335,6 +413,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             onBack={() =>
               setState((prev) => ({ ...prev, subStage: "C" }))
             }
+            onCanvasMutated={onCanvasMutated}
           />
         )}
         {state.subStage === "E" && (
@@ -345,6 +424,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             // wizard once the user clicks the modal footer's "下一步".
             onComplete={() => undefined}
             onBack={onEBack}
+            onCanvasMutated={onCanvasMutated}
           />
         )}
       </div>

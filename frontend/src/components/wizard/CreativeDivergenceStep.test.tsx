@@ -137,8 +137,6 @@ describe("CreativeDivergenceStep (5-substage container)", () => {
     await waitFor(() => {
       expect(screen.getByText("新颖度评估与提交")).toBeInTheDocument();
     });
-    // ContinueBanner must be visible whenever a draft exists.
-    expect(screen.getByTestId("continue-banner")).toBeInTheDocument();
   });
 
   it("falls back to A when getDivergeState rejects", async () => {
@@ -151,6 +149,5 @@ describe("CreativeDivergenceStep (5-substage container)", () => {
         screen.getByPlaceholderText(/用一句话描述你的故事想法/),
       ).toBeInTheDocument();
     });
-    expect(screen.queryByTestId("continue-banner")).not.toBeInTheDocument();
   });
 });

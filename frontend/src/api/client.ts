@@ -22,9 +22,18 @@ export async function request<T>(
   path: string,
   body?: unknown,
   headers?: Record<string, string>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  // If the caller passed their own AbortSignal (e.g. a per-effect timeout),
+  // forward the abort so they can cancel in flight. Also forward our
+  // internal TIMEOUT_MS abort to the caller's signal so the caller is
+  // notified if we time out at the global layer.
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
 
   let res: Response;
   try {
@@ -617,6 +626,13 @@ export interface WhatIfNode {
   content: string;
   novelty_score: number | null;
   children_ids: string[];
+  /**
+   * "active" — on the selected path; "dimmed" — previously-generated
+   * sibling that the user did not choose. Backend serializes this for
+   * every node; older clients ignore the field. Used by S0D to render
+   * 弃选 badges + 切换到此分支 buttons under each parent.
+   */
+  branch_status?: BranchStatus;
 }
 
 export interface NoveltyScores {
@@ -1418,11 +1434,14 @@ export const api = {
   postDivergeContradict: (
     projectId: string,
     body: { variant_id: string; variant_content: string },
+    options?: { signal?: AbortSignal },
   ) =>
     request<{ candidates: ContradictionCandidate[] }>(
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/contradict`,
       body,
+      undefined,
+      options?.signal,
     ),
 
   putDivergeContradict: (
@@ -1464,6 +1483,27 @@ export const api = {
       ifMatch ? { "If-Match": ifMatch } : undefined,
     ),
 
+  // S0D: switch the active branch under a parent to a previously-dimmed
+  // sibling. Backend lives at /api/v1/projects/{pid}/creative/diverge/
+  // choose-branch. The unrelated api.chooseBranch (creative/canvas/) is a
+  // pre-existing method with a stale URL — not touching it here because
+  // CreativeCanvasPage depends on it.
+  postDivergeChooseBranch: (
+    projectId: string,
+    parentNodeId: string,
+    chosenChildId: string,
+  ) =>
+    request<{
+      selected_path: string[];
+      branch_choices: Record<string, string>;
+      chosen_node: WhatIfNode;
+      dimmed_count: number;
+    }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/choose-branch`,
+      { parent_node_id: parentNodeId, chosen_child_id: chosenChildId },
+    ),
+
   getDivergeNovelty: (projectId: string) =>
     request<NoveltyScores>(
       "GET",
@@ -1493,6 +1533,60 @@ export const api = {
     request<FuseResponse>(
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/fuse`,
+      body,
+    ),
+
+  // --- /diverge/regenerate/* — per-stage regen from the frontend modal ---
+  postDivergeRegenerateRawIntent: (
+    projectId: string,
+    body: { user_modifications?: string },
+  ) =>
+    request<{ variants: IdeaVariant[]; user_modifications_received: boolean }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/regenerate/raw-intent`,
+      body,
+    ),
+
+  postDivergeRegenerateVariants: (
+    projectId: string,
+    body: { user_modifications?: string },
+  ) =>
+    request<{ variants: IdeaVariant[]; user_modifications_received: boolean }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/regenerate/variants`,
+      body,
+    ),
+
+  postDivergeRegenerateContradiction: (
+    projectId: string,
+    body: { user_modifications?: string },
+  ) =>
+    request<{ ok: boolean; user_modifications_received: boolean }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/regenerate/contradiction`,
+      body,
+    ),
+
+  postDivergeRegenerateWhatif: (
+    projectId: string,
+    body: { user_modifications?: string },
+  ) =>
+    request<{
+      nodes: Record<string, unknown>;
+      user_modifications_received: boolean;
+    }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/regenerate/whatif`,
+      body,
+    ),
+
+  postDivergeRegenerateNovelty: (
+    projectId: string,
+    body: { user_modifications?: string },
+  ) =>
+    request<NoveltyScores & { regenerated: boolean; user_modifications_received: boolean }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/regenerate/novelty`,
       body,
     ),
 

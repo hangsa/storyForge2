@@ -1,12 +1,27 @@
 import { useEffect, useState } from "react";
 import api, { type IdeaVariant, type RawIntent } from "@/api/client";
+import { RegenerateModal } from "../../shared/RegenerateModal";
 
 interface Props {
   projectId: string;
   rawIntent: RawIntent;
   initial?: IdeaVariant[];
-  onComplete: (variants: IdeaVariant[]) => void;
+  /**
+   * IDs of variants the user previously selected before navigating away.
+   * S0B initializes its Set from this so back-nav keeps the visual
+   * selection (instead of every card looking un-picked on re-entry).
+   * Filter to currently-shown variants on mount — orphaned IDs are dropped.
+   */
+  selectedIds?: string[];
+  onComplete: (variants: IdeaVariant[], selectedIds: string[]) => void;
   onBack: () => void;
+  /**
+   * Called after a successful /diverge/regenerate/variants call so the
+   * parent re-reads canvas state. /regenerate/variants clears core_
+   * contradiction + selected_path on canvas, so the parent's stale values
+   * need to drop.
+   */
+  onCanvasMutated?: () => void;
 }
 
 // MutationEngine.MutationOp valid values: inversion | fusion | escalation
@@ -50,13 +65,31 @@ export default function S0BMutationStep({
   projectId,
   rawIntent,
   initial,
+  selectedIds,
   onComplete,
   onBack,
+  onCanvasMutated,
 }: Props) {
   const [variants, setVariants] = useState<IdeaVariant[]>(initial || []);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Rehydrate from `selectedIds` when the user navigates back from C/D/E
+  // and the parent's DivergenceState still has the prior selection set.
+  // Without this, every card looks un-picked on re-entry — the bug from
+  // the 2026-09-01 back-nav regression list.
+  //
+  // Filter against the currently-shown variant IDs so orphaned IDs (e.g.
+  // from a /regenerate/variants that minted new IDs between sessions)
+  // don't inflate the counter while leaving no visible selection. The
+  // counter and the highlighted cards must agree — otherwise the user
+  // sees "已选 2 / 3" but no card is highlighted, which on back-nav from
+  // Stage C reads as "I forgot which variants I picked".
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    const visibleIds = new Set((initial ?? []).map((v) => v.id));
+    return new Set((selectedIds ?? []).filter((id) => visibleIds.has(id)));
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
 
   useEffect(() => {
     if (initial && initial.length > 0) return;
@@ -130,59 +163,123 @@ export default function S0BMutationStep({
     }
   }
 
+  async function handleRegenerateAll(userModifications: string) {
+    setShowRegenerateModal(false);
+    setRegenerating(true);
+    setError(null);
+    try {
+      // /regenerate/variants re-runs the 3-op mutate chain against the
+      // existing raw_intent and writes fresh idea_variants. Downstream
+      // (core_contradiction, selected_path) is cleared on canvas.
+      const result = await api.postDivergeRegenerateVariants(projectId, {
+        user_modifications: userModifications,
+      });
+      // Update local state directly so the UI is consistent before the
+      // parent's canvasVersion bump round-trips through getDivergeState.
+      // Selection is cleared because the old IDs are gone.
+      setVariants(result.variants);
+      setSelected(new Set());
+      onCanvasMutated?.();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "重新生成失败");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   function submit() {
     if (selected.size === 0) return;
     const selectedVariants = variants.filter((v) => selected.has(v.id));
-    onComplete(selectedVariants);
+    onComplete(selectedVariants, Array.from(selected));
   }
 
   return (
     <div className="p-6 space-y-4">
-      <h2 className="text-xl font-medium">创意变体</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-medium">创意变体</h2>
+        <button
+          type="button"
+          data-testid="s0b-regenerate"
+          onClick={() => setShowRegenerateModal(true)}
+          disabled={regenerating || loading}
+          aria-label="重新生成 — 创意变体"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded border border-outline-variant text-on-surface text-sm hover:bg-surface-container hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <span
+            className={`material-symbols-outlined text-[16px]${regenerating ? " animate-spin" : ""}`}
+            data-testid={regenerating ? "s0b-regenerate-spinner" : undefined}
+          >
+            {regenerating ? "progress_activity" : "refresh"}
+          </span>
+          重新生成
+        </button>
+      </div>
       {error && <div className="text-error text-sm">{error}</div>}
       {loading && (
         <div className="text-on-surface-variant">生成变体中...</div>
       )}
       <div className="grid grid-cols-2 gap-4">
-        {variants.map((v) => (
-          <div
-            key={v.id}
-            data-testid={`variant-card-${v.id}`}
-            className={[
-              "p-4 border rounded-lg cursor-pointer transition-colors",
-              selected.has(v.id)
-                ? "border-primary bg-surface-container"
-                : "border-outline-variant hover:border-primary",
-            ].join(" ")}
-            onClick={() => toggleSelect(v.id)}
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="font-medium">{v.title}</h3>
-              <span className="text-xs px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container">
-                {v.mutation_type}
-              </span>
+        {variants.map((v) => {
+          const isSelected = selected.has(v.id);
+          return (
+            <div
+              key={v.id}
+              data-testid={`variant-card-${v.id}`}
+              className={[
+                "p-4 border rounded-lg cursor-pointer transition-colors",
+                isSelected
+                  ? "border-primary bg-surface-container"
+                  : "border-outline-variant hover:border-primary",
+              ].join(" ")}
+              onClick={() => toggleSelect(v.id)}
+            >
+              <div className="flex justify-between items-start">
+                <h3 className="font-medium">{v.title}</h3>
+                <div className="flex flex-col items-end gap-1">
+                  {/* Explicit "已选" badge — without this, the only signal
+                      that a card is picked is a subtle border-color swap
+                      (border-primary vs border-outline-variant). On back-nav
+                      from Stage C the user reported they couldn't tell
+                      which variants they'd originally picked, because the
+                      border change is too easy to miss next to the gray
+                      un-selected cards. The badge mirrors the Stage D "弃选"
+                      pattern so the divergence wizard has consistent
+                      affordances across stages. */}
+                  {isSelected && (
+                    <span
+                      data-testid={`selected-badge-${v.id}`}
+                      className="text-xs px-2 py-0.5 rounded bg-primary text-on-primary font-medium"
+                    >
+                      已选
+                    </span>
+                  )}
+                  <span className="text-xs px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container">
+                    {v.mutation_type}
+                  </span>
+                </div>
+              </div>
+              <p className="text-sm text-on-surface-variant mt-2">
+                {v.premise_one_line}
+              </p>
+              <div className="flex justify-between items-center mt-3 text-xs">
+                <span className="text-on-surface-variant">
+                  新颖度 {(v.estimated_novelty * 100).toFixed(0)}%
+                </span>
+                <button
+                  data-testid={`regen-${v.id}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    regenerate(v.id);
+                  }}
+                  className="text-primary hover:underline"
+                >
+                  再生成
+                </button>
+              </div>
             </div>
-            <p className="text-sm text-on-surface-variant mt-2">
-              {v.premise_one_line}
-            </p>
-            <div className="flex justify-between items-center mt-3 text-xs">
-              <span className="text-on-surface-variant">
-                新颖度 {(v.estimated_novelty * 100).toFixed(0)}%
-              </span>
-              <button
-                data-testid={`regen-${v.id}`}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  regenerate(v.id);
-                }}
-                className="text-primary hover:underline"
-              >
-                再生成
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="flex justify-between">
         <button
@@ -208,6 +305,14 @@ export default function S0BMutationStep({
           </button>
         </div>
       </div>
+      <RegenerateModal
+        open={showRegenerateModal}
+        target="创意变体"
+        placeholder="例如:让变体之间的差异更明显 / 加入更多反转 / 减少套路感……"
+        busy={regenerating}
+        onConfirm={handleRegenerateAll}
+        onCancel={() => setShowRegenerateModal(false)}
+      />
     </div>
   );
 }

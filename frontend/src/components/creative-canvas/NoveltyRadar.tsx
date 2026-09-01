@@ -10,9 +10,16 @@ import type { NoveltyScoreDetail } from "../../api/client";
 
 interface NoveltyRadarProps {
   scores: NoveltyScoreDetail;
+  /**
+   * Pixel height of the chart drawing area (excluding the threshold
+   * legend below it). Default 240 fits a half-width card; bump to ~280
+   * when the radar gets a wider display box (e.g. centered between two
+   * peer cards on the divergence commit step).
+   */
+  height?: number;
 }
 
-export default function NoveltyRadar({ scores }: NoveltyRadarProps) {
+export default function NoveltyRadar({ scores, height = 240 }: NoveltyRadarProps) {
   const data = [
     { axis: "市场饱和度", value: scores.market_saturation_score, fullMark: 100 },
     { axis: "套话相似度", value: scores.trope_similarity_score, fullMark: 100 },
@@ -26,7 +33,7 @@ export default function NoveltyRadar({ scores }: NoveltyRadarProps) {
   const fill = total >= 80 ? "#22c55e" : total < 40 ? "#ef4444" : "#7c3aed";
 
   return (
-    <div className="w-full h-[240px]">
+    <div className="w-full" style={{ height: `${height}px` }}>
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">
           <PolarGrid stroke="rgba(255,255,255,0.1)" />

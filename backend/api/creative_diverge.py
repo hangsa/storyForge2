@@ -1223,6 +1223,32 @@ async def apply_mutation(project_id: str, data: dict):
         nodes, branch_choices, canvas["root_node_id"]
     )
 
+    # --- Step 6.5: sync idea_variants list -------------------------------
+    # /apply-mutation creates a brand-new sibling node with mutation_context
+    # populated, but historically never appended the corresponding entry to
+    # canvas["idea_variants"]. That left /state's idea_variants empty for
+    # fresh projects even after Step B succeeded (proj_f0721bdc had 6 mu_xxx
+    # nodes but `idea_variants: []`). The v2→v3 migration does the same
+    # extraction, so old projects were correct — new ones drift. Mirror the
+    # extraction here so /commit's downstream consumers see a consistent list.
+    # Idempotent on (node_id, mutation_type) so re-runs of an old call don't
+    # duplicate entries.
+    variants_list = canvas.setdefault("idea_variants", [])
+    if not any(
+        v.get("id") == new_id and v.get("mutation_type") == mutation_result.operation.value
+        for v in variants_list
+    ):
+        variants_list.append({
+            "id": new_id,
+            "title": (mutation_result.core_premise or "")[:30],
+            "premise_one_line": mutation_result.core_premise or "",
+            "mutation_type": mutation_result.operation.value,
+            "mutation_logic": mutation_result.core_conflict or "",
+            "estimated_novelty": float(new_node.novelty_score or 0.0),
+            "trope_tags": list(new_node.trope_tags),
+            "regenerated_count": 0,
+        })
+
     try:
         _validate_canvas_invariants(canvas)
     except CanvasInvariantError as exc:
@@ -2078,13 +2104,25 @@ class ConfirmContradictRequest(BaseModel):
 
 
 def _build_contradiction_engine() -> ContradictionEngine:
-    """Return a ContradictionEngine without an LLM router.
+    """Build a ContradictionEngine, preferring a real model_router.
 
-    expand() requires a model_router and would raise NotImplementedError; the
-    POST /contradict endpoint catches that and falls back to template metadata
-    only so the endpoint still works in CI / when LLM is unavailable.
+    expand() requires a model_router; without it every call raises
+    NotImplementedError and the /contradict endpoint silently returns 5
+    candidates with empty `preview_statement` / `side_a` / `side_b` and
+    `tension_score=0` — the bug that surfaced on proj_f0721bdc Step C.
+
+    Try to attach the global router first; fall back to a no-router engine
+    so CI / dev-without-LLM still produces the same degraded response as
+    before this change. Mirrors the try/except pattern in /apply-mutation.
     """
-    return ContradictionEngine()
+    try:
+        from backend.llm.model_router import get_model_router
+
+        router = get_model_router()
+        return ContradictionEngine(model_router=router)
+    except Exception as exc:
+        logger.info("ContradictionEngine without model_router: %s", exc)
+        return ContradictionEngine()
 
 
 @router.post("/contradict")

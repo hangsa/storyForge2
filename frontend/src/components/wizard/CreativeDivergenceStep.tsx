@@ -150,20 +150,10 @@ export function clearDownstream(current: SubStage): Partial<DivergenceState> {
     else if (laterStage === "D") cleared.selectedPath = [];
     // E is terminal and owns no DivergenceState field.
   }
-  // A owns the /fuse call — clear both fields whenever clearDownstream is
-  // called from a downstream stage AND we're clearing "A" effects (i.e.
-  // when re-saving from a later stage the A fields would otherwise leak
-  // through `...prev`). Actually `clearDownstream("A")` already clears via
-  // the loop above only when current==A — but a re-save from B/C/D/E
-  // doesn't trigger clearDownstream("A"). The complete replacement path
-  // lives in `nextAfterA`, which sets both fields explicitly there.
-  // For B/C/D, the user can't re-save A, so the prior /fuse result
+  // A owns the /fuse call — when re-saving A, clear the prior pick + banner
+  // so the next /fuse result isn't shadowed. B/C/D/E don't reach this branch
+  // (the user can't re-save A from those stages), so the prior /fuse result
   // remains valid as long as rawIntent didn't change.
-  //
-  // This block handles the `clearDownstream("A")` test expectations: when
-  // the helper is invoked with current="A" (i.e. the caller is editing
-  // A and advancing to B), both fusion fields must be null/cleared so the
-  // next /fuse result isn't shadowed by the prior pick.
   if (current === "A") {
     cleared.fusionVariant = null;
     cleared.fusionBanner = null;
@@ -435,13 +425,9 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
         )}
         {state.subStage === "B" && (
           <>
-            {/* Fusion-failure banner (Task 11). Rendered above S0-B when
-                S0-A's /fuse call rejected (LLM unavailable, etc.) so the
-                user knows fusion was skipped — without this, the missing
-                fusion card looks identical to "fusion was disabled" and
-                there's no signal that the user could retry. Wrapped in a
-                JSX fragment because we need TWO children (banner + step)
-                alongside the existing single-step render below. */}
+            {/* /fuse failed in S0-A — banner signals "fusion was skipped due
+                to error" (distinguishable from "fusion was disabled", which
+                would render no card and no banner). */}
             {state.fusionBanner && (
               <div
                 data-testid="fusion-banner"
@@ -458,9 +444,6 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
               }
               initial={state.variants}
               selectedIds={state.selectedVariantIds}
-              // S0-B's `fusion-card` panel — Task 11 wires the
-              // S0-A-returned variant through DivergenceState so back-nav
-              // from C/D/E keeps the user's prior pick.
               fusionVariant={state.fusionVariant}
               onComplete={(variants, selectedIds) =>
                 setState((prev) => nextAfterB(prev, variants, selectedIds))

@@ -10,11 +10,21 @@ import type { PersistedCandidates } from "../CreativeDivergenceStep";
 interface Props {
   projectId: string;
   variants: IdeaVariant[];
+  /**
+   * S0B's user-selected variant IDs. The first one is the /contradict
+   * source so the contradiction reflects what the user actually picked,
+   * not the chain-default variants[0] (which is always INVERSION/m0).
+   * Empty/missing falls back to variants[0] — a defensive default for
+   * flows that may bypass S0B (e.g. a future A→C shortcut). S0B's submit
+   * button is disabled at selected.size === 0, so the empty case is rare
+   * in practice.
+   */
+  selectedVariantIds?: string[];
   initial?: CoreContradiction | null;
   /**
    * Persisted 5-candidate list from the last /contradict POST. S0C uses
-   * these on mount when `variant_id` matches `variants[0]?.id`, avoiding
-   * a redundant LLM round-trip when the user navigates back from D/E
+   * these on mount when `variant_id` matches `primary.id`, avoiding a
+   * redundant LLM round-trip when the user navigates back from D/E
    * without changing anything upstream. When the cache is stale (variant
    * id changed, or this is a fresh mount), the effect below calls
    * /contradict as before and the backend overwrites the canvas cache.
@@ -42,6 +52,7 @@ function tensionColor(score: number): string {
 export default function S0CContradictionStep({
   projectId,
   variants,
+  selectedVariantIds,
   initial,
   initialCandidates,
   onComplete,
@@ -66,6 +77,19 @@ export default function S0CContradictionStep({
   // Contradict ourselves after the regen call lands.
   const [regenKey, setRegenKey] = useState(0);
 
+  // Pick the variant that drives /contradict. Prefer the first S0B
+  // selection so the contradiction reflects the user's actual choice;
+  // before this fix, S0C hardcoded variants[0] (always INVERSION/m0),
+  // making S0B's selection functionally cosmetic — only used for back-nav
+  // highlight. Fallback to variants[0] when no pick is set (defensive —
+  // S0B disables submit at selected.size === 0, but future flow changes
+  // could bypass S0B). Lifted out of the effect so the render below can
+  // also read it for the source-variant hint.
+  const pickedFirst = (selectedVariantIds ?? [])
+    .map((id) => variants.find((v) => v.id === id))
+    .find((v): v is IdeaVariant => v !== undefined);
+  const primary = pickedFirst ?? variants[0];
+
   useEffect(() => {
     // Re-fetch candidates every time the step mounts, even when an `initial`
     // contradiction was passed in. The previous guard `if (initial) return`
@@ -80,14 +104,12 @@ export default function S0CContradictionStep({
     if (variants.length === 0) return;
 
     // Fast-path: use the persisted candidate set from the last /contradict
-    // POST when its variant_id matches the current variants[0]. Avoids
-    // re-running the LLM on C→D→back-to-C navigation. variant_content is
-    // best-effort compared too — if the backend returns a richer version
-    // (e.g. trope_tags arrived after TropeExtractor finished), prefer the
-    // fresh variant_content over the cache's snapshot. Strict match keeps
-    // us from showing stale candidates after a /regenerate/variants call
-    // (which re-rolls the 3-op chain but keeps the variant_id format).
-    const primary = variants[0];
+    // POST when its variant_id matches the current `primary` (the picked
+    // variant — falls back to variants[0]). Avoids re-running the LLM on
+    // C→D→back-to-C navigation. Strict match keeps us from showing stale
+    // candidates after a /regenerate/variants call (which re-rolls the
+    // 3-op chain but keeps the variant_id format) or after the user
+    // changes their S0B selection (which changes `primary`).
     if (
       initialCandidates &&
       initialCandidates.variant_id === primary.id &&
@@ -148,7 +170,7 @@ export default function S0CContradictionStep({
       clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, variants, initial, initialCandidates, regenKey]);
+  }, [projectId, variants, initial, initialCandidates, regenKey, selectedVariantIds]);
 
   async function submit() {
     if (!selected) return;

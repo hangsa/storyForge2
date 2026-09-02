@@ -459,6 +459,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
           <S0CContradictionStep
             projectId={projectId}
             variants={state.variants}
+            selectedVariantIds={state.selectedVariantIds}
             initial={state.coreContradiction}
             initialCandidates={state.contradictionCandidates}
             onComplete={onCComplete}

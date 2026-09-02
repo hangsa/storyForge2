@@ -400,4 +400,58 @@ describe("S0CContradictionStep", () => {
     expect(api.postDivergeContradict).not.toHaveBeenCalled();
     expect(onCanvasMutated).not.toHaveBeenCalled();
   });
+
+  // Regression for the S0A-S0E audit's #1 gap: S0B's user selection used to
+  // be dead state. S0C always used variants[0] (INVERSION/m0) regardless
+  // of which variants the user picked. After fix: the first picked variant
+  // is the source of the contradiction, so the user sees their pick drive
+  // the generation, not just back-nav highlight.
+  it("uses S0B's first selected variant for /contradict when selectedVariantIds provided", async () => {
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={[
+          { ...sampleVariants[0], id: "v1", title: "变体1", premise_one_line: "前提1" },
+          { ...sampleVariants[0], id: "v2", title: "变体2", premise_one_line: "前提2" },
+          { ...sampleVariants[0], id: "v3", title: "变体3", premise_one_line: "前提3" },
+        ]}
+        selectedVariantIds={["v3", "v1"]}  // first picked = v3, not variants[0]=v1
+        onComplete={() => {}}
+        onBack={() => {}}
+      />,
+    );
+    await waitFor(() => {
+      expect(api.postDivergeContradict).toHaveBeenCalledWith(
+        "p1",
+        { variant_id: "v3", variant_content: "前提3" },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+  });
+
+  // Defensive fallback: S0B submit is disabled at selected.size === 0 so
+  // this branch shouldn't fire in production, but if a future flow bypasses
+  // S0B (e.g. quick-mode-from-A-to-C without B), S0C must still work using
+  // variants[0] as the source.
+  it("falls back to variants[0] for /contradict when selectedVariantIds is empty", async () => {
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={[
+          { ...sampleVariants[0], id: "v1", premise_one_line: "前提1" },
+          { ...sampleVariants[0], id: "v2", premise_one_line: "前提2" },
+        ]}
+        selectedVariantIds={[]}
+        onComplete={() => {}}
+        onBack={() => {}}
+      />,
+    );
+    await waitFor(() => {
+      expect(api.postDivergeContradict).toHaveBeenCalledWith(
+        "p1",
+        { variant_id: "v1", variant_content: "前提1" },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+  });
 });

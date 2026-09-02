@@ -8,8 +8,6 @@ projects are migrated in memory only (no write-back, see _read_canvas).
 """
 from __future__ import annotations
 
-from typing import Optional
-
 
 def _build_root_idea_from_raw_intent(raw_intent: dict) -> dict:
     """Derive root_idea (v4) from raw_intent (v3).

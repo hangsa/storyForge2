@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import api, { ApiError, request } from "../api/client";
+import type { RawIntent } from "../api/client";
 
 describe("ApiError", () => {
   it("creates error with code and message", () => {
@@ -260,5 +261,48 @@ describe("stage4 exemptions + sf-log + precheck client", () => {
       chapter_end: 5,
       user_modifications: "let me adjust",
     });
+  });
+});
+
+// --- v2.1 Creative Divergence: postDivergeInit accepts RawIntent ---
+//
+// The backend /diverge/init endpoint now expects the full RawIntent shape
+// (prompt + genre_primary + genre_secondary + target_reader + ...), not just
+// a bare `premise` string. This test pins the new signature so callers
+// (S0AInputStep in particular) don't silently fall back to the legacy
+// {premise} body shape.
+describe("postDivergeInit", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(makeJsonResponse({}));
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it("accepts a RawIntent object (not just premise string)", async () => {
+    const rawIntent: RawIntent = {
+      prompt: "长生者寻死",
+      genre_primary: "xianxia",
+      genre_secondary: "xuanyi",
+    };
+    // TypeScript compile-time check: second arg accepts RawIntent type
+    expect(typeof api.postDivergeInit).toBe("function");
+
+    await api.postDivergeInit("proj_test", rawIntent);
+
+    // Verify the body sent is the full RawIntent (not the legacy {premise} wrapper)
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/v1/projects/proj_test/creative/diverge/init");
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(init.body as string);
+    expect(body.prompt).toBe("长生者寻死");
+    expect(body.genre_primary).toBe("xianxia");
+    expect(body.genre_secondary).toBe("xuanyi");
+    // Crucial regression guard: must NOT wrap under {premise} anymore.
+    expect(body.premise).toBeUndefined();
   });
 });

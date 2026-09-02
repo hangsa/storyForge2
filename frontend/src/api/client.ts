@@ -1402,11 +1402,11 @@ export const api = {
     ),
 
   // --- v1.2 Creative Divergence ---
-  postDivergeInit: (projectId: string, premise: string) =>
+  postDivergeInit: (projectId: string, rawIntent: RawIntent) =>
     request<CanvasStateV3>(
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/init`,
-      { premise },
+      rawIntent,
     ),
 
   postDivergeMutate: (

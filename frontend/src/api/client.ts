@@ -833,11 +833,28 @@ export interface CanvasV4State {
   };
   creative_path: CreativeStep[];
   current_concept: CurrentConcept;
-  final_concept: unknown | null;
+  final_concept: unknown;
   committed: boolean;
   committed_at: string | null;
   scores: Record<string, number>;
   session_metadata: Record<string, unknown>;
+}
+
+export interface CanvasV2CommitResponse {
+  error: boolean;
+  code: string;
+  message: string;
+  detail: {
+    concept: Record<string, unknown>;
+    story_dna: Record<string, unknown>;
+    source: string;
+    committed_at: string;
+    concept_preview: Record<string, unknown>;
+    story_dna_preview: Record<string, unknown>;
+    novelty_summary: Record<string, unknown>;
+    next_step_url: string;
+    warnings: string[];
+  };
 }
 
 // --- v1.7 Branch Simulation types ---
@@ -1700,24 +1717,7 @@ export const api = {
       body,
     ),
 
-  postCanvasV2Commit: (
-    projectId: string,
-  ): Promise<{
-    error: boolean;
-    code: string;
-    message: string;
-    detail: {
-      concept: Record<string, unknown>;
-      story_dna: Record<string, unknown>;
-      source: string;
-      committed_at: string;
-      concept_preview: Record<string, unknown>;
-      story_dna_preview: Record<string, unknown>;
-      novelty_summary: Record<string, unknown>;
-      next_step_url: string;
-      warnings: string[];
-    };
-  }> =>
+  postCanvasV2Commit: (projectId: string): Promise<CanvasV2CommitResponse> =>
     request(
       "POST",
       `/creative/canvas/${encodeURIComponent(projectId)}/session/commit`,

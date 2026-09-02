@@ -1,9 +1,9 @@
-"""Creative Canvas v2 routes — `/creative/canvas/session/*`.
+"""Creative Canvas v2 routes — `/creative/canvas/{project_id}/session/*`.
 
 This module extends the existing v1.x divergence API without breaking
 changes. All v1.x endpoints in `creative_diverge.py` remain functional.
 
-Endpoint naming: v2.0 uses `/creative/canvas/session/*` to:
+Endpoint naming: v2.0 uses `/creative/canvas/{project_id}/session/*` to:
   1. Differentiate from v1.x `/creative/diverge/*` (gradual rollout)
   2. Avoid conflict with wizard step 1's divergence sub-path
   3. Reserve `/creative/canvas/regenerate`, `/finalize`, `/backtrack`
@@ -13,12 +13,27 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import yaml
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/creative/canvas", tags=["canvas-v2"])
+from backend.api.creative_diverge import (
+    _ensure_project,
+    _read_canvas,
+    _write_canvas,
+    _compute_etag,
+)
+from backend.creative_os.state_machine import (
+    transition_step_state,
+)
+from backend.creative_os.op_hint import compute_op_hint
+
+router = APIRouter(prefix="/creative/canvas/{project_id}", tags=["canvas-v2"])
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _NEXT_STEP_PROMPT_PATH = _PROMPTS_DIR / "canvas_v2_next_step.yaml"
@@ -107,3 +122,291 @@ def _validate_for_commit(canvas: dict) -> None:
                 "detail": {},
             },
         )
+
+
+# --- Pydantic models ---
+
+
+class InitRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=1700)
+    genre_primary: str = Field(..., min_length=1)
+    genre_secondary: Optional[str] = None
+    target_reader: Optional[str] = None
+    reference_works: Optional[list] = None
+    forbidden_directions: Optional[list] = None
+    quick_mode: bool = False
+
+
+class NextStepRequest(BaseModel):
+    current_step: int = Field(..., ge=1, le=5)
+
+
+class SelectRequest(BaseModel):
+    step: int = Field(..., ge=1, le=5)
+    option_id: str = Field(..., min_length=1)
+
+
+# --- /init ---
+
+
+@router.post("/session/init")
+async def init_canvas_v2(project_id: str, body: InitRequest):
+    """Initialize v2 canvas with raw_intent + root_idea dual-write."""
+    _ensure_project(project_id)
+
+    now = datetime.now(timezone.utc).isoformat()
+    canvas = {
+        "schema_version": 4,
+        "session_id": str(uuid.uuid4()),
+        "root_idea": {
+            "prompt": body.prompt,
+            "genre": body.genre_primary,
+            "premise": body.prompt,
+            "extracted": {"core_elements": []},
+        },
+        "raw_intent": {
+            "prompt": body.prompt,
+            "genre_primary": body.genre_primary,
+            "genre_secondary": body.genre_secondary,
+            "target_reader": body.target_reader,
+            "reference_works": body.reference_works or [],
+            "forbidden_directions": body.forbidden_directions or [],
+            "quick_mode": body.quick_mode,
+            "trope_tags": [],
+        },
+        "creative_session": {
+            "current_step": 1,
+            "max_steps": 5,
+            "status": "active",
+        },
+        "creative_path": [{
+            "step": 1,
+            "operation": None,
+            "operation_reason": None,
+            "options": [],
+            "selected_option_id": None,
+            "created_at": now,
+            "selected_at": None,
+            "regenerated_count": 0,
+            "state": "available",
+        }],
+        "current_concept": {
+            "premise": body.prompt,
+            "core_conflict": "",
+            "characters": [],
+            "world_rules": [],
+            "tropes": [],
+            "themes": [],
+            "novelty": 0.0,
+        },
+        "final_concept": None,
+        "committed": False,
+        "scores": {},
+        "session_metadata": {
+            "created_at": now,
+            "last_modified_at": now,
+            "elapsed_seconds": 0,
+            "operation_count": 0,
+        },
+    }
+    etag = _compute_etag(canvas)
+    canvas["_etag"] = etag
+    _write_canvas(project_id, canvas)
+
+    return {"ok": True, "session_id": canvas["session_id"], "etag": etag}
+
+
+# --- /state ---
+
+
+@router.get("/session/state")
+async def get_state_v2(project_id: str):
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "CANVAS_NOT_FOUND", "message": "画布未初始化"},
+        )
+    canvas["_etag"] = _compute_etag(canvas)
+    return canvas
+
+
+# --- /next-step (impl extracted for testability) ---
+
+
+async def _next_step_impl(project_id: str, current_step: int) -> dict:
+    """Core logic for /next-step. Returns {step, operation, options, quality_warning}.
+
+    Raises HTTPException on validation failure.
+    """
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "CANVAS_NOT_INITIALIZED"},
+        )
+
+    if canvas["creative_session"]["current_step"] != current_step:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "STEP_OUT_OF_SYNC",
+                "message": (
+                    f"expected step "
+                    f"{canvas['creative_session']['current_step']}"
+                ),
+            },
+        )
+
+    # Compute deterministic op hint
+    genres = [canvas["raw_intent"].get("genre_primary") or ""]
+    if canvas["raw_intent"].get("genre_secondary"):
+        genres.append(canvas["raw_intent"]["genre_secondary"])
+    hint = compute_op_hint(
+        canvas["current_concept"],
+        canvas["creative_path"],
+        current_step,
+        genres=genres,
+    )
+
+    # Call LLM (single shot) via project's model_router.
+    # Uses tier-1 (creative core) per CLAUDE.md routing.
+    # See backend/llm/model_router.py + backend/services/llm_config.py.
+    from backend.llm.model_router import get_model_router
+    from backend.config import settings as _settings
+
+    async def llm_call(context):
+        router = get_model_router()
+        user_prompt = (
+            f"current_concept: {context.get('concept', {})}\n"
+            f"selected_path: {context.get('selected_path', [])}\n"
+            f"current_step: {context.get('step')}\n"
+            f"max_steps: 5\n"
+            f"candidate_operation_hint: {context.get('hint')}\n"
+        )
+        system_prompt = _load_next_step_prompt()["system"]
+        return await router.complete(
+            tier="tier1",
+            system=system_prompt,
+            user=user_prompt,
+            model=_settings.llm_model,
+            max_tokens=2048,
+            temperature=0.7,
+        )
+
+    parsed = await _call_llm_with_retry(llm_call, {
+        "hint": hint,
+        "concept": canvas["current_concept"],
+        "step": current_step,
+    })
+
+    # Build path entry
+    path_entry = {
+        "step": current_step,
+        "operation": parsed["operation"],
+        "operation_reason": parsed.get("operation_reason", ""),
+        "options": [{
+            "id": o["id"],
+            "title": o["title"],
+            "premise": o["premise"],
+            "logic": o.get("logic", ""),
+            "scores": {},  # fire-and-forget NoveltyEvaluator will fill
+        } for o in parsed["options"]],
+        "selected_option_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "selected_at": None,
+        "regenerated_count": 0,
+        "state": "active",
+    }
+
+    # Ensure creative_path has an entry for this step (extend if needed)
+    while len(canvas["creative_path"]) < current_step:
+        canvas["creative_path"].append({
+            "step": len(canvas["creative_path"]) + 1,
+            "operation": None,
+            "operation_reason": None,
+            "options": [],
+            "selected_option_id": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "selected_at": None,
+            "regenerated_count": 0,
+            "state": "locked",
+        })
+
+    canvas["creative_path"][current_step - 1] = path_entry
+    transition_step_state(canvas, step=current_step, event="activate")
+    canvas["_etag"] = _compute_etag(canvas)
+    _write_canvas(project_id, canvas)
+
+    return {
+        "step": current_step,
+        "operation": {
+            "type": parsed["operation"],
+            "name": parsed["operation"],
+            "reason": parsed.get("operation_reason", ""),
+        },
+        "options": path_entry["options"],
+        "quality_warning": None,
+    }
+
+
+@router.post("/session/next-step")
+async def next_step_v2(project_id: str, body: NextStepRequest):
+    return await _next_step_impl(project_id, body.current_step)
+
+
+# --- /select ---
+
+
+@router.post("/session/select")
+async def select_option_v2(project_id: str, body: SelectRequest):
+    """Mark step's selected_option_id; cascade-compute next step or finalize."""
+    canvas = _read_canvas(project_id)
+    if canvas is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "CANVAS_NOT_INITIALIZED"},
+        )
+
+    path = canvas["creative_path"]
+    if body.step > len(path):
+        raise HTTPException(status_code=404, detail={"code": "STEP_NOT_FOUND"})
+
+    entry = path[body.step - 1]
+    if body.option_id not in [o["id"] for o in entry.get("options", [])]:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_OPTION_ID"},
+        )
+
+    entry["selected_option_id"] = body.option_id
+    entry["selected_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Update current_concept from selected option
+    selected = next(o for o in entry["options"] if o["id"] == body.option_id)
+    canvas["current_concept"]["premise"] = selected.get(
+        "premise", canvas["current_concept"]["premise"],
+    )
+
+    transition_step_state(canvas, step=body.step, event="complete")
+
+    # Write the completed step back so the in-memory state survives the
+    # cascade re-read below.
+    canvas["_etag"] = _compute_etag(canvas)
+    _write_canvas(project_id, canvas)
+
+    # Auto-trigger next step (or finalize at step 5)
+    if body.step < 5:
+        await _next_step_impl(project_id, body.step + 1)
+        canvas = _read_canvas(project_id)
+        canvas["_etag"] = _compute_etag(canvas)
+        _write_canvas(project_id, canvas)
+    # else: current_concept 收尾(final_concept 留给 /commit)
+
+    return {
+        "ok": True,
+        "step": body.step,
+        "selected_option_id": body.option_id,
+    }
+
+

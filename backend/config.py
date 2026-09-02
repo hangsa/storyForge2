@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     genres_dir: Path = Path(__file__).parent.parent / "config" / "genres"
     global_prompt_overrides_path: Path = Path("config/global_prompt_overrides.json")
 
+    enable_canvas_v2: bool = False
+
     # Allow unknown env vars so the migration can write new prefixed keys
     # (e.g. STORYFORGE_PROVIDER_API_KEY_DEEPSEEK) without Settings rejecting
     # the loaded file.

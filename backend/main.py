@@ -97,6 +97,10 @@ app.include_router(llm_config_api.router)
 app.include_router(genres_api.router)
 app.include_router(creative_divergence.router)
 
+if settings.enable_canvas_v2:
+    from backend.api.v2_canvas import router as v2_canvas_router
+    app.include_router(v2_canvas_router)
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

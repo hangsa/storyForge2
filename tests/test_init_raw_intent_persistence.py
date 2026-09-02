@@ -95,3 +95,21 @@ def test_init_returns_400_when_genre_primary_whitespace_only(project, client):
     )
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "GENRE_MISSING"
+
+
+def test_init_accepts_prompt_alias_for_premise(project, client):
+    """The frontend RawIntent interface uses `prompt`; the legacy backend
+    field name is `premise`. Both must populate the same canvas field so
+    the UI doesn't 422 on every submit.
+
+    Found in Task 13 E2E smoke test (proj_f597db51, 2026-09-02): the
+    field mismatch was hidden by frontend unit tests that mock
+    postDivergeInit, so the bug shipped through Tasks 1 + 8 undetected.
+    """
+    response = client.post(
+        f"/api/v1/projects/{project}/creative/diverge/init",
+        json={"prompt": "用 prompt 字段的现代调用", "genre_primary": "xianxia"},
+    )
+    assert response.status_code == 200, response.text
+    canvas = response.json()["detail"]
+    assert canvas["raw_intent"]["prompt"] == "用 prompt 字段的现代调用"

@@ -601,13 +601,21 @@ async def get_canvas_state(project_id: str):
 class InitRequest(BaseModel):
     """Request body for POST /init: canvas initialization + RawIntent capture."""
 
-    premise: str = Field(..., min_length=1, max_length=1700)
+    # `prompt` is the canonical RawIntent field (PRD §4.1). `premise` is
+    # kept as an alias for legacy callers (tests, internal scripts) that
+    # predate the genre-fusion wiring. populate_by_name=True lets the
+    # field populate from either alias in incoming JSON without rejecting.
+    premise: str = Field(
+        ..., min_length=1, max_length=1700, alias="prompt",
+    )
     genre_primary: Optional[str] = None
     genre_secondary: Optional[str] = None
     target_reader: Optional[str] = None
     reference_works: Optional[List[str]] = None
     forbidden_directions: Optional[List[str]] = None
     quick_mode: bool = False
+
+    model_config = {"populate_by_name": True}
 
 
 @router.post("/init")

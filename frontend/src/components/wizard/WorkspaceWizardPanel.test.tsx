@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import WorkspaceWizardPanel from "./WorkspaceWizardPanel";
 import api from "../../api/client";
@@ -29,16 +30,25 @@ vi.mock("../../api/client", () => ({
 }));
 
 describe("WorkspaceWizardPanel", () => {
-  it("renders WizardSidebar + step 1 canvas", async () => {
-    render(<WorkspaceWizardPanel projectId="proj_test" />);
+  it("renders WizardSidebar + step 1 divergence step", async () => {
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
     expect(screen.getByTestId("wizard-sidebar")).toBeInTheDocument();
     // "创意发散" appears in the sidebar item, header subtitle, and step 1 h2.
-    // Asserting ≥1 match confirms step 1's canvas mounted.
+    // Asserting ≥1 match confirms step 1's divergence step mounted.
     await waitFor(() => expect(screen.getAllByText("创意发散").length).toBeGreaterThanOrEqual(1));
   });
 
+  it("does NOT render the 创意画布 sidebar module (canvas refactor pending)", async () => {
+    // The 创意画布 sidebar module was removed on 2026-09-02 while the
+    // feature is being refactored (see docs/design/creative-canvas-module.md).
+    // The modules slot should be omitted (not rendered with a canvas entry).
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
+    expect(screen.queryByTestId("wizard-sidebar-modules")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("wizard-sidebar-module-canvas")).not.toBeInTheDocument();
+  });
+
   it("calls the remaining prefill endpoints on mount", async () => {
-    render(<WorkspaceWizardPanel projectId="proj_test" />);
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
     await waitFor(() => {
       expect(api.getConcept).toHaveBeenCalled();
       expect(api.getWorld).toHaveBeenCalled();
@@ -59,7 +69,7 @@ describe("WorkspaceWizardPanel", () => {
       concept: { title: "建木之囚", genre: "爽文", premise: "P", tone: "T", theme: "T", target_audience: "A", style_template: "" },
       story_dna: { core_contradiction: { statement: "S", side_a: "A", side_b: "B" }, value_stack: [] },
     });
-    render(<WorkspaceWizardPanel projectId="proj_test" />);
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
     await waitFor(() => {
       // Sidebar item 1 should NOT be disabled once prefill completes.
       expect(screen.getByTestId("wizard-sidebar-item-1")).not.toHaveAttribute("disabled");
@@ -81,7 +91,7 @@ describe("WorkspaceWizardPanel", () => {
       has_selection: false,
       selected_at: "2026-08-31T14:00:05.164787",
     });
-    render(<WorkspaceWizardPanel projectId="proj_f0721bdc" />);
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_f0721bdc" /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByTestId("wizard-sidebar-item-1")).not.toHaveAttribute("disabled");
     });

@@ -34,6 +34,11 @@ export default function WorkspaceWizardPanel({ projectId }: Props) {
 function Inner({ projectId }: Props) {
   const wizard = useWizard();
 
+  // The 创意画布 sidebar module was removed on 2026-09-02 while the
+  // feature is being refactored (see docs/design/creative-canvas-module.md).
+  // When the refactor lands, re-add the WizardSidebarModule entry between
+  // step 1 and step 2.
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

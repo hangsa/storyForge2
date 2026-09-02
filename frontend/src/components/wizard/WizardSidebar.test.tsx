@@ -28,4 +28,40 @@ describe("WizardSidebar", () => {
     fireEvent.click(screen.getByText("概念 DNA"));
     expect(onJump).toHaveBeenCalledWith(2);
   });
+
+  it("renders modules between step 1 and step 2 when modules prop is passed", () => {
+    render(
+      <WizardSidebar
+        currentStep={1}
+        completedSteps={[]}
+        onJump={() => {}}
+        modules={[{ id: "canvas", label: "创意画布", icon: "account_tree", path: "/p/stage1/canvas" }]}
+      />
+    );
+    const module = screen.getByTestId("wizard-sidebar-module-canvas");
+    expect(module).toBeInTheDocument();
+    // Module button must NOT be disabled (modules aren't gated by the
+    // wizard's completed-steps reachability — they're a sibling surface).
+    expect(module).not.toHaveAttribute("disabled");
+  });
+
+  it("calls onModuleNavigate with the module's path when clicked", () => {
+    const onModuleNavigate = vi.fn();
+    render(
+      <WizardSidebar
+        currentStep={1}
+        completedSteps={[]}
+        onJump={() => {}}
+        modules={[{ id: "canvas", label: "创意画布", icon: "account_tree", path: "/p/stage1/canvas" }]}
+        onModuleNavigate={onModuleNavigate}
+      />
+    );
+    fireEvent.click(screen.getByTestId("wizard-sidebar-module-canvas"));
+    expect(onModuleNavigate).toHaveBeenCalledWith("/p/stage1/canvas");
+  });
+
+  it("omits the modules slot when modules prop is empty", () => {
+    render(<WizardSidebar currentStep={1} completedSteps={[]} onJump={() => {}} />);
+    expect(screen.queryByTestId("wizard-sidebar-modules")).not.toBeInTheDocument();
+  });
 });

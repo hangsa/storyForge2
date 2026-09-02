@@ -1,4 +1,5 @@
 import { render, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import WorkspaceWizardPanel from "./WorkspaceWizardPanel";
 
@@ -48,7 +49,7 @@ vi.mock("../../api/client", () => ({
 describe("WorkspaceWizardPanel crash repro", () => {
   it("renders without crashing with 404-shaped prefill envelope", async () => {
     const { errors, errSpy } = captureReactErrors();
-    render(<WorkspaceWizardPanel projectId="proj_test" />);
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
 
     await waitFor(() => {
       expect(document.querySelector('[data-testid="wizard-sidebar"]')).toBeInTheDocument();
@@ -91,7 +92,7 @@ describe("WorkspaceWizardPanel crash repro", () => {
     }));
 
     const { default: FreshPanel } = await import("./WorkspaceWizardPanel");
-    render(<FreshPanel projectId="proj_test" />);
+    render(<MemoryRouter><FreshPanel projectId="proj_test" /></MemoryRouter>);
 
     await waitFor(() => {
       expect(document.querySelector('[data-testid="wizard-sidebar"]')).toBeInTheDocument();

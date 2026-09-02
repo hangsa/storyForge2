@@ -1,10 +1,14 @@
 import { useState } from "react";
-import api, { type RawIntent } from "@/api/client";
+import api, { type IdeaVariant, type RawIntent } from "@/api/client";
 import { RegenerateModal } from "../../shared/RegenerateModal";
 
 interface Props {
   projectId: string;
-  onComplete: (rawIntent: RawIntent) => void;
+  onComplete: (
+    rawIntent: RawIntent,
+    fusionVariant: IdeaVariant | null,
+    fusionBanner: string | null,
+  ) => void;
   initial?: RawIntent | null;
   /**
    * Called after a successful /diverge/regenerate/raw-intent call so the
@@ -42,13 +46,18 @@ export default function S0AInputStep({
   const [genreSecondary, setGenreSecondary] = useState(
     initial?.genre_secondary || "",
   );
+  const [enableFusion, setEnableFusion] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
 
+  // canSubmit: prompt ≥10 + 主类型有值 + (勾选融合则副类型也必须有值)
   const canSubmit =
-    prompt.trim().length >= 10 && !!genrePrimary && !submitting;
+    prompt.trim().length >= 10 &&
+    !!genrePrimary &&
+    (!enableFusion || !!genreSecondary) &&
+    !submitting;
 
   async function submit() {
     if (!canSubmit) return;
@@ -60,8 +69,24 @@ export default function S0AInputStep({
         genre_primary: genrePrimary,
         genre_secondary: genreSecondary || undefined,
       };
-      await api.postDivergeInit(projectId, rawIntent.prompt);
-      onComplete(rawIntent);
+      await api.postDivergeInit(projectId, rawIntent);
+
+      let fusionVariant: IdeaVariant | null = null;
+      let fusionBanner: string | null = null;
+      if (rawIntent.genre_secondary && enableFusion) {
+        try {
+          const fuseResp = await api.postDivergeFuse(projectId, {
+            genre_primary: rawIntent.genre_primary,
+            genre_secondary: rawIntent.genre_secondary,
+            prompt: rawIntent.prompt,
+          });
+          fusionVariant = fuseResp.variants[0] ?? null;
+        } catch (e) {
+          fusionBanner = `类型融合未启用(${e instanceof Error ? e.message : "LLM 后端不可用"})`;
+        }
+      }
+
+      onComplete(rawIntent, fusionVariant, fusionBanner);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "提交失败");
       setSubmitting(false);
@@ -73,10 +98,6 @@ export default function S0AInputStep({
     setRegenerating(true);
     setError(null);
     try {
-      // /regenerate/raw-intent re-runs the 3-op mutate chain against the
-      // existing prompt (raw_intent isn't modified) and writes new
-      // idea_variants. Downstream fields (core_contradiction, selected_path)
-      // are cleared on the canvas.
       await api.postDivergeRegenerateRawIntent(projectId, {
         user_modifications: userModifications,
       });
@@ -92,10 +113,6 @@ export default function S0AInputStep({
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-medium">灵感输入</h2>
-        {/* /regenerate/raw-intent only writes new variants (clears downstream)
-            — it does NOT change raw_intent itself. Disable until the user has
-            a saved prompt to regenerate against; otherwise the user clicks
-            and the UI offers no feedback. */}
         <button
           type="button"
           data-testid="s0a-regenerate"
@@ -156,6 +173,17 @@ export default function S0AInputStep({
           ))}
         </select>
       </div>
+      {genreSecondary && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            data-testid="enable-fusion"
+            checked={enableFusion}
+            onChange={(e) => setEnableFusion(e.target.checked)}
+          />
+          <span>启用类型融合(计算 BFS 距离 + 风险等级,产出融合变体)</span>
+        </label>
+      )}
       {error && <div className="text-error text-sm">{error}</div>}
       <div className="flex justify-end">
         <button

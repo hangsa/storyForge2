@@ -153,7 +153,17 @@ function advanceMaxReached(prev: SubStage, next: SubStage): SubStage {
 export function nextAfterA(
   prev: DivergenceState,
   rawIntent: RawIntent,
+  fusionVariant?: IdeaVariant | null,
+  fusionBanner?: string | null,
 ): DivergenceState {
+  // Task 9: S0AInputStep now passes (fusionVariant, fusionBanner) up to the
+  // parent. Task 11 will surface these via DivergenceState.fusionVariant +
+  // state.fusionBanner (and feed fusionVariant into S0B). Until then we
+  // accept but don't persist — the args are safely ignored so existing
+  // callers (and the CreativeDivergenceStep.test.tsx suite) keep working
+  // with the 2-arg form.
+  void fusionVariant;
+  void fusionBanner;
   return {
     ...prev,
     ...clearDownstream("A"),
@@ -367,8 +377,10 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
           <S0AInputStep
             projectId={projectId}
             initial={state.rawIntent}
-            onComplete={(rawIntent) =>
-              setState((prev) => nextAfterA(prev, rawIntent))
+            onComplete={(rawIntent, fusionVariant, fusionBanner) =>
+              setState((prev) =>
+                nextAfterA(prev, rawIntent, fusionVariant, fusionBanner),
+              )
             }
             onCanvasMutated={onCanvasMutated}
           />

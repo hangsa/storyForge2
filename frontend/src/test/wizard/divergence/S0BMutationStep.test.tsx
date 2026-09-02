@@ -303,6 +303,69 @@ describe("S0BMutationStep", () => {
     // users without hover/keyboard focus).
     expect(btn).toHaveTextContent(/重新生成/);
   });
+
+  // Back-nav regression on proj_f0721bdc 2026-09-02: after Stage A's
+  // submit + clearDownstream("A") wipes state.variants, S0B's mount
+  // effect generates the 3 mutations via /expand + /apply-mutation and
+  // stores them in LOCAL `variants` state only. Without an
+  // onCanvasMutated call, parent's state.variants stays [], so when the
+  // user tab-navigates A → B → tab-A → tab-B the second B-mount sees
+  // initial=[] and re-runs /expand + /apply-mutation (3 more LLM
+  // calls, polluting canvas with duplicate children). Fix: the mount
+  // effect must call onCanvasMutated after successful generation so
+  // parent's state.variants is populated from canvas. Pairs with the
+  // CreativeDivergenceStep mergeCanvasState isInitialLoad flag (so the
+  // canvasVersion bump doesn't bounce the user from B to C).
+  it("mount effect calls onCanvasMutated after generating variants (proj_f0721bdc 2026-09-02)", async () => {
+    const onCanvasMutated = vi.fn();
+    render(
+      <S0BMutationStep
+        projectId="p1"
+        rawIntent={{ prompt: "测试", genre_primary: "修仙" }}
+        // initial=[] simulates "user just submitted A and
+        // clearDownstream("A") wiped state.variants". Fast-path misses,
+        // so the mount effect must run generation.
+        onComplete={() => {}}
+        onBack={() => {}}
+        onCanvasMutated={onCanvasMutated}
+      />,
+    );
+    // Wait for variants to populate (proves /expand + /apply-mutation
+    // completed). Then assert onCanvasMutated was called.
+    await waitFor(() => {
+      expect(screen.getAllByTestId(/^variant-card-/)).toHaveLength(3);
+    });
+    expect(onCanvasMutated).toHaveBeenCalled();
+  });
+
+  // When `initial` is non-empty (parent already has variants — either
+  // from canvas rehydration on initial mount, or because S0B's mount
+  // effect synced them last time), the fast-path hits and NO
+  // /expand + /apply-mutation fires. onCanvasMutated must NOT be called
+  // either — there's nothing to sync (the parent already has the data).
+  // The pair to the test above locks in the conditional behavior.
+  it("mount effect does NOT call onCanvasMutated when initial has variants (fast-path)", async () => {
+    const onCanvasMutated = vi.fn();
+    render(
+      <S0BMutationStep
+        projectId="p1"
+        rawIntent={{ prompt: "测试", genre_primary: "修仙" }}
+        initial={[
+          { ...sampleVariant, id: "v1", title: "变体1" },
+          { ...sampleVariant, id: "v2", title: "变体2" },
+          { ...sampleVariant2, id: "v3", title: "变体3" },
+        ]}
+        onComplete={() => {}}
+        onBack={() => {}}
+        onCanvasMutated={onCanvasMutated}
+      />,
+    );
+    await waitFor(() => screen.getAllByTestId(/^variant-card-/));
+    // Fast-path: no /expand + /apply-mutation, no parent sync needed.
+    expect(api.postDivergeWhatIfExpand).not.toHaveBeenCalled();
+    expect(api.postDivergeMutate).not.toHaveBeenCalled();
+    expect(onCanvasMutated).not.toHaveBeenCalled();
+  });
 });
 
 // --- Genre fusion card + 重新融合 button (Task 10, plan §S0-B wiring) ---

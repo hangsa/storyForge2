@@ -156,6 +156,17 @@ export default function S0BMutationStep({
         }
         if (cancelled) return;
         setVariants(built);
+        // Sync to parent so state.variants gets populated from canvas.
+        // Without this, parent's state.variants stays empty
+        // (clearDownstream("A") wiped it on A submit), and a tab-nav
+        // round-trip A → B → A → B would re-run /expand +
+        // /apply-mutation because S0B's mount-effect fast-path sees
+        // initial=[] on the second mount. onCanvasMutated bumps
+        // canvasVersion → loadCanvas reads the freshly written
+        // mutations off canvas → state.variants populated.
+        // mergeCanvasState's isInitialLoad=false flag prevents
+        // loadCanvas from bouncing the user from B to C mid-navigation.
+        onCanvasMutated?.();
       } catch (e: unknown) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : "生成失败");

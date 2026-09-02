@@ -344,6 +344,7 @@ function buildRootNode(core: CoreContradiction | null): WhatIfNode {
 export function mergeCanvasState(
   canvas: CanvasStateV3 | null,
   prev: DivergenceState,
+  options?: { isInitialLoad?: boolean },
 ): DivergenceState {
   if (!canvas) return prev;
   const rawIntent = canvas.raw_intent ?? null;
@@ -365,10 +366,23 @@ export function mergeCanvasState(
     core_contradiction: core,
     selected_path: path,
   });
+  // isInitialLoad distinguishes "first loadCanvas after mount" from
+  // "mid-session canvasVersion tick from onCanvasMutated":
+  //   - initial load: subStage is inferred from canvas (the user just
+  //     refreshed the page; canvas is authoritative for where they are)
+  //   - mid-session: subStage is preserved from prev — the user is
+  //     actively navigating, and any canvas re-fetch (e.g., from S0B
+  //     syncing its generated variants, or any regen handler) must not
+  //     bounce them. Regression caught on proj_f0721bdc 2026-09-02:
+  //     S0B's mount effect calls onCanvasMutated after generating
+  //     variants; without this flag, loadCanvas would re-infer "C"
+  //     (canvas has raw_intent + variants, no core_contradiction) and
+  //     auto-advance the user past B before they'd picked anything.
+  const isInitialLoad = options?.isInitialLoad ?? false;
   return {
     ...prev,
-    subStage: inferred,
-    maxReachedSubStage: inferred,
+    subStage: isInitialLoad ? inferred : prev.subStage,
+    maxReachedSubStage: isInitialLoad ? inferred : prev.maxReachedSubStage,
     rawIntent,
     variants,
     fusionVariant,
@@ -395,7 +409,15 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
   const loadCanvas = useCallback(async () => {
     try {
       const response = await api.getDivergeState(projectId);
-      setState((prev) => mergeCanvasState(response, prev));
+      // isInitialLoad uses prev.loading as the signal: INITIAL has
+      // loading=true; after the first loadCanvas, mergeCanvasState sets
+      // it to false. Subsequent loadCanvas calls (from canvasVersion
+      // ticks on regen handlers or S0B's sync-from-mount call) see
+      // loading=false → preserve the user's subStage instead of
+      // auto-advancing based on canvas state.
+      setState((prev) =>
+        mergeCanvasState(response, prev, { isInitialLoad: prev.loading }),
+      );
     } catch {
       setState((prev) => ({ ...prev, loading: false }));
     }

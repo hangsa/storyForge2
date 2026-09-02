@@ -525,8 +525,68 @@ describe("mergeCanvasState", () => {
     // picked a contradiction yet). If we wrongly passed state.variants
     // (=[] after filtering) instead of allVariants, inferSubStage would
     // hit the "no variants" branch and return B.
-    const next = mergeCanvasState(canvas, filledPrev({ subStage: "A" }));
+    //
+    // isInitialLoad=true: simulates initial mount (loading=true →
+    // loadCanvas is the very first one). subStage gets inferred.
+    // After this fix, mid-session onCanvasMutated calls preserve the
+    // user's subStage instead — see the next test.
+    const next = mergeCanvasState(
+      canvas,
+      filledPrev({ subStage: "A", loading: true }),
+      { isInitialLoad: true },
+    );
     expect(next.subStage).toBe("C");
     expect(next.variants).toEqual([]);  // filtered: fusion only
+  });
+
+  // Mid-session loadCanvas (canvasVersion bump from a child calling
+  // onCanvasMutated) must NOT re-infer subStage — the user's current
+  // navigation is authoritative. Regression caught on proj_f0721bdc
+  // 2026-09-02: S0B's mount effect called onCanvasMutated after
+  // generation, but loadCanvas blindly inferred subStage=C (canvas had
+  // raw_intent + variants, no core_contradiction), bouncing the user
+  // from B straight to C before they'd picked variants.
+  it("isInitialLoad=false preserves prev.subStage (mid-session onCanvasMutated)", () => {
+    const rawIntent = { prompt: "x", genre_primary: "x" } as unknown as RawIntent;
+    const canvas = canvasOf({
+      raw_intent: rawIntent,
+      idea_variants: [{ id: "v1", mutation_type: "inversion" } as unknown as IdeaVariant],
+    });
+    // User is at B with no prev-loading flag (=false = mid-session).
+    // Canvas has raw_intent + variants + no core → inferSubStage="C".
+    // The fix must override that inference and keep prev.subStage="B".
+    const prev = filledPrev({ subStage: "B", loading: false });
+    const next = mergeCanvasState(canvas, prev, { isInitialLoad: false });
+    expect(next.subStage).toBe("B");
+    expect(next.subStage).not.toBe("C");
+  });
+
+  // Same protection for maxReachedSubStage — mid-session loadCanvas
+  // must never drop the user's "highest reached" mark just because
+  // canvas temporarily doesn't reflect it (e.g., right after a regen
+  // that cleared downstream fields, before the user has re-picked).
+  it("isInitialLoad=false preserves prev.maxReachedSubStage", () => {
+    const rawIntent = { prompt: "x", genre_primary: "x" } as unknown as RawIntent;
+    // Canvas is "fresh" — only raw_intent, no variants. inferSubStage
+    // would say "A", but the user has actually reached E in this session.
+    const canvas = canvasOf({ raw_intent: rawIntent });
+    const prev = filledPrev({ subStage: "E", maxReachedSubStage: "E", loading: false });
+    const next = mergeCanvasState(canvas, prev, { isInitialLoad: false });
+    expect(next.maxReachedSubStage).toBe("E");
+    expect(next.subStage).toBe("E");
+  });
+
+  // isInitialLoad defaults to false (current callers that don't pass it
+  // explicitly — like the mergeCanvasState(null, prev) defensive branch
+  // — get the "preserve" behavior). The isInitialLoad=true flag is the
+  // exception, not the default. This pins the contract so a future
+  // refactor doesn't accidentally flip it.
+  it("isInitialLoad defaults to false (preserves prev.subStage)", () => {
+    const rawIntent = { prompt: "x", genre_primary: "x" } as unknown as RawIntent;
+    const canvas = canvasOf({ raw_intent: rawIntent });
+    const prev = filledPrev({ subStage: "D", loading: false });
+    const next = mergeCanvasState(canvas, prev);
+    // No options passed → isInitialLoad undefined → treated as false.
+    expect(next.subStage).toBe("D");
   });
 });

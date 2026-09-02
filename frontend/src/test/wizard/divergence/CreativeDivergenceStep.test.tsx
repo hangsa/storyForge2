@@ -21,6 +21,8 @@ function filledPrev(overrides: Partial<{
   contradictionCandidates: PersistedCandidates | null;
   coreContradiction: CoreContradiction | null;
   selectedPath: string[];
+  fusionVariant: IdeaVariant | null;
+  fusionBanner: string | null;
   quickMode: boolean;
   loading: boolean;
   maxReachedSubStage: SubStage;
@@ -33,6 +35,11 @@ function filledPrev(overrides: Partial<{
     contradictionCandidates: null,
     coreContradiction: { id: "c1" } as unknown as CoreContradiction,
     selectedPath: ["root", "v1"],
+    // Task 11: A owns the /fuse call — these are populated when the user
+    // re-saves A from a later stage. Tests that don't override them get a
+    // null baseline (the "fresh user" / "edit-A" path).
+    fusionVariant: null,
+    fusionBanner: null,
     quickMode: false,
     loading: false,
     // matches subStage in the "post-E" fixture — the user has reached E.
@@ -42,13 +49,17 @@ function filledPrev(overrides: Partial<{
 }
 
 describe("clearDownstream", () => {
-  it("clears {variants, selectedVariantIds, contradictionCandidates, coreContradiction, selectedPath} for stage A", () => {
+  it("clears {variants, selectedVariantIds, contradictionCandidates, coreContradiction, selectedPath, fusionVariant, fusionBanner} for stage A", () => {
+    // Task 11: A owns the /fuse call, so re-saving A must clear both
+    // fusion fields to avoid a stale pick leaking through after edit.
     expect(clearDownstream("A")).toEqual({
       variants: [],
       selectedVariantIds: [],
       contradictionCandidates: null,
       coreContradiction: null,
       selectedPath: [],
+      fusionVariant: null,
+      fusionBanner: null,
     });
   });
 
@@ -92,11 +103,34 @@ describe("nextAfterA", () => {
     expect(next.variants).toEqual([]);
     expect(next.coreContradiction).toBeNull();
     expect(next.selectedPath).toEqual([]);
+    // Task 11: A owns /fuse — re-save A clears prior fusion pick + banner.
+    expect(next.fusionVariant).toBeNull();
+    expect(next.fusionBanner).toBeNull();
     // Sticky / unrelated fields pass through.
     expect(next.quickMode).toBe(false);
     expect(next.loading).toBe(false);
     // maxReached is monotonic — A→B advances it; prev was E so it stays E.
     expect(next.maxReachedSubStage).toBe("E");
+  });
+
+  it("persists fusionVariant + fusionBanner when passed (Task 11)", () => {
+    const prev = filledPrev();
+    const rawIntent = { prompt: "new", genre_primary: "new" } as unknown as RawIntent;
+    const fusionVariant = {
+      id: "var-fuse-1",
+      title: "fusion",
+      premise_one_line: "f",
+      mutation_type: "fusion",
+      mutation_logic: "",
+      estimated_novelty: 0.7,
+      trope_tags: [],
+      regenerated_count: 0,
+      risk_level: "medium",
+      fusion_distance: 2,
+    } as unknown as IdeaVariant;
+    const next = nextAfterA(prev, rawIntent, fusionVariant, "类型融合未启用(LLM 不可用)");
+    expect(next.fusionVariant).toBe(fusionVariant);
+    expect(next.fusionBanner).toBe("类型融合未启用(LLM 不可用)");
   });
 });
 

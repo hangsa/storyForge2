@@ -36,6 +36,11 @@ vi.mock("../../api/client", () => ({
       source: "creative_divergence",
       committed_at: "2026-08-30T00:00:00Z",
     }),
+    postDivergeFuse: vi.fn().mockResolvedValue({
+      variants: [],
+      fusion_distance: { distance: 0, compatibility: "低" },
+      risk_level: "low",
+    }),
   },
 }));
 
@@ -148,6 +153,137 @@ describe("CreativeDivergenceStep (5-substage container)", () => {
       expect(
         screen.getByPlaceholderText(/用一句话描述你的故事想法/),
       ).toBeInTheDocument();
+    });
+  });
+});
+
+// Plan Task 11 (2026-09-02): S0-A passes (fusionVariant, fusionBanner) up
+// through its onComplete signature (Task 9 left the parent's `nextAfterA`
+// accepting but ignoring them via `void fusionVariant; void fusionBanner`).
+// Task 11 wires them into CreativeDivergenceStep's DivergenceState and
+// (a) passes `fusionVariant` to S0-B as a prop and (b) renders the banner
+// above S0-B when `fusionBanner` is non-null. These tests pin both
+// behaviors end-to-end so a future refactor can't silently drop the wiring
+// (the "fusionVariant not passed to S0-B" and "banner missing" classes of
+// regression).
+describe("CreativeDivergenceStep fusion propagation (Task 11)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.getDivergeState as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...sampleEmpty,
+    });
+    (api.postDivergeInit as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    // S0-B's on-mount expands the root then runs 3 /apply-mutation calls.
+    // The success-path test doesn't reach S0-B submit; failure-path test
+    // exercises S0-A → /fuse-fail → banner render without entering S0-B
+    // (banner shows when fusionBanner is set; the user can choose to
+    // continue with the mutation-chain alone).
+    (api.postDivergeWhatIfExpand as ReturnType<typeof vi.fn>).mockResolvedValue({
+      nodes: { c0: { id: "c0", content: "根展开的第一个子节点" } },
+      scores: {},
+      suggestion: "",
+    });
+    (api.postDivergeMutate as ReturnType<typeof vi.fn>).mockResolvedValue({
+      new_node: { id: "v1", title: "变体1" },
+      mutation_result: {
+        core_premise: "变体1",
+        novelty_hook: "x",
+        operation: "inversion",
+      },
+    });
+  });
+
+  it("passes fusionVariant from S0-A to S0-B (success path)", async () => {
+    // /fuse returns a non-null variant — parent's nextAfterA must persist
+    // it into DivergenceState.fusionVariant and S0-B must render its
+    // `fusion-card` testid with the variant's risk_level badge.
+    (api.postDivergeFuse as ReturnType<typeof vi.fn>).mockResolvedValue({
+      variants: [
+        {
+          id: "var-fuse-1",
+          title: "fusion",
+          premise_one_line: "f",
+          mutation_type: "fusion",
+          mutation_logic: "",
+          estimated_novelty: 0.7,
+          trope_tags: ["xianxia", "xuanyi"],
+          regenerated_count: 0,
+          risk_level: "medium",
+          fusion_distance: 2,
+        },
+      ],
+      fusion_distance: { distance: 2, compatibility: "中" },
+      risk_level: "medium",
+    });
+
+    renderStep();
+
+    // Wait for mount effect (loadCanvas) to clear the loading state and
+    // render S0A's textarea. Without this, fireEvent.change fails because
+    // the placeholder isn't in the DOM yet.
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText(/用一句话描述你的故事想法/),
+      ).toBeInTheDocument();
+    });
+
+    // Fill the A form: prompt ≥10 chars, both genres, check fusion.
+    fireEvent.change(
+      screen.getByPlaceholderText(/用一句话描述你的故事想法/),
+      { target: { value: "一个长生者踏上了寻找死亡的道路" } },
+    );
+    fireEvent.change(screen.getByTestId("genre-primary"), {
+      target: { value: "修仙" },
+    });
+    fireEvent.change(screen.getByTestId("genre-secondary"), {
+      target: { value: "悬疑" },
+    });
+    fireEvent.click(screen.getByTestId("enable-fusion"));
+    fireEvent.click(screen.getByTestId("s0a-submit"));
+
+    // S0-B mounts with fusionVariant non-null → renders fusion-card +
+    // risk-badge with the variant's risk_level.
+    await waitFor(() => {
+      expect(screen.getByTestId("fusion-card")).toBeInTheDocument();
+      expect(screen.getByTestId("risk-badge")).toHaveTextContent(/medium/);
+    });
+  });
+
+  it("shows fusionBanner in S0-B when /fuse failed", async () => {
+    // /fuse rejects — parent's nextAfterA must persist fusionBanner into
+    // DivergenceState and S0-B's parent render must surface it via the
+    // `fusion-banner` testid with the failure message.
+    (api.postDivergeFuse as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("LLM 不可用"),
+    );
+
+    renderStep();
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText(/用一句话描述你的故事想法/),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText(/用一句话描述你的故事想法/),
+      { target: { value: "一个长生者踏上了寻找死亡的道路" } },
+    );
+    fireEvent.change(screen.getByTestId("genre-primary"), {
+      target: { value: "修仙" },
+    });
+    fireEvent.change(screen.getByTestId("genre-secondary"), {
+      target: { value: "悬疑" },
+    });
+    fireEvent.click(screen.getByTestId("enable-fusion"));
+    fireEvent.click(screen.getByTestId("s0a-submit"));
+
+    // After A completes and we land on B, the banner is rendered with the
+    // user-facing "类型融合未启用" message (S0-A wraps the error there).
+    await waitFor(() => {
+      expect(screen.getByTestId("fusion-banner")).toHaveTextContent(
+        /类型融合未启用/,
+      );
     });
   });
 });

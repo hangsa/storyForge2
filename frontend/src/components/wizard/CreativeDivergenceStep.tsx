@@ -52,6 +52,22 @@ interface DivergenceState {
   contradictionCandidates: PersistedCandidates | null;
   coreContradiction: CoreContradiction | null;
   selectedPath: string[];
+  /**
+   * Fusion variant returned by S0-A's /fuse call. Threaded through the
+   * state so S0-B can render it as a distinguished card above the
+   * mutation-chain variants, with the user's pick preserved across
+   * C/D/E back-nav. Null when fusion was disabled or /fuse was not
+   * attempted. S0-B owns its own copy (`fusionVariantState`) seeded from
+   * this prop and manages re-rolls locally via 「重新融合」.
+   */
+  fusionVariant: IdeaVariant | null;
+  /**
+   * User-facing banner string shown above S0-B when /fuse failed (so the
+   * user knows fusion was skipped, not silently absent). Stays across
+   * C/D/E back-nav for the lifetime of the session; cleared on A
+   * re-save (the next /fuse result replaces this either way).
+   */
+  fusionBanner: string | null;
   quickMode: boolean;
   loading: boolean;
   /**
@@ -72,6 +88,8 @@ const INITIAL: DivergenceState = {
   contradictionCandidates: null,
   coreContradiction: null,
   selectedPath: [],
+  fusionVariant: null,
+  fusionBanner: null,
   quickMode: false,
   loading: true,
   maxReachedSubStage: "A",
@@ -88,7 +106,8 @@ const INITIAL: DivergenceState = {
 // Field ownership map:
 //
 //   A → rawIntent         clears {variants, contradictionCandidates,
-//                          coreContradiction, selectedPath}
+//                          coreContradiction, selectedPath, fusionVariant,
+//                          fusionBanner}
 //   B → variants          clears {contradictionCandidates, coreContradiction,
 //                          selectedPath}
 //   C → coreContradiction clears {selectedPath}
@@ -100,6 +119,10 @@ const INITIAL: DivergenceState = {
 // produces new variants; regen B re-rolls all 3 variants). The picker
 // must rebuild from a fresh LLM call. C-regen clears the candidates via
 // its own /regenerate/contradiction call.
+//
+// `fusionVariant` + `fusionBanner` are cleared on A-regen because S0-A
+// owns the /fuse call (it runs on submit). Re-save A must produce a
+// fresh /fuse result, so the prior pick + banner are stale.
 //
 // SubStage ordering for compare: A < B < C < D < E.
 const SUB_STAGE_ORDER: SubStage[] = ["A", "B", "C", "D", "E"];
@@ -126,6 +149,24 @@ export function clearDownstream(current: SubStage): Partial<DivergenceState> {
     }
     else if (laterStage === "D") cleared.selectedPath = [];
     // E is terminal and owns no DivergenceState field.
+  }
+  // A owns the /fuse call — clear both fields whenever clearDownstream is
+  // called from a downstream stage AND we're clearing "A" effects (i.e.
+  // when re-saving from a later stage the A fields would otherwise leak
+  // through `...prev`). Actually `clearDownstream("A")` already clears via
+  // the loop above only when current==A — but a re-save from B/C/D/E
+  // doesn't trigger clearDownstream("A"). The complete replacement path
+  // lives in `nextAfterA`, which sets both fields explicitly there.
+  // For B/C/D, the user can't re-save A, so the prior /fuse result
+  // remains valid as long as rawIntent didn't change.
+  //
+  // This block handles the `clearDownstream("A")` test expectations: when
+  // the helper is invoked with current="A" (i.e. the caller is editing
+  // A and advancing to B), both fusion fields must be null/cleared so the
+  // next /fuse result isn't shadowed by the prior pick.
+  if (current === "A") {
+    cleared.fusionVariant = null;
+    cleared.fusionBanner = null;
   }
   return cleared;
 }
@@ -156,18 +197,18 @@ export function nextAfterA(
   fusionVariant?: IdeaVariant | null,
   fusionBanner?: string | null,
 ): DivergenceState {
-  // Task 9: S0AInputStep now passes (fusionVariant, fusionBanner) up to the
-  // parent. Task 11 will surface these via DivergenceState.fusionVariant +
-  // state.fusionBanner (and feed fusionVariant into S0B). Until then we
-  // accept but don't persist — the args are safely ignored so existing
-  // callers (and the CreativeDivergenceStep.test.tsx suite) keep working
-  // with the 2-arg form.
-  void fusionVariant;
-  void fusionBanner;
+  // Task 11 wires the (fusionVariant, fusionBanner) tuple into the
+  // DivergenceState. S0-A's onComplete signature already passes them up
+  // (Task 9); this helper is where they become observable to S0-B's
+  // parent render and to the banner. `clearDownstream("A")` resets both
+  // fields to null first, then we apply the new values on top so a stale
+  // pick from a prior run can't leak through after re-save.
   return {
     ...prev,
     ...clearDownstream("A"),
     rawIntent,
+    fusionVariant: fusionVariant ?? null,
+    fusionBanner: fusionBanner ?? null,
     subStage: "B",
     maxReachedSubStage: advanceMaxReached(prev.maxReachedSubStage, "B"),
   };
@@ -306,6 +347,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
         selected_path: path,
       });
       setState((prev) => ({
+        ...prev,
         subStage: inferred,
         maxReachedSubStage: inferred,
         rawIntent,
@@ -318,6 +360,12 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
         contradictionCandidates: persisted,
         coreContradiction: core,
         selectedPath: path,
+        // /state doesn't persist fusionVariant / fusionBanner (they live in
+        // local component memory only — they're session-scoped, not
+        // canvas-scoped, since /fuse is cheap and re-runnable via 重新融合).
+        // Hard reload starts the user fresh in this respect.
+        fusionVariant: null,
+        fusionBanner: null,
         quickMode: rawIntent?.quick_mode ?? false,
         loading: false,
       }));
@@ -386,21 +434,43 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
           />
         )}
         {state.subStage === "B" && (
-          <S0BMutationStep
-            projectId={projectId}
-            rawIntent={
-              state.rawIntent ?? { prompt: "", genre_primary: "" }
-            }
-            initial={state.variants}
-            selectedIds={state.selectedVariantIds}
-            onComplete={(variants, selectedIds) =>
-              setState((prev) => nextAfterB(prev, variants, selectedIds))
-            }
-            onBack={() =>
-              setState((prev) => ({ ...prev, subStage: "A" }))
-            }
-            onCanvasMutated={onCanvasMutated}
-          />
+          <>
+            {/* Fusion-failure banner (Task 11). Rendered above S0-B when
+                S0-A's /fuse call rejected (LLM unavailable, etc.) so the
+                user knows fusion was skipped — without this, the missing
+                fusion card looks identical to "fusion was disabled" and
+                there's no signal that the user could retry. Wrapped in a
+                JSX fragment because we need TWO children (banner + step)
+                alongside the existing single-step render below. */}
+            {state.fusionBanner && (
+              <div
+                data-testid="fusion-banner"
+                role="status"
+                className="mx-6 mt-4 p-3 rounded bg-warning/10 border border-warning text-sm text-on-surface"
+              >
+                {state.fusionBanner}
+              </div>
+            )}
+            <S0BMutationStep
+              projectId={projectId}
+              rawIntent={
+                state.rawIntent ?? { prompt: "", genre_primary: "" }
+              }
+              initial={state.variants}
+              selectedIds={state.selectedVariantIds}
+              // S0-B's `fusion-card` panel — Task 11 wires the
+              // S0-A-returned variant through DivergenceState so back-nav
+              // from C/D/E keeps the user's prior pick.
+              fusionVariant={state.fusionVariant}
+              onComplete={(variants, selectedIds) =>
+                setState((prev) => nextAfterB(prev, variants, selectedIds))
+              }
+              onBack={() =>
+                setState((prev) => ({ ...prev, subStage: "A" }))
+              }
+              onCanvasMutated={onCanvasMutated}
+            />
+          </>
         )}
         {state.subStage === "C" && (
           <S0CContradictionStep

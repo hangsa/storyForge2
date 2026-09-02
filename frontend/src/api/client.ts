@@ -591,6 +591,13 @@ export interface IdeaVariant {
   estimated_novelty: number;
   trope_tags: string[];
   regenerated_count: number;
+  /** Set on fusion variants (from /fuse) per PRD §3.4. Absent on
+   *  /apply-mutation outputs. Used by S0BMutationStep to render the risk
+   *  badge and by /commit's fusion_meta write. */
+  risk_level?: "low" | "medium" | "high";
+  /** BFS genre-graph distance 0-3+ (0 = same genre). Set on fusion variants
+   *  only. */
+  fusion_distance?: number;
 }
 
 export interface ContradictionCandidate {

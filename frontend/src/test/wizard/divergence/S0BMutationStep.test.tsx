@@ -10,6 +10,7 @@ vi.mock("@/api/client", () => ({
     postDivergeMutate: vi.fn(),
     postDivergeMutateRegenerate: vi.fn(),
     postDivergeRegenerateVariants: vi.fn(),
+    postDivergeFuse: vi.fn(),
   },
 }));
 
@@ -301,5 +302,113 @@ describe("S0BMutationStep", () => {
     // aria-label or title attribute — those aren't surfaced to sighted
     // users without hover/keyboard focus).
     expect(btn).toHaveTextContent(/重新生成/);
+  });
+});
+
+// --- Genre fusion card + 重新融合 button (Task 10, plan §S0-B wiring) ---
+
+describe("S0BMutationStep fusion variant UI", () => {
+  const rawIntentWithSecondary = {
+    prompt: "p".repeat(20),
+    genre_primary: "xianxia",
+    genre_secondary: "xuanyi",
+  };
+
+  const fusionSample = {
+    id: "var-fuse-1",
+    title: "融合变体",
+    premise_one_line: "跨体裁融合前提",
+    mutation_type: "fusion" as const,
+    mutation_logic: "",
+    estimated_novelty: 0.7,
+    trope_tags: ["xianxia", "xuanyi"],
+    regenerated_count: 0,
+    risk_level: "medium" as const,
+    fusion_distance: 2,
+  };
+
+  const baseProps = {
+    projectId: "proj_x",
+    rawIntent: rawIntentWithSecondary,
+    initial: [] as any[],
+    selectedIds: [] as string[],
+    onComplete: vi.fn(),
+    onBack: vi.fn(),
+    fusionVariant: null as any,
+  };
+
+  beforeEach(() => {
+    (api.postDivergeFuse as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (api.postDivergeFuse as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      variants: [
+        {
+          id: "var-fuse-replaced",
+          title: "新融合变体",
+          premise_one_line: "新的融合前提",
+          mutation_type: "fusion",
+          mutation_logic: "",
+          estimated_novelty: 0.8,
+          trope_tags: ["xianxia", "xuanyi"],
+          regenerated_count: 0,
+          risk_level: "high",
+          fusion_distance: 3,
+        },
+      ],
+      fusion_distance: { distance: 3, compatibility: "低" },
+      risk_level: "high",
+    });
+  });
+
+  it("renders 重新融合 button when rawIntent.genre_secondary exists", () => {
+    render(<S0BMutationStep {...baseProps} />);
+    expect(screen.getByTestId("refuse-button")).toBeInTheDocument();
+  });
+
+  it("renders fusion variant card with risk_level badge when fusionVariant passed", () => {
+    render(
+      <S0BMutationStep
+        {...baseProps}
+        initial={[fusionSample]}
+        fusionVariant={fusionSample}
+      />,
+    );
+    expect(screen.getByTestId("fusion-card")).toBeInTheDocument();
+    expect(screen.getByTestId("risk-badge")).toHaveTextContent("medium");
+  });
+
+  it("clicking 重新融合 calls postDivergeFuse + replaces fusion variant", async () => {
+    const initialFusion = { ...fusionSample };
+    render(
+      <S0BMutationStep
+        {...baseProps}
+        initial={[initialFusion]}
+        fusionVariant={initialFusion}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("refuse-button"));
+    await waitFor(() => {
+      expect(api.postDivergeFuse).toHaveBeenCalledWith(
+        "proj_x",
+        expect.objectContaining({
+          genre_primary: "xianxia",
+          genre_secondary: "xuanyi",
+        }),
+      );
+    });
+    // After re-fuse, the new card replaces the old one — the old "medium"
+    // badge is gone, replaced by the mocked "high" badge.
+    await waitFor(() => {
+      expect(screen.getByTestId("risk-badge")).toHaveTextContent("high");
+    });
+  });
+
+  it("disables 重新融合 when genre_secondary missing", () => {
+    render(
+      <S0BMutationStep
+        {...baseProps}
+        rawIntent={{ prompt: "p".repeat(20), genre_primary: "xianxia" }}
+      />,
+    );
+    expect(screen.getByTestId("refuse-button")).toBeDisabled();
   });
 });

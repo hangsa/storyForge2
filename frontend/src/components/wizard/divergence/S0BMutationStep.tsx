@@ -22,6 +22,13 @@ interface Props {
    * need to drop.
    */
   onCanvasMutated?: () => void;
+  /**
+   * Optional fusion variant (from S0-A's /fuse call). When present,
+   * rendered as a prominent card above the mutation chain variants with
+   * its risk_level badge. Re-runnable via the 「重新融合」 button which
+   * re-calls /fuse (replaces this state with a fresh variant).
+   */
+  fusionVariant?: IdeaVariant | null;
 }
 
 // MutationEngine.MutationOp valid values: inversion | fusion | escalation
@@ -31,6 +38,16 @@ interface Props {
 // chain must feed the previous new_node.id into the next call. See
 // backend/creative_diverge.py /apply-mutation.
 const MUTATION_OPS = ["inversion", "escalation", "subversion"] as const;
+
+// Risk-level color tokens for the fusion variant badge. PRD §3.4: distance
+// 0-1 = low (green), 2 = medium (yellow), 3+ = high (red). Mirrors the
+// Tailwind palette used elsewhere in the wizard so the badge reads at a
+// glance next to the gray mutation-chain cards.
+const RISK_COLORS: Record<string, string> = {
+  low: "bg-green-100 text-green-800 border-green-300",
+  medium: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  high: "bg-red-100 text-red-800 border-red-300",
+};
 
 function buildVariant(
   nodeId: string,
@@ -69,6 +86,7 @@ export default function S0BMutationStep({
   onComplete,
   onBack,
   onCanvasMutated,
+  fusionVariant,
 }: Props) {
   const [variants, setVariants] = useState<IdeaVariant[]>(initial || []);
   // Rehydrate from `selectedIds` when the user navigates back from C/D/E
@@ -90,6 +108,16 @@ export default function S0BMutationStep({
   const [error, setError] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  // Fusion variant state — seeded from the prop so back-nav from Stage C
+  // shows the user's prior fusion pick. Replaced (preserving the ID +
+  // bumping regenerated_count) on each 「重新融合」 click. Stored
+  // separately from `variants` because fusion variants don't go through
+  // /apply-mutation — they live on the canvas's idea_variants list with
+  // mutation_type="fusion" + risk_level + fusion_distance metadata.
+  const [fusionVariantState, setFusionVariantState] = useState<IdeaVariant | null>(
+    fusionVariant ?? null,
+  );
+  const [refusing, setRefusing] = useState(false);
 
   useEffect(() => {
     if (initial && initial.length > 0) return;
@@ -163,6 +191,41 @@ export default function S0BMutationStep({
     }
   }
 
+  // 「重新融合」 — re-runs /fuse against (genre_primary, genre_secondary)
+  // and replaces the current fusion variant state. Preserves the original
+  // ID so /commit can match the user's selected fusion variant back to the
+  // canvas's idea_variants list, and bumps regenerated_count so the count
+  // is observable (same pattern as `regenerate` above). No-op without
+  // both genres (button is disabled in the UI — checked here too as a
+  // defensive guard against accidental keyboard activation).
+  async function handleRefuse() {
+    if (!rawIntent.genre_primary || !rawIntent.genre_secondary) return;
+    setRefusing(true);
+    setError(null);
+    try {
+      const resp = await api.postDivergeFuse(projectId, {
+        genre_primary: rawIntent.genre_primary,
+        genre_secondary: rawIntent.genre_secondary,
+        prompt: rawIntent.prompt || "",
+      });
+      const newFusion = resp.variants?.[0] ?? null;
+      // Preserve the original ID + bump regenerated_count so the variant
+      // is identifiable as the same "picked fusion" through re-rolls (the
+      // /fuse endpoint mints a fresh ID per call).
+      const prevId = fusionVariantState?.id;
+      const prevCount = fusionVariantState?.regenerated_count ?? 0;
+      if (newFusion && prevId) {
+        newFusion.id = prevId;
+        newFusion.regenerated_count = prevCount + 1;
+      }
+      setFusionVariantState(newFusion);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "重新融合失败");
+    } finally {
+      setRefusing(false);
+    }
+  }
+
   async function handleRegenerateAll(userModifications: string) {
     setShowRegenerateModal(false);
     setRegenerating(true);
@@ -197,26 +260,79 @@ export default function S0BMutationStep({
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-medium">创意变体</h2>
-        <button
-          type="button"
-          data-testid="s0b-regenerate"
-          onClick={() => setShowRegenerateModal(true)}
-          disabled={regenerating || loading}
-          aria-label="重新生成 — 创意变体"
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded border border-outline-variant text-on-surface text-sm hover:bg-surface-container hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <span
-            className={`material-symbols-outlined text-[16px]${regenerating ? " animate-spin" : ""}`}
-            data-testid={regenerating ? "s0b-regenerate-spinner" : undefined}
+        <div className="flex items-center gap-2">
+          {/* 「重新融合」 — re-runs /fuse against (genre_primary,
+              genre_secondary) and replaces the fusion card. Always rendered
+              (so the affordance is discoverable); disabled when no
+              genre_secondary is set (fusion needs two source genres) or
+              while a request is in flight. Visually mirrors the 重新生成
+              button to its right but uses a distinct label so the user can
+              tell "this only re-rolls the fusion card, not the mutation
+              chain". */}
+          <button
+            type="button"
+            data-testid="refuse-button"
+            onClick={handleRefuse}
+            disabled={refusing || !rawIntent.genre_secondary}
+            aria-label="重新融合 — 类型融合变体"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded border border-outline-variant text-on-surface text-sm hover:bg-surface-container hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {regenerating ? "progress_activity" : "refresh"}
-          </span>
-          重新生成
-        </button>
+            <span
+              className={`material-symbols-outlined text-[16px]${refusing ? " animate-spin" : ""}`}
+              data-testid={refusing ? "refuse-button-spinner" : undefined}
+            >
+              {refusing ? "progress_activity" : "refresh"}
+            </span>
+            重新融合
+          </button>
+          <button
+            type="button"
+            data-testid="s0b-regenerate"
+            onClick={() => setShowRegenerateModal(true)}
+            disabled={regenerating || loading}
+            aria-label="重新生成 — 创意变体"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded border border-outline-variant text-on-surface text-sm hover:bg-surface-container hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <span
+              className={`material-symbols-outlined text-[16px]${regenerating ? " animate-spin" : ""}`}
+              data-testid={regenerating ? "s0b-regenerate-spinner" : undefined}
+            >
+              {regenerating ? "progress_activity" : "refresh"}
+            </span>
+            重新生成
+          </button>
+        </div>
       </div>
       {error && <div className="text-error text-sm">{error}</div>}
       {loading && (
         <div className="text-on-surface-variant">生成变体中...</div>
+      )}
+      {/* Fusion variant card — rendered above the mutation-chain variants
+          grid when present. Has a distinctive primary border to read as
+          "separate from the regular variants" at a glance, plus the risk
+          badge so the user can see BFS distance + risk level (the badge
+          is the only visible signal of how risky the fusion is — the
+          mutation variants don't show one). Replaced via 重新融合 button. */}
+      {fusionVariantState && (
+        <div
+          data-testid="fusion-card"
+          className="border-2 border-primary rounded-lg p-4 bg-surface-container"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-medium">融合变体</h3>
+            <span
+              data-testid="risk-badge"
+              className={`text-xs px-2 py-1 rounded border ${
+                RISK_COLORS[fusionVariantState.risk_level ?? "low"] ??
+                RISK_COLORS.low
+              }`}
+            >
+              risk: {fusionVariantState.risk_level ?? "low"} · distance:{" "}
+              {fusionVariantState.fusion_distance ?? 0}
+            </span>
+          </div>
+          <p className="text-sm">{fusionVariantState.premise_one_line}</p>
+        </div>
       )}
       <div className="grid grid-cols-2 gap-4">
         {variants.map((v) => {

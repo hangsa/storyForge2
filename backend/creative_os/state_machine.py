@@ -8,6 +8,9 @@ centralized (spec §4.2). _validate_step_invariants() catches structural
 errors that any single endpoint might miss.
 """
 from __future__ import annotations
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class StepStateError(ValueError):
@@ -36,6 +39,10 @@ def transition_step_state(canvas: dict, step: int | None = None, event: str = ""
         return
 
     if step is None or step < 1 or step > len(path):
+        logger.warning(
+            "transition_step_state out-of-range step=%s event=%s path_len=%s",
+            step, event, len(path),
+        )
         return
 
     if event == "activate":
@@ -47,9 +54,11 @@ def transition_step_state(canvas: dict, step: int | None = None, event: str = ""
     elif event == "backtrack_from":
         for i in range(step - 1, len(path)):
             path[i]["state"] = "stale"
+    else:
+        logger.warning("transition_step_state unknown event=%s step=%s", event, step)
 
 
-def _validate_step_invariants(canvas: dict) -> None:
+def validate_step_invariants(canvas: dict) -> None:
     """Raise StepStateError on any violation (spec §4.3).
 
     Called by _validate_for_commit() before allowing a commit.
@@ -66,7 +75,10 @@ def _validate_step_invariants(canvas: dict) -> None:
         raise StepStateError("存在 STALE 步骤,需要回溯处理")
 
     for p in path:
-        if p.get("state") == "completed" and not p.get("selected_option_id"):
+        if (
+            p.get("state") == "completed"
+            and p.get("selected_option_id") in (None, "")
+        ):
             raise StepStateError(
                 f"Step {p.get('step')} COMPLETED 但无 selected_option_id"
             )

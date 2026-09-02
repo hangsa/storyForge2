@@ -1,8 +1,8 @@
-"""Verify Step state machine: 5 states + transition_step + _validate_step_invariants."""
+"""Verify Step state machine: 5 states + transition_step + validate_step_invariants."""
 import pytest
 from backend.creative_os.state_machine import (
     transition_step_state,
-    _validate_step_invariants,
+    validate_step_invariants,
     StepStateError,
 )
 
@@ -78,13 +78,13 @@ def test_backtrack_from_marks_downstream_stale():
 
 def test_validate_invariants_passes_for_valid_5_step_completed():
     canvas = _make_canvas(5, ["completed"] * 5)
-    _validate_step_invariants(canvas)  # should not raise
+    validate_step_invariants(canvas)  # should not raise
 
 
 def test_validate_invariants_rejects_too_many_steps():
     canvas = _make_canvas(6, ["completed"] * 6)
     with pytest.raises(StepStateError, match="超过 5"):
-        _validate_step_invariants(canvas)
+        validate_step_invariants(canvas)
 
 
 def test_validate_invariants_rejects_missing_step_1():
@@ -92,13 +92,13 @@ def test_validate_invariants_rejects_missing_step_1():
         {"step": 2, "state": "completed", "selected_option_id": "x"},
     ]}
     with pytest.raises(StepStateError, match="Step 1"):
-        _validate_step_invariants(canvas)
+        validate_step_invariants(canvas)
 
 
 def test_validate_invariants_rejects_stale_steps():
     canvas = _make_canvas(5, ["completed", "completed", "stale", "locked", "locked"])
     with pytest.raises(StepStateError, match="STALE"):
-        _validate_step_invariants(canvas)
+        validate_step_invariants(canvas)
 
 
 def test_validate_invariants_rejects_completed_without_selection():
@@ -106,4 +106,4 @@ def test_validate_invariants_rejects_completed_without_selection():
                               "completed", "completed"])
     canvas["creative_path"][2]["selected_option_id"] = None
     with pytest.raises(StepStateError, match="selected_option_id"):
-        _validate_step_invariants(canvas)
+        validate_step_invariants(canvas)

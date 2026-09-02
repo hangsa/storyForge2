@@ -2095,6 +2095,12 @@ async def commit_canvas(project_id: str, data: dict = {}):
     # The reverse order (concept updated, canvas not stamped) leaves the
     # user with a new concept they have no audit trail for. The former is
     # more recoverable (re-commit overwrites cleanly).
+    #
+    # UI recovery expectation: when canvas_state.committed_at is set but
+    # concept_and_dna.json is missing or stale, the frontend should show a
+    # "commit partially completed — retry" banner rather than treating the
+    # state as fully committed. /commit is idempotent and overwrites both
+    # files atomically on retry.
     now = datetime.utcnow().isoformat()
     canvas["committed_at"] = now
     canvas["committed_concept_ref"] = "concept_and_dna.json"

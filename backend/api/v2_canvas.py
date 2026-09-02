@@ -11,9 +11,48 @@ Endpoint naming: v2.0 uses `/creative/canvas/session/*` to:
 """
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
+
+import yaml
 from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/creative/canvas", tags=["canvas-v2"])
+
+_PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+_NEXT_STEP_PROMPT_PATH = _PROMPTS_DIR / "canvas_v2_next_step.yaml"
+_logger = logging.getLogger(__name__)
+
+
+def _load_next_step_prompt() -> dict:
+    """Load next-step prompt template from YAML. Cached after first call."""
+    if not hasattr(_load_next_step_prompt, "_cache"):
+        with open(_NEXT_STEP_PROMPT_PATH, encoding="utf-8") as f:
+            _load_next_step_prompt._cache = yaml.safe_load(f)
+    return _load_next_step_prompt._cache
+
+
+async def _call_llm_with_retry(llm_call, context, max_attempts=2):
+    """Call LLM with JSON retry (spec §6.5).
+
+    Retries ONCE on JSON parse failure with hint 'Please return valid
+    JSON only'. Retry interval is 0 (immediate). Raises RuntimeError
+    after exhaustion.
+    """
+    last_error = None
+    for attempt in range(max_attempts):
+        try:
+            raw = await llm_call(context)
+            return json.loads(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            last_error = exc
+            _logger.warning("LLM JSON parse failed on attempt %d: %s", attempt + 1, exc)
+            if attempt + 1 < max_attempts:
+                context = {**context, "retry_hint": "Please return valid JSON only"}
+    raise RuntimeError(
+        f"LLM 返回了无效 JSON ({max_attempts} 次): {last_error}"
+    )
 
 
 def _validate_for_commit(canvas: dict) -> None:

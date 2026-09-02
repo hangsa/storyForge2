@@ -62,9 +62,10 @@ def test_empty_concept_returns_twist_fallback():
     assert hint == "twist"  # defaults trigger fallback
 
 
-def test_handles_conflict_with_contradiction_keyword():
+def test_handles_missing_conflict_keywords():
+    """No 冲突/矛盾 keywords → rule 3 fires → break."""
     hint = compute_op_hint(
-        {"novelty": 0.6, "core_conflict": "主要矛盾在于身份"},
+        {"novelty": 0.6, "core_conflict": "主角的内心挣扎"},
         [], step=2,
     )
-    assert hint == "break"  # contains "矛盾"
+    assert hint == "break"

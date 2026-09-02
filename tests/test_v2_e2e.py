@@ -58,6 +58,8 @@ def stub_planner(monkeypatch):
                     "value_stack": [{"level": l, "value_a": "", "value_b": ""}
                                     for l in ("personal", "social",
                                               "philosophical", "existential")],
+                    # Non-empty style_template required to pass commit gate
+                    # (real PlannerAgent always returns a default).
                     "style_template": "白描克制", "fusion_meta": None,
                 },
             },
@@ -86,7 +88,9 @@ def stub_llm(monkeypatch):
              "scores": {}},
         ]
         canvas = _read_canvas(project_id)
-        # Extend path with locked stubs so creative_path[current_step-1] is in range
+        # Extend path with locked stubs so creative_path[current_step-1] is in range.
+        # Needed because /select (v2_canvas.py:403) cascades into _next_step_impl(step+1)
+        # without first writing the new step's entry — this loop pre-fills the gap.
         while len(canvas["creative_path"]) < current_step:
             canvas["creative_path"].append({
                 "step": len(canvas["creative_path"]) + 1,
@@ -191,7 +195,7 @@ def test_e2e_partial_flow_cannot_commit(project, client, stub_llm):
     assert "INVALID_PATH" in commit_resp.text
 
 
-def test_e2e_v3_canvas_lazy_migrates_and_committable(project, client, stub_planner, stub_llm, tmp_path):
+def test_e2e_v3_canvas_lazy_migrates_and_committable(project, client, tmp_path):
     """Write a v3 canvas to disk (uncommitted). GET /state migrates to v4
     in-memory and writes v4 back to disk (write-through for uncommitted v3).
     """

@@ -778,6 +778,68 @@ export interface CanvasSelectResponse {
   evaluation: string;
 }
 
+// --- v2.0 Creative Canvas types ---
+
+/** TODO: tighten once backend serializes a stable contract — keep loose
+ *  shape for now to avoid coupling client to in-flight Pydantic changes. */
+export type CurrentConcept = Record<string, unknown>;
+
+export type StepState = "locked" | "available" | "active" | "completed" | "stale";
+
+export interface CreativeOption {
+  id: string;
+  title: string;
+  premise: string;
+  logic: string;
+  scores: Record<string, number>;
+}
+
+export interface CreativeStep {
+  step: number;
+  operation: string | null;
+  operation_reason: string | null;
+  options: CreativeOption[];
+  selected_option_id: string | null;
+  created_at: string;
+  selected_at: string | null;
+  regenerated_count: number;
+  state: StepState;
+}
+
+export interface NextStepResponse {
+  step: number;
+  operation: { type: string; name: string; reason: string };
+  options: CreativeOption[];
+  quality_warning: string | null;
+}
+
+/** v4 canvas state — full payload returned by GET /session/state.
+ *  Schema_version is locked to 4 by backend._migrate_v3_to_v4. */
+export interface CanvasV4State {
+  schema_version: 4;
+  session_id: string;
+  _etag: string;
+  root_idea: {
+    prompt: string;
+    genre: string;
+    premise: string;
+    extracted: Record<string, unknown>;
+  };
+  raw_intent: RawIntent;
+  creative_session: {
+    current_step: number;
+    max_steps: 5;
+    status: string;
+  };
+  creative_path: CreativeStep[];
+  current_concept: CurrentConcept;
+  final_concept: unknown | null;
+  committed: boolean;
+  committed_at: string | null;
+  scores: Record<string, number>;
+  session_metadata: Record<string, unknown>;
+}
+
 // --- v1.7 Branch Simulation types ---
 
 export interface LLMInferenceItem {
@@ -1595,6 +1657,70 @@ export const api = {
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/regenerate/novelty`,
       body,
+    ),
+
+  // --- v2.0 Creative Canvas (session/*) ---
+  // Router prefix: /creative/canvas/{project_id}/session/*. v1.x canvas
+  // methods (above) live under /v1/projects/{pid}/creative/canvas/* — these
+  // are the v2 replacement namespace. See backend/api/v2_canvas.py.
+
+  postCanvasV2Init: (
+    projectId: string,
+    rawIntent: RawIntent,
+  ): Promise<{ ok: boolean; session_id: string; etag: string }> =>
+    request(
+      "POST",
+      `/creative/canvas/${encodeURIComponent(projectId)}/session/init`,
+      rawIntent,
+    ),
+
+  getCanvasV2State: (projectId: string): Promise<CanvasV4State> =>
+    request(
+      "GET",
+      `/creative/canvas/${encodeURIComponent(projectId)}/session/state`,
+    ),
+
+  postCanvasV2NextStep: (
+    projectId: string,
+    body: { current_step: number },
+  ): Promise<NextStepResponse> =>
+    request(
+      "POST",
+      `/creative/canvas/${encodeURIComponent(projectId)}/session/next-step`,
+      body,
+    ),
+
+  postCanvasV2Select: (
+    projectId: string,
+    body: { step: number; option_id: string },
+  ): Promise<{ ok: boolean; step: number; selected_option_id: string }> =>
+    request(
+      "POST",
+      `/creative/canvas/${encodeURIComponent(projectId)}/session/select`,
+      body,
+    ),
+
+  postCanvasV2Commit: (
+    projectId: string,
+  ): Promise<{
+    error: boolean;
+    code: string;
+    message: string;
+    detail: {
+      concept: Record<string, unknown>;
+      story_dna: Record<string, unknown>;
+      source: string;
+      committed_at: string;
+      concept_preview: Record<string, unknown>;
+      story_dna_preview: Record<string, unknown>;
+      novelty_summary: Record<string, unknown>;
+      next_step_url: string;
+      warnings: string[];
+    };
+  }> =>
+    request(
+      "POST",
+      `/creative/canvas/${encodeURIComponent(projectId)}/session/commit`,
     ),
 
   // --- v1.7 Branch Simulation ---

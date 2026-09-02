@@ -63,6 +63,15 @@ interface DivergenceState {
    */
   fusionVariant: IdeaVariant | null;
   /**
+   * Canvas-side root tree node id (wi_*). Set by /init during Stage A
+   * submit and preserved across /regenerate/raw-intent. S0D uses this
+   * (NOT core.template_type, which is a Chinese label like "永恒×消逝")
+   * to look up the actual root in canvas.nodes. Without it, S0D's mount
+   * effect can't build the tree and clicking 展开 returns "节点 X 不存在"
+   * (regression caught on proj_f0721bdc 2026-09-02).
+   */
+  rootNodeId: string | null;
+  /**
    * User-facing banner string shown above S0-B when /fuse failed (so the
    * user knows fusion was skipped, not silently absent). Stays across
    * C/D/E back-nav for the lifetime of the session; cleared on A
@@ -94,6 +103,8 @@ const INITIAL: DivergenceState = {
   quickMode: false,
   loading: true,
   maxReachedSubStage: "A",
+  // null until loadCanvas populates it from canvas.root_node_id.
+  rootNodeId: null,
 };
 
 // Returns a DivergenceState patch with strictly-downstream fields cleared.
@@ -297,9 +308,22 @@ export function completedFor(maxReached: SubStage): SubStage[] {
 // Wraps a WhatIfNode-compatible "root" for S0D from the chosen
 // CoreContradiction. The root node carries the contradiction's statement
 // into the WhatIf tree; children are expanded lazily by S0DWhatIfStep.
-function buildRootNode(core: CoreContradiction | null): WhatIfNode {
+//
+// The id MUST be canvas.root_node_id (a wi_* string), not
+// core.template_type (a Chinese label like "永恒×消逝"). S0D's mount
+// effect looks up `canvasNodes[rootNode.id]` to find the actual root;
+// looking up the template label always misses, leaving the tree at a
+// synthetic root and making 「展开」 hit a backend 404 "节点 X 不存在".
+// rootNodeId is populated by mergeCanvasState from canvas.root_node_id;
+// older projects whose canvas predates this field fall back to
+// template_type (still wrong, but visible to the user rather than
+// silently broken).
+export function buildRootNode(
+  core: CoreContradiction | null,
+  rootNodeId: string | null,
+): WhatIfNode {
   return {
-    id: core?.template_type ?? "root",
+    id: rootNodeId ?? core?.template_type ?? "root",
     parent_id: null,
     content: core?.statement ?? "",
     novelty_score: null,
@@ -390,6 +414,10 @@ export function mergeCanvasState(
     contradictionCandidates: persisted,
     coreContradiction: core,
     selectedPath: path,
+    // canvas.root_node_id is the actual wi_* root (set by /init, line
+    // 650 of creative_diverge.py). Distinct from core.template_type
+    // which is a Chinese label and never matches any canvas node key.
+    rootNodeId: canvas.root_node_id ?? null,
     fusionBanner: prev.fusionBanner,
     quickMode: rawIntent?.quick_mode ?? false,
     loading: false,
@@ -531,7 +559,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
         {state.subStage === "D" && !state.quickMode && (
           <S0DWhatIfStep
             projectId={projectId}
-            rootNode={buildRootNode(state.coreContradiction)}
+            rootNode={buildRootNode(state.coreContradiction, state.rootNodeId)}
             onComplete={(path) =>
               setState((prev) => nextAfterD(prev, path))
             }

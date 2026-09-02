@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRootNode,
   clearDownstream,
   completedFor,
   mergeCanvasState,
@@ -33,6 +34,7 @@ function filledPrev(overrides: Partial<{
   quickMode: boolean;
   loading: boolean;
   maxReachedSubStage: SubStage;
+  rootNodeId: string | null;
 }> = {}) {
   return {
     subStage: "E" as SubStage,
@@ -49,6 +51,12 @@ function filledPrev(overrides: Partial<{
     fusionBanner: null,
     quickMode: false,
     loading: false,
+    // The canvas's actual root tree node id (wi_*) — distinct from
+    // core.template_type which is a Chinese label like "永恒×消逝".
+    // Populated by mergeCanvasState from canvas.root_node_id. Older
+    // builds of /init didn't persist this; defaults to null so the
+    // fallback (template_type) keeps those projects working.
+    rootNodeId: null,
     // matches subStage in the "post-E" fixture — the user has reached E.
     maxReachedSubStage: "E" as SubStage,
     ...overrides,
@@ -588,5 +596,75 @@ describe("mergeCanvasState", () => {
     const next = mergeCanvasState(canvas, prev);
     // No options passed → isInitialLoad undefined → treated as false.
     expect(next.subStage).toBe("D");
+  });
+
+  // Root node id regression on proj_f0721bdc 2026-09-02: S0D's mount
+  // effect does `canvasNodes[rootNode.id]` to find the actual root
+  // tree node. The previous buildRootNode used core.template_type as
+  // the id, which is a Chinese label like "永恒×消逝" — never matches
+  // any canvas node (canvas keys are wi_* / mu_*). Symptom: tree
+  // stayed at synthetic root, 展开 clicked → backend 404 "节点
+  // 永恒×消逝 不存在". mergeCanvasState now pulls canvas.root_node_id
+  // into state.rootNodeId so buildRootNode can use the real id.
+  it("reads root_node_id from canvas into state.rootNodeId", () => {
+    const canvas = canvasOf({}) as unknown as CanvasStateV3 & {
+      root_node_id: string | null;
+    };
+    canvas.root_node_id = "wi_001_00";
+    const next = mergeCanvasState(canvas, filledPrev());
+    expect(next.rootNodeId).toBe("wi_001_00");
+  });
+
+  it("falls back to null when canvas has no root_node_id", () => {
+    const canvas = canvasOf({}) as unknown as CanvasStateV3 & {
+      root_node_id: string | null;
+    };
+    canvas.root_node_id = null;
+    const next = mergeCanvasState(canvas, filledPrev());
+    expect(next.rootNodeId).toBeNull();
+  });
+});
+
+// buildRootNode: must use the actual canvas root_node_id (wi_*) as the
+// node id, not core.template_type (a Chinese label). Regression caught
+// on proj_f0721bdc 2026-09-02: the previous version used template_type,
+// which never matched any canvas node, so S0D's tree never built and
+// 展开 returned "节点 X 不存在".
+describe("buildRootNode", () => {
+  const core = {
+    template_type: "永恒×消逝",
+    statement: "高阳发现永恒是建木的谎言...",
+    side_a: "永恒",
+    side_b: "消逝",
+    tension_score: 32,
+    is_custom: false,
+    confirmed_at: "2026-09-02T00:00:00Z",
+  } as unknown as CoreContradiction;
+
+  it("uses rootNodeId when provided (the normal canvas-backed path)", () => {
+    const r = buildRootNode(core, "wi_001_00");
+    expect(r.id).toBe("wi_001_00");
+    // id must NOT be the template_type — that was the original bug.
+    expect(r.id).not.toBe("永恒×消逝");
+  });
+
+  it("falls back to template_type when rootNodeId is null (defensive)", () => {
+    // A canvas that pre-dates root_node_id tracking (older /init
+    // versions) would have rootNodeId=null. Better to use template_type
+    // than crash — still wrong, but visible to the user.
+    const r = buildRootNode(core, null);
+    expect(r.id).toBe("永恒×消逝");
+  });
+
+  it("falls back to 'root' when both rootNodeId and core are missing", () => {
+    const r = buildRootNode(null, null);
+    expect(r.id).toBe("root");
+  });
+
+  it("carries the core statement into the synthetic root for display", () => {
+    const r = buildRootNode(core, "wi_001_00");
+    expect(r.content).toBe("高阳发现永恒是建木的谎言...");
+    expect(r.parent_id).toBeNull();
+    expect(r.children_ids).toEqual([]);
   });
 });

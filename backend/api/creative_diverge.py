@@ -38,6 +38,7 @@ from backend.models.creative_os import (
     BRANCH_STATUS_DIMMED,
 )
 from backend.creative_os.contradiction_engine import ContradictionEngine
+from backend.creative_os.migration import _migrate_v3_to_v4
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,6 @@ def _read_canvas(project_id: str) -> Optional[dict]:
     if canvas.get("schema_version") == 4:
         return canvas
     if canvas.get("schema_version") == 3:
-        from backend.creative_os.migration import _migrate_v3_to_v4
         v4 = _migrate_v3_to_v4(canvas)
         if not v4.get("committed"):
             _write_canvas(project_id, v4, write_through=True)

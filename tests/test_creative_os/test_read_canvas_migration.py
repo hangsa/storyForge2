@@ -5,6 +5,7 @@ Key invariant: committed v3 canvases must NOT be written back to disk
 """
 import json
 import pytest
+from fastapi import HTTPException
 from backend.api import creative_diverge
 from backend.config import settings
 
@@ -123,5 +124,7 @@ def test_read_canvas_returns_none_for_missing_project(tmp_projects_dir):
 def test_read_canvas_raises_for_unknown_schema(tmp_projects_dir):
     pid = "p_unknown"
     _setup_project(tmp_projects_dir, pid, {"schema_version": 2})
-    with pytest.raises(Exception):
+    with pytest.raises(HTTPException) as exc_info:
         creative_diverge._read_canvas(pid)
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "UNKNOWN_SCHEMA_VERSION"

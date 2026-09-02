@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api, {
+  type CanvasStateV3,
   type ContradictionCandidate,
   type CoreContradiction,
   type IdeaVariant,
@@ -306,6 +307,81 @@ function buildRootNode(core: CoreContradiction | null): WhatIfNode {
   };
 }
 
+// Pure state-merge: applies the canvas-side response from /diverge/state
+// onto the parent's current DivergenceState. Extracted from loadCanvas on
+// proj_f0721bdc 2026-09-02 to fix three back-nav bugs:
+//
+//   Bug 1 — S0C's "本次矛盾基于「」" hint showed empty:
+//     loadCanvas was wiping `selectedVariantIds` on a ref-equality check
+//     (`prev.rawIntent === rawIntent`). /state returns freshly parsed
+//     objects every call, so the check was always false and selection was
+//     reset on every canvasVersion bump — including the one /contradict
+//     triggers on every S0C mount. S0C's effect then re-ran with
+//     pickedFirst=undefined → fell back to variants[0], which was the
+//     fusion variant (LLM was down when /fuse ran, so the backend
+//     synthesized an empty-title placeholder).
+//
+//   Bug 2a — Going back from C to B lost the visual selection in S0B.
+//     Same root cause as Bug 1.
+//
+//   Bug 3 — S0B's "融合变体" special card disappeared; only the empty-
+//     title fusion card remained in the regular variants grid.
+//     loadCanvas was hardcoding `fusionVariant: null` instead of reading
+//     from canvas.idea_variants — which has the fusion entry appended by
+//     /fuse (line 2760 of creative_diverge.py).
+//
+// Fix contract:
+//   - canvas `idea_variants` is partitioned: fusions (mutation_type="fusion")
+//     feed `fusionVariant` (latest wins — /fuse appends, last entry is the
+//     freshest); mutations feed `state.variants`.
+//   - `selectedVariantIds` is session-local (never on canvas). Always
+//     carried through from prev.
+//   - `fusionBanner` is session-local (one-shot UX warn when /fuse failed).
+//     Always carried through from prev.
+//   - `inferSubStage` uses the FULL canvas `idea_variants` (incl. fusion) —
+//     otherwise a project with only a fusion entry would mis-classify as
+//     "B (no variants)" instead of "at B".
+export function mergeCanvasState(
+  canvas: CanvasStateV3 | null,
+  prev: DivergenceState,
+): DivergenceState {
+  if (!canvas) return prev;
+  const rawIntent = canvas.raw_intent ?? null;
+  const allVariants = canvas.idea_variants ?? [];
+  const fusions = allVariants.filter((v) => v.mutation_type === "fusion");
+  const fusionVariant = fusions.length > 0 ? fusions[fusions.length - 1] : null;
+  const variants = allVariants.filter((v) => v.mutation_type !== "fusion");
+  const core = canvas.core_contradiction ?? null;
+  const path = canvas.selected_path ?? [];
+  // /state returns the full canvas object — contradiction_candidates is
+  // the same shape we POST to /contradict. Not yet on the CanvasStateV3
+  // TS type (backend-only field as of 2026-09-01) — cast to read.
+  const persisted =
+    (canvas as { contradiction_candidates?: PersistedCandidates | null })
+      ?.contradiction_candidates ?? null;
+  const inferred = inferSubStage({
+    raw_intent: rawIntent,
+    idea_variants: allVariants,
+    core_contradiction: core,
+    selected_path: path,
+  });
+  return {
+    ...prev,
+    subStage: inferred,
+    maxReachedSubStage: inferred,
+    rawIntent,
+    variants,
+    fusionVariant,
+    selectedVariantIds: prev.selectedVariantIds,
+    contradictionCandidates: persisted,
+    coreContradiction: core,
+    selectedPath: path,
+    fusionBanner: prev.fusionBanner,
+    quickMode: rawIntent?.quick_mode ?? false,
+    loading: false,
+  };
+}
+
 export default function CreativeDivergenceStep({ projectId }: Props) {
   const [state, setState] = useState<DivergenceState>(INITIAL);
   // `canvasVersion` is a tick that we bump after a child triggers a regen
@@ -319,46 +395,7 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
   const loadCanvas = useCallback(async () => {
     try {
       const response = await api.getDivergeState(projectId);
-      const rawIntent = response?.raw_intent ?? null;
-      const variants = response?.idea_variants ?? [];
-      const core = response?.core_contradiction ?? null;
-      const path = response?.selected_path ?? [];
-      // /state returns the full canvas object — contradiction_candidates is
-      // the same shape we POST to /contradict (variant_id + variant_content
-      // + generated_at + candidates). Older projects may lack the field
-      // entirely (added 2026-09-01); treat missing as null.
-      const persisted =
-        (response as { contradiction_candidates?: PersistedCandidates | null })
-          ?.contradiction_candidates ?? null;
-      const inferred = inferSubStage({
-        raw_intent: rawIntent,
-        idea_variants: variants,
-        core_contradiction: core,
-        selected_path: path,
-      });
-      setState((prev) => ({
-        ...prev,
-        subStage: inferred,
-        maxReachedSubStage: inferred,
-        rawIntent,
-        variants,
-        // Same as the mount path: hard reload resets selection. Live
-        // back-nav reads the current `selectedVariantIds` from `prev`
-        // (only refreshed by `nextAfterB`, never by loadCanvas).
-        selectedVariantIds:
-          prev.rawIntent === rawIntent ? prev.selectedVariantIds : [],
-        contradictionCandidates: persisted,
-        coreContradiction: core,
-        selectedPath: path,
-        // /state doesn't persist fusionVariant / fusionBanner (they live in
-        // local component memory only — they're session-scoped, not
-        // canvas-scoped, since /fuse is cheap and re-runnable via 重新融合).
-        // Hard reload starts the user fresh in this respect.
-        fusionVariant: null,
-        fusionBanner: null,
-        quickMode: rawIntent?.quick_mode ?? false,
-        loading: false,
-      }));
+      setState((prev) => mergeCanvasState(response, prev));
     } catch {
       setState((prev) => ({ ...prev, loading: false }));
     }

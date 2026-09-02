@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   clearDownstream,
   completedFor,
+  mergeCanvasState,
   nextAfterA,
   nextAfterB,
   nextAfterC,
   nextAfterD,
 } from "@/components/wizard/CreativeDivergenceStep";
 import type { PersistedCandidates } from "@/components/wizard/CreativeDivergenceStep";
-import type { CoreContradiction, IdeaVariant, RawIntent } from "@/api/client";
+import type {
+  CanvasStateV3,
+  ContradictionCandidate,
+  CoreContradiction,
+  IdeaVariant,
+  RawIntent,
+} from "@/api/client";
 import type { SubStage } from "@/components/wizard/divergence/StepIndicator";
 
 // A fully-populated "post-E" DivergenceState. Every downstream-only field is
@@ -280,5 +287,246 @@ describe("maxReachedSubStage stability across back-navigation", () => {
     expect(next.subStage).toBe("B");
     // maxReached stays at C — the user has actually reached C.
     expect(next.maxReachedSubStage).toBe("C");
+  });
+});
+
+// mergeCanvasState is the loadCanvas state-merge pure function. Extracted
+// from loadCanvas on proj_f0721bdc 2026-09-02 to fix three back-nav bugs:
+//
+// 1. S0C's "本次矛盾基于「」" hint showed empty: loadCanvas was wiping
+//    selectedVariantIds on ref-equality check (`prev.rawIntent === rawIntent`
+//    is always false because /state returns freshly parsed objects), then
+//    S0C's effect re-ran with pickedFirst=undefined → fell back to
+//    variants[0] which was the fusion variant with empty title (LLM was
+//    down when /fuse ran, so backend synthesized empty placeholder).
+//
+// 2. Going back from C to B lost the visual selection in S0B (same root
+//    cause as #1 — selectedVariantIds always reset).
+//
+// 3. The "融合变体" special card disappeared from S0B because loadCanvas
+//    hardcoded `fusionVariant: null` instead of reading from canvas's
+//    idea_variants (which DO have the fusion entry appended by /fuse —
+//    line 2760 of creative_diverge.py).
+//
+// Fix: filter fusion variants out of state.variants (they belong to
+// fusionVariant, not the mutation grid); preserve session-local state
+// (selectedVariantIds, fusionBanner) from prev.
+describe("mergeCanvasState", () => {
+  // Mirror the CanvasStateV3 shape the loadCanvas handler reads, scoped to
+  // the fields mergeCanvasState actually consumes. `contradiction_candidates`
+  // isn't on the TS type yet (backend-only field as of 2026-09-01), so we
+  // thread it via a cast in the implementation.
+  function canvasOf(overrides: {
+    idea_variants?: IdeaVariant[];
+    raw_intent?: RawIntent | null;
+    core_contradiction?: CoreContradiction | null;
+    selected_path?: string[];
+    contradiction_candidates?: PersistedCandidates | null;
+  } = {}): CanvasStateV3 {
+    return {
+      schema_version: 3,
+      root_node_id: null,
+      raw_intent: overrides.raw_intent ?? null,
+      idea_variants: overrides.idea_variants ?? [],
+      core_contradiction: overrides.core_contradiction ?? null,
+      selected_path: overrides.selected_path ?? [],
+      // Field exists on backend but not in TS type — cast below.
+      ...({ contradiction_candidates: overrides.contradiction_candidates ?? null } as object),
+    } as unknown as CanvasStateV3;
+  }
+
+  it("filters out fusion variants from state.variants (bug 3 root cause)", () => {
+    // proj_f0721bdc canvas: [fusion (empty title), m0, m1, m2]. Without the
+    // filter, variants[0] is the fusion with empty title — S0C's hint
+    // (pickedFirst ?? variants[0].title) shows empty, S0B's grid shows a
+    // ghost fusion card with no title. After fix: fusion is routed to
+    // fusionVariant, the grid only shows real mutations.
+    const fusion: IdeaVariant = {
+      id: "var-fuse",
+      title: "",
+      premise_one_line: "",
+      mutation_type: "fusion",
+      mutation_logic: "",
+      estimated_novelty: 0.7,
+      trope_tags: [],
+      regenerated_count: 0,
+    };
+    const m0: IdeaVariant = {
+      id: "mu_m0",
+      title: "M0 title",
+      premise_one_line: "M0 premise",
+      mutation_type: "inversion",
+      mutation_logic: "",
+      estimated_novelty: 0.5,
+      trope_tags: [],
+      regenerated_count: 0,
+    };
+    const canvas = canvasOf({ idea_variants: [fusion, m0] });
+    const next = mergeCanvasState(canvas, filledPrev());
+    expect(next.variants.map((v) => v.id)).toEqual(["mu_m0"]);
+    // Sanity: fusion is NOT in the grid.
+    expect(next.variants.find((v) => v.id === "var-fuse")).toBeUndefined();
+  });
+
+  it("picks the latest fusion as state.fusionVariant (bug 2b root cause)", () => {
+    // /fuse appends each fusion to canvas.idea_variants (line 2760 of
+    // creative_diverge.py). After multiple 重新融合, the most recent one
+    // (last in the list) wins — earlier ones are stale. loadCanvas was
+    // hardcoding null, so S0B's special "融合变体" card never rendered.
+    const olderFusion: IdeaVariant = {
+      id: "var-fuse-1",
+      title: "First fusion",
+      premise_one_line: "stale",
+      mutation_type: "fusion",
+      mutation_logic: "",
+      estimated_novelty: 0.7,
+      trope_tags: [],
+      regenerated_count: 0,
+      risk_level: "low",
+      fusion_distance: 1,
+    };
+    const newerFusion: IdeaVariant = {
+      id: "var-fuse-2",
+      title: "Second fusion",
+      premise_one_line: "fresh",
+      mutation_type: "fusion",
+      mutation_logic: "",
+      estimated_novelty: 0.8,
+      trope_tags: [],
+      regenerated_count: 1,
+      risk_level: "high",
+      fusion_distance: 3,
+    };
+    const m0: IdeaVariant = {
+      id: "mu_m0",
+      title: "M0",
+      premise_one_line: "p",
+      mutation_type: "inversion",
+      mutation_logic: "",
+      estimated_novelty: 0.5,
+      trope_tags: [],
+      regenerated_count: 0,
+    };
+    const canvas = canvasOf({ idea_variants: [olderFusion, m0, newerFusion] });
+    const next = mergeCanvasState(canvas, filledPrev());
+    expect(next.fusionVariant?.id).toBe("var-fuse-2");
+    expect(next.fusionVariant?.title).toBe("Second fusion");
+  });
+
+  it("sets fusionVariant to null when canvas has no fusion entries", () => {
+    // Defensive: a project that never ran /fuse (fusion disabled) should
+    // not crash, and S0B's special card should stay hidden.
+    const m0: IdeaVariant = {
+      id: "mu_m0",
+      title: "M0",
+      premise_one_line: "p",
+      mutation_type: "inversion",
+      mutation_logic: "",
+      estimated_novelty: 0.5,
+      trope_tags: [],
+      regenerated_count: 0,
+    };
+    const canvas = canvasOf({ idea_variants: [m0] });
+    const next = mergeCanvasState(canvas, filledPrev());
+    expect(next.fusionVariant).toBeNull();
+    expect(next.variants).toHaveLength(1);
+  });
+
+  it("preserves prev.selectedVariantIds (bug 1 + bug 2a root cause)", () => {
+    // loadCanvas previously did:
+    //   selectedVariantIds: prev.rawIntent === rawIntent ? prev.selectedVariantIds : []
+    // The ref-equality check is always false (canvas returns fresh objects)
+    // so selection was wiped on every canvasVersion bump — including the
+    // one /contradict triggers on every S0C mount. The user picked [m0,m2]
+    // in S0B; by the time S0C's effect ran, pickedFirst was empty and
+    // primary fell back to variants[0] (the empty-title fusion).
+    // Fix: selectedVariantIds is session-local, never read from canvas —
+    // always carry prev through.
+    const prev = filledPrev({ selectedVariantIds: ["mu_m0", "mu_m2"] });
+    const rawIntent = { prompt: "x", genre_primary: "x" } as unknown as RawIntent;
+    // Pass a fresh rawIntent object — the old check would have wiped the
+    // selection here. After fix, selection must survive.
+    const canvas = canvasOf({ raw_intent: rawIntent });
+    const next = mergeCanvasState(canvas, prev);
+    expect(next.selectedVariantIds).toEqual(["mu_m0", "mu_m2"]);
+    // Reference identity must be prev's array (no spurious re-allocation).
+    expect(next.selectedVariantIds).toBe(prev.selectedVariantIds);
+  });
+
+  it("preserves prev.fusionBanner (warning state survives canvas re-fetch)", () => {
+    // fusionBanner is the "类型融合未启用(LLM 不可用)" warning shown
+    // above S0B when /fuse failed. It's session-scoped (not on canvas —
+    // /fuse either succeeds with a real variant or appends a placeholder,
+    // the banner is a UX hint). The previous loadCanvas wiped it on every
+    // canvasVersion bump, so re-entering S0B after a /contradict refresh
+    // silently dropped the warning. Carry prev through.
+    const prev = filledPrev({ fusionBanner: "类型融合未启用(LLM 不可用)" });
+    const canvas = canvasOf({ raw_intent: { prompt: "x", genre_primary: "x" } as unknown as RawIntent });
+    const next = mergeCanvasState(canvas, prev);
+    expect(next.fusionBanner).toBe("类型融合未启用(LLM 不可用)");
+  });
+
+  it("returns prev unchanged when canvas is null (defensive no-op)", () => {
+    // loadCanvas only calls mergeCanvasState on a successful /state
+    // response, but tests should not crash on the null branch.
+    const prev = filledPrev({ selectedVariantIds: ["v1"] });
+    const next = mergeCanvasState(null, prev);
+    expect(next).toBe(prev);
+  });
+
+  it("populates contradictionCandidates from canvas (the D→C fast-path payload)", () => {
+    // S0C's fast-path uses initialCandidates to skip the LLM round-trip on
+    // C→D→back-to-C navigation. The backend persists these as
+    // contradiction_candidates on canvas (added 2026-09-01, not on the
+    // TS type yet — cast in the impl). mergeCanvasState must propagate
+    // them so the parent's state.contradictionCandidates is in sync with
+    // canvas. Without this, parent never sees the cache and D→C always
+    // re-runs /contradict (the bug dba5d55 partially fixed).
+    const candidates: ContradictionCandidate[] = [
+      {
+        template_type: "能力×限制",
+        preview_statement: "x",
+        side_a: "A",
+        side_b: "B",
+        tension_score: 80,
+      },
+    ];
+    const persisted: PersistedCandidates = {
+      variant_id: "mu_m0",
+      variant_content: "p",
+      generated_at: "2026-09-02T00:00:00Z",
+      candidates,
+    };
+    const canvas = canvasOf({ contradiction_candidates: persisted });
+    const next = mergeCanvasState(canvas, filledPrev());
+    expect(next.contradictionCandidates).toBe(persisted);
+  });
+
+  it("uses full idea_variants list (incl. fusion) for inferSubStage", () => {
+    // Safety guard: if mergeCanvasState passed the FILTERED variants
+    // (state.variants, no fusion) to inferSubStage, an edge case where the
+    // canvas only has a fusion entry (no mutations — possible if /fuse ran
+    // before /apply-mutation, or after a /regenerate/variants wipe) would
+    // mis-classify as "B (no variants)" instead of "C". Pass the FULL
+    // canvas list to inferSubStage so fusion entries count.
+    const fusion: IdeaVariant = {
+      id: "var-fuse",
+      title: "F",
+      premise_one_line: "f",
+      mutation_type: "fusion",
+      mutation_logic: "",
+      estimated_novelty: 0.7,
+      trope_tags: [],
+      regenerated_count: 0,
+    };
+    const rawIntent = { prompt: "x", genre_primary: "x" } as unknown as RawIntent;
+    const canvas = canvasOf({ raw_intent: rawIntent, idea_variants: [fusion] });
+    // raw_intent + any variants + no core → C (user is past B, hasn't
+    // picked a contradiction yet). If we wrongly passed state.variants
+    // (=[] after filtering) instead of allVariants, inferSubStage would
+    // hit the "no variants" branch and return B.
+    const next = mergeCanvasState(canvas, filledPrev({ subStage: "A" }));
+    expect(next.subStage).toBe("C");
+    expect(next.variants).toEqual([]);  // filtered: fusion only
   });
 });

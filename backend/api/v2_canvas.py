@@ -16,7 +16,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import yaml
 from fastapi import APIRouter, HTTPException
@@ -34,6 +34,9 @@ from backend.creative_os.state_machine import (
 from backend.creative_os.op_hint import compute_op_hint
 
 router = APIRouter(prefix="/creative/canvas/{project_id}", tags=["canvas-v2"])
+
+# Must match v1.x InitRequest in backend/api/creative_diverge.py.
+_MAX_PROMPT_LEN = 1700
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _NEXT_STEP_PROMPT_PATH = _PROMPTS_DIR / "canvas_v2_next_step.yaml"
@@ -128,12 +131,12 @@ def _validate_for_commit(canvas: dict) -> None:
 
 
 class InitRequest(BaseModel):
-    prompt: str = Field(..., min_length=1, max_length=1700)
+    prompt: str = Field(..., min_length=1, max_length=_MAX_PROMPT_LEN)
     genre_primary: str = Field(..., min_length=1)
     genre_secondary: Optional[str] = None
     target_reader: Optional[str] = None
-    reference_works: Optional[list] = None
-    forbidden_directions: Optional[list] = None
+    reference_works: Optional[List[str]] = None
+    forbidden_directions: Optional[List[str]] = None
     quick_mode: bool = False
 
 

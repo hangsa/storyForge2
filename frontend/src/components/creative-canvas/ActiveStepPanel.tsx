@@ -1,23 +1,10 @@
 import { PrimaryButton } from "@/components/ds";
-
-interface CreativeOptionShape {
-  id: string;
-  title: string;
-  premise: string;
-  logic: string;
-  scores: Record<string, number>;
-}
-
-interface OperationShape {
-  type: string;
-  name: string;
-  reason: string;
-}
+import type { CreativeOption, NextStepResponse } from "@/api/client";
 
 interface Props {
   step: number;
-  operation: OperationShape;
-  options: CreativeOptionShape[];
+  operation: NextStepResponse["operation"];
+  options: CreativeOption[];
   onSelect: (optionId: string) => void;
   disabled?: boolean;
 }

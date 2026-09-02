@@ -4,6 +4,12 @@ interface Props {
   storyPotential: number;
 }
 
+// TODO(canvas-v2): backend scores scale is currently undecided. compute_op_hint
+// tests pass 0-1, but NoveltyEvaluator has not yet been wired to fill option
+// `scores`. If the real evaluator writes 0-100, normalize here before display.
+// Until then: clamp to [0, 1] so a 0-100 input can't render as 7000%.
+const toPct = (v: number) => Math.min(100, Math.max(0, Math.round(v * 100)));
+
 export function QualityBar({ novelty, conflict, storyPotential }: Props) {
   const items = [
     { label: "新颖度", value: novelty, color: "bg-primary" },
@@ -21,10 +27,10 @@ export function QualityBar({ novelty, conflict, storyPotential }: Props) {
           <div className="w-24 h-2 bg-surface-container-high rounded overflow-hidden">
             <div
               className={`h-full ${item.color}`}
-              style={{ width: `${Math.round(item.value * 100)}%` }}
+              style={{ width: `${toPct(item.value)}%` }}
             />
           </div>
-          <span className="font-medium">{Math.round(item.value * 100)}</span>
+          <span className="font-medium">{toPct(item.value)}</span>
         </div>
       ))}
     </div>

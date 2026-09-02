@@ -251,6 +251,21 @@ export default function S0CContradictionStep({
           重新生成
         </button>
       </div>
+      {/* Show which S0B variant drives this contradiction so the
+          S0B→S0C selection flow is visible. Without this hint, the
+          picker looks identical regardless of what the user picked in
+          S0B — the audit found users couldn't tell the contradiction
+          was tied to their pick. Same testid pattern as S0B's
+          "selected-badge" so divergence wizard affordances stay
+          consistent. */}
+      {primary && (
+        <p
+          data-testid="s0c-source-variant-hint"
+          className="text-xs text-on-surface-variant"
+        >
+          本次矛盾基于「{primary.title}」
+        </p>
+      )}
       {error && <div className="text-error text-sm">{error}</div>}
       {loading && (
         <div className="text-on-surface-variant">生成矛盾候选中...</div>

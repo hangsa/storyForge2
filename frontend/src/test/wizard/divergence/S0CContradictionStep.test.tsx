@@ -454,4 +454,49 @@ describe("S0CContradictionStep", () => {
       );
     });
   });
+
+  // Visibility (audit gap #2 follow-up): the user can't tell which variant
+  // drives the contradiction they're picking from. Without this hint, the
+  // S0B→S0C selection flow is invisible — the picker looks the same
+  // regardless of which variants the user picked in S0B.
+  it("renders '本次矛盾基于' hint showing the picked variant's title", async () => {
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={[
+          { ...sampleVariants[0], id: "v1", title: "变体1-INVERSION", premise_one_line: "前提1" },
+          { ...sampleVariants[0], id: "v2", title: "变体2-ESCALATION", premise_one_line: "前提2" },
+        ]}
+        selectedVariantIds={["v2"]}
+        onComplete={() => {}}
+        onBack={() => {}}
+      />,
+    );
+    await waitFor(() => screen.getAllByTestId(/^candidate-/));
+    expect(
+      screen.getByTestId("s0c-source-variant-hint"),
+    ).toHaveTextContent(/变体2-ESCALATION/);
+  });
+
+  // Defensive: hint should still render using variants[0].title when the
+  // user bypassed S0B — keeps the user informed about the source even
+  // without an explicit pick.
+  it("renders the hint using variants[0] title when selectedVariantIds is empty", async () => {
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={[
+          { ...sampleVariants[0], id: "v1", title: "默认-INVERSION", premise_one_line: "前提1" },
+          { ...sampleVariants[0], id: "v2", title: "ESCALATION", premise_one_line: "前提2" },
+        ]}
+        selectedVariantIds={[]}
+        onComplete={() => {}}
+        onBack={() => {}}
+      />,
+    );
+    await waitFor(() => screen.getAllByTestId(/^candidate-/));
+    expect(
+      screen.getByTestId("s0c-source-variant-hint"),
+    ).toHaveTextContent(/默认-INVERSION/);
+  });
 });

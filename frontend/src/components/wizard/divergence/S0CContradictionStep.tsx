@@ -123,6 +123,13 @@ export default function S0CContradictionStep({
         if (result.candidates.length > 0 && !selected) {
           setSelected(result.candidates[0].template_type);
         }
+        // Sync the persisted candidates back into parent state so a back-nav
+        // from S0D (or StepIndicator jump) hits the fast-path above instead
+        // of re-running the 5-template LLM expansion. Without this, parent
+        // state.contradictionCandidates stays null between C's fetch and any
+        // subsequent C remount — D's choose-branch / regen would refresh it,
+        // but a plain C→D→back-to-C sequence silently re-fetched every time.
+        onCanvasMutated?.();
       } catch (e: unknown) {
         if (cancelled) return;
         if (e instanceof DOMException && e.name === "AbortError") {

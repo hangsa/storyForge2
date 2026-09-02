@@ -345,4 +345,59 @@ describe("S0CContradictionStep", () => {
       );
     });
   });
+
+  it("calls onCanvasMutated after a fresh /contradict POST so D→C back-nav hits the fast-path", async () => {
+    // Repro of the bug found 2026-09-02: S0C's fetch handler only updated
+    // local candidates + selected state. Parent's state.contradictionCandidates
+    // is the ONLY thing the fast-path checks on remount, and it only syncs
+    // from canvas via loadCanvas() — which never re-ran between C's fetch and
+    // a plain C→D→back-to-C sequence. So every D→C back-nav triggered a fresh
+    // 15-20s LLM expansion. The fix: call onCanvasMutated after the POST
+    // resolves, so the parent's loadCanvas syncs state.contradictionCandidates
+    // from canvas's persisted candidates.
+    const onCanvasMutated = vi.fn();
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={sampleVariants}
+        onComplete={() => {}}
+        onBack={() => {}}
+        onCanvasMutated={onCanvasMutated}
+      />,
+    );
+    await waitFor(() => {
+      expect(api.postDivergeContradict).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(onCanvasMutated).toHaveBeenCalled();
+    });
+  });
+
+  it("does NOT call onCanvasMutated on the fast-path (initialCandidates already cached)", async () => {
+    // Inverse of the above: when the fast-path hits (variant_id matches,
+    // candidates cached), there's no new canvas write to sync — onCanvasMutated
+    // would only trigger an unnecessary loadCanvas round-trip. Pairs with
+    // the test above to lock in the conditional behavior.
+    const onCanvasMutated = vi.fn();
+    render(
+      <S0CContradictionStep
+        projectId="p1"
+        variants={sampleVariants}
+        initialCandidates={{
+          variant_id: "v1",  // matches variants[0].id
+          variant_content: "一个前提",
+          generated_at: "2026-09-01T00:00:00Z",
+          candidates,
+        }}
+        onComplete={() => {}}
+        onBack={() => {}}
+        onCanvasMutated={onCanvasMutated}
+      />,
+    );
+    await waitFor(() => screen.getAllByTestId(/^candidate-/));
+    // Fast-path populated candidates without a fetch, so no canvas mutation
+    // happened — onCanvasMutated must not be called.
+    expect(api.postDivergeContradict).not.toHaveBeenCalled();
+    expect(onCanvasMutated).not.toHaveBeenCalled();
+  });
 });

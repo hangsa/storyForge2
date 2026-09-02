@@ -2742,52 +2742,17 @@ async def fuse_genres(project_id: str, request: FuseRequest):
         )
 
     from backend.creative_os.genre_fusion_engine import GenreFusionEngine
-    from backend.creative_os.mutation_engine import MutationEngine
 
-    fusion_engine = GenreFusionEngine()
-    distance = fusion_engine.compute_distance(
+    # Shared helper — also used by /regenerate/raw-intent (D10). Single
+    # source of truth for the GenreFusionEngine → MutationEngine.fuse →
+    # synthesized-fallback chain so behavior can't drift between the
+    # initial /fuse call and any re-roll.
+    variant, distance, risk_level = await _compute_fusion_variant(
+        request.genre_primary, request.genre_secondary, request.prompt,
+    )
+    compatibility = GenreFusionEngine().get_compatibility(
         request.genre_primary, request.genre_secondary
     )
-    compatibility = fusion_engine.get_compatibility(
-        request.genre_primary, request.genre_secondary
-    )
-    risk_level = _risk_from_distance(distance)
-
-    trope_a = _genre_to_trope(request.genre_primary, request.prompt)
-    trope_b = _genre_to_trope(request.genre_secondary, request.prompt)
-
-    variant: Optional[dict] = None
-    try:
-        mutation_engine = MutationEngine()
-        mutation_result = await mutation_engine.fuse(trope_a, trope_b)
-        variant = _mutation_to_idea_variant(
-            mutation_result,
-            request.genre_primary,
-            request.genre_secondary,
-            risk_level=risk_level,
-            distance=distance,
-        )
-    except NotImplementedError as exc:
-        # LLM backend not available (no model_router). Synthesize a minimal
-        # variant from the genres + distance so the endpoint still works in
-        # CI / dev environments without a real LLM.
-        logger.info("MutationEngine.fuse unavailable (no LLM): %s", exc)
-    except Exception as exc:
-        logger.warning("MutationEngine.fuse failed: %s", exc)
-
-    if variant is None:
-        variant = {
-            "id": f"var-{uuid.uuid4().hex[:8]}",
-            "title": f"{request.genre_primary}×{request.genre_secondary}",
-            "premise_one_line": f"{request.genre_primary} 与 {request.genre_secondary} 融合",
-            "mutation_type": "fusion",
-            "mutation_logic": f"跨 {distance} 跳距离的体裁融合",
-            "estimated_novelty": 0.7,
-            "trope_tags": [request.genre_primary, request.genre_secondary],
-            "regenerated_count": 0,
-            "risk_level": risk_level,
-            "fusion_distance": distance,
-        }
 
     # Persist to canvas_state.idea_variants. We read canvas at the top of this
     # handler (after CANVAS_NOT_INITIALIZED check), so it's guaranteed to be

@@ -113,3 +113,25 @@ def test_init_accepts_prompt_alias_for_premise(project, client):
     assert response.status_code == 200, response.text
     canvas = response.json()["detail"]
     assert canvas["raw_intent"]["prompt"] == "用 prompt 字段的现代调用"
+
+
+def test_init_accepts_legacy_premise_field_name(project, client):
+    """The `prompt` alias was added so the new frontend works, but legacy
+    internal callers (tests, scripts) still send `premise`. This test
+    asserts the legacy name keeps working — without it, a future refactor
+    that drops `populate_by_name=True` would silently break every legacy
+    caller.
+
+    Pairs with `test_init_accepts_prompt_alias_for_premise` (the modern
+    side of the same alias contract).
+    """
+    response = client.post(
+        f"/api/v1/projects/{project}/creative/diverge/init",
+        json={"premise": "legacy premise 字段的旧调用", "genre_primary": "xianxia"},
+    )
+    assert response.status_code == 200, response.text
+    canvas = response.json()["detail"]
+    # Both aliases populate the same canvas field; the wire-level naming
+    # is invisible to downstream consumers (regenerate/fuse/commit all
+    # read canvas.raw_intent.prompt regardless of which name was sent).
+    assert canvas["raw_intent"]["prompt"] == "legacy premise 字段的旧调用"

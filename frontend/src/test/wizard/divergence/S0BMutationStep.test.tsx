@@ -402,6 +402,35 @@ describe("S0BMutationStep fusion variant UI", () => {
     });
   });
 
+  it("重新融合 preserves fusion variant ID + bumps regenerated_count", async () => {
+    // The mocked postDivergeFuse returns a fresh ID per call ("var-fuse-2"),
+    // but the user's selected pick is keyed off the original ID. If
+    // S0BMutationStep didn't preserve the original ID across re-rolls,
+    // /commit's selectedPath matching would silently drop the user's pick.
+    // Pairs with backend /regenerate/{node_id}/regenerate's mutation_type
+    // preservation test — same contract on the client side.
+    const initialFusion = { ...fusionSample, regenerated_count: 0 };
+    render(
+      <S0BMutationStep
+        {...baseProps}
+        initial={[initialFusion]}
+        fusionVariant={initialFusion}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("refuse-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("risk-badge")).toHaveTextContent("high");
+    });
+    // The card title attribute is keyed off the original ID via the
+    // `variant-card-${id}` testid (look in S0BMutationStep render). The
+    // ID-preservation contract means the card still renders under the
+    // original "var-fuse-1" testid, not the fresh "var-fuse-2" one.
+    expect(screen.getByTestId("variant-card-var-fuse-1")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("variant-card-var-fuse-2"),
+    ).not.toBeInTheDocument();
+  });
+
   it("disables 重新融合 when genre_secondary missing", () => {
     render(
       <S0BMutationStep

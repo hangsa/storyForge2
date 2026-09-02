@@ -36,9 +36,14 @@ def _load_next_step_prompt() -> dict:
 async def _call_llm_with_retry(llm_call, context, max_attempts=2):
     """Call LLM with JSON retry (spec §6.5).
 
-    Retries ONCE on JSON parse failure with hint 'Please return valid
-    JSON only'. Retry interval is 0 (immediate). Raises RuntimeError
-    after exhaustion.
+    Retries ONCE on JSON parse failure. The retry sets
+    ``context["retry_hint"]`` to "Please return valid JSON only"; the
+    caller is responsible for reading this key and prepending it to the
+    prompt sent to the LLM on the second attempt. Without that step,
+    retries will fail the same way and the helper will raise after
+    exhaustion.
+
+    Retry interval is 0 (immediate). Raises RuntimeError after exhaustion.
     """
     last_error = None
     for attempt in range(max_attempts):
@@ -51,7 +56,7 @@ async def _call_llm_with_retry(llm_call, context, max_attempts=2):
             if attempt + 1 < max_attempts:
                 context = {**context, "retry_hint": "Please return valid JSON only"}
     raise RuntimeError(
-        f"LLM 返回了无效 JSON ({max_attempts} 次): {last_error}"
+        f"LLM 返回了无效 JSON ({max_attempts} 次): {last_error or 'no attempts'}"
     )
 
 

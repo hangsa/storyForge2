@@ -54,13 +54,15 @@ def test_call_llm_with_retry_succeeds_first_try():
 
 
 def test_call_llm_with_retry_retries_on_invalid_json():
-    calls = {"count": 0}
+    calls = {"count": 0, "hint_on_retry": None}
     valid = json.dumps({"operation": "twist", "options": [{}, {}, {}]})
 
     async def fake_llm(prompt):
         calls["count"] += 1
         if calls["count"] == 1:
+            assert "retry_hint" not in prompt, "first attempt must not carry hint"
             return "not valid json {"
+        calls["hint_on_retry"] = prompt.get("retry_hint")
         return valid
 
     async def run():
@@ -68,6 +70,7 @@ def test_call_llm_with_retry_retries_on_invalid_json():
 
     result = _run(run())
     assert calls["count"] == 2
+    assert calls["hint_on_retry"] == "Please return valid JSON only"
     assert result["operation"] == "twist"
 
 

@@ -37,15 +37,18 @@ def test_load_prompt_has_system_and_user_sections():
 
 
 def test_call_llm_with_retry_succeeds_first_try():
+    calls = {"count": 0}
     payload = {"operation": "twist", "operation_reason": "low novelty", "options": [{}, {}, {}]}
 
     async def fake_llm(prompt):
+        calls["count"] += 1
         return json.dumps(payload)
 
     async def run():
         return await _call_llm_with_retry(fake_llm, {"any": "ctx"})
 
     result = _run(run())
+    assert calls["count"] == 1
     assert result["operation"] == "twist"
     assert len(result["options"]) == 3
 

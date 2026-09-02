@@ -80,42 +80,50 @@ def _derive_edges_from_nodes(nodes: dict) -> list:
 
 
 def _read_canvas(project_id: str) -> Optional[dict]:
-    """Read canvas_state.json. Returns None if not initialized.
+    """Read canvas_state.json, lazily migrating v3 → v4.
 
-    Migrates v1 → v2 → v3 transparently. After any migration, the upgraded
-    form is written back atomically so subsequent reads skip the migration
-    step.
+    Returns the v4 view (in-memory migration) for v3 canvases.
 
-    Always returns a canvas whose `edges` field reflects the current
-    `children_ids` on every node (derived at read time).
+    Write-back semantics:
+    - v4 canvas: returns as-is, no migration
+    - v3 uncommitted: migrates AND writes v4 back to disk (next read sees v4)
+    - v3 committed: migrates in-memory only, does NOT write back
+      (v3 is the historical record; do not touch)
+
+    Raises HTTPException(409) for unknown schema versions.
     """
-    path = _get_canvas_path(project_id)
-    if not path.exists():
+    canvas_path = _get_canvas_path(project_id)
+    if not canvas_path.exists():
         return None
-    with open(path, "r", encoding="utf-8") as f:
+    with open(canvas_path, "r", encoding="utf-8") as f:
         canvas = json.load(f)
-    needs_persist = False
-    schema_version = canvas.get("schema_version")
-    # v1 → v2: pre-v2 schema lacked schema_version=2 tag
-    if schema_version != 2 and schema_version != 3:
-        canvas = _migrate_v1_to_v2(canvas)
-        schema_version = 2
-        needs_persist = True
-    # v2 → v3: introduce idea_variants / core_contradiction / novelty_scores
-    # / raw_intent / session_metadata
-    if schema_version == 2:
-        canvas = _migrate_v2_to_v3(canvas)
-        needs_persist = True
-    if needs_persist:
-        tmp = path.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(canvas, f, ensure_ascii=False, indent=2)
-        tmp.replace(path)
-    canvas["edges"] = _derive_edges_from_nodes(canvas.get("nodes", {}))
-    return canvas
+    if canvas is None:
+        return None
+    if canvas.get("schema_version") == 4:
+        return canvas
+    if canvas.get("schema_version") == 3:
+        from backend.creative_os.migration import _migrate_v3_to_v4
+        v4 = _migrate_v3_to_v4(canvas)
+        if not v4.get("committed"):
+            _write_canvas(project_id, v4, write_through=True)
+        return v4
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "error": True,
+            "code": "UNKNOWN_SCHEMA_VERSION",
+            "message": f"不支持的 schema_version: {canvas.get('schema_version')}",
+            "detail": {},
+        },
+    )
 
 
-def _write_canvas(project_id: str, data: dict, preserve_committed: bool = False) -> None:
+def _write_canvas(
+    project_id: str,
+    data: dict,
+    preserve_committed: bool = False,
+    write_through: bool = True,
+) -> None:
     """Atomically write canvas_state.json after validating invariants.
 
     Raises CanvasInvariantError if the canvas would violate any of the 6
@@ -131,6 +139,12 @@ def _write_canvas(project_id: str, data: dict, preserve_committed: bool = False)
     it's recomputed on every read instead. Also bumps `updated_at` and
     `session_metadata.operation_count` so audit consumers can see when the
     canvas last changed.
+
+    Args:
+        preserve_committed: If True, keep committed_at/committed_concept_ref
+            even if `data` doesn't include them. Used by /commit itself.
+        write_through: If False, skip the disk write (caller already knows
+            the canvas is a transient v4 view, e.g. lazy-migrated v3 committed).
     """
     # Strip transient ETag BEFORE validation so we never try to validate an
     # ETag field as canvas state. Recomputed at read time instead.
@@ -141,6 +155,11 @@ def _write_canvas(project_id: str, data: dict, preserve_committed: bool = False)
     except CanvasInvariantError as exc:
         logger.error("Refusing to write invalid canvas for %s: %s", project_id, exc)
         raise
+
+    # Skip disk write when caller opts out (e.g. lazy-migrated v3 committed
+    # canvases — v3 is the historical record and must not be overwritten).
+    if not write_through:
+        return
 
     # Keep the persisted edges in sync with children_ids so the file on disk
     # matches what _read_canvas would derive (avoids stale edge lists).
@@ -416,7 +435,13 @@ def _validate_canvas_invariants(canvas: dict) -> None:
         4. branch_choices values point to real children.
         5. dimmed nodes' descendants are all dimmed.
         6. root_node is active.
+
+    v4 canvases are not validated here — v4 invariants are defined in Task 3
+    (Step 状态机 + invariants). Lazy-migrated v3 → v4 canvases pass through
+    so the disk-write step in _read_canvas can persist the upgraded form.
     """
+    if canvas.get("schema_version") == 4:
+        return
     nodes = canvas.get("nodes", {})
     branch_choices = canvas.get("branch_choices", {})
     selected_path = canvas.get("selected_path", [])

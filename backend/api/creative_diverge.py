@@ -1832,6 +1832,32 @@ def _format_canvas_summary(selected_path: list, nodes: dict) -> str:
     return text
 
 
+def _validate_for_commit_canvas_only(canvas):
+    """v1.x wrapper: handle None, then defer to v2's _validate_for_commit."""
+    if canvas is None:
+        raise HTTPException(status_code=400, detail={"code": "CANVAS_NOT_FOUND"})
+    from backend.api.v2_canvas import _validate_for_commit as _v2_validate
+    _v2_validate(canvas)
+
+
+def _derive_selected_path_from_canvas(canvas: dict) -> list:
+    """Backfill selected_path from v4-schema creative_path.
+
+    v4 canvas (from /creative/canvas/{pid}/session/init) tracks choices in
+    `creative_path[*].selected_option_id` and never populates the legacy
+    `selected_path` field. /commit (v1.x) downstream still expects a flat
+    list of node IDs in `selected_path` for concept_and_dna.json's
+    canvas_snapshot — so we synthesize it from each completed step's choice.
+    """
+    path = canvas.get("creative_path") or []
+    derived = []
+    for entry in path:
+        sid = entry.get("selected_option_id")
+        if sid:
+            derived.append(sid)
+    return derived
+
+
 @router.post("/commit")
 async def commit_canvas(project_id: str, data: dict = {}):
     """Translate canvas selected_path into concept_and_dna.json via LLM.
@@ -1841,17 +1867,17 @@ async def commit_canvas(project_id: str, data: dict = {}):
       - value_stack_override: list[dict] replace story_dna.value_stack after LLM
       - user_notes: str (placeholder, ignored for now)
 
-    Steps:
+    Steps (Task 8 / spec §5.4 — order changed from v1.x):
         1. Read canvas_state.json (400 if not initialized)
-        2. Validate path length >= 2 (root + at least one refinement)
+        2. Validate canvas via _validate_for_commit (does NOT check final_concept)
         3. Build canvas_summary text from path
         4. Read project.json for genre
         5. Call PlannerAgent.generate_concept_from_canvas
-        6. Apply optional value_stack_override
-        7. Validate LLM output has story_dna.core_contradiction.statement
-        8. Write concept_and_dna.json (last-write-wins; overwrites any existing)
-        9. Dual-write creative_divergence.json (compat with STAGE1 /concept guard)
-       10. Update canvas_state.json with committed_at + committed_concept_ref
+        6. Validate LLM output has story_dna.core_contradiction.statement
+        7. Apply optional value_stack_override
+        8. Write canvas_state.json with committed_at + committed_concept_ref
+        9. Write concept_and_dna.json (last-write-wins; overwrites any existing)
+       10. Dual-write creative_divergence.json (compat with STAGE1 /concept guard)
        11. Return detail envelope with concept/story_dna + previews + novelty
 
     LLM output that misses the gate field is returned as 503 with the raw
@@ -1872,7 +1898,16 @@ async def commit_canvas(project_id: str, data: dict = {}):
             },
         )
 
-    selected_path = data.get("confirmed_path_ids") or canvas.get("selected_path") or []
+    # Task 8 / spec §5.4 step 1: validate canvas BEFORE PlannerAgent generation.
+    # This replaces the v1.x `selected_path < 2` early gate. v2.0 validator
+    # requires ≥ 2 steps COMPLETED + no STALE + Step 5 specifically COMPLETED.
+    _validate_for_commit_canvas_only(canvas)
+
+    selected_path = (
+        data.get("confirmed_path_ids")
+        or canvas.get("selected_path")
+        or _derive_selected_path_from_canvas(canvas)
+    )
     if len(selected_path) < 2:
         raise HTTPException(
             status_code=400,

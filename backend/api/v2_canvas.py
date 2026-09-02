@@ -413,3 +413,19 @@ async def select_option_v2(project_id: str, body: SelectRequest):
     }
 
 
+# --- /commit ---
+
+
+@router.post("/session/commit")
+async def commit_canvas_v2(project_id: str):
+    """v2 commit endpoint — delegates to v1.x logic.
+
+Both v1.x `/creative/diverge/commit` and v2 `/creative/canvas/{project_id}/session/commit`
+share the same downstream logic; the only difference is the new validation
+order (validate → generate → validate → write). v1.x handler was refactored
+in Task 8 to use this order.
+    """
+    from backend.api.creative_diverge import commit_canvas as _v1_commit
+    return await _v1_commit(project_id, {})
+
+

@@ -195,3 +195,96 @@ def test_select_marks_step_completed_and_unlocks_next(project, client, monkeypat
     assert canvas["creative_path"][0]["state"] == "completed"
     assert canvas["creative_path"][0]["selected_option_id"] == "opt_1_b"
 
+
+def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatch):
+    """v2 /commit must output concept_and_dna.json in v3 schema (no v2 new fields)."""
+    from backend.api import v2_canvas
+    from backend.api.creative_diverge import _read_canvas, _write_canvas
+    from backend.agents.planner import PlannerAgent
+
+    async def fake_generate(self, canvas_summary, genre="cool_novel"):
+        return (
+            {
+                "concept": {"title": "T", "premise": "P", "genre": "xianxia",
+                            "tone": "", "theme": "", "target_audience": "",
+                            "style_template": "白描克制", "source": "canvas"},
+                "story_dna": {
+                    "core_contradiction": {"statement": "S", "side_a": "A", "side_b": "B"},
+                    "value_stack": [{"level": "personal", "value_a": "", "value_b": ""}] * 4,
+                    "style_template": "白描克制",
+                    "fusion_meta": None,
+                },
+            },
+            None,
+        )
+    monkeypatch.setattr(PlannerAgent, "generate_concept_from_canvas", fake_generate)
+
+    # Init + walk 5 steps + select
+    client.post(f"/creative/canvas/{project}/session/init",
+                json={"prompt": "p", "genre_primary": "xianxia"})
+
+    async def fake_next(project_id, current_step):
+        options = [
+            {"id": f"opt_{current_step}_a", "title": "A", "premise": "p", "logic": "",
+             "scores": {}},
+            {"id": f"opt_{current_step}_b", "title": "B", "premise": "p", "logic": "",
+             "scores": {}},
+            {"id": f"opt_{current_step}_c", "title": "C", "premise": "p", "logic": "",
+             "scores": {}},
+        ]
+        canvas = _read_canvas(project_id)
+        while len(canvas["creative_path"]) < current_step:
+            canvas["creative_path"].append({
+                "step": len(canvas["creative_path"]) + 1,
+                "operation": None,
+                "operation_reason": None,
+                "options": [],
+                "selected_option_id": None,
+                "created_at": "2026-09-02T00:00:00",
+                "selected_at": None,
+                "regenerated_count": 0,
+                "state": "locked",
+            })
+        canvas["creative_path"][current_step - 1] = {
+            "step": current_step,
+            "operation": "twist",
+            "operation_reason": "",
+            "options": options,
+            "selected_option_id": None,
+            "created_at": "2026-09-02T00:00:00",
+            "selected_at": None,
+            "regenerated_count": 0,
+            "state": "active",
+        }
+        _write_canvas(project_id, canvas)
+        return {
+            "step": current_step,
+            "operation": {"type": "twist", "name": "twist", "reason": ""},
+            "options": options,
+            "quality_warning": None,
+        }
+    monkeypatch.setattr(v2_canvas, "_next_step_impl", fake_next)
+
+    for step in range(1, 6):
+        client.post(f"/creative/canvas/{project}/session/next-step",
+                    json={"current_step": step})
+        client.post(f"/creative/canvas/{project}/session/select",
+                    json={"step": step, "option_id": f"opt_{step}_b"})
+
+    response = client.post(f"/creative/canvas/{project}/session/commit")
+    assert response.status_code == 200, response.text
+
+    # Verify v3 schema
+    cnp = Path(settings.projects_dir) / project / "concept_and_dna.json"
+    cnd = json.loads(cnp.read_text(encoding="utf-8"))
+    assert "concept" in cnd
+    assert "story_dna" in cnd
+    assert "canvas_snapshot" in cnd
+    # v2 NEW fields NOT written
+    assert "creative_path" not in cnd
+    assert "creative_mechanism" not in cnd
+    assert "canvas_meta" not in cnd
+    # canvas_snapshot.selected_path dual-written for backfill compat
+    assert "selected_path" in cnd["canvas_snapshot"]
+    assert len(cnd["canvas_snapshot"]["selected_path"]) == 5
+

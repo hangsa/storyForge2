@@ -35,6 +35,16 @@ export type WizardRegenerateState =
  */
 export type CreativeDivergenceSubStage = "A" | "B" | "C" | "D" | "E";
 
+/**
+ * Step 1 of the wizard has two parallel surfaces:
+ *   - "divergence" — the original CreativeDivergenceStep (A→B→C→D→E)
+ *   - "canvas"     — the v4 创意画布 (5-step path of 3 options/step)
+ * Both are surfaced in the sidebar at position 1; either surface's
+ * completion unlocks step 2 (OR semantic). The two are independent —
+ * completing one does NOT mark the other.
+ */
+export type Step1SurfaceId = "divergence" | "canvas";
+
 export interface WizardData {
   creative_divergence: {
     variants: Array<{ id: string; label: string; title: string; description: string; tags: string[]; created_at: string }>;
@@ -138,6 +148,21 @@ interface WizardState {
   saveHandler: (() => void) | null;
   saveDisabled: boolean;
   creativeDivergenceSubStage: CreativeDivergenceSubStage;
+  /**
+   * Which step-1 surface is currently rendered in the wizard's main
+   * area. Only meaningful when `currentStep === 1`; the field is
+   * preserved (not reset) when the user navigates to step 2+ and
+   * back, so they return to the surface they last used.
+   * Default: "divergence" (preserves pre-integration behavior).
+   */
+  activeStep1Surface: Step1SurfaceId;
+  /**
+   * Set of step-1 surfaces that have completed (independent, OR
+   * semantic). Persists to sessionStorage; disk prefill overrides
+   * via `hydrateStep1Surfaces`. Sorted on read for deterministic
+   * sidebar `✓` placement.
+   */
+  completedStep1Surfaces: Step1SurfaceId[];
 }
 
 type WizardAction =
@@ -191,7 +216,10 @@ type WizardAction =
       disabled: boolean;
     }
   | { type: "SET_DIVERGENCE_SUBSTAGE"; subStage: CreativeDivergenceSubStage }
-  | { type: "JUMP_TO_CREATIVE_DIVERGENCE"; subStage: CreativeDivergenceSubStage };
+  | { type: "JUMP_TO_CREATIVE_DIVERGENCE"; subStage: CreativeDivergenceSubStage }
+  | { type: "SET_ACTIVE_STEP1_SURFACE"; surface: Step1SurfaceId }
+  | { type: "MARK_STEP1_SURFACE_COMPLETED"; surface: Step1SurfaceId }
+  | { type: "HYDRATE_STEP1_SURFACES"; surfaces: Step1SurfaceId[] };
 
 const initialState: WizardState = {
   currentStep: 1,
@@ -208,6 +236,8 @@ const initialState: WizardState = {
   saveHandler: null,
   saveDisabled: false,
   creativeDivergenceSubStage: "A",
+  activeStep1Surface: "divergence",
+  completedStep1Surfaces: [],
 };
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
@@ -334,6 +364,53 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, regenerateHandler: action.handler, regenerateDisabled: action.disabled };
     case "SET_SAVE_HANDLER":
       return { ...state, saveHandler: action.handler, saveDisabled: action.disabled };
+    case "SET_ACTIVE_STEP1_SURFACE": {
+      // Always set currentStep=1 (no-op if already 1) so clicking
+      // a surface from a later step lands the user back at step 1.
+      // creativeDivergenceSubStage is preserved — switching to canvas
+      // and back should restore the user's last divergence sub-step.
+      return {
+        ...state,
+        currentStep: 1,
+        activeStep1Surface: action.surface,
+      };
+    }
+    case "MARK_STEP1_SURFACE_COMPLETED": {
+      if (state.completedStep1Surfaces.includes(action.surface)) return state;
+      // Sync completedSteps so step 2's `reachable = completed ||
+      // current` (which reads completedSteps.includes(1)) flips to
+      // enabled immediately. Without this, the user has to wait for
+      // the next page reload (which forces prefill rerun) before
+      // step 2 unlocks.
+      const nextCompletedSteps = state.completedSteps.includes(1)
+        ? state.completedSteps
+        : [...state.completedSteps, 1].sort((a, b) => a - b);
+      return {
+        ...state,
+        completedStep1Surfaces: [
+          ...state.completedStep1Surfaces,
+          action.surface,
+        ],
+        completedSteps: nextCompletedSteps,
+      };
+    }
+    case "HYDRATE_STEP1_SURFACES": {
+      // Union with existing — sessionStorage-loaded surfaces stay
+      // even if prefill didn't re-confirm them on disk (e.g., user
+      // completed a surface but the disk write hasn't landed yet).
+      const merged = Array.from(
+        new Set([...state.completedStep1Surfaces, ...action.surfaces]),
+      );
+      // Same OR-semantic push to completedSteps as the marker reducer
+      const nextCompletedSteps = merged.length >= 1 && !state.completedSteps.includes(1)
+        ? [...state.completedSteps, 1].sort((a, b) => a - b)
+        : state.completedSteps;
+      return {
+        ...state,
+        completedStep1Surfaces: merged,
+        completedSteps: nextCompletedSteps,
+      };
+    }
     default:
       return state;
   }
@@ -373,6 +450,14 @@ function loadPersisted(projectId: string): WizardState | null {
         // if a stale sessionStorage payload predates this field.
         creativeDivergenceSubStage:
           parsed.creativeDivergenceSubStage ?? "A",
+        activeStep1Surface:
+          parsed.activeStep1Surface === "canvas" ? "canvas" : "divergence",
+        completedStep1Surfaces: Array.isArray(parsed.completedStep1Surfaces)
+          ? parsed.completedStep1Surfaces.filter(
+              (s: unknown): s is Step1SurfaceId =>
+                s === "divergence" || s === "canvas",
+            )
+          : [],
       };
     }
     return null;
@@ -444,6 +529,28 @@ interface WizardContextValue extends WizardState {
    * indicator) wants to land the user at a specific sub-step of step 1.
    */
   jumpToCreativeDivergence: (subStage: CreativeDivergenceSubStage) => void;
+  /**
+   * Switch the active step-1 surface. If currently on step 2+, also
+   * jumps to step 1 (the reducer handles this). Preserves
+   * creativeDivergenceSubStage so the user returns to the same
+   * divergence sub-stage when toggling back from canvas.
+   */
+  setActiveStep1Surface: (id: Step1SurfaceId) => void;
+  /**
+   * Mark a step-1 surface as completed. Idempotent. Also pushes 1
+   * into completedSteps so step 2 reachability flips immediately.
+   * The canvas and divergence page components call this via the
+   * `onCommitSuccess` callback prop they receive — they do NOT call
+   * useWizard() directly (the page is standalone-capable).
+   */
+  markStep1SurfaceCompleted: (id: Step1SurfaceId) => void;
+  /**
+   * Merge disk-derived surfaces into the completed set. Called from
+   * the prefill useEffect in WorkspaceWizardPanel after
+   * getCreativeDivergence + getCanvasV2State resolve. Union via Set
+   * dedup; existing surfaces stay even if prefill didn't re-confirm.
+   */
+  hydrateStep1Surfaces: (surfaces: Step1SurfaceId[]) => void;
 }
 
 const WizardContext = createContext<WizardContextValue | null>(null);
@@ -493,6 +600,8 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
           data: state.data,
           errorMessage: state.errorMessage,
           creativeDivergenceSubStage: state.creativeDivergenceSubStage,
+          activeStep1Surface: state.activeStep1Surface,
+          completedStep1Surfaces: state.completedStep1Surfaces,
         })
       );
     } catch {
@@ -531,6 +640,12 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
       dispatch({ type: "SET_DIVERGENCE_SUBSTAGE", subStage }),
     jumpToCreativeDivergence: (subStage) =>
       dispatch({ type: "JUMP_TO_CREATIVE_DIVERGENCE", subStage }),
+    setActiveStep1Surface: (surface) =>
+      dispatch({ type: "SET_ACTIVE_STEP1_SURFACE", surface }),
+    markStep1SurfaceCompleted: (surface) =>
+      dispatch({ type: "MARK_STEP1_SURFACE_COMPLETED", surface }),
+    hydrateStep1Surfaces: (surfaces) =>
+      dispatch({ type: "HYDRATE_STEP1_SURFACES", surfaces }),
     reset: () => {
       try {
         sessionStorage.removeItem(getSessionKey(projectId));
@@ -548,4 +663,14 @@ export function useWizard(): WizardContextValue {
   const ctx = useContext(WizardContext);
   if (!ctx) throw new Error("useWizard must be used within WizardProvider");
   return ctx;
+}
+
+/**
+ * True iff at least one step-1 surface has completed. Used by tests
+ * and any external code that wants to know if step 2 should be
+ * reachable. Sidebar itself uses `completedSteps.includes(1)` which
+ * is kept in sync via the reducer.
+ */
+export function isStep1EffectivelyCompleted(state: WizardState): boolean {
+  return state.completedStep1Surfaces.length >= 1;
 }

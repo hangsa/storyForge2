@@ -289,10 +289,23 @@ def test_delete_state_resets_session_preserves_root_idea(project, client, monkey
 
 
 def test_delete_state_when_uninitialized_is_idempotent(project, client):
-    """DELETE /state when no init has been done should not 500."""
-    response = client.delete(f"/creative/canvas/{project}/session/state")
-    assert response.status_code == 200
-    assert response.json()["ok"] is True
+    """DELETE /state on an uninitialized project is idempotent: safe to call repeatedly."""
+    canvas_file = _canvas_path(project)
+
+    # First DELETE on uninitialized project — should not 500
+    first = client.delete(f"/creative/canvas/{project}/session/state")
+    assert first.status_code == 200
+    assert first.json()["ok"] is True
+    assert not canvas_file.exists(), "canvas_state.json should not exist after first DELETE"
+
+    # Second DELETE — must also be 200 (no-op since there is still no canvas)
+    second = client.delete(f"/creative/canvas/{project}/session/state")
+    assert second.status_code == 200
+    assert second.json()["ok"] is True
+    assert not canvas_file.exists(), "canvas_state.json should not exist after second DELETE"
+
+    # Idempotent: identical response bodies for both calls
+    assert first.json() == second.json()
 
 
 def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatch):

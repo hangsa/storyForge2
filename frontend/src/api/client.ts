@@ -815,6 +815,20 @@ export interface NextStepResponse {
 
 /** v4 canvas state — full payload returned by GET /session/state.
  *  Schema_version is locked to 4 by backend._migrate_v3_to_v4. */
+export interface RootIdeaExtracted {
+  genre: string;
+  core_elements: string[];
+  potential_conflict: string;
+}
+
+export interface CanvasV4Scores {
+  novelty: number;
+  conflict: number;
+  story_potential: number;
+  uniqueness: number;
+  computed_at: string;
+}
+
 export interface CanvasV4State {
   schema_version: 4;
   session_id: string;
@@ -823,7 +837,7 @@ export interface CanvasV4State {
     prompt: string;
     genre: string;
     premise: string;
-    extracted: Record<string, unknown>;
+    extracted: RootIdeaExtracted;
   };
   raw_intent: RawIntent;
   creative_session: {
@@ -836,7 +850,8 @@ export interface CanvasV4State {
   final_concept: unknown;
   committed: boolean;
   committed_at: string | null;
-  scores: Record<string, number>;
+  committed_concept_ref?: string;
+  scores: CanvasV4Scores;
   session_metadata: Record<string, unknown>;
 }
 

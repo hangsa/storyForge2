@@ -90,11 +90,12 @@ describe("CreativeCanvasPage v2", () => {
         },
       ],
       committed: false, committed_at: null,
-      root_idea: { prompt: "test idea", genre: "", premise: "", extracted: {} },
+      root_idea: { prompt: "test idea", genre: "", premise: "", extracted: { genre: "", core_elements: [], potential_conflict: "" } },
       raw_intent: { prompt: "test idea", genre_primary: "" },
       creative_session: { current_step: 2, max_steps: 5, status: "active" },
       current_concept: {}, final_concept: null,
-      scores: {}, session_metadata: {},
+      scores: { novelty: 0, conflict: 0, story_potential: 0, uniqueness: 0, computed_at: "" },
+      session_metadata: {},
     });
 
     render(

@@ -154,7 +154,13 @@ class SelectRequest(BaseModel):
 
 @router.post("/session/init")
 async def init_canvas_v2(project_id: str, body: InitRequest):
-    """Initialize v2 canvas with raw_intent + root_idea dual-write."""
+    """Initialize v2 canvas with raw_intent + root_idea dual-write.
+
+    Writes PRD §22 enriched schema: root_idea (with extracted.genre +
+    extracted.potential_conflict), creative_session, current_concept, top-level
+    scores (with computed_at timestamp), session_metadata.elapsed_seconds, and
+    committed_concept_ref (PRD §23.4).
+    """
     _ensure_project(project_id)
 
     now = datetime.now(timezone.utc).isoformat()
@@ -165,7 +171,11 @@ async def init_canvas_v2(project_id: str, body: InitRequest):
             "prompt": body.prompt,
             "genre": body.genre_primary,
             "premise": body.prompt,
-            "extracted": {"core_elements": []},
+            "extracted": {
+                "genre": body.genre_primary,
+                "core_elements": [],
+                "potential_conflict": "",
+            },
         },
         "raw_intent": {
             "prompt": body.prompt,
@@ -204,7 +214,15 @@ async def init_canvas_v2(project_id: str, body: InitRequest):
         },
         "final_concept": None,
         "committed": False,
-        "scores": {},
+        "committed_at": None,
+        "committed_concept_ref": "concept_and_dna.json",
+        "scores": {
+            "novelty": 0.0,
+            "conflict": 0.0,
+            "story_potential": 0.0,
+            "uniqueness": 0.0,
+            "computed_at": now,
+        },
         "session_metadata": {
             "created_at": now,
             "last_modified_at": now,
@@ -302,6 +320,13 @@ async def _next_step_impl(project_id: str, current_step: int) -> dict:
         "concept": canvas["current_concept"],
         "step": current_step,
     })
+
+    # Renumber option ids to be step-scoped (LLM prompt produces opt_a/b/c;
+    # TreeCanvas looks up opt_{step}_{slot} so the UI can bind selections
+    # back to the correct step and column).
+    for idx, opt in enumerate(parsed["options"]):
+        slot = ("a", "b", "c")[idx] if idx < 3 else f"x{idx}"
+        opt["id"] = f"opt_{current_step}_{slot}"
 
     # Build path entry
     path_entry = {

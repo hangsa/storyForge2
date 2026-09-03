@@ -39,6 +39,30 @@ def _canvas_path(pid: str) -> Path:
     return Path(settings.projects_dir) / pid / "creative_os" / "canvas_state.json"
 
 
+def test_init_writes_enriched_v4_schema_with_root_idea(project, client):
+    """PRD §22 + §23.4 + UI design (root_idea card column)."""
+    init_resp = client.post(
+        f"/creative/canvas/{project}/session/init",
+        json={"prompt": "修仙对抗外星舰队的可能性", "genre_primary": "xianxia"},
+    )
+    assert init_resp.status_code == 200, init_resp.text
+
+    canvas = json.loads(_canvas_path(project).read_text(encoding="utf-8"))
+    # PRD §22 root_idea block (used by IdeaRootNode in design)
+    assert canvas["root_idea"]["prompt"] == "修仙对抗外星舰队的可能性"
+    assert canvas["root_idea"]["genre"] == "xianxia"
+    assert "extracted" in canvas["root_idea"]
+    # PRD §22 creative_session block (used by StepIndicator)
+    assert canvas["creative_session"]["current_step"] == 1
+    assert canvas["creative_session"]["max_steps"] == 5
+    assert canvas["creative_session"]["status"] == "active"
+    # PRD §22 top-level scores (used by QualityBar in option cards)
+    assert "scores" in canvas
+    assert canvas["scores"]["computed_at"]  # ISO timestamp
+    # PRD §23.4 raw_intent double-write
+    assert canvas["raw_intent"]["prompt"] == "修仙对抗外星舰队的可能性"
+
+
 def test_init_writes_v4_with_raw_intent_and_root_idea(project, client):
     response = client.post(
         f"/creative/canvas/{project}/session/init",
@@ -120,6 +144,10 @@ def test_next_step_returns_operation_and_3_options(project, client, monkeypatch)
     assert data["operation"]["type"] == "twist"
     assert len(data["options"]) == 3
     assert all("id" in o for o in data["options"])
+    # Step-scoped option ids (PRD §22: opt_{step}_{slot}); LLM prompt returns
+    # opt_a/b/c — _next_step_impl must renumber so TreeCanvas can bind
+    # selections back to the correct step + column.
+    assert [o["id"] for o in data["options"]] == ["opt_1_a", "opt_1_b", "opt_1_c"]
 
 
 def test_select_marks_step_completed_and_unlocks_next(project, client, monkeypatch):

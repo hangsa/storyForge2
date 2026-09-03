@@ -520,3 +520,134 @@ def captured_user_prompt_op_hint(user_prompt: str) -> str:
     assert match, f"could not parse op from prompt: {user_prompt!r}"
     return match.group(1)
 
+
+def test_select_refreshes_top_level_scores(project, client, monkeypatch):
+    """PRD §16.1: after /select, canvas.scores refresh via NoveltyEvaluator.
+
+    Task 5 wires NoveltyEvaluator into the /select handler. The evaluator
+    is sync, so the handler wraps it with loop.run_in_executor + a 3s
+    timeout. The test patches both `_build_novelty_evaluator` (so no
+    real TropePool/ContradictionEngine construction is needed in the test
+    env, which lacks trope_catalog.yaml) and `_run` (so the executor
+    invokes the fake_evaluate rather than the real one).
+    """
+    from backend.api import v2_canvas
+    from backend.api.creative_diverge import _read_canvas, _write_canvas
+    from backend.models.creative_os import NoveltyScore
+    from backend.creative_os import novelty_evaluator
+
+    # Track that fake_evaluate was called so we can assert the executor
+    # path actually invoked it (not just produced a fallback payload).
+    captured: dict = {}
+
+    def fake_evaluate(self, content):
+        # Sync (not async) — Task 5 wraps with run_in_executor.
+        # Return values mirror what a real call produces (0-100 scale);
+        # the implementation normalizes to 0-1 for canvas["scores"].
+        # The 4 dimension fields map 1:1 to PRD canvas.scores fields (after
+        # /100 normalization): trope_similarity → novelty, contradiction →
+        # conflict, market_saturation → story_potential, discussion →
+        # uniqueness. Pick raw values that produce the asserted 0-1 outputs.
+        captured["content"] = content
+        return NoveltyScore(
+            total=88.0,
+            market_saturation_score=85.0,      # → story_potential 0.85
+            trope_similarity_score=88.0,       # → novelty 0.88
+            contradiction_depth_score=91.0,    # → conflict 0.91
+            discussion_potential_score=82.0,   # → uniqueness 0.82
+            grade="高新颖度",
+        )
+
+    monkeypatch.setattr(novelty_evaluator.NoveltyEvaluator, "evaluate", fake_evaluate)
+
+    # Stub `_build_novelty_evaluator` so the executor's _run() gets back a
+    # cheap stand-in instance whose `evaluate` is the patched fake above.
+    # This sidesteps the TropePool catalog dependency without exercising
+    # the real evaluator (covered by /novelty tests).
+    class _FakeEval:
+        evaluate = fake_evaluate
+
+    monkeypatch.setattr(
+        v2_canvas, "_build_novelty_evaluator", lambda project_id: _FakeEval(),
+    )
+
+    init_resp = client.post(
+        f"/creative/canvas/{project}/session/init",
+        json={"prompt": "p", "genre_primary": "xianxia"},
+    )
+    assert init_resp.status_code == 200, init_resp.text
+
+    # Stub _next_step_impl so /select's auto-trigger doesn't call the LLM.
+    async def fake_next_step(project_id, current_step):
+        options = [
+            {"id": f"opt_{current_step}_a", "title": "A", "premise": "p",
+             "logic": "", "scores": {}},
+            {"id": f"opt_{current_step}_b", "title": "B", "premise": "p",
+             "logic": "", "scores": {}},
+            {"id": f"opt_{current_step}_c", "title": "C", "premise": "p",
+             "logic": "", "scores": {}},
+        ]
+        canvas = _read_canvas(project_id)
+        while len(canvas["creative_path"]) < current_step:
+            canvas["creative_path"].append({
+                "step": len(canvas["creative_path"]) + 1,
+                "operation": None,
+                "operation_reason": None,
+                "options": [],
+                "selected_option_id": None,
+                "created_at": "2026-09-03T00:00:00",
+                "selected_at": None,
+                "regenerated_count": 0,
+                "state": "locked",
+            })
+        canvas["creative_path"][current_step - 1] = {
+            "step": current_step,
+            "operation": "twist",
+            "operation_reason": "",
+            "options": options,
+            "selected_option_id": None,
+            "created_at": "2026-09-03T00:00:00",
+            "selected_at": None,
+            "regenerated_count": 0,
+            "state": "active",
+        }
+        _write_canvas(project_id, canvas)
+        return {
+            "step": current_step,
+            "operation": {"type": "twist", "name": "twist", "reason": ""},
+            "options": options,
+            "quality_warning": None,
+        }
+    monkeypatch.setattr(v2_canvas, "_next_step_impl", fake_next_step)
+
+    # Generate options for step 1.
+    ns = client.post(
+        f"/creative/canvas/{project}/session/next-step",
+        json={"current_step": 1},
+    )
+    assert ns.status_code == 200, ns.text
+
+    sel = client.post(
+        f"/creative/canvas/{project}/session/select",
+        json={"step": 1, "option_id": "opt_1_b"},
+    )
+    assert sel.status_code == 200, sel.text
+
+    # Sanity: the executor path actually invoked our fake, not the fallback.
+    assert captured["content"] == "p", (
+        f"fake_evaluate should have been called with option premise; "
+        f"got captured={captured!r}"
+    )
+
+    canvas = json.loads(_canvas_path(project).read_text(encoding="utf-8"))
+    # PRD §16.1: top-level scores auto-refresh after /select. The 4
+    # dimensions in canvas.scores (novelty/conflict/story_potential/
+    # uniqueness) are all in 0-1; NoveltyEvaluator returns them on a
+    # 0-100 scale, so each is divided by 100 before persistence.
+    assert canvas["scores"]["novelty"] == 0.88
+    assert canvas["scores"]["conflict"] == 0.91
+    assert canvas["scores"]["story_potential"] == 0.85
+    assert canvas["scores"]["uniqueness"] == 0.82
+    # computed_at must be set (ISO timestamp).
+    assert canvas["scores"]["computed_at"]
+

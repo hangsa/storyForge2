@@ -11,6 +11,7 @@ Endpoint naming: v2.0 uses `/creative/canvas/{project_id}/session/*` to:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -28,6 +29,7 @@ from backend.api.creative_diverge import (
     _write_canvas,
     _compute_etag,
 )
+from backend.config import settings
 from backend.creative_os.state_machine import (
     transition_step_state,
 )
@@ -506,6 +508,15 @@ async def select_option_v2(project_id: str, body: SelectRequest):
 
     transition_step_state(canvas, step=body.step, event="complete")
 
+    # PRD §16.1: after a selection, refresh top-level `scores` via
+    # NoveltyEvaluator. NoveltyEvaluator.evaluate() is a SYNC method, so we
+    # offload it to the default executor and cap the wait at 3s — a slow or
+    # broken evaluator must never block the user's select action. The
+    # evaluator returns scores on a 0-100 scale; canvas["scores"] is
+    # normalized to 0-1 to match the schema initialized in _empty_canvas_v4.
+    concept_for_eval = selected.get("premise", canvas["current_concept"]["premise"])
+    canvas["scores"] = await _refresh_top_level_scores(project_id, concept_for_eval)
+
     # Write the completed step back so the in-memory state survives the
     # cascade re-read below.
     canvas["_etag"] = _compute_etag(canvas)
@@ -524,6 +535,71 @@ async def select_option_v2(project_id: str, body: SelectRequest):
         "step": body.step,
         "selected_option_id": body.option_id,
     }
+
+
+async def _refresh_top_level_scores(
+    project_id: str, concept_for_eval: str, existing_scores: Optional[dict] = None,
+) -> dict:
+    """Run NoveltyEvaluator in the executor pool and map its 0-100 output
+    to the canvas["scores"] 0-1 schema.
+
+    Best-effort: any construction failure, timeout, or exception is logged
+    and the existing scores are preserved (only `computed_at` is bumped).
+    Never raises — the calling /select handler must always complete.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    def _run() -> "object":  # returns NoveltyScore or raises
+        try:
+            evaluator = _build_novelty_evaluator(project_id)
+        except Exception as exc:  # construction-time import errors
+            raise RuntimeError(f"NoveltyEvaluator build failed: {exc}") from exc
+        if evaluator is None:
+            raise RuntimeError("NoveltyEvaluator build returned None")
+        return evaluator.evaluate(concept_for_eval)
+
+    try:
+        loop = asyncio.get_running_loop()
+        new_score = await asyncio.wait_for(
+            loop.run_in_executor(None, _run),
+            timeout=3.0,
+        )
+        return {
+            "novelty": round(new_score.trope_similarity_score / 100.0, 2),
+            "conflict": round(new_score.contradiction_depth_score / 100.0, 2),
+            "story_potential": round(new_score.market_saturation_score / 100.0, 2),
+            "uniqueness": round(new_score.discussion_potential_score / 100.0, 2),
+            "computed_at": now_iso,
+        }
+    except (asyncio.TimeoutError, Exception) as exc:
+        _logger.warning("NoveltyEvaluator refresh failed in /select: %s", exc)
+        return {**(existing_scores or {}), "computed_at": now_iso}
+
+
+def _build_novelty_evaluator(project_id: str):
+    """Construct a NoveltyEvaluator mirroring `/novelty` and `/whatif-expand`.
+
+    Returns None on any construction failure (missing config files,
+    missing project_dir, etc.) — the caller treats None as "skip refresh"
+    and preserves the existing scores rather than 500ing the endpoint.
+    """
+    try:
+        from backend.creative_os.novelty_evaluator import NoveltyEvaluator
+        from backend.creative_os.trope_pool import TropePool
+        from backend.creative_os.contradiction_engine import ContradictionEngine
+
+        project_dir = settings.projects_dir / project_id
+        catalog_path = settings.projects_dir.parent / "config" / "trope_catalog.yaml"
+        trope_pool = TropePool(project_dir=project_dir, catalog_path=catalog_path)
+        return NoveltyEvaluator(
+            trope_pool=trope_pool,
+            contradiction_engine=ContradictionEngine(),
+            model_router=None,
+            embedder=None,
+        )
+    except Exception as exc:
+        _logger.warning("Could not build NoveltyEvaluator for %s: %s", project_id, exc)
+        return None
 
 
 # --- /commit ---

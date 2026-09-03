@@ -113,8 +113,12 @@ describe("TreeCanvas", () => {
 
   it("marks selected option with check icon", () => {
     render(<TreeCanvas canvas={baseState} />);
+    // Accessible-name query — the circle container carries aria-label="Selected"
+    // and the check glyph inside is aria-hidden (decorative). Scope to the
+    // option-node-1-b container to verify the badge belongs to *this* option,
+    // not some other step's selection.
     const selectedB = screen.getByTestId("option-node-1-b");
-    expect(selectedB.querySelector("[data-check-icon]")).toBeInTheDocument();
+    expect(selectedB.querySelector('[aria-label="Selected"]')).toBeInTheDocument();
   });
 
   it("marks current step's center node with pulse animation", () => {

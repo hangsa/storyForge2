@@ -25,9 +25,9 @@ export function TreePath({ paths }: { paths: PathSegment[] }) {
               key={i}
               d={d}
               fill="none"
-              stroke="#38bdf8"
+              stroke="var(--color-primary-container)"
               strokeWidth={2}
-              style={{ filter: "drop-shadow(0 0 4px #38bdf8)" }}
+              style={{ filter: "drop-shadow(0 0 4px var(--color-primary-container))" }}
             />
           );
         }
@@ -36,7 +36,7 @@ export function TreePath({ paths }: { paths: PathSegment[] }) {
             key={i}
             d={d}
             fill="none"
-            stroke="#3e484f"
+            stroke="var(--color-outline-variant)"
             strokeDasharray="4 4"
             strokeWidth={2}
           />

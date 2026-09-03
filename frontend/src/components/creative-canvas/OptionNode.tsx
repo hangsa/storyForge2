@@ -15,9 +15,12 @@ export function OptionNode({ testId, slot, label, selected, faded = false }: Pro
         data-testid={testId}
         className="flex flex-col items-center relative top-[-10px]"
       >
-        <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/50 text-primary flex items-center justify-center mb-sm shadow-[0_0_10px_rgba(56,189,248,0.2)]">
+        <div
+          aria-label="Selected"
+          className="w-12 h-12 rounded-full bg-primary/20 border border-primary/50 text-primary flex items-center justify-center mb-sm shadow-[0_0_10px_rgba(56,189,248,0.2)]"
+        >
           <span
-            data-check-icon
+            aria-hidden="true"
             className="material-symbols-outlined"
             style={{ fontVariationSettings: "'FILL' 1" }}
           >
@@ -33,10 +36,12 @@ export function OptionNode({ testId, slot, label, selected, faded = false }: Pro
       </div>
     );
   }
+  // Display-only — selection happens in the active-step panel
+  // (OptionCard lands separately as Task 8), not in the tree visualization.
   return (
     <div
       data-testid={testId}
-      className={`flex flex-col items-center transition-opacity cursor-pointer ${
+      className={`flex flex-col items-center transition-opacity ${
         faded ? "opacity-30" : "opacity-50 hover:opacity-100"
       }`}
     >

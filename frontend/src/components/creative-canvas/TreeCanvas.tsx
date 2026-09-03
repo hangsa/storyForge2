@@ -26,10 +26,17 @@ export function TreeCanvas({ canvas }: Props) {
   const steps = canvas.creative_path;
 
   // Resolve each step's selected option → "a"/"b"/"c".
+  // Walk the options array by index rather than parsing the option id —
+  // the previous regex (`/_([abc])$/`) silently misrouted for any id that
+  // didn't end in a single `a`/`b`/`c` character (e.g. `_alpha`), turning
+  // a real selected option into a "phantom root connector".
   const selectedSlotByStep: Record<number, Slot | null> = {};
   steps.forEach((s) => {
-    const match = s.selected_option_id?.match(/_([abc])$/);
-    selectedSlotByStep[s.step] = (match?.[1] as Slot | undefined) ?? null;
+    const selIdx = s.selected_option_id
+      ? s.options.findIndex((o) => o.id === s.selected_option_id)
+      : -1;
+    selectedSlotByStep[s.step] =
+      selIdx >= 0 && selIdx < 3 ? (["a", "b", "c"][selIdx] as Slot) : null;
   });
 
   // Build path segments connecting previous selected → next column's options.

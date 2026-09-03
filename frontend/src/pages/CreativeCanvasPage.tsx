@@ -1,140 +1,167 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { PrimaryButton, PanelCard } from "@/components/ds";
-// TODO(canvas-recon Task 14): rewrite CreativeCanvasPage to use TreeCanvas.
-// Temporary stub keeps tsc happy while HorizontalPathCanvas migration completes.
-const HorizontalPathCanvas: React.FC<{ rootIdea: string; path: unknown[] }> = () => null;
-// TODO(canvas-recon Task 14): rewrite ActiveStepPanel integration to use OptionCard.
-// Temporary stub keeps tsc happy while the migration completes.
-const ActiveStepPanel: React.FC<{
-  step: number;
-  operation: { type: string; name: string; reason: string };
-  options: unknown[];
-  disabled: boolean;
-  onSelect: (optionId: string) => void | Promise<void>;
-}> = () => null;
-import { QualityBar } from "@/components/creative-canvas/QualityBar";
-// TODO(canvas-recon Task 14): rewrite CanvasToolbar integration to use StepIndicator.
-// Temporary stub keeps tsc happy while the migration completes.
-const CanvasToolbar: React.FC<{
-  currentStep: number;
-  totalSteps: number;
-  onViewPath: () => void;
-  onReset: () => void;
-}> = () => null;
+import { useParams } from "react-router-dom";
 import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
-import type { RawIntent, NextStepResponse } from "@/api/client";
+import { TreeCanvas } from "@/components/creative-canvas/TreeCanvas";
+import { StepIndicator } from "@/components/creative-canvas/StepIndicator";
+import { OptionCard } from "@/components/creative-canvas/OptionCard";
+import { EmptyState } from "@/components/creative-canvas/EmptyState";
+import { ResetConfirmDialog } from "@/components/creative-canvas/ResetConfirmDialog";
+import { PreCommitSummary } from "@/components/creative-canvas/PreCommitSummary";
+import { GhostButton, PrimaryButton } from "@/components/ds";
+import type { CreativeOption } from "@/api/client";
+
+// Map of v2 operation keys → display labels (zh). Mirrors StepIndicator's
+// OPERATION_LABELS so the OptionCard title prefix stays consistent with the
+// header pill. The StepIndicator owns the full { zh, en } record; the page
+// only needs the zh string for the title text.
+const OPERATION_LABEL_ZH: Record<string, string> = {
+  twist: "扭曲",
+  break: "打破",
+  fuse: "融合",
+  fusion: "融合",
+  invert: "反转",
+  escalate: "升级",
+  dramaturgy: "收束",
+};
+
+type Slot = "A" | "B" | "C";
 
 export default function CreativeCanvasPage() {
-  const { id: projectId } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  // Route is /project/:projectId/stage1/canvas (App.tsx:114)
+  const { projectId = "" } = useParams<{ projectId: string }>();
   const {
-    status, canvas, error, loadingStep, committedAt, canCommit,
-    loadCanvas, initSession, nextStep, selectOption, commitCanvas,
-  } = useCreativeCanvasV2(projectId || "");
-  const [initForm, setInitForm] = useState({ prompt: "", genre_primary: "" });
-  const [pendingNextStep, setPendingNextStep] = useState<NextStepResponse | null>(null);
+    canvas, loadingStep, canCommit,
+    showResetDialog, onReset, closeResetDialog, confirmReset,
+    showPreCommit, onCommitClick, closePreCommit, confirmCommit,
+    initSession, selectOption,
+  } = useCreativeCanvasV2(projectId);
 
-  useEffect(() => {
-    loadCanvas();
-  }, [projectId, loadCanvas]);
-
-  // Derive the active step's NextStepResponse from canvas or pending fetch
-  const activeStep = canvas?.creative_path.find((p) => p.state === "active");
-  const stepResponse: NextStepResponse | null =
-    pendingNextStep ||
-    (activeStep && activeStep.options.length > 0
-      ? {
-          step: activeStep.step,
-          operation: {
-            type: activeStep.operation || "twist",
-            name: activeStep.operation || "twist",
-            reason: activeStep.operation_reason || "",
-          },
-          options: activeStep.options,
-          quality_warning: null,
-        }
-      : null);
-
-  if (status === "empty") {
+  // Empty state — no canvas yet. The EmptyState owns its own form controls
+  // and gates initSession on prompt length (>=10 chars). EmptyState's
+  // `onInit` callback signature is `(prompt, genre)`; map to RawIntent's
+  // `genre_primary` field (the backend enum, e.g. "xianxia").
+  if (!canvas) {
     return (
-      <div className="p-8 max-w-2xl mx-auto">
-        <PanelCard>
-          <h2 className="text-xl mb-4">开始你的创意</h2>
-          <textarea
-            placeholder="用一句话描述你的故事想法"
-            className="w-full h-32 p-3 border border-outline-variant rounded-lg mb-3"
-            value={initForm.prompt}
-            onChange={(e) => setInitForm({ ...initForm, prompt: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="主类型"
-            className="w-full p-2 border border-outline-variant rounded-lg mb-3"
-            value={initForm.genre_primary}
-            onChange={(e) => setInitForm({ ...initForm, genre_primary: e.target.value })}
-          />
-          <PrimaryButton
-            label="初始化"
-            disabled={initForm.prompt.length < 10 || !initForm.genre_primary}
-            onClick={() => initSession(initForm as RawIntent)}
-          />
-        </PanelCard>
-      </div>
+      <EmptyState
+        loading={loadingStep}
+        onInit={(prompt, genre) => {
+          initSession({ prompt, genre_primary: genre }).catch(() => {
+            // Hook already surfaces errors via its own error state; the
+            // catch here only prevents an unhandled-rejection warning in
+            // the console when the user retries after a malformed prompt.
+          });
+        }}
+      />
     );
   }
 
+  const activeStep = canvas.creative_path.find((s) => s.state === "active");
+  const completedCount = canvas.creative_path.filter(
+    (s) => s.state === "completed"
+  ).length;
+
+  // Header defaults to "twist" when no active step exists yet (committed or
+  // pre-init states) so the pill stays populated.
+  const headerOperation = activeStep?.operation ?? "twist";
+  const opLabel =
+    OPERATION_LABEL_ZH[headerOperation] ?? headerOperation;
+
   return (
-    <div data-testid="creative-canvas-v2-page" className="flex flex-col h-full">
-      <div data-testid="canvas-toolbar-todo">
-        TODO(canvas-recon Task 14): StepIndicator rewrite
+    <div
+      data-testid="creative-canvas-page"
+      className="bg-surface-container-lowest min-h-screen p-6"
+    >
+      {/* Header: title left, StepIndicator right */}
+      <div className="flex justify-between items-end mb-6">
+        <div>
+          <h2 className="text-headline-lg font-bold text-on-surface">
+            Creative Canvas
+          </h2>
+          <p className="text-on-surface-variant text-sm">
+            Explore and evolve your core concept.
+          </p>
+        </div>
+        <StepIndicator
+          currentStep={canvas.creative_session.current_step}
+          maxSteps={canvas.creative_session.max_steps}
+          operation={headerOperation}
+        />
       </div>
 
-      {canvas && (
-        <div data-testid="canvas-route-todo">
-          TODO(canvas-recon Task 14): TreeCanvas rewrite pending
+      {/* Tree visualization */}
+      <TreeCanvas canvas={canvas} />
+
+      {/* Active step options — PRD §8: B is AI default (recommended). */}
+      {activeStep && (
+        <div className="mt-6" data-testid="active-step-panel">
+          <div className="grid grid-cols-3 gap-6">
+            {(["A", "B", "C"] as const).map((slot) => {
+              // Option id format: opt_{step}_{slot} (backend renumbers the
+              // LLM-produced opt_a/b/c → opt_{step}_a/b/c in v2_canvas.py).
+              const option = activeStep.options.find(
+                (o) => o.id === `opt_${activeStep.step}_${slot.toLowerCase()}`
+              ) as CreativeOption | undefined;
+              if (!option) return null;
+              const isRecommended = slot === "B";
+              return (
+                <OptionCard
+                  key={slot}
+                  option={option}
+                  slot={slot}
+                  operationLabel={`${opLabel} ${slot}`}
+                  recommended={isRecommended}
+                  selected={false}
+                  onSelect={(id) => {
+                    selectOption(activeStep.step, id).catch(() => {});
+                  }}
+                  disabled={loadingStep}
+                />
+              );
+            })}
+          </div>
+          <p className="text-on-surface-variant text-sm mt-4 text-center">
+            为什么是「{activeStep.operation}」？{activeStep.operation_reason}
+          </p>
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-4">
-        {loadingStep && <div>生成选项中...</div>}
-
-        {stepResponse && (
-          <div data-testid="active-step-todo">
-            TODO(canvas-recon Task 14): OptionCard rewrite
-          </div>
-        )}
-
-        {canvas?.scores && (
-          <QualityBar
-            novelty={canvas.scores.novelty || 0}
-            conflict={canvas.scores.conflict || 0}
-          />
-        )}
-
-        {canCommit && (
-          <div className="mt-4">
-            <PrimaryButton label="提交到 Stage 0" onClick={() => commitCanvas()} />
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-4 p-3 bg-error/10 border border-error rounded text-error">
-            {error}
-          </div>
-        )}
-
-        {committedAt && (
-          <div className="mt-4 p-3 bg-success/10 border border-success rounded">
-            已提交于 {committedAt}
+      {/* Bottom action bar — Reset on the left, Commit on the right (only
+          when canCommit flips true after step 5 completes). */}
+      <div className="mt-6 flex justify-between">
+        <GhostButton
+          label="重新开始"
+          onClick={onReset}
+          disabled={loadingStep}
+        />
+        <div className="flex gap-2">
+          {canCommit && (
             <PrimaryButton
-              label="跳转到 Stage 0"
-              onClick={() => navigate(`/project/${projectId}/stage0`)}
-              size="sm"
+              label="提交"
+              onClick={onCommitClick}
+              disabled={loadingStep}
             />
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      <ResetConfirmDialog
+        open={showResetDialog}
+        onConfirm={() => {
+          confirmReset().catch(() => {});
+        }}
+        onCancel={closeResetDialog}
+      />
+      <PreCommitSummary
+        open={showPreCommit}
+        stats={{
+          depth: completedCount,
+          novelty: Math.round((canvas.scores?.novelty ?? 0) * 100),
+          conflict: Math.round((canvas.scores?.conflict ?? 0) * 100),
+        }}
+        onCommit={() => {
+          confirmCommit().catch(() => {});
+        }}
+        onCancel={closePreCommit}
+      />
     </div>
   );
 }

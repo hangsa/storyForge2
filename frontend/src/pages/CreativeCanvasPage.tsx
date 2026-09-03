@@ -64,7 +64,7 @@ export default function CreativeCanvasPage({
     canvas, loadingStep, canCommit,
     showResetDialog, onReset, closeResetDialog, confirmReset,
     showPreCommit, onCommitClick, closePreCommit, confirmCommit,
-    initSession, selectOption,
+    initSession, selectOption, nextStep,
   } = useCreativeCanvasV2(projectId);
 
   // Empty state — no canvas yet. The EmptyState owns its own form controls
@@ -138,7 +138,18 @@ export default function CreativeCanvasPage({
       )}
 
       {/* Tree visualization */}
-      <TreeCanvas canvas={canvas} />
+      <TreeCanvas
+        canvas={canvas}
+        onAdvance={(step) => {
+          // PRD §5.2: user-driven AVAILABLE → ACTIVE transition. The
+          // button only renders when onAdvance is provided, so passing
+          // a no-op would still render dead buttons — only attach it
+          // when loadingStep is false to avoid double-firing.
+          if (!loadingStep) {
+            nextStep(step).catch(() => {});
+          }
+        }}
+      />
 
       {/* Active step options — PRD §8: B is AI default (recommended). */}
       {activeStep && (

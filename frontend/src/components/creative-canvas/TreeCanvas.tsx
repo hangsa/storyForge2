@@ -7,6 +7,15 @@ type Slot = "a" | "b" | "c";
 
 interface Props {
   canvas: CanvasV4State;
+  /**
+   * Invoked when the user clicks the 继续 button rendered inside an
+   * AVAILABLE step column. PRD §5.2: AVAILABLE → ACTIVE is a user-driven
+   * transition (not auto-triggered) so the user retains control over
+   * when LLM generation kicks in. Pure-display callers (tests, docs)
+   * can omit this prop and the column falls back to the empty 3-slot
+   * visualization.
+   */
+  onAdvance?: (step: number) => void;
 }
 
 // Coordinate system (matches docs/design/canvas-reconstruction/code.html lines 226-371).
@@ -22,7 +31,7 @@ const COL_START_X = 300; // x coordinate where a step column's leftmost node sit
 const SLOT_Y: Record<Slot, number> = { a: 50, b: 200, c: 350 };
 const CENTER_Y = 200;
 
-export function TreeCanvas({ canvas }: Props) {
+export function TreeCanvas({ canvas, onAdvance }: Props) {
   // Guard against missing/non-array creative_path — same defensive pattern
   // as CreativeCanvasPage. Backend contract says it's always an array,
   // but the page should render (showing the root idea + nothing) rather
@@ -127,6 +136,31 @@ export function TreeCanvas({ canvas }: Props) {
                 />
               );
             })}
+            {s.state === "available" && onAdvance && (
+              // PRD §5.2: AVAILABLE → ACTIVE is user-triggered via this
+              // button. /next-step flips state to "active" and populates
+              // the 3 options. Centered at y=200 (CENTER_Y) to match
+              // where the "active" current-node sits, so the column
+              // looks consistent across the transition.
+              <button
+                type="button"
+                data-testid={`advance-step-${s.step}`}
+                onClick={() => onAdvance(s.step)}
+                className="absolute top-[150px] left-1/2 transform -translate-x-1/2 flex flex-col items-center group cursor-pointer"
+              >
+                <div className="w-14 h-14 rounded-full bg-surface-container border-2 border-primary border-dashed flex items-center justify-center group-hover:bg-surface-container-high group-hover:glow-active transition-all">
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-primary text-2xl"
+                  >
+                    arrow_forward
+                  </span>
+                </div>
+                <span className="font-label-sm text-label-sm text-primary font-bold mt-sm uppercase tracking-wider">
+                  继续
+                </span>
+              </button>
+            )}
             {s.state === "active" && (
               <div
                 data-testid={`step-${s.step}-current-node`}

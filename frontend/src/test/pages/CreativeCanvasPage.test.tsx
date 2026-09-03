@@ -309,6 +309,41 @@ describe("CreativeCanvasPage embedded mode", () => {
     fireEvent.click(screen.getByRole("button", { name: /形成概念/ }));
     await waitFor(() => expect(confirmCommit).toHaveBeenCalledTimes(1), { timeout: 3000 });
   });
+
+  it("wires the available-step 继续 button to nextStep on the hook", async () => {
+    // PRD §5.2: AVAILABLE → ACTIVE is user-triggered via the 继续 button
+    // TreeCanvas renders inside an available step column. Page wires
+    // nextStep as onAdvance; clicking must call it with the step number.
+    // Regression guard: if the page forgets to forward nextStep, the
+    // button becomes dead and the user gets stuck on step 1 forever
+    // (root cause of the "只有一个原始想法的点" user report).
+    const nextStep = vi.fn().mockResolvedValue(undefined);
+    const freshInit: CanvasV4State = {
+      ...baseCanvas,
+      creative_session: { current_step: 1, max_steps: 5, status: "active" },
+      creative_path: [
+        {
+          step: 1,
+          operation: null,
+          operation_reason: null,
+          options: [],
+          selected_option_id: null,
+          created_at: "2026-09-03T00:00:00",
+          selected_at: null,
+          regenerated_count: 0,
+          state: "available",
+        },
+      ],
+    };
+    mockUseCreativeCanvasV2.mockReturnValue({
+      ...defaultHookReturn(freshInit),
+      nextStep,
+    });
+    render(<CreativeCanvasPage projectId="proj_test" embedded />);
+    fireEvent.click(screen.getByTestId("advance-step-1"));
+    await waitFor(() => expect(nextStep).toHaveBeenCalledTimes(1));
+    expect(nextStep).toHaveBeenCalledWith(1);
+  });
 });
 
 // Workspace render crash regression: user reported

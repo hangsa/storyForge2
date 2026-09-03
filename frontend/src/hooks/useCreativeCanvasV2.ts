@@ -79,6 +79,12 @@ export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
     setLoadingStep(true);
     try {
       const resp = await api.postCanvasV2NextStep(projectId, { current_step: currentStep });
+      // Reload canvas so the step column transitions AVAILABLE → ACTIVE
+      // and the 3 freshly-generated options show up. Without this the
+      // TreeCanvas keeps showing the stale empty available column even
+      // though the backend has already populated options (the resp is
+      // not merged into canvas state).
+      await loadCanvas();
       return resp;
     } catch (e) {
       setError(e instanceof Error ? e.message : "next step failed");
@@ -86,7 +92,7 @@ export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
     } finally {
       setLoadingStep(false);
     }
-  }, [projectId]);
+  }, [projectId, loadCanvas]);
 
   const selectOption = useCallback(async (step: number, optionId: string) => {
     try {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { TreeCanvas } from "@/components/creative-canvas/TreeCanvas";
 import type { CanvasV4State } from "@/api/client";
 
@@ -150,5 +150,63 @@ describe("TreeCanvas", () => {
     // Renders the root + the (option-less) step column rather than crashing.
     expect(screen.getByTestId("idea-root-node")).toBeInTheDocument();
     expect(screen.getAllByTestId(/^step-column-\d+$/)).toHaveLength(1);
+  });
+
+  it("renders a 继续 button for steps in 'available' state and invokes onAdvance with the step number", () => {
+    // PRD §5.2: AVAILABLE → ACTIVE is triggered by the user clicking 继续.
+    // Previously there was no UI affordance, leaving step 1 stuck in
+    // 'available' forever after /init (init_session writes state='available'
+    // with empty options per v2_canvas.py:271-281). The button is the
+    // hand-off to /next-step which generates the 3 options + flips state
+    // to 'active'.
+    const freshlyInit: CanvasV4State = {
+      ...baseState,
+      creative_path: [
+        {
+          step: 1,
+          operation: null,
+          operation_reason: null,
+          options: [],
+          selected_option_id: null,
+          created_at: "2026-09-03T00:00:00",
+          selected_at: null,
+          regenerated_count: 0,
+          state: "available",
+        },
+      ],
+    };
+    const onAdvance = vi.fn();
+    render(<TreeCanvas canvas={freshlyInit} onAdvance={onAdvance} />);
+    const btn = screen.getByTestId("advance-step-1");
+    expect(btn).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(onAdvance).toHaveBeenCalledTimes(1);
+    expect(onAdvance).toHaveBeenCalledWith(1);
+  });
+
+  it("does not render the 继续 button when no onAdvance prop is provided", () => {
+    // Defensive: pure-display consumers (tests, docs, screenshots) should
+    // not break just because the click handler is missing. Render falls
+    // back to the existing 3-slot empty-letter visualization.
+    const freshlyInit: CanvasV4State = {
+      ...baseState,
+      creative_path: [
+        {
+          step: 1,
+          operation: null,
+          operation_reason: null,
+          options: [],
+          selected_option_id: null,
+          created_at: "2026-09-03T00:00:00",
+          selected_at: null,
+          regenerated_count: 0,
+          state: "available",
+        },
+      ],
+    };
+    render(<TreeCanvas canvas={freshlyInit} />);
+    expect(screen.queryByTestId("advance-step-1")).toBeNull();
+    // Falls back to the 3 empty slots (A/B/C labels).
+    expect(screen.getAllByTestId(/^option-node-1-[abc]$/)).toHaveLength(3);
   });
 });

@@ -4,7 +4,15 @@ import { PrimaryButton, PanelCard } from "@/components/ds";
 // TODO(canvas-recon Task 14): rewrite CreativeCanvasPage to use TreeCanvas.
 // Temporary stub keeps tsc happy while HorizontalPathCanvas migration completes.
 const HorizontalPathCanvas: React.FC<{ rootIdea: string; path: unknown[] }> = () => null;
-import { ActiveStepPanel } from "@/components/creative-canvas/ActiveStepPanel";
+// TODO(canvas-recon Task 14): rewrite ActiveStepPanel integration to use OptionCard.
+// Temporary stub keeps tsc happy while the migration completes.
+const ActiveStepPanel: React.FC<{
+  step: number;
+  operation: { type: string; name: string; reason: string };
+  options: unknown[];
+  disabled: boolean;
+  onSelect: (optionId: string) => void | Promise<void>;
+}> = () => null;
 import { QualityBar } from "@/components/creative-canvas/QualityBar";
 import { CanvasToolbar } from "@/components/creative-canvas/CanvasToolbar";
 import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
@@ -92,27 +100,15 @@ export default function CreativeCanvasPage() {
         {loadingStep && <div>生成选项中...</div>}
 
         {stepResponse && (
-          <ActiveStepPanel
-            step={stepResponse.step}
-            operation={stepResponse.operation}
-            options={stepResponse.options}
-            disabled={loadingStep}
-            onSelect={async (optionId) => {
-              setPendingNextStep(null);
-              await selectOption(stepResponse.step, optionId);
-              if (stepResponse.step < 5) {
-                const next = await nextStep(stepResponse.step + 1);
-                setPendingNextStep(next);
-              }
-            }}
-          />
+          <div data-testid="active-step-todo">
+            TODO(canvas-recon Task 14): OptionCard rewrite
+          </div>
         )}
 
         {canvas?.scores && (
           <QualityBar
             novelty={canvas.scores.novelty || 0}
             conflict={canvas.scores.conflict || 0}
-            storyPotential={canvas.scores.story_potential || 0}
           />
         )}
 

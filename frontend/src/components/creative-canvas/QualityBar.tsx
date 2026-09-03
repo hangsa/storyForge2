@@ -11,8 +11,8 @@ const toPct = (v: number) => Math.min(100, Math.max(0, Math.round(v * 100)));
 
 export function QualityBar({ novelty, conflict }: Props) {
   const items = [
-    { key: "novelty", label: "Novelty", value: novelty, color: "bg-primary" },
-    { key: "conflict", label: "Conflict", value: conflict, color: "bg-error" },
+    { key: "novelty", label: "Novelty", value: novelty, color: "bg-primary", labelColor: "text-surface-tint" },
+    { key: "conflict", label: "Conflict", value: conflict, color: "bg-error", labelColor: "text-error" },
   ];
   return (
     <div data-testid="quality-bar" className="flex flex-col gap-1 items-end">
@@ -22,7 +22,7 @@ export function QualityBar({ novelty, conflict }: Props) {
           data-testid={`quality-${item.key}`}
           className="flex flex-col gap-1 items-end"
         >
-          <span className="font-label-sm text-label-sm text-surface-tint">
+          <span className={`font-label-sm text-label-sm ${item.labelColor}`}>
             {item.label}: {toPct(item.value) / 10}/10
           </span>
           <div className="w-16 h-1 bg-surface-variant rounded-full overflow-hidden">

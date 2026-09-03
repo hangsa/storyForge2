@@ -203,9 +203,30 @@ export default function CreativeCanvasPage({
               );
             })}
           </div>
-          <p className="text-on-surface-variant text-sm mt-4 text-center">
-            为什么是「{activeStep.operation}」？{activeStep.operation_reason}
-          </p>
+          {/* AI recommendation rationale — PRD §15.1. Upgraded from a
+              single muted line to a callout-style block so users
+              actually read the reasoning before picking A/B/C. The
+              testid guards against regression to a plain paragraph. */}
+          <div
+            data-testid="operation-reason-callout"
+            className="mt-4 flex gap-3 items-start rounded-lg border border-primary/30 bg-primary-container/10 px-4 py-3"
+          >
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined text-primary text-xl mt-0.5 shrink-0"
+              style={{ fontVariationSettings: "'FILL' 1" }}
+            >
+              auto_awesome
+            </span>
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="text-xs uppercase tracking-wider font-label-sm text-primary font-bold">
+                为什么是「{activeStep.operation}」？
+              </span>
+              <p className="text-sm text-on-surface leading-relaxed">
+                {activeStep.operation_reason}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

@@ -344,6 +344,21 @@ describe("CreativeCanvasPage embedded mode", () => {
     await waitFor(() => expect(nextStep).toHaveBeenCalledTimes(1));
     expect(nextStep).toHaveBeenCalledWith(1);
   });
+
+  it("renders the AI-recommended-operation reasoning inside a callout-style block", async () => {
+    // PRD §15.1: "为什么是这个操作" 建立用户对 AI 的信任. Was a tiny
+    // muted line at the bottom of the active-step panel — easy to
+    // miss. Upgraded to a callout block with an icon so users
+    // actually read the rationale before picking A/B/C.
+    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
+    render(<CreativeCanvasPage projectId="proj_test" embedded />);
+    const callout = screen.getByTestId("operation-reason-callout");
+    expect(callout).toBeInTheDocument();
+    expect(callout).toHaveTextContent(/为什么是「fuse」/);
+    expect(callout).toHaveTextContent(/step 3 reason/);
+    // Class tokens that distinguish a styled callout from plain text.
+    expect(callout.className).toMatch(/rounded|border|bg-/);
+  });
 });
 
 // Workspace render crash regression: user reported

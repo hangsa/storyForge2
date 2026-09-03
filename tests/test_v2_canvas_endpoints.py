@@ -421,23 +421,35 @@ def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatc
 
 def test_next_step_prompt_renders_axis_hint_block(project, client, monkeypatch):
     """PRD §7: next-step template renders operation-specific axis guidance."""
-    from backend.api import v2_canvas
+    # Capture the user_prompt actually sent to the LLM router so we can
+    # verify the operation-aware axis block is in the live wire-up (not just
+    # in module-level tests of format_axis_hint_block).
+    captured: dict = {}
 
-    # Stub LLM call so /next-step can complete without a real router.
-    async def fake_llm_call(context):
-        return (
-            '{"operation": "twist", "operation_reason": "test",'
-            '"options": ['
-            '{"id": "opt_a", "title": "A", "premise": "p1", "logic": ""},'
-            '{"id": "opt_b", "title": "B", "premise": "p2", "logic": ""},'
-            '{"id": "opt_c", "title": "C", "premise": "p3", "logic": ""}'
-            ']}'
-        )
+    class _FakeRouter:
+        async def complete(self, *, tier, system, user, model, max_tokens, temperature):
+            captured["tier"] = tier
+            captured["system"] = system
+            captured["user"] = user
+            captured["model"] = model
+            return (
+                '{"operation": "twist", "operation_reason": "test",'
+                '"options": ['
+                '{"id": "opt_a", "title": "A", "premise": "p1", "logic": ""},'
+                '{"id": "opt_b", "title": "B", "premise": "p2", "logic": ""},'
+                '{"id": "opt_c", "title": "C", "premise": "p3", "logic": ""}'
+                ']}'
+            )
 
-    async def fake_retry(llm_call, context, max_attempts=2):
-        return json.loads(await fake_llm_call(context))
+    # `_next_step_impl` does `from backend.llm.model_router import
+    # get_model_router` inside the function body, so patching at the
+    # v2_canvas module level would miss it. Patch at the source module
+    # instead — that's where the binding is actually resolved.
+    from backend.llm import model_router
 
-    monkeypatch.setattr(v2_canvas, "_call_llm_with_retry", fake_retry)
+    monkeypatch.setattr(
+        model_router, "get_model_router", lambda: _FakeRouter(),
+    )
 
     init_resp = client.post(
         f"/creative/canvas/{project}/session/init",
@@ -451,9 +463,38 @@ def test_next_step_prompt_renders_axis_hint_block(project, client, monkeypatch):
     )
     assert ns.status_code == 200, ns.text
 
-    # Verify the YAML template still has the placeholders + the
-    # option_generator module produces the expected text for at least one
-    # operation.
+    # The user prompt sent to the LLM must contain the operation-aware axis
+    # block produced by the canonical helper (not the dead YAML
+    # placeholders). On a fresh init compute_op_hint() typically returns
+    # "twist" for step 1 — check the wire-up against format_axis_hint_block
+    # rather than hard-coding a particular op, so the assertion stays
+    # stable if the hint heuristic shifts.
+    from backend.creative_os.option_generator import format_axis_hint_block
+    user_prompt = captured["user"]
+    assert "## 三选项差异轴" in user_prompt, user_prompt
+    assert "A（基础）" in user_prompt
+    assert "B（变体）" in user_prompt
+    assert "C（极端）" in user_prompt
+    assert "三个选项必须沿此轴变化" in user_prompt
+    # Unrendered YAML placeholders MUST NOT leak into the live prompt — that
+    # was the original code-review bug.
+    assert "{axis_hint_a}" not in user_prompt
+    assert "{axis_hint_b}" not in user_prompt
+    assert "{axis_hint_c}" not in user_prompt
+    # The block text in the live prompt should match what the canonical
+    # helper would produce for whatever op hint was chosen. Grep for the
+    # helper output to confirm the wire-up is actually using it (not
+    # re-implementing the formatting inline).
+    op_hint_used = captured_user_prompt_op_hint(user_prompt)
+    expected_block = format_axis_hint_block(op_hint_used)
+    assert expected_block in user_prompt, (
+        f"live prompt missing canonical axis block\n"
+        f"  expected substring: {expected_block!r}\n"
+        f"  in user_prompt:    {user_prompt!r}"
+    )
+
+    # Verify the YAML template still has the placeholders (they're now
+    # documentation only — the wire-up uses the helper, not .format()).
     yaml_text = Path("backend/prompts/canvas_v2_next_step.yaml").read_text(
         encoding="utf-8",
     )
@@ -461,12 +502,21 @@ def test_next_step_prompt_renders_axis_hint_block(project, client, monkeypatch):
     assert "{axis_hint_b}" in yaml_text
     assert "{axis_hint_c}" in yaml_text
 
-    from backend.creative_os.option_generator import format_axis_hint_block
-    fuse_block = format_axis_hint_block("fuse")
+    helper_block = format_axis_hint_block("fuse")
     # The module is operation-agnostic — only the bare operation name (e.g.
     # "fuse") appears in the block, not its Chinese translation ("融合").
     # Axis descriptions may themselves mention "融合" (e.g. "表面元素融合"),
     # so check the operation name appears with parentheses-style framing.
-    assert "fuse 操作" in fuse_block
-    assert "A（基础）" in fuse_block
+    assert "fuse 操作" in helper_block
+    assert "A（基础）" in helper_block
+
+
+def captured_user_prompt_op_hint(user_prompt: str) -> str:
+    """Extract the operation name from the rendered `## 三选项差异轴（<op> 操作）`
+    header so we can compare against `format_axis_hint_block(op)`."""
+    import re
+
+    match = re.search(r"## 三选项差异轴（(\w+) 操作）", user_prompt)
+    assert match, f"could not parse op from prompt: {user_prompt!r}"
+    return match.group(1)
 

@@ -32,6 +32,7 @@ from backend.creative_os.state_machine import (
     transition_step_state,
 )
 from backend.creative_os.op_hint import compute_op_hint
+from backend.creative_os.option_generator import get_axis_hint
 
 router = APIRouter(prefix="/creative/canvas/{project_id}", tags=["canvas-v2"])
 
@@ -374,12 +375,25 @@ async def _next_step_impl(project_id: str, current_step: int) -> dict:
 
     async def llm_call(context):
         router = get_model_router()
+        # PRD §7: inject operation-aware A/B/C axis guidance so the three
+        # generated options vary along the operation's axis instead of
+        # being three rephrasings. `hint` is the deterministic op-hint from
+        # compute_op_hint() — same source the LLM is told to consider via
+        # candidate_operation_hint. If the LLM flips the operation, the
+        # axis still applies to the originally-hinted op.
+        hint_for_axis = context.get("hint") or "twist"
+        axis = get_axis_hint(hint_for_axis)
         user_prompt = (
             f"current_concept: {context.get('concept', {})}\n"
             f"selected_path: {context.get('selected_path', [])}\n"
             f"current_step: {context.get('step')}\n"
             f"max_steps: 5\n"
             f"candidate_operation_hint: {context.get('hint')}\n"
+            f"\n## 三选项差异轴\n"
+            f"- A（基础）：{axis['A']}\n"
+            f"- B（变体）：{axis['B']}\n"
+            f"- C（极端）：{axis['C']}\n"
+            f"\n三个选项必须沿此轴变化，禁止仅是措辞不同。\n"
         )
         system_prompt = _load_next_step_prompt()["system"]
         return await router.complete(

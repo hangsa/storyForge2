@@ -418,3 +418,55 @@ def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatc
     assert "selected_path" in cnd["canvas_snapshot"]
     assert len(cnd["canvas_snapshot"]["selected_path"]) == 5
 
+
+def test_next_step_prompt_renders_axis_hint_block(project, client, monkeypatch):
+    """PRD §7: next-step template renders operation-specific axis guidance."""
+    from backend.api import v2_canvas
+
+    # Stub LLM call so /next-step can complete without a real router.
+    async def fake_llm_call(context):
+        return (
+            '{"operation": "twist", "operation_reason": "test",'
+            '"options": ['
+            '{"id": "opt_a", "title": "A", "premise": "p1", "logic": ""},'
+            '{"id": "opt_b", "title": "B", "premise": "p2", "logic": ""},'
+            '{"id": "opt_c", "title": "C", "premise": "p3", "logic": ""}'
+            ']}'
+        )
+
+    async def fake_retry(llm_call, context, max_attempts=2):
+        return json.loads(await fake_llm_call(context))
+
+    monkeypatch.setattr(v2_canvas, "_call_llm_with_retry", fake_retry)
+
+    init_resp = client.post(
+        f"/creative/canvas/{project}/session/init",
+        json={"prompt": "p", "genre_primary": "xianxia"},
+    )
+    assert init_resp.status_code == 200, init_resp.text
+
+    ns = client.post(
+        f"/creative/canvas/{project}/session/next-step",
+        json={"current_step": 1},
+    )
+    assert ns.status_code == 200, ns.text
+
+    # Verify the YAML template still has the placeholders + the
+    # option_generator module produces the expected text for at least one
+    # operation.
+    yaml_text = Path("backend/prompts/canvas_v2_next_step.yaml").read_text(
+        encoding="utf-8",
+    )
+    assert "{axis_hint_a}" in yaml_text
+    assert "{axis_hint_b}" in yaml_text
+    assert "{axis_hint_c}" in yaml_text
+
+    from backend.creative_os.option_generator import format_axis_hint_block
+    fuse_block = format_axis_hint_block("fuse")
+    # The module is operation-agnostic — only the bare operation name (e.g.
+    # "fuse") appears in the block, not its Chinese translation ("融合").
+    # Axis descriptions may themselves mention "融合" (e.g. "表面元素融合"),
+    # so check the operation name appears with parentheses-style framing.
+    assert "fuse 操作" in fuse_block
+    assert "A（基础）" in fuse_block
+

@@ -27,3 +27,10 @@ user: |
   current_step: {current_step}
   max_steps: {max_steps}
   candidate_operation_hint: {candidate_operation_hint}
+
+  ## 三选项差异轴
+  - A（基础）：{axis_hint_a}
+  - B（变体）：{axis_hint_b}
+  - C（极端）：{axis_hint_c}
+
+  三个选项必须沿此轴变化，禁止仅是措辞不同。

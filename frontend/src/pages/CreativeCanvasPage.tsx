@@ -75,6 +75,7 @@ export default function CreativeCanvasPage({
     return embedded ? (
       <EmptyState
         loading={loadingStep}
+        embedded={embedded}
         onInit={(prompt, genre) => {
           initSession({ prompt, genre_primary: genre }).catch(() => {});
         }}
@@ -83,6 +84,7 @@ export default function CreativeCanvasPage({
       <div data-testid="creative-canvas-page" className="bg-surface-container-lowest min-h-screen p-6">
         <EmptyState
           loading={loadingStep}
+          embedded={embedded}
           onInit={(prompt, genre) => {
             initSession({ prompt, genre_primary: genre }).catch(() => {
               // Hook already surfaces errors via its own error state; the

@@ -14,4 +14,18 @@ describe("EmptyState", () => {
     expect(screen.getByPlaceholderText(/一个关于|用一句话/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /开始|初始化/ })).toBeInTheDocument();
   });
+
+  it("applies max-w-2xl mx-auto by default (standalone layout)", () => {
+    render(<EmptyState />);
+    const panel = screen.getByTestId("empty-state");
+    expect(panel.className).toContain("max-w-2xl");
+    expect(panel.className).toContain("mx-auto");
+  });
+
+  it("drops max-w/mx-auto when embedded=true (matches divergence layout)", () => {
+    render(<EmptyState embedded />);
+    const panel = screen.getByTestId("empty-state");
+    expect(panel.className).not.toContain("max-w-2xl");
+    expect(panel.className).not.toContain("mx-auto");
+  });
 });

@@ -258,6 +258,26 @@ describe("CreativeCanvasPage embedded mode", () => {
     expect(screen.getByRole("heading", { name: /Creative Canvas/ })).toBeInTheDocument();
   });
 
+  it("forwards embedded=true to EmptyState (no max-w-2xl) when canvas is null", () => {
+    // When canvas is null the page renders <EmptyState>. In embedded mode
+    // the EmptyState drops its max-w-2xl/mx-auto constraint so it fills
+    // the wizard main area (no left/right whitespace). Standalone keeps
+    // the centered narrow look.
+    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(null));
+    render(<CreativeCanvasPage projectId="proj_test" embedded />);
+    const panel = screen.getByTestId("empty-state");
+    expect(panel.className).not.toContain("max-w-2xl");
+    expect(panel.className).not.toContain("mx-auto");
+  });
+
+  it("forwards embedded=false to EmptyState (keeps max-w-2xl) when canvas is null (standalone)", () => {
+    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(null));
+    render(<CreativeCanvasPage projectId="proj_test" />);
+    const panel = screen.getByTestId("empty-state");
+    expect(panel.className).toContain("max-w-2xl");
+    expect(panel.className).toContain("mx-auto");
+  });
+
   it("invokes onCommitSuccess after confirmCommit resolves", async () => {
     const onCommitSuccess = vi.fn();
     const confirmCommit = vi.fn().mockResolvedValue(undefined);

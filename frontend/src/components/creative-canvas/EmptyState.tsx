@@ -4,18 +4,28 @@ import { PrimaryButton } from "@/components/ds";
 interface Props {
   onInit?: (prompt: string, genre: string) => void;
   loading?: boolean;
+  /**
+   * When true (wizard-embedded mode), drop the max-w-2xl/mx-auto
+   * centering so the panel fills the wizard's main area width —
+   // matches the divergence surface layout (which is full-width
+   // with no max-w constraint). Standalone mode keeps the centered
+   * narrow look (max-w-2xl, ~672px).
+   */
+  embedded?: boolean;
 }
 
 const GENRES = ["仙侠", "科幻", "都市", "悬疑", "历史", "玄幻"];
 
-export function EmptyState({ onInit, loading = false }: Props) {
+export function EmptyState({ onInit, loading = false, embedded = false }: Props) {
   const [prompt, setPrompt] = useState("");
   const [genre, setGenre] = useState("xianxia");
 
   return (
     <div
       data-testid="empty-state"
-      className="glass-panel rounded-xl p-xl max-w-2xl mx-auto space-y-lg mt-xl"
+      className={`glass-panel rounded-xl p-xl space-y-lg mt-xl ${
+        embedded ? "" : "max-w-2xl mx-auto"
+      }`}
     >
       <div>
         <h2 className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface">

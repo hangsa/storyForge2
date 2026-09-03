@@ -18,7 +18,7 @@ regeneration because `novelty < 0.5`.
 """
 from dataclasses import dataclass, field
 
-CONFLFLICT_KEYWORDS = {"冲突", "矛盾", "对立", "对抗", "紧张", "挣扎", "两难", "vs"}
+CONFLICT_KEYWORDS = {"冲突", "矛盾", "对立", "对抗", "紧张", "挣扎", "两难", "vs"}
 NOVELTY_THRESHOLD = 0.5
 
 
@@ -55,10 +55,10 @@ def check_consistency(concept: dict) -> CheckResult:
                                 "Regenerate with at least one protagonist."))
 
     core_conflict = concept.get("core_conflict", "")
-    if core_conflict and not any(kw in core_conflict for kw in CONFLFLICT_KEYWORDS):
+    if core_conflict and not any(kw in core_conflict for kw in CONFLICT_KEYWORDS):
         failures.append(Failure(
             "conflict",
-            f"core_conflict lacks conflict keywords ({sorted(CONFLFLICT_KEYWORDS)})",
+            f"core_conflict lacks conflict keywords ({sorted(CONFLICT_KEYWORDS)})",
             "Reframe conflict in terms of opposition/tension.",
         ))
 

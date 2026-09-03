@@ -736,7 +736,6 @@ def test_next_step_auto_regenerates_on_consistency_fail(project, client, monkeyp
         regen because current_concept.novelty is 0.0 by default).
     """
     from backend.api import v2_canvas
-    from backend.creative_os import consistency_check as cc_mod
     from backend.creative_os.consistency_check import CheckResult, Failure
 
     # 1. Stub _call_llm_with_retry so the initial + regen LLM calls return
@@ -757,8 +756,8 @@ def test_next_step_auto_regenerates_on_consistency_fail(project, client, monkeyp
     monkeypatch.setattr(v2_canvas, "_call_llm_with_retry", fake_retry)
 
     # 2. Patch check_consistency on the v2_canvas module (which imports it
-    #    by name at module load — patching cc_mod alone won't rebind the
-    #    local reference inside _next_step_impl).
+    #    by name at module load — patching the consistency_check module
+    #    alone won't rebind the local reference inside _next_step_impl).
     def fake_check(concept):
         # Force a non-novelty failure so the regen branch fires.
         return CheckResult(

@@ -539,12 +539,31 @@ async def _regenerate_options_with_hint(
     )
     axis_block = format_axis_hint_block(operation)
 
+    # Mirror _next_step_impl's curated `selected_path`: build a minimal
+    # projection of canvas['creative_path'] containing only the chosen
+    # option's title+premise per completed step. Avoids bloating the LLM
+    # prompt with full canvas internals (options, scores, _etag, ...).
+    selected_path_projection = []
+    for entry in canvas["creative_path"]:
+        sel_id = entry.get("selected_option_id")
+        if not sel_id:
+            continue
+        chosen = next(
+            (o for o in entry.get("options", []) if o.get("id") == sel_id),
+            None,
+        )
+        if chosen:
+            selected_path_projection.append({
+                "title": chosen.get("title", ""),
+                "premise": chosen.get("premise", ""),
+            })
+
     async def llm_call(_context):
         router = get_model_router()
         user_prompt = (
             failure_hint
             + f"current_concept: {canvas['current_concept']}\n"
-            + f"selected_path: {[o for o in canvas['creative_path']]}\n"
+            + f"selected_path: {selected_path_projection}\n"
             + f"current_step: {current_step}\n"
             + f"max_steps: 5\n"
             + f"candidate_operation_hint: {hint}\n"
@@ -560,7 +579,18 @@ async def _regenerate_options_with_hint(
             temperature=0.7,
         )
 
-    parsed = await _call_llm_with_retry(llm_call, {})
+    try:
+        parsed = await _call_llm_with_retry(llm_call, {})
+    except RuntimeError as exc:
+        # _call_llm_with_retry raises RuntimeError after JSON retry
+        # exhaustion. The caller already wrote the initial LLM-pass
+        # options to disk; on regen failure we ship those initial options
+        # rather than crashing the HTTP request.
+        _logger.warning(
+            "Regen skipped — LLM call failed for project=%s step=%d dims=%s: %s",
+            project_id, current_step, failure_dims, exc,
+        )
+        return
 
     # Renumber option ids to be step-scoped (mirrors _next_step_impl).
     new_options = []

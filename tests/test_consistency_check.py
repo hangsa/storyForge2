@@ -7,8 +7,6 @@ Validates check_consistency() across all five dimensions:
 - Conflict (core_conflict contains opposition keywords)
 - Novelty (concept.novelty ≥ 0.5)
 """
-import pytest
-
 from backend.creative_os.consistency_check import check_consistency
 
 

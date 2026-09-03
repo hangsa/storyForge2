@@ -62,8 +62,10 @@ function Inner({ projectId }: Props) {
           completedStep1Surfaces.push("divergence");
         }
 
-        // Canvas surface completion: CanvasV4State.committed is the
-        // semantic signal; committed_at non-null is a defensive backstop.
+        // Canvas surface completion: committed is the semantic signal;
+        // committed_at !== null is a defensive backstop ensuring both
+        // flags agree on read (the backend stamps both atomically today,
+        // but defense-in-depth for disk-derived signals).
         const canvasPayload = canvasState.status === "fulfilled" ? canvasState.value : null;
         if (canvasPayload?.committed === true && canvasPayload.committed_at !== null) {
           if (!completed.includes(1)) completed.push(1);
@@ -89,6 +91,9 @@ function Inner({ projectId }: Props) {
         } else {
           wizard.markPrefillComplete();
         }
+        // Note: HYDRATE_STEP1_SURFACES does not flip prefillComplete; if
+        // only step-1 surfaces completed (no step 2+ files), the
+        // markPrefillComplete() above covers the gate.
         if (completedStep1Surfaces.length > 0) {
           wizard.hydrateStep1Surfaces(completedStep1Surfaces);
         }

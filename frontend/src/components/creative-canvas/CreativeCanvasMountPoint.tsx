@@ -13,13 +13,10 @@ interface Props {
  * wizard via `markStep1SurfaceCompleted("canvas")` so step 2
  * (概念 DNA) unlocks.
  *
- * The wrapper keeps `data-testid="creative-canvas-mount-point"` so the
- * existing WorkspaceWizardPanel render-branch test continues to work —
- * it asserts the wizard sidebar item click switches the main area to
- * the canvas surface, and this testid is its anchor.
- *
- * Task 4 of 6 — canvas-wizard integration.
- * Spec: docs/superpowers/specs/2026-09-03-canvas-wizard-integration-design.md §4.3
+ * The `data-testid="creative-canvas-mount-point"` is part of the
+ * wizard's render-branch public contract — WorkspaceWizardPanel tests
+ * assert the sidebar item click switches the main area to the canvas
+ * surface via this anchor.
  */
 export default function CreativeCanvasMountPoint({ projectId }: Props) {
   const wizard = useWizard();

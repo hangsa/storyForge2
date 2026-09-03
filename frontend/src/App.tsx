@@ -18,11 +18,7 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ChapterReviewPage = lazy(() => import("./pages/ChapterReviewPage"));
 const ImpactAnalysisPage = lazy(() => import("./pages/ImpactAnalysisPage"));
 const StoryOSPage = lazy(() => import("./pages/StoryOSPage"));
-// CreativeCanvasPage was removed from the route tree on 2026-09-02 while
-// the feature is being refactored (see docs/design/creative-canvas-module.md).
-// The component file itself is kept on disk. When the refactor lands,
-// re-introduce the lazy import and the route below.
-// const CreativeCanvasPage = lazy(() => import("./pages/CreativeCanvasPage"));
+const CreativeCanvasPage = lazy(() => import("./pages/CreativeCanvasPage"));
 const BranchSimulationPage = lazy(() => import("./pages/BranchSimulationPage"));
 const Stage3Layout = lazy(() => import("./components/layout/Stage3Layout"));
 const WizardDeepLinkPage = lazy(() => import("./pages/WizardDeepLinkPage"));
@@ -116,7 +112,13 @@ function App() {
           />
           <Route
             path="canvas"
-            element={<Navigate to=".." replace />}
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <StageWrapper name="stage1-canvas">
+                  <CreativeCanvasPage />
+                </StageWrapper>
+              </Suspense>
+            }
           />
         </Route>
         <Route

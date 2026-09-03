@@ -310,3 +310,87 @@ describe("CreativeCanvasPage embedded mode", () => {
     await waitFor(() => expect(confirmCommit).toHaveBeenCalledTimes(1), { timeout: 3000 });
   });
 });
+
+// Workspace render crash regression: user reported
+// "Cannot read properties of undefined (reading 'find')" after clicking
+// 开始创意推演 on the canvas surface. The crash was a render-time
+// throw from `canvas.creative_path.find(...)` (page:100), `activeStep
+// .options.find(...)` (page:146), or `s.options.find(...)` (TreeCanvas
+// :110) when the backend response shape drifted from the TS contract.
+// Page now treats a missing/non-array creative_path or options as [] so
+// the user sees an empty tree + no active step instead of a hard crash.
+describe("CreativeCanvasPage malformed-canvas regression", () => {
+  it("does not crash when canvas.creative_path is undefined", () => {
+    const malformed = {
+      ...baseCanvas,
+      creative_path: undefined as never,
+    };
+    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(malformed));
+    expect(() =>
+      render(
+        <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+          <Routes>
+            <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    ).not.toThrow();
+    // Tree still renders the root idea — empty step list rather than crash.
+    expect(screen.getByTestId("tree-canvas")).toBeInTheDocument();
+    // No active-step panel since no active step exists in cpath.
+    expect(screen.queryByTestId("active-step-panel")).toBeNull();
+  });
+
+  it("does not crash when activeStep.options is undefined", () => {
+    const malformed = {
+      ...baseCanvas,
+      creative_path: [
+        // Active step but options is undefined — page:146 previously threw
+        {
+          ...baseCanvas.creative_path[2],
+          options: undefined as never,
+          state: "active" as const,
+        },
+      ],
+    };
+    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(malformed));
+    expect(() =>
+      render(<CreativeCanvasPage projectId="proj_test" embedded />),
+    ).not.toThrow();
+    // Active step panel still renders (3 slots), each OptionCard falls back
+    // to undefined option and is skipped via the `if (!option) return null`
+    // guard. With options=[undefined x3], no option-card-* testid appears
+    // but the panel container does — sanity check it didn't throw.
+    expect(screen.getByTestId("active-step-panel")).toBeInTheDocument();
+  });
+
+  it("does not crash on freshly-init canvas (state='available', options=[])", () => {
+    // Mirror what backend/api/v2_canvas.py:271 emits after init — the
+    // step exists with state="available" and empty options, not the
+    // "completed" or "active" states the existing fixtures assume.
+    const freshInit: CanvasV4State = {
+      ...baseCanvas,
+      creative_session: { current_step: 1, max_steps: 5, status: "active" },
+      creative_path: [
+        {
+          step: 1,
+          operation: null,
+          operation_reason: null,
+          options: [],
+          selected_option_id: null,
+          created_at: "2026-09-03T00:00:00",
+          selected_at: null,
+          regenerated_count: 0,
+          state: "available",
+        },
+      ],
+    };
+    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(freshInit));
+    expect(() =>
+      render(<CreativeCanvasPage projectId="proj_test" embedded />),
+    ).not.toThrow();
+    expect(screen.getByTestId("tree-canvas")).toBeInTheDocument();
+    // No active step → no panel
+    expect(screen.queryByTestId("active-step-panel")).toBeNull();
+  });
+});

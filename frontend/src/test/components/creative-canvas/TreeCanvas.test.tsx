@@ -126,4 +126,29 @@ describe("TreeCanvas", () => {
     const currentNode = screen.getByTestId("step-3-current-node");
     expect(currentNode.className).toMatch(/animate-pulse|glow-active/);
   });
+
+  it("does not crash when a step's options array is undefined", () => {
+    // Defense-in-depth: backend contract says options is always [] or
+    // populated, but a partial / mid-migration payload could arrive with
+    // options: undefined. TreeCanvas previously called
+    // `s.options.findIndex(...)` and `s.options.find(...)` unguarded,
+    // which threw "Cannot read properties of undefined (reading 'find')"
+    // and tripped the workspace StageErrorBoundary. See
+    // repro_canvas_crash.test.tsx for the page-level repro.
+    const malformed: CanvasV4State = {
+      ...baseState,
+      creative_path: [
+        {
+          ...baseState.creative_path[0],
+          // cast as never — simulating a malformed server response
+          options: undefined as never,
+          selected_option_id: null,
+        },
+      ],
+    };
+    expect(() => render(<TreeCanvas canvas={malformed} />)).not.toThrow();
+    // Renders the root + the (option-less) step column rather than crashing.
+    expect(screen.getByTestId("idea-root-node")).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^step-column-\d+$/)).toHaveLength(1);
+  });
 });

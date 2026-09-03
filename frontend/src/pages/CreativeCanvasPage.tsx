@@ -97,10 +97,14 @@ export default function CreativeCanvasPage({
     );
   }
 
-  const activeStep = canvas.creative_path.find((s) => s.state === "active");
-  const completedCount = canvas.creative_path.filter(
-    (s) => s.state === "completed"
-  ).length;
+  // Guard against a backend response where creative_path is missing or
+  // not yet an array (e.g., mid-migration, manual disk edit, schema
+  // drift) — the TypeScript type lies about runtime safety. Treating it
+  // as [] lets the user keep the canvas on disk and re-trigger init via
+  // the wizard's reset flow, instead of crashing the render tree.
+  const cpath = Array.isArray(canvas.creative_path) ? canvas.creative_path : [];
+  const activeStep = cpath.find((s) => s?.state === "active");
+  const completedCount = cpath.filter((s) => s?.state === "completed").length;
 
   // Header defaults to "twist" when no active step exists yet (committed or
   // pre-init states) so the pill stays populated.
@@ -143,7 +147,11 @@ export default function CreativeCanvasPage({
             {(["A", "B", "C"] as const).map((slot) => {
               // Option id format: opt_{step}_{slot} (backend renumbers the
               // LLM-produced opt_a/b/c → opt_{step}_a/b/c in v2_canvas.py).
-              const option = activeStep.options.find(
+              // Guard options against undefined — same defensive pattern as
+              // cpath above; otherwise a malformed active step throws on
+              // ".find()" and trips the StageErrorBoundary.
+              const activeOptions = Array.isArray(activeStep.options) ? activeStep.options : [];
+              const option = activeOptions.find(
                 (o) => o.id === `opt_${activeStep.step}_${slot.toLowerCase()}`
               ) as CreativeOption | undefined;
               if (!option) return null;

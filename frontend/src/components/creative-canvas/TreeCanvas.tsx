@@ -23,7 +23,11 @@ const SLOT_Y: Record<Slot, number> = { a: 50, b: 200, c: 350 };
 const CENTER_Y = 200;
 
 export function TreeCanvas({ canvas }: Props) {
-  const steps = canvas.creative_path;
+  // Guard against missing/non-array creative_path — same defensive pattern
+  // as CreativeCanvasPage. Backend contract says it's always an array,
+  // but the page should render (showing the root idea + nothing) rather
+  // than crash if a malformed payload reaches us.
+  const steps = Array.isArray(canvas.creative_path) ? canvas.creative_path : [];
 
   // Resolve each step's selected option → "a"/"b"/"c".
   // Walk the options array by index rather than parsing the option id —
@@ -32,8 +36,9 @@ export function TreeCanvas({ canvas }: Props) {
   // a real selected option into a "phantom root connector".
   const selectedSlotByStep: Record<number, Slot | null> = {};
   steps.forEach((s) => {
-    const selIdx = s.selected_option_id
-      ? s.options.findIndex((o) => o.id === s.selected_option_id)
+    const stepOptions = Array.isArray(s?.options) ? s.options : [];
+    const selIdx = s?.selected_option_id
+      ? stepOptions.findIndex((o) => o.id === s.selected_option_id)
       : -1;
     selectedSlotByStep[s.step] =
       selIdx >= 0 && selIdx < 3 ? (["a", "b", "c"][selIdx] as Slot) : null;
@@ -107,7 +112,8 @@ export function TreeCanvas({ canvas }: Props) {
             className="w-[200px] flex flex-col justify-between py-[25px] h-[400px] relative"
           >
             {(["a", "b", "c"] as Slot[]).map((slot) => {
-              const opt = s.options.find((o) => o.id === `opt_${s.step}_${slot}`);
+              const stepOptions = Array.isArray(s?.options) ? s.options : [];
+              const opt = stepOptions.find((o) => o.id === `opt_${s.step}_${slot}`);
               const isSelected = s.selected_option_id === `opt_${s.step}_${slot}`;
               const isFaded = !isSelected && s.state === "completed";
               return (

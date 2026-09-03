@@ -26,6 +26,11 @@ interface UseCreativeCanvasV2 {
   onReset: () => void;
   closeResetDialog: () => void;
   confirmReset: () => Promise<void>;
+  // Pre-commit (added in Task 12 — PreCommitSummary)
+  showPreCommit: boolean;
+  onCommitClick: () => void;
+  closePreCommit: () => void;
+  confirmCommit: () => Promise<void>;
 }
 
 // Reset-confirm-dialog state added in Task 11 to back ResetConfirmDialog.
@@ -39,6 +44,7 @@ export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
   const [loadingStep, setLoadingStep] = useState(false);
   const [committedAt, setCommittedAt] = useState<string | null>(null);
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const [showPreCommit, setShowPreCommit] = useState(false);
 
   const loadCanvas = useCallback(async () => {
     setStatus("loading");
@@ -114,6 +120,15 @@ export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
     }
   }, [projectId, loadCanvas]);
 
+  // Pre-commit (PRD §18.3): gate commitCanvas() behind a confirmation dialog.
+  // confirmCommit closes the modal then runs the existing commitCanvas flow.
+  const onCommitClick = useCallback(() => setShowPreCommit(true), []);
+  const closePreCommit = useCallback(() => setShowPreCommit(false), []);
+  const confirmCommit = useCallback(async () => {
+    setShowPreCommit(false);
+    await commitCanvas();
+  }, [commitCanvas]);
+
   // canCommit: spec §7.5
   const cpath = canvas?.creative_path ?? [];
   const completed = cpath.filter((p) => p.state === "completed");
@@ -129,5 +144,6 @@ export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
     status, canvas, error, loadingStep, committedAt, canCommit,
     loadCanvas, initSession, nextStep, selectOption, commitCanvas,
     showResetDialog, onReset, closeResetDialog, confirmReset,
+    showPreCommit, onCommitClick, closePreCommit, confirmCommit,
   };
 }

@@ -283,4 +283,10 @@
   .fact-guard-row {
     border-radius: 0;
   }
+
+  /* Creative Canvas — primary glow ring for active option / current step */
+  .glow-active {
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.45),
+      0 0 4px rgba(56, 189, 248, 0.6);
+  }
 }

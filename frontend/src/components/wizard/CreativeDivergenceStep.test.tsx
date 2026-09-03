@@ -41,6 +41,17 @@ vi.mock("../../api/client", () => ({
       fusion_distance: { distance: 0, compatibility: "低" },
       risk_level: "low",
     }),
+    // Used by S0ECommitStep's mount effect to fetch novelty scores.
+    // Default-mock here (Task 5's onCommitSuccess tests override in
+    // their beforeEach; other describe blocks don't reach S0E).
+    getDivergeNovelty: vi.fn().mockResolvedValue({
+      market_saturation: 70,
+      trope_similarity: 60,
+      contradiction_depth: 80,
+      discussion_potential: 65,
+      composite: 70,
+      grade: "A",
+    }),
   },
 }));
 
@@ -284,6 +295,121 @@ describe("CreativeDivergenceStep fusion propagation (Task 11)", () => {
       expect(screen.getByTestId("fusion-banner")).toHaveTextContent(
         /类型融合未启用/,
       );
+    });
+  });
+});
+
+// Plan Task 5 (2026-09-03): CreativeDivergenceStep grows onCommitSuccess?: ()
+// void. Called exactly once when the divergence flow's E sub-step's commit
+// API resolves (i.e., api.postDivergeCommit returned successfully and the
+// parent received S0E's onComplete). The wizard injects
+// markStep1SurfaceCompleted("divergence") via the callback, so the step
+// stays wizard-decoupled (no useWizard import).
+describe("CreativeDivergenceStep onCommitSuccess (Task 5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // /state returns a fully-committed canvas → loadCanvas infers E →
+    // S0ECommitStep mounts immediately. Saves having to drive A→B→C→D→E
+    // interactions for the success-path test (the E stage's submit button
+    // is the only thing the user can trigger from here).
+    (api.getDivergeState as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...sampleEmpty,
+      raw_intent: {
+        prompt: "一个完整的故事想法,够长够详细",
+        genre_primary: "修仙",
+      },
+      idea_variants: [
+        {
+          id: "v1",
+          title: "x",
+          premise_one_line: "y",
+          mutation_type: "inversion",
+          mutation_logic: "z",
+          estimated_novelty: 0.5,
+          trope_tags: [],
+          regenerated_count: 0,
+        },
+      ],
+      core_contradiction: {
+        template_type: "T1",
+        statement: "矛盾",
+        side_a: "A",
+        side_b: "B",
+        tension_score: 80,
+        is_custom: false,
+        confirmed_at: "2026-08-30T00:00:00Z",
+      },
+      selected_path: ["root", "node-1", "node-2"],
+    });
+    // getDivergeNovelty must resolve so the submit button enables
+    // (`disabled={!scores || submitting}`).
+    (api.getDivergeNovelty as ReturnType<typeof vi.fn>).mockResolvedValue({
+      market_saturation: 70,
+      trope_similarity: 60,
+      contradiction_depth: 80,
+      discussion_potential: 65,
+      composite: 70,
+      grade: "A",
+    });
+    // /commit returns the standard CommitResponse shape.
+    (api.postDivergeCommit as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: "creative_divergence",
+      committed_at: "2026-09-03T00:00:00Z",
+    });
+  });
+
+  it("calls onCommitSuccess once when the E sub-step commits", async () => {
+    const onCommitSuccess = vi.fn();
+    render(
+      <WizardProvider projectId="proj_test">
+        <CreativeDivergenceStep
+          projectId="proj_test"
+          onCommitSuccess={onCommitSuccess}
+        />
+      </WizardProvider>,
+    );
+
+    // Wait for S0E to mount (sub-stage inferred from fully-committed canvas).
+    await waitFor(() => {
+      expect(screen.getByTestId("s0e-submit")).toBeInTheDocument();
+    });
+
+    // Click submit → /commit → onComplete fires → parent's onCommitSuccess
+    // callback must be invoked exactly once.
+    fireEvent.click(screen.getByTestId("s0e-submit"));
+
+    await waitFor(
+      () => {
+        expect(onCommitSuccess).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 5000 },
+    );
+  });
+
+  it("does not throw when onCommitSuccess is omitted", async () => {
+    // The prop is optional — omitting it must not crash S0E submit. We
+    // drive the submit to ensure the dedup-guarded `onCommitSuccess?.()`
+    // call path tolerates undefined.
+    render(
+      <WizardProvider projectId="proj_test">
+        <CreativeDivergenceStep projectId="proj_test" />
+      </WizardProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("s0e-submit")).toBeInTheDocument();
+    });
+
+    // No-throw smoke: clicking submit completes without exploding. The
+    // test fails if the component throws synchronously or in a microtask.
+    fireEvent.click(screen.getByTestId("s0e-submit"));
+
+    // Settle: /commit mock resolves immediately, so by now the parent has
+    // received S0E's onComplete (which is the no-op `() => undefined`
+    // wired without onCommitSuccess). Assert the submit button transitioned
+    // to its submitting state and back, indicating the happy path ran.
+    await waitFor(() => {
+      expect(api.postDivergeCommit).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api, {
   type CanvasStateV3,
   type ContradictionCandidate,
@@ -18,6 +18,17 @@ import S0ECommitStep from "./divergence/S0ECommitStep";
 
 interface Props {
   projectId: string;
+  /**
+   * Invoked once the divergence flow's commit resolves — i.e., the
+   * E sub-step's /commit POST succeeded and the backend has stamped
+   * `selected_at` + written creative_divergence.json. Called exactly
+   * once per successful commit (deduped via commitNotifiedRef so a
+   * re-render of S0E with the same committed state doesn't re-fire).
+   * No-op if not provided. The wizard injects
+   * `markStep1SurfaceCompleted("divergence")` via this prop, so this
+   * step stays wizard-decoupled (no useWizard import).
+   */
+  onCommitSuccess?: () => void;
 }
 
 /**
@@ -424,7 +435,7 @@ export function mergeCanvasState(
   };
 }
 
-export default function CreativeDivergenceStep({ projectId }: Props) {
+export default function CreativeDivergenceStep({ projectId, onCommitSuccess }: Props) {
   const [state, setState] = useState<DivergenceState>(INITIAL);
   // `canvasVersion` is a tick that we bump after a child triggers a regen
   // (A/B/C/D regen endpoints mutate canvas downstream). The mount effect
@@ -433,6 +444,13 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
   // .coreContradiction / .selectedPath stay in sync with what the child
   // stages will see on next mount/navigation.
   const [canvasVersion, setCanvasVersion] = useState(0);
+  // Single-fire guard for onCommitSuccess. S0E's onComplete can fire more
+  // than once if React re-mounts S0E while a commit is in flight (e.g.,
+  // canvasVersion bumps mid-commit → loadCanvas re-infers E → S0E
+  // remounts → submit re-runs). The ref ensures the wizard's
+  // markStep1SurfaceCompleted("divergence") callback fires exactly once
+  // per successful commit lifecycle.
+  const commitNotifiedRef = useRef(false);
 
   const loadCanvas = useCallback(async () => {
     try {
@@ -575,7 +593,17 @@ export default function CreativeDivergenceStep({ projectId }: Props) {
             selectedPath={state.selectedPath}
             // S0E owns /commit; wizard-step advance is handled by the parent
             // wizard once the user clicks the modal footer's "下一步".
-            onComplete={() => undefined}
+            // onCommitSuccess is wired here (not in S0ECommitStep itself) so
+            // the sub-step stays free of wizard-coupling concerns — the
+            // parent owns "what happens after the commit resolves". The
+            // dedup ref ensures the wizard's markStep1SurfaceCompleted fires
+            // exactly once per successful commit lifecycle even if S0E
+            // remounts during in-flight submission.
+            onComplete={() => {
+              if (commitNotifiedRef.current) return;
+              commitNotifiedRef.current = true;
+              onCommitSuccess?.();
+            }}
             onBack={onEBack}
             onCanvasMutated={onCanvasMutated}
           />

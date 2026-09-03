@@ -1,138 +1,104 @@
-const STEPS: Array<{ num: number; label: string; icon: string }> = [
-  { num: 1, label: "创意发散", icon: "psychology" },
-  { num: 2, label: "概念 DNA", icon: "biotech" },
-  { num: 3, label: "世界观", icon: "public" },
-  { num: 4, label: "角色设计", icon: "groups" },
-  { num: 5, label: "地图系统", icon: "map" },
-  { num: 6, label: "全文大纲", icon: "format_list_numbered" },
-  { num: 7, label: "章节大纲", icon: "auto_stories" },
-];
+import type { Step1SurfaceId } from "./WizardContext";
 
-/**
- * Module entries are non-step links that live alongside the wizard's
- * linear flow. They navigate the user to a sibling page (a `path` built
- * by the caller — typically `/project/:id/<module-route>`) rather than
- * driving wizard state. Modules are rendered in the order given, between
- * the step whose `num` matches `afterStep` and the next step.
- *
- * Rationale for the `afterStep` placement contract: 创意画布 must sit
- * between 创意发散 (#1) and 概念 DNA (#2) so the user perceives it as
- * "an alternative divergence surface" rather than something that comes
- * after the concept is locked in. New module positions are added by
- * extending the `insertModulesAfter(num)` index — keep the rule explicit
- * so the next person doesn't have to read both the wizard and the
- * module list to figure out why their tab is in the wrong place.
- */
-export interface WizardSidebarModule {
+export interface SidebarItem {
   id: string;
   label: string;
   icon: string;
-  path: string;
+  /** 1..7 — visual row position. Position 1 has 2 surface items (divergence + canvas). */
+  position: number;
+  /** "step1-surface" → parallel step-1 entry (no step number); undefined → ordinary step. */
+  kind?: "step1-surface";
+  /** Only meaningful when kind === "step1-surface". */
+  surfaceId?: Step1SurfaceId;
 }
+
+const SIDEBAR_ITEMS: SidebarItem[] = [
+  { id: "divergence", label: "创意发散", icon: "psychology", position: 1, kind: "step1-surface", surfaceId: "divergence" },
+  { id: "canvas",     label: "创意画布", icon: "account_tree", position: 1, kind: "step1-surface", surfaceId: "canvas" },
+  { id: "concept",    label: "概念 DNA", icon: "biotech",     position: 2 },
+  { id: "world",      label: "世界观",   icon: "public",       position: 3 },
+  { id: "character",  label: "角色设计", icon: "groups",       position: 4 },
+  { id: "map",        label: "地图系统", icon: "map",          position: 5 },
+  { id: "outline",    label: "全文大纲", icon: "format_list_numbered", position: 6 },
+  { id: "chapter",    label: "章节大纲", icon: "auto_stories", position: 7 },
+];
 
 interface WizardSidebarProps {
   currentStep: number;
   completedSteps: number[];
-  onJump: (step: number) => void;
-  /**
-   * Modules to render alongside the linear step list. Each module lands
-   * between `afterStep` (the step's `num`) and the next step. Modules
-   * with no matching afterStep are appended at the bottom of the sidebar.
-   */
-  modules?: WizardSidebarModule[];
-  /**
-   * Insertion anchor: modules in `modules` whose insertion point matches
-   * this step's `num` are rendered immediately after this step. The
-   * single value applies to all modules; if you need per-module anchors,
-   * extend the prop shape (kept as one value for now since the only
-   * caller inserts everything between #1 and #2).
-   */
-  insertModulesAfter?: number;
-  /**
-   * Called with the module's `path` when the user clicks a module entry.
-   * Receivers should `navigate(path)` — the sidebar intentionally doesn't
-   * pull in `useNavigate` itself so it stays easy to unit-test (no router
-   * provider needed).
-   */
-  onModuleNavigate?: (path: string) => void;
+  activeStep1Surface: Step1SurfaceId;
+  completedStep1Surfaces: Step1SurfaceId[];
+  onJump: (item: SidebarItem) => void;
 }
 
 export default function WizardSidebar({
   currentStep,
   completedSteps,
+  activeStep1Surface,
+  completedStep1Surfaces,
   onJump,
-  modules = [],
-  insertModulesAfter = 1,
-  onModuleNavigate,
 }: WizardSidebarProps) {
   return (
     <nav data-testid="wizard-sidebar"
          className="bg-surface-container dark:bg-surface-container sticky top-16 self-start h-[calc(100vh-64px)] w-[200px] shrink-0 border-r border-outline-variant dark:border-outline-variant flex flex-col py-6 px-3 z-20">
       <div className="flex-1 flex flex-col items-center gap-2 overflow-y-auto pr-0 custom-scrollbar">
-        {STEPS.map(({ num, label, icon }) => {
-          const completed = completedSteps.includes(num);
-          const current = currentStep === num;
-          const reachable = completed || current;
+        {SIDEBAR_ITEMS.map((item) => {
+          const isStep1Surface = item.kind === "step1-surface";
+          // surface item completed = in completedStep1Surfaces; ordinary
+          // step = in completedSteps. WizardContext's
+          // MARK_STEP1_SURFACE_COMPLETED reducer keeps completedSteps
+          // in sync (pushes 1 when a surface commits), but the sidebar
+          // also ORs against the surface list directly so unit tests
+          // and legacy projects (where completedSteps was set before
+          // canvas existed) reach step 2 without reducer round-trips.
+          const completed = isStep1Surface
+            ? completedStep1Surfaces.includes(item.surfaceId!)
+            : completedSteps.includes(item.position);
+          const current = isStep1Surface
+            ? currentStep === 1 && activeStep1Surface === item.surfaceId
+            : currentStep === item.position;
+          // Step 1 is "effectively complete" when any surface row has
+          // committed, OR when step 1 is in the legacy completedSteps
+          // list. This is the OR semantic: divergence done OR canvas
+          // done OR legacy step 1 done.
+          const step1Effective =
+            completedStep1Surfaces.length >= 1 || completedSteps.includes(1);
+          // Reachable rules:
+            // - surface rows: any row at position 1 is reachable when
+            //   you're on step 1 (so you can switch between divergence
+            //   and canvas freely), or when completed.
+            // - ordinary rows: completed || current || (step 1 effective
+            //   AND this is step 2 — the next step after step 1).
+          const reachable = isStep1Surface
+            ? completed || current || currentStep === 1
+            : completed || current || (item.position === 2 && step1Effective);
           const baseCls = "flex items-center justify-start gap-2 px-3 py-2 rounded-lg transition-colors w-[160px]";
           const stateCls = current
             ? "bg-secondary-container text-on-secondary-container font-bold scale-[0.98] transition-transform duration-150"
             : "text-on-surface-variant hover:bg-surface-variant dark:hover:bg-surface-variant";
           return (
-            <div key={num} className="flex flex-col items-center gap-2">
+            <div key={item.id} className="flex flex-col items-center gap-2">
               <button
                 type="button"
-                data-testid={`wizard-sidebar-item-${num}`}
+                data-testid={`wizard-sidebar-item-${item.id}`}
                 data-state={completed ? "completed" : current ? "current" : "pending"}
                 disabled={!reachable}
-                onClick={() => reachable && onJump(num)}
+                onClick={() => reachable && onJump(item)}
                 className={`${baseCls} ${stateCls} ${!reachable ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
               >
                 <span
                   className="material-symbols-outlined text-[20px] leading-none"
                   style={{ fontVariationSettings: current ? '"FILL" 1' : '"FILL" 0' }}
                 >
-                  {icon}
+                  {item.icon}
                 </span>
-                <span className="font-body-md text-sm whitespace-nowrap">{label}</span>
+                <span className="font-body-md text-sm whitespace-nowrap">{item.label}</span>
                 {completed && !current && (
                   <span aria-hidden="true" className="material-symbols-outlined text-[14px] leading-none text-primary ml-auto">
                     check
                   </span>
                 )}
               </button>
-              {/* Module slot — rendered between the step matching
-                  `insertModulesAfter` and the next step. Visually
-                  distinguished by a thinner outline + `open_in_new`
-                  affordance so the user reads it as "go to a sibling
-                  page" rather than "advance through the wizard". */}
-              {num === insertModulesAfter && modules.length > 0 && (
-                <div
-                  data-testid="wizard-sidebar-modules"
-                  className="flex flex-col items-center gap-2 w-[160px] pt-1 border-t border-dashed border-outline-variant/60"
-                >
-                  {modules.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      data-testid={`wizard-sidebar-module-${m.id}`}
-                      onClick={() => onModuleNavigate?.(m.path)}
-                      className={`${baseCls} text-on-surface-variant hover:bg-surface-variant dark:hover:bg-surface-variant border border-dashed border-outline-variant/60 hover:border-primary/60`}
-                      title={m.path}
-                    >
-                      <span className="material-symbols-outlined text-[20px] leading-none">
-                        {m.icon}
-                      </span>
-                      <span className="font-body-md text-sm whitespace-nowrap">{m.label}</span>
-                      <span
-                        aria-hidden="true"
-                        className="material-symbols-outlined text-[14px] leading-none ml-auto text-on-surface-variant/70"
-                      >
-                        open_in_new
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}

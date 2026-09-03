@@ -26,9 +26,14 @@ export function OptionCard({
   const titleClass = recommended
     ? "text-primary"
     : "text-on-surface group-hover:text-primary";
+  // Card treatment aligned to the divergence wizard's variant cards (S0B):
+  // flat borders (border-primary for recommended, border-outline-variant
+  // otherwise), no glass-panel / glow overlays. Keeps the canvas option
+  // cards visually consistent with the divergence variants when both
+  // surface inside the wizard main area.
   const panelClass = recommended
-    ? "glass-panel rounded-xl p-md flex flex-col border-primary glow-active bg-surface-container-highest relative h-full"
-    : "glass-panel rounded-xl p-md flex flex-col hover:border-primary/50 transition-colors cursor-pointer group h-full";
+    ? "border-2 border-primary rounded-lg p-4 flex flex-col bg-surface-container relative h-full"
+    : "border border-outline-variant rounded-lg p-4 flex flex-col hover:border-primary transition-colors cursor-pointer group h-full";
 
   return (
     <div
@@ -38,9 +43,9 @@ export function OptionCard({
       className={panelClass}
     >
       {recommended && <AIRecommendedBadge />}
-      <div className="flex justify-between items-start mb-md mt-2">
+      <div className="flex justify-between items-start mb-2 mt-2">
         <h4
-          className={`font-title-md text-title-md transition-colors ${titleClass}`}
+          className={`font-medium transition-colors ${titleClass}`}
         >
           {operationLabel} {slot}: {option.title}
         </h4>
@@ -50,7 +55,7 @@ export function OptionCard({
         />
       </div>
       <p
-        className={`text-sm flex-1 mb-md ${recommended ? "text-on-surface" : "text-on-surface-variant"}`}
+        className={`text-sm flex-1 mb-4 ${recommended ? "text-on-surface" : "text-on-surface-variant"}`}
       >
         {option.premise}
       </p>
@@ -60,8 +65,8 @@ export function OptionCard({
         onClick={() => onSelect(option.id)}
         className={
           recommended
-            ? "w-full py-xs rounded bg-primary text-on-primary font-bold hover:bg-primary-container transition-colors shadow-[0_0_15px_rgba(56,189,248,0.2)]"
-            : "w-full py-xs rounded border border-outline-variant text-on-surface-variant group-hover:border-primary/50 group-hover:text-primary transition-colors"
+            ? "w-full py-2 rounded bg-primary text-on-primary disabled:opacity-40 transition-colors"
+            : "w-full py-2 rounded border border-outline-variant text-on-surface-variant hover:border-primary hover:text-primary transition-colors"
         }
       >
         {recommended

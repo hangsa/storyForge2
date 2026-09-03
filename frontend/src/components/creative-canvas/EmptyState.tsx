@@ -21,41 +21,42 @@ export function EmptyState({ onInit, loading = false, embedded = false }: Props)
   const [genre, setGenre] = useState("xianxia");
 
   return (
+    // Visual style aligned to the divergence wizard sub-steps (S0A etc.):
+    // flat border panel + text-xl font-medium heading + bg-surface-container
+    // inputs — keeps the canvas + divergence surfaces visually consistent
+    // when both live inside the wizard main area.
     <div
       data-testid="empty-state"
-      className={`glass-panel rounded-xl p-xl space-y-lg mt-xl ${
+      className={`border border-outline-variant rounded-lg p-6 space-y-4 ${
         embedded ? "" : "max-w-2xl mx-auto"
       }`}
     >
-      <div>
-        <h2 className="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface">
-          创造一个故事，不需要从完整故事开始。
-        </h2>
-        <p className="text-on-surface-variant font-body-md mt-sm">
-          只需要告诉我：
-          <br />
-          「你脑子里现在有什么？」
-        </p>
-      </div>
+      <h2 className="text-xl font-medium text-on-surface">
+        创造一个故事，不需要从完整故事开始。
+      </h2>
+      <p className="text-sm text-on-surface-variant">
+        只需要告诉我：「你脑子里现在有什么？」
+      </p>
       <textarea
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         placeholder="一个关于……用一句话描述你脑子里的故事"
         rows={4}
-        className="w-full bg-surface-container-high border border-outline-variant rounded-lg p-md
-                   text-on-surface placeholder-on-surface-variant/50
-                   focus:border-primary focus:outline-none transition-colors"
+        className="w-full p-3 bg-surface-container border border-outline-variant rounded-lg
+                   resize-none text-primary text-sm
+                   placeholder:text-on-surface-variant/50
+                   focus:outline-none focus:border-primary transition-colors"
       />
-      <div className="flex items-center gap-md">
-        <label className="font-label-sm text-label-sm text-on-surface-variant uppercase">
+      <div className="flex items-center gap-3">
+        <label className="text-sm text-on-surface-variant">
           类型
         </label>
         <select
           value={genre}
           onChange={(e) => setGenre(e.target.value)}
           aria-label="题材"
-          className="bg-surface-container-high border border-outline-variant rounded-lg
-                     px-md py-xs text-on-surface focus:border-primary"
+          className="flex-1 p-2 bg-surface-container border border-outline-variant rounded-lg
+                     text-primary text-sm focus:outline-none focus:border-primary"
         >
           {GENRES.map((g) => (
             <option key={g} value={g}>

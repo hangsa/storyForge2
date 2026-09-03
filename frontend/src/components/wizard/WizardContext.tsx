@@ -159,8 +159,8 @@ interface WizardState {
   /**
    * Set of step-1 surfaces that have completed (independent, OR
    * semantic). Persists to sessionStorage; disk prefill overrides
-   * via `hydrateStep1Surfaces`. Sorted on read for deterministic
-   * sidebar `✓` placement.
+   * via `hydrateStep1Surfaces`. Sorted on write (alphabetical) for
+   * deterministic sidebar `✓` placement.
    */
   completedStep1Surfaces: Step1SurfaceId[];
 }
@@ -390,7 +390,7 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
         completedStep1Surfaces: [
           ...state.completedStep1Surfaces,
           action.surface,
-        ],
+        ].sort(),
         completedSteps: nextCompletedSteps,
       };
     }
@@ -400,7 +400,7 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       // completed a surface but the disk write hasn't landed yet).
       const merged = Array.from(
         new Set([...state.completedStep1Surfaces, ...action.surfaces]),
-      );
+      ).sort();
       // Same OR-semantic push to completedSteps as the marker reducer
       const nextCompletedSteps = merged.length >= 1 && !state.completedSteps.includes(1)
         ? [...state.completedSteps, 1].sort((a, b) => a - b)

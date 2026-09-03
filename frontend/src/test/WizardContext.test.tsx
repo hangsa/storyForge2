@@ -5,6 +5,7 @@ import {
   WizardProvider,
   useWizard,
   getSessionKey,
+  isStep1EffectivelyCompleted,
   type WizardData,
 } from "../components/wizard/WizardContext";
 
@@ -566,8 +567,35 @@ describe("WizardContext", () => {
 
   it("isStep1EffectivelyCompleted returns true when any surface done", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
+    // WizardState isn't exported, so build a minimal state object and
+    // cast. The helper only reads completedStep1Surfaces; the rest of
+    // the fields come from the live hook snapshot so the object stays
+    // faithful to the real shape.
+    const stateFrom = (surfaces: readonly string[]) =>
+      ({
+        activeStep1Surface: result.current.activeStep1Surface,
+        completedStep1Surfaces: surfaces,
+        currentStep: result.current.currentStep,
+        completedSteps: result.current.completedSteps,
+        status: "idle",
+        data: makeData(),
+        errorMessage: null,
+        creativeDivergenceSubStage: "A",
+        regenerateState: { kind: "idle" },
+        prefillComplete: true,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any;
+
     expect(result.current.completedStep1Surfaces).toEqual([]);
+    expect(isStep1EffectivelyCompleted(stateFrom([]))).toBe(false);
+
     act(() => result.current.markStep1SurfaceCompleted("divergence"));
+
     expect(result.current.completedStep1Surfaces.length >= 1).toBe(true);
+    expect(
+      isStep1EffectivelyCompleted(
+        stateFrom(result.current.completedStep1Surfaces),
+      ),
+    ).toBe(true);
   });
 });

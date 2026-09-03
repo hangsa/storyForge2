@@ -526,46 +526,45 @@ def test_select_refreshes_top_level_scores(project, client, monkeypatch):
 
     Task 5 wires NoveltyEvaluator into the /select handler. The evaluator
     is sync, so the handler wraps it with loop.run_in_executor + a 3s
-    timeout. The test patches both `_build_novelty_evaluator` (so no
-    real TropePool/ContradictionEngine construction is needed in the test
-    env, which lacks trope_catalog.yaml) and `_run` (so the executor
-    invokes the fake_evaluate rather than the real one).
+    timeout. The test patches `_build_novelty_evaluator` to return a
+    cheap stand-in (sidestepping TropePool catalog dependency in the test
+    env). Only the 2 fields the sync evaluator can produce meaningfully
+    today are asserted — `story_potential` + `uniqueness` are deferred to
+    a future task with real LLM scoring (the evaluator returns constant
+    50.0 for those when tags are empty, which would render as a
+    meaningless 0.5 in the UI).
     """
     from backend.api import v2_canvas
     from backend.api.creative_diverge import _read_canvas, _write_canvas
     from backend.models.creative_os import NoveltyScore
-    from backend.creative_os import novelty_evaluator
 
     # Track that fake_evaluate was called so we can assert the executor
     # path actually invoked it (not just produced a fallback payload).
     captured: dict = {}
 
-    def fake_evaluate(self, content):
+    def fake_evaluate(content):
         # Sync (not async) — Task 5 wraps with run_in_executor.
         # Return values mirror what a real call produces (0-100 scale);
         # the implementation normalizes to 0-1 for canvas["scores"].
-        # The 4 dimension fields map 1:1 to PRD canvas.scores fields (after
-        # /100 normalization): trope_similarity → novelty, contradiction →
-        # conflict, market_saturation → story_potential, discussion →
-        # uniqueness. Pick raw values that produce the asserted 0-1 outputs.
+        # Only the 2 meaningfully-mappable dimensions are checked below:
+        # trope_similarity → novelty, contradiction → conflict. Other
+        # fields are populated by the stand-in but the impl does NOT
+        # write them into canvas["scores"] (deferred to a future task).
         captured["content"] = content
         return NoveltyScore(
             total=88.0,
-            market_saturation_score=85.0,      # → story_potential 0.85
+            market_saturation_score=85.0,
             trope_similarity_score=88.0,       # → novelty 0.88
             contradiction_depth_score=91.0,    # → conflict 0.91
-            discussion_potential_score=82.0,   # → uniqueness 0.82
+            discussion_potential_score=82.0,
             grade="高新颖度",
         )
 
-    monkeypatch.setattr(novelty_evaluator.NoveltyEvaluator, "evaluate", fake_evaluate)
-
-    # Stub `_build_novelty_evaluator` so the executor's _run() gets back a
-    # cheap stand-in instance whose `evaluate` is the patched fake above.
-    # This sidesteps the TropePool catalog dependency without exercising
-    # the real evaluator (covered by /novelty tests).
     class _FakeEval:
-        evaluate = fake_evaluate
+        # Bind as instance method so evaluator.evaluate(content) works
+        # (the implementation calls it as evaluator.evaluate(concept_for_eval)).
+        def evaluate(self, content):
+            return fake_evaluate(content)
 
     monkeypatch.setattr(
         v2_canvas, "_build_novelty_evaluator", lambda project_id: _FakeEval(),
@@ -640,14 +639,88 @@ def test_select_refreshes_top_level_scores(project, client, monkeypatch):
     )
 
     canvas = json.loads(_canvas_path(project).read_text(encoding="utf-8"))
-    # PRD §16.1: top-level scores auto-refresh after /select. The 4
-    # dimensions in canvas.scores (novelty/conflict/story_potential/
-    # uniqueness) are all in 0-1; NoveltyEvaluator returns them on a
-    # 0-100 scale, so each is divided by 100 before persistence.
+    # PRD §16.1: top-level scores auto-refresh after /select. The 2
+    # dimensions written to canvas.scores are in 0-1; NoveltyEvaluator
+    # returns them on a 0-100 scale, so each is divided by 100 before
+    # persistence. story_potential + uniqueness are deferred.
     assert canvas["scores"]["novelty"] == 0.88
     assert canvas["scores"]["conflict"] == 0.91
-    assert canvas["scores"]["story_potential"] == 0.85
-    assert canvas["scores"]["uniqueness"] == 0.82
     # computed_at must be set (ISO timestamp).
     assert canvas["scores"]["computed_at"]
+
+
+def test_select_preserves_existing_scores_on_evaluator_failure(project, client, monkeypatch):
+    """When the evaluator fails, canvas.scores preserves previous values.
+
+    Regression for the bug where the /select helper returned
+    ``{"computed_at": ...}`` on fallback, silently erasing the 4 score
+    keys. The fix reads existing scores from canvas["scores"] directly
+    and only bumps computed_at on failure.
+    """
+    from backend.api import v2_canvas
+    from backend.api.creative_diverge import _read_canvas, _write_canvas
+
+    # Stub _build_novelty_evaluator so the call always raises. This
+    # exercises the build-error branch of _refresh_top_level_scores
+    # (the same fallback path is used for runtime errors and timeouts).
+    def raising_build(project_id):
+        raise RuntimeError("simulated evaluator build failure")
+
+    monkeypatch.setattr(v2_canvas, "_build_novelty_evaluator", raising_build)
+
+    # Seed the canvas with non-default scores so we can prove they
+    # survive the failed refresh.
+    init_resp = client.post(
+        f"/creative/canvas/{project}/session/init",
+        json={"prompt": "p", "genre_primary": "xianxia"},
+    )
+    assert init_resp.status_code == 200, init_resp.text
+
+    canvas = _read_canvas(project)
+    canvas["scores"] = {
+        "novelty": 0.42,
+        "conflict": 0.73,
+        "story_potential": 0.66,
+        "uniqueness": 0.81,
+        "computed_at": "2026-09-01T00:00:00+00:00",
+    }
+    # Pre-seed creative_path step 1 so /select has something to select.
+    canvas["creative_path"][0] = {
+        "step": 1,
+        "operation": "twist",
+        "operation_reason": "",
+        "options": [
+            {"id": "opt_1_a", "title": "A", "premise": "p", "logic": "", "scores": {}},
+            {"id": "opt_1_b", "title": "B", "premise": "p", "logic": "", "scores": {}},
+            {"id": "opt_1_c", "title": "C", "premise": "p", "logic": "", "scores": {}},
+        ],
+        "selected_option_id": None,
+        "created_at": "2026-09-03T00:00:00",
+        "selected_at": None,
+        "regenerated_count": 0,
+        "state": "active",
+    }
+    _write_canvas(project, canvas)
+
+    # Stub _next_step_impl so /select's auto-trigger doesn't call the LLM.
+    async def fake_next_step(project_id, current_step):
+        return {"step": current_step, "operation": None, "options": [], "quality_warning": None}
+    monkeypatch.setattr(v2_canvas, "_next_step_impl", fake_next_step)
+
+    sel = client.post(
+        f"/creative/canvas/{project}/session/select",
+        json={"step": 1, "option_id": "opt_1_b"},
+    )
+    assert sel.status_code == 200, sel.text
+
+    canvas = json.loads(_canvas_path(project).read_text(encoding="utf-8"))
+    scores = canvas["scores"]
+    # Existing values must survive — fallback is NOT {computed_at: ...}.
+    assert scores["novelty"] == 0.42
+    assert scores["conflict"] == 0.73
+    assert scores["story_potential"] == 0.66
+    assert scores["uniqueness"] == 0.81
+    # computed_at MUST be refreshed (so callers know the fallback ran).
+    assert scores["computed_at"] != "2026-09-01T00:00:00+00:00"
+    assert scores["computed_at"]
 

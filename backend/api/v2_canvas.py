@@ -45,6 +45,11 @@ _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _NEXT_STEP_PROMPT_PATH = _PROMPTS_DIR / "canvas_v2_next_step.yaml"
 _logger = logging.getLogger(__name__)
 
+# Best-effort evaluator timeout (s). NoveltyEvaluator.evaluate() is a sync
+# call, so /select wraps it in loop.run_in_executor and caps the wait here.
+# A slow or broken evaluator must NEVER block the user's select action.
+_EVALUATOR_TIMEOUT_S = 3.0
+
 
 def _load_next_step_prompt() -> dict:
     """Load next-step prompt template from YAML. Cached after first call."""
@@ -514,8 +519,10 @@ async def select_option_v2(project_id: str, body: SelectRequest):
     # broken evaluator must never block the user's select action. The
     # evaluator returns scores on a 0-100 scale; canvas["scores"] is
     # normalized to 0-1 to match the schema initialized in _empty_canvas_v4.
+    # On any failure, _refresh_top_level_scores preserves the in-memory
+    # canvas["scores"] and only bumps computed_at.
     concept_for_eval = selected.get("premise", canvas["current_concept"]["premise"])
-    canvas["scores"] = await _refresh_top_level_scores(project_id, concept_for_eval)
+    await _refresh_top_level_scores(project_id, concept_for_eval, canvas)
 
     # Write the completed step back so the in-memory state survives the
     # cascade re-read below.
@@ -538,68 +545,74 @@ async def select_option_v2(project_id: str, body: SelectRequest):
 
 
 async def _refresh_top_level_scores(
-    project_id: str, concept_for_eval: str, existing_scores: Optional[dict] = None,
-) -> dict:
-    """Run NoveltyEvaluator in the executor pool and map its 0-100 output
-    to the canvas["scores"] 0-1 schema.
+    project_id: str, concept_for_eval: str, canvas: dict,
+) -> None:
+    """Best-effort refresh of canvas["scores"] after /select.
 
-    Best-effort: any construction failure, timeout, or exception is logged
-    and the existing scores are preserved (only `computed_at` is bumped).
-    Never raises — the calling /select handler must always complete.
+    Mutates canvas in place. On any failure (build error, evaluator timeout,
+    evaluator exception), preserves existing canvas["scores"] and only bumps
+    `computed_at`. Never raises — the calling /select handler must always
+    complete.
+
+    PRD §16.1 only requires novelty + conflict from the sync evaluator;
+    `story_potential` + `uniqueness` are deferred to a future task that
+    wires real LLM-driven scoring (the evaluator returns a constant 50.0
+    for those fields when tags are empty, which would render as a
+    meaningless 0.5 in the UI). This helper writes the 2 fields the
+    evaluator can produce meaningfully today.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
+    existing = canvas.get("scores", {}) or {}
+    fallback = {**existing, "computed_at": now_iso}
 
-    def _run() -> "object":  # returns NoveltyScore or raises
-        try:
-            evaluator = _build_novelty_evaluator(project_id)
-        except Exception as exc:  # construction-time import errors
-            raise RuntimeError(f"NoveltyEvaluator build failed: {exc}") from exc
-        if evaluator is None:
-            raise RuntimeError("NoveltyEvaluator build returned None")
+    try:
+        evaluator = _build_novelty_evaluator(project_id)
+    except Exception as exc:
+        _logger.warning("NoveltyEvaluator build failed in /select: %s", exc)
+        canvas["scores"] = fallback
+        return
+
+    def _evaluate() -> "object":
         return evaluator.evaluate(concept_for_eval)
 
     try:
         loop = asyncio.get_running_loop()
         new_score = await asyncio.wait_for(
-            loop.run_in_executor(None, _run),
-            timeout=3.0,
+            loop.run_in_executor(None, _evaluate),
+            timeout=_EVALUATOR_TIMEOUT_S,
         )
-        return {
-            "novelty": round(new_score.trope_similarity_score / 100.0, 2),
-            "conflict": round(new_score.contradiction_depth_score / 100.0, 2),
-            "story_potential": round(new_score.market_saturation_score / 100.0, 2),
-            "uniqueness": round(new_score.discussion_potential_score / 100.0, 2),
+        canvas["scores"] = {
+            "novelty": round(getattr(new_score, "trope_similarity_score", 0.0) / 100.0, 2),
+            "conflict": round(getattr(new_score, "contradiction_depth_score", 0.0) / 100.0, 2),
             "computed_at": now_iso,
         }
-    except (asyncio.TimeoutError, Exception) as exc:
+    except Exception as exc:
+        # Single catch covers TimeoutError, asyncio.TimeoutError (alias on
+        # 3.11+), RuntimeError, and any evaluator-side failure.
         _logger.warning("NoveltyEvaluator refresh failed in /select: %s", exc)
-        return {**(existing_scores or {}), "computed_at": now_iso}
+        canvas["scores"] = fallback
 
 
 def _build_novelty_evaluator(project_id: str):
     """Construct a NoveltyEvaluator mirroring `/novelty` and `/whatif-expand`.
 
-    Returns None on any construction failure (missing config files,
-    missing project_dir, etc.) — the caller treats None as "skip refresh"
-    and preserves the existing scores rather than 500ing the endpoint.
+    Lets construction-time exceptions propagate so the caller (`_refresh_top_level_scores`)
+    can catch them in one place. Pre-v1.x callers may have wrapped a None return,
+    but Task 5's wire-up uses an explicit exception path now.
     """
-    try:
-        from backend.creative_os.novelty_evaluator import NoveltyEvaluator
-        from backend.creative_os.trope_pool import TropePool
-        from backend.creative_os.contradiction_engine import ContradictionEngine
+    from backend.creative_os.novelty_evaluator import NoveltyEvaluator
+    from backend.creative_os.trope_pool import TropePool
+    from backend.creative_os.contradiction_engine import ContradictionEngine
 
-        project_dir = settings.projects_dir / project_id
-        catalog_path = settings.projects_dir.parent / "config" / "trope_catalog.yaml"
-        trope_pool = TropePool(project_dir=project_dir, catalog_path=catalog_path)
-        return NoveltyEvaluator(
-            trope_pool=trope_pool,
-            contradiction_engine=ContradictionEngine(),
-            model_router=None,
-            embedder=None,
-        )
-    except Exception as exc:
-        _logger.warning("Could not build NoveltyEvaluator for %s: %s", project_id, exc)
-        return None
+    project_dir = settings.projects_dir / project_id
+    catalog_path = settings.projects_dir.parent / "config" / "trope_catalog.yaml"
+    trope_pool = TropePool(project_dir=project_dir, catalog_path=catalog_path)
+    return NoveltyEvaluator(
+        trope_pool=trope_pool,
+        contradiction_engine=ContradictionEngine(),
+        model_router=None,
+        embedder=None,
+    )
 
 
 # --- /commit ---

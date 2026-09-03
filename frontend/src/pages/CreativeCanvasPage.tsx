@@ -6,6 +6,7 @@ import { OptionCard } from "@/components/creative-canvas/OptionCard";
 import { EmptyState } from "@/components/creative-canvas/EmptyState";
 import { ResetConfirmDialog } from "@/components/creative-canvas/ResetConfirmDialog";
 import { PreCommitSummary } from "@/components/creative-canvas/PreCommitSummary";
+import { ScoresBar } from "@/components/creative-canvas/ScoresBar";
 import { GhostButton, PrimaryButton } from "@/components/ds";
 import type { CreativeOption } from "@/api/client";
 
@@ -150,6 +151,25 @@ export default function CreativeCanvasPage({
           }
         }}
       />
+
+      {/* Creative quality scores — PRD §16. Reads canvas.scores which
+          is refreshed by /select's _refresh_top_level_scores helper.
+          Rendered between the tree and the active-step panel so users
+          see the concept's overall quality at a glance regardless of
+          which step they're on. */}
+      {canvas.scores && (
+        <div className="mt-md">
+          <ScoresBar
+            scores={{
+              novelty: canvas.scores.novelty ?? 0,
+              conflict: canvas.scores.conflict ?? 0,
+              story_potential: canvas.scores.story_potential ?? 0,
+              uniqueness: canvas.scores.uniqueness ?? 0,
+            }}
+            embedded={embedded}
+          />
+        </div>
+      )}
 
       {/* Active step options — PRD §8: B is AI default (recommended). */}
       {activeStep && (

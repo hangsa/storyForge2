@@ -319,6 +319,11 @@ def test_evaluate_returns_deprecation_header(project, client):
     assert resp.headers.get("deprecation") == "true"
     body = resp.json()
     assert body["deprecated"] is True
+    # Lock down the migration hint so future edits to the warning don't
+    # silently change which endpoint v1.x callers should migrate to.
+    assert "next-step" in body["warning"], (
+        f"warning should direct callers to /next-step, got: {body['warning']!r}"
+    )
 
 
 def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatch):

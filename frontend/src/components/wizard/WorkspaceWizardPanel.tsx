@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
 import { WizardProvider, useWizard, type WizardData } from "./WizardContext";
 import WizardSidebar from "./WizardSidebar";
@@ -33,6 +34,11 @@ export default function WorkspaceWizardPanel({ projectId }: Props) {
 
 function Inner({ projectId }: Props) {
   const wizard = useWizard();
+  const navigate = useNavigate();
+  const handleCanvasNavigate = useCallback(
+    (path: string) => navigate(path),
+    [navigate]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -94,7 +100,10 @@ function Inner({ projectId }: Props) {
   return (
     <div className="flex" style={{ minHeight: "calc(100vh - 64px)" }}>
       <WizardSidebar currentStep={wizard.currentStep} completedSteps={wizard.completedSteps}
-                     onJump={(s) => wizard.jumpToStep(s)} />
+                     onJump={(s) => wizard.jumpToStep(s)}
+                     modules={[{ id: "canvas", label: "创意画布", icon: "account_tree",
+                                 path: `/project/${projectId}/stage1/canvas` }]}
+                     onModuleNavigate={handleCanvasNavigate} />
 
       <div className="flex-1 flex flex-col bg-background min-w-0">
         <main className="flex-1 overflow-y-auto">

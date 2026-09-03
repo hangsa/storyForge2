@@ -38,13 +38,17 @@ describe("WorkspaceWizardPanel", () => {
     await waitFor(() => expect(screen.getAllByText("创意发散").length).toBeGreaterThanOrEqual(1));
   });
 
-  it("does NOT render the 创意画布 sidebar module (canvas refactor pending)", async () => {
-    // The 创意画布 sidebar module was removed on 2026-09-02 while the
-    // feature is being refactored (see docs/design/creative-canvas-module.md).
-    // The modules slot should be omitted (not rendered with a canvas entry).
+  it("renders the 创意画布 sidebar module between 创意发散 and 概念 DNA", async () => {
+    // Re-enabled 2026-09-03 after the canvas reconstruction shipped.
+    // The module renders between step 1 (创意发散) and step 2 (概念 DNA),
+    // pointing at /project/:id/stage1/canvas.
     render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
-    expect(screen.queryByTestId("wizard-sidebar-modules")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("wizard-sidebar-module-canvas")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("wizard-sidebar-module-canvas")).toBeInTheDocument()
+    );
+    const module = screen.getByTestId("wizard-sidebar-module-canvas");
+    expect(module).toHaveTextContent("创意画布");
+    expect(module).toHaveAttribute("title", "/project/proj_test/stage1/canvas");
   });
 
   it("calls the remaining prefill endpoints on mount", async () => {

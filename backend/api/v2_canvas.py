@@ -33,6 +33,7 @@ from backend.config import settings
 from backend.creative_os.state_machine import (
     transition_step_state,
 )
+from backend.creative_os.consistency_check import check_consistency
 from backend.creative_os.op_hint import compute_op_hint
 from backend.creative_os.option_generator import format_axis_hint_block
 
@@ -461,16 +462,125 @@ async def _next_step_impl(project_id: str, current_step: int) -> dict:
     canvas["_etag"] = _compute_etag(canvas)
     _write_canvas(project_id, canvas)
 
+    # PRD §17.2: post-step consistency check on current_concept (which is
+    # updated by /select when the user picks an option, and reflects the
+    # concept going into THIS step). On failure, regenerate silently — max 1
+    # retry per spec.
+    #
+    # CRITICAL: `novelty` dimension is EXEMPT from the regen trigger because
+    # current_concept.novelty is initialized to 0.0 in _empty_canvas_v4()
+    # and the LLM doesn't always set it (it's only refreshed by /select's
+    # NoveltyEvaluator pass, not by _next_step_impl itself). Treating
+    # novelty like any other failure would trigger spurious regen on every
+    # step. The check_consistency helper still REPORTS novelty as a failure
+    # when below threshold — the caller filters it out before triggering
+    # regen.
+    result = check_consistency(canvas["current_concept"])
+    non_novelty_failures = [
+        f for f in result.failures if f.dimension != "novelty"
+    ]
+    if non_novelty_failures and current_step < 5:
+        await _regenerate_options_with_hint(
+            project_id, current_step,
+            failure_dims=[f.dimension for f in non_novelty_failures],
+        )
+        # Re-read canvas after regen so the return uses the new options.
+        canvas = _read_canvas(project_id)
+        path_entry = canvas["creative_path"][current_step - 1]
+
     return {
         "step": current_step,
         "operation": {
-            "type": parsed["operation"],
-            "name": parsed["operation"],
-            "reason": parsed.get("operation_reason", ""),
+            "type": path_entry["operation"],
+            "name": path_entry["operation"],
+            "reason": path_entry.get("operation_reason", ""),
         },
         "options": path_entry["options"],
         "quality_warning": None,
     }
+
+
+async def _regenerate_options_with_hint(
+    project_id: str, current_step: int, failure_dims: list[str],
+) -> None:
+    """PRD §17.2: re-call LLM with failure-dimension hints (max 1 retry).
+
+    Bumps `regenerated_count` on the step's creative_path entry and overwrites
+    `options` with the regenerated set. The first LLM call already populated
+    the path entry; this helper preserves `selected_option_id` / `state` and
+    only swaps the `options` field. Per PRD §17.2 this is a SINGLE retry —
+    if it fails the caller ships whatever the LLM produced.
+
+    We do NOT call `_next_step_impl` recursively because that would overwrite
+    `regenerated_count` and `state` on the path. Instead we invoke a
+    purpose-built call path that re-uses the LLM plumbing but updates only
+    the options on the existing entry.
+    """
+    from backend.llm.model_router import get_model_router
+    from backend.config import settings as _settings
+
+    canvas = _read_canvas(project_id)
+    path_entry = canvas["creative_path"][current_step - 1]
+    operation = path_entry.get("operation") or "twist"
+    genres = [canvas["raw_intent"].get("genre_primary") or ""]
+    if canvas["raw_intent"].get("genre_secondary"):
+        genres.append(canvas["raw_intent"]["genre_secondary"])
+    hint = compute_op_hint(
+        canvas["current_concept"],
+        canvas["creative_path"],
+        current_step,
+        genres=genres,
+    )
+
+    failure_hint = (
+        "**此前一致性检查发现以下维度需要改进**: "
+        + ", ".join(failure_dims)
+        + "\n请在这些维度上提供更扎实的选项。\n"
+    )
+    axis_block = format_axis_hint_block(operation)
+
+    async def llm_call(_context):
+        router = get_model_router()
+        user_prompt = (
+            failure_hint
+            + f"current_concept: {canvas['current_concept']}\n"
+            + f"selected_path: {[o for o in canvas['creative_path']]}\n"
+            + f"current_step: {current_step}\n"
+            + f"max_steps: 5\n"
+            + f"candidate_operation_hint: {hint}\n"
+            + f"\n{axis_block}\n"
+        )
+        system_prompt = _load_next_step_prompt()["system"]
+        return await router.complete(
+            tier="tier1",
+            system=system_prompt,
+            user=user_prompt,
+            model=_settings.llm_model,
+            max_tokens=2048,
+            temperature=0.7,
+        )
+
+    parsed = await _call_llm_with_retry(llm_call, {})
+
+    # Renumber option ids to be step-scoped (mirrors _next_step_impl).
+    new_options = []
+    for idx, opt in enumerate(parsed["options"]):
+        slot = ("a", "b", "c")[idx] if idx < 3 else f"x{idx}"
+        new_options.append({
+            "id": f"opt_{current_step}_{slot}",
+            "title": opt["title"],
+            "premise": opt["premise"],
+            "logic": opt.get("logic", ""),
+            "scores": {},
+        })
+
+    # Mutate the existing path_entry in place to preserve state/selected/created_at.
+    path_entry["options"] = new_options
+    path_entry["regenerated_count"] = path_entry.get("regenerated_count", 0) + 1
+
+    canvas["creative_path"][current_step - 1] = path_entry
+    canvas["_etag"] = _compute_etag(canvas)
+    _write_canvas(project_id, canvas)
 
 
 @router.post("/session/next-step")

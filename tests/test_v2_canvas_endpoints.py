@@ -724,3 +724,125 @@ def test_select_preserves_existing_scores_on_evaluator_failure(project, client, 
     assert scores["computed_at"] != "2026-09-01T00:00:00+00:00"
     assert scores["computed_at"]
 
+
+def test_next_step_auto_regenerates_on_consistency_fail(project, client, monkeypatch):
+    """PRD §17.2: post-step consistency failure triggers 1 silent regen.
+
+    Verifies:
+      - The consistency check runs at the end of _next_step_impl.
+      - On a non-novelty failure, _regenerate_options_with_hint is invoked.
+      - regenerated_count is bumped on the creative_path entry.
+      - The novelty dimension is EXEMPT (would otherwise trigger spurious
+        regen because current_concept.novelty is 0.0 by default).
+    """
+    from backend.api import v2_canvas
+    from backend.creative_os import consistency_check as cc_mod
+    from backend.creative_os.consistency_check import CheckResult, Failure
+
+    # 1. Stub _call_llm_with_retry so the initial + regen LLM calls return
+    #    a deterministic 3-option payload.
+    call_count = {"n": 0}
+
+    async def fake_retry(llm_call, context, max_attempts=2):
+        call_count["n"] += 1
+        return json.loads(
+            '{"operation": "twist", "operation_reason": "test",'
+            '"options": ['
+            '{"id": "opt_a", "title": "A", "premise": "p1", "logic": ""},'
+            '{"id": "opt_b", "title": "B", "premise": "p2", "logic": ""},'
+            '{"id": "opt_c", "title": "C", "premise": "p3", "logic": ""}'
+            ']}'
+        )
+
+    monkeypatch.setattr(v2_canvas, "_call_llm_with_retry", fake_retry)
+
+    # 2. Patch check_consistency on the v2_canvas module (which imports it
+    #    by name at module load — patching cc_mod alone won't rebind the
+    #    local reference inside _next_step_impl).
+    def fake_check(concept):
+        # Force a non-novelty failure so the regen branch fires.
+        return CheckResult(
+            passed=False,
+            failures=[Failure("concept", "test reason", "test suggestion")],
+        )
+
+    monkeypatch.setattr(v2_canvas, "check_consistency", fake_check)
+
+    # 3. Init canvas
+    init_resp = client.post(
+        f"/creative/canvas/{project}/session/init",
+        json={"prompt": "p", "genre_primary": "xianxia"},
+    )
+    assert init_resp.status_code == 200, init_resp.text
+
+    # 4. Call /next-step — this should trigger the regen path internally.
+    ns = client.post(
+        f"/creative/canvas/{project}/session/next-step",
+        json={"current_step": 1},
+    )
+    assert ns.status_code == 200, ns.text
+
+    # 5. The LLM was called TWICE: once for the initial pass, once for the
+    #    auto-regen.
+    assert call_count["n"] == 2, (
+        f"expected 2 LLM calls (initial + regen), got {call_count['n']}"
+    )
+
+    # 6. regenerated_count bumped to 1 on the creative_path entry.
+    canvas = json.loads(_canvas_path(project).read_text(encoding="utf-8"))
+    assert canvas["creative_path"][0]["regenerated_count"] == 1
+
+
+def test_next_step_no_regen_on_novelty_only_failure(project, client, monkeypatch):
+    """PRD §17.2: novelty-only failures MUST NOT trigger regen.
+
+    `current_concept.novelty` is initialized to 0.0 in _empty_canvas_v4()
+    and the LLM doesn't always set it. The caller filters novelty out
+    before triggering regen to avoid spurious regeneration on every step.
+    """
+    from backend.api import v2_canvas
+    from backend.creative_os.consistency_check import CheckResult, Failure
+
+    call_count = {"n": 0}
+
+    async def fake_retry(llm_call, context, max_attempts=2):
+        call_count["n"] += 1
+        return json.loads(
+            '{"operation": "twist", "operation_reason": "test",'
+            '"options": ['
+            '{"id": "opt_a", "title": "A", "premise": "p1", "logic": ""},'
+            '{"id": "opt_b", "title": "B", "premise": "p2", "logic": ""},'
+            '{"id": "opt_c", "title": "C", "premise": "p3", "logic": ""}'
+            ']}'
+        )
+
+    monkeypatch.setattr(v2_canvas, "_call_llm_with_retry", fake_retry)
+
+    def fake_check(concept):
+        # Only novelty fails — every other dimension passes.
+        return CheckResult(
+            passed=False,
+            failures=[Failure("novelty", "below threshold", "regenerate")],
+        )
+
+    monkeypatch.setattr(v2_canvas, "check_consistency", fake_check)
+
+    client.post(
+        f"/creative/canvas/{project}/session/init",
+        json={"prompt": "p", "genre_primary": "xianxia"},
+    )
+    ns = client.post(
+        f"/creative/canvas/{project}/session/next-step",
+        json={"current_step": 1},
+    )
+    assert ns.status_code == 200, ns.text
+
+    # Single LLM call — no regen was triggered because the only failure was
+    # novelty (which is exempt per PRD §17.2).
+    assert call_count["n"] == 1, (
+        f"novelty-only failure must not trigger regen; got {call_count['n']} calls"
+    )
+
+    canvas = json.loads(_canvas_path(project).read_text(encoding="utf-8"))
+    assert canvas["creative_path"][0]["regenerated_count"] == 0
+

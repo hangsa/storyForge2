@@ -12,7 +12,7 @@
 
 `/project/:id/workspace?tab=settings` 的设置向导有 7 个 step,step 1「创意发散」(`CreativeDivergenceStep.tsx`)是用户从 prompt 出发生成概念的入口。
 
-`/project/:id/stage1/canvas` 路由是 v4 创意画布(`CreativeCanvasPage.tsx`),同样从 prompt 出发、同样 commit 后写 `creative_divergence.json`,但是是一套独立的 UI 树(`EmptyState` / `TreeCanvas` / `OptionCard` / v2 `StepIndicator`)+ 独立后端(`backend/api/v2_canvas.py` + `creative_canvas_v4.json`)。
+`/project/:id/stage1/canvas` 路由是 v4 创意画布(`CreativeCanvasPage.tsx`),同样从 prompt 出发、同样 commit 后写 `creative_divergence.json`(经由 `backend/api/creative_diverge.py` 的 dual-write 兼容层),但是是一套独立的 UI 树(`CanvasEmptyState` / `TreeCanvas` / `OptionCard` / v2 `StepIndicator`)+ 独立后端(`backend/api/v2_canvas.py` + `creative_canvas_v4.json`)。
 
 今天 commit `dc9197c` 在 `WizardSidebar` 加了一个 "modules" 槽位,把 创意画布 作为 创意发散 之后的独立模块入口,但:
 
@@ -37,7 +37,7 @@
 
 - **关闭 创意发散** — 用户后续可能做,但本 spec 不实现 flag,只确保架构留出挂载点(参见 §6 风险)
 - **画布 v4 流程改动** — `2026-09-02-creative-canvas-v2-design.md` 已落地;本 spec 不动
-- **后端 schema 合并** — v3 (`creative_diverge.py`) / v4 (`v2_canvas.py`) 的双写兼容不在本 spec 范围
+- **后端 schema 合并** — v3 (`backend/api/creative_divergence.py`) / v4 (`backend/api/creative_diverge.py` 命名虽像 v3,实际是 v4 兼容层) 的双写兼容不在本 spec 范围
 - **画布完成后的下游联动** — 当前画布 commit 已经写 `creative_divergence.json`,step 2 (ConceptStep) 读这份文件,逻辑天然兼容;本 spec 不动 step 2 的消费侧
 - **侧边栏 visual polish** — 沿用现有 `WizardSidebar` 的样式系统(行高、icon、current/completed 配色);不引入新视觉 token
 
@@ -317,45 +317,73 @@ onJump(item) {
 {/* ... 其他 step 同现状 ... */}
 ```
 
-`CreativeCanvasMountPoint` 是一个薄包装:
+`CreativeCanvasMountPoint` 是一个薄包装,负责把 wizard 上下文隔在 canvas page 之外:
 
 ```tsx
 function CreativeCanvasMountPoint({ projectId }: { projectId: string }) {
-  // 把 CreativeCanvasPage 的内容(原本在 /stage1/canvas 路由下)
-  // 在 wizard 主区域就地渲染。
-  // 保留 CreativeCanvasPage 自己的 hook / state,只换 container。
-  return <CreativeCanvasPage projectId={projectId} embedded />;
+  const wizard = useWizard();
+  return (
+    <CreativeCanvasPage
+      projectId={projectId}
+      embedded
+      onCommitSuccess={() => wizard.markStep1SurfaceCompleted("canvas")}
+    />
+  );
 }
 ```
 
-`CreativeCanvasPage` 加一个 `embedded?: boolean` prop;为 true 时:
-- 不渲染自己的 `<PageShell>` / header(由 wizard 提供)
-- commit 成功后,调 `wizard.markStep1SurfaceCompleted("canvas")` 通知 wizard
-- 不做 `navigate()`(用户停留在 settings tab)
+**`CreativeCanvasPage` 解耦改动**:为了不把 wizard context 耦合进 page 层(它本来是 standalone-capable 的),改为加两个 **callback props** 而不是直接调 `useWizard()`:
 
-`CreativeDivergenceStep` 加 commit hook:commit 成功后调 `wizard.markStep1SurfaceCompleted("divergence")`。
+- `embedded?: boolean` — 为 true 时:
+  - 不渲染自己的 `<PageShell>` / header(由 wizard 提供)
+  - 不做 `navigate()`(用户停留在 settings tab)
+- `onCommitSuccess?: () => void` — commit 成功后调用。Standalone 模式下不传;embedded 模式由 `CreativeCanvasMountPoint` 注入 wizard hook。
+
+页面内部用 `useCreativeCanvasV2` hook 拿 `commitCanvas` 方法,在 `commitCanvas` resolve 后调 `onCommitSuccess?.()`。这样 `CreativeCanvasPage` 仍然可以在 `/stage1/canvas` 路由下使用,不需要 WizardProvider。
+
+`CreativeDivergenceStep` 同样的解耦:不直接调 `wizard.markStep1SurfaceCompleted`,而是由 `WorkspaceWizardPanel` 包装一层 `<CreativeDivergenceStep onCommitSuccess={...} />`。现有 `CreativeDivergenceStep` 接受 `projectId` 一个 prop;新增 `onCommitSuccess?: () => void`,在内部 commit(E 子步完成后)调用。
+
+> **为什么不直接调 `wizard.saveStep(1, ...)`?** 因为 saveStep 会触发 STEP_COMPLETED reducer,把 currentStep 推到 2;而 divergence 的 step 1 完成语义由 `markStep1SurfaceCompleted` 处理更干净 — divergence 完成时 currentStep 是否立刻跳到 2 由 footer 的 下一步 按钮决定(沿用现有交互)。画布同理 — 画布的「提交」按钮完成后,只标记 surface 完成,不自动跳到 step 2。
 
 > **为什么不直接调 `wizard.saveStep(1, ...)`?** 因为 saveStep 会触发 STEP_COMPLETED reducer,把 currentStep 推到 2;而 divergence 的 step 1 完成语义由 `markStep1SurfaceCompleted` 处理更干净 — divergence 完成时 currentStep 是否立刻跳到 2 由 footer 的 下一步 按钮决定(沿用现有交互)。画布同理 — 画布的「提交」按钮完成后,只标记 surface 完成,不自动跳到 step 2。
 
 ### 4.4 prefill 时的 completedStep1Surfaces 派生
 
-`WorkspaceWizardPanel` 的 `useEffect` 已有 `Promise.allSettled([...])` 拉 6 个文件。在其结果上额外判断:
+`WorkspaceWizardPanel` 的 `useEffect` 已有 `Promise.allSettled([...])` 拉 6 个文件。**新增 canvas state 拉取**:
 
 ```typescript
-// 在现有 cdPayload 检查旁边:
-const divergenceDone = !!cdPayload?.selected_at;            // 现有逻辑
-const canvasDone = canvasState !== null && canvasState.committed_at !== null;  // 新增
-const completedStep1Surfaces: Step1SurfaceId[] = [];
-if (divergenceDone) completedStep1Surfaces.push("divergence");
-if (canvasDone) completedStep1Surfaces.push("canvas");
+// 把 canvas state 加进 Promise.allSettled:
+const [cd, canvasState, concept, world, chars, novel, outline] = await Promise.allSettled([
+  api.getCreativeDivergence(projectId),
+  api.getCanvasV2State(projectId),  // 新增;404 → rejected(项目无画布历史)
+  api.getConcept(projectId),
+  // ... 其他不变
+]);
 
-// 调 hydrateFromFiles,把 completedStep1Surfaces 合并进去
-const completedSteps: number[] = [...];
-if (completedStep1Surfaces.length > 0 && !completedSteps.includes(1)) {
-  completedSteps.push(1);
+// 现有 cdPayload 检查逻辑不变;在它旁边加 canvas 完成判定:
+const cdPayload = cd.status === "fulfilled" ? cd.value : null;
+if (cdPayload && cdPayload.selected_at) {
+  completed.push(1);  // 现有 divergence 完成逻辑
 }
-wizard.hydrateFromFiles(completedSteps, data);
-// 同时新增一个 action 把 completedStep1Surfaces 写进 wizard state:
+// 新增 canvas 完成判定 — canvasState 是 settledResult,fulfilled.value 才读:
+const canvasPayload = canvasState.status === "fulfilled" ? canvasState.value : null;
+// CanvasV4State 既有 committed_at (string|null) 又有 committed (boolean),
+// 优先用语义更明确的 committed,但同时校验 committed_at 非空兜底
+// (防御 backend 把 committed=true 但 committed_at 漏写)。
+const canvasDone = canvasPayload?.committed === true
+  && canvasPayload.committed_at !== null;
+if (canvasDone) {
+  completedStep1Surfaces.push("canvas");
+  if (!completed.includes(1)) completed.push(1);  // OR 语义:补 step 1
+}
+
+// divergence 完成时也补 completedStep1Surfaces(已有 cdPayload.selected_at 检查)
+if (cdPayload?.selected_at) {
+  completedStep1Surfaces.push("divergence");
+  // completed.push(1) 已在上面完成
+}
+
+wizard.hydrateFromFiles(completed, data);
 wizard.hydrateStep1Surfaces(completedStep1Surfaces);
 ```
 
@@ -382,10 +410,11 @@ hydrateStep1Surfaces: (surfaces: Step1SurfaceId[]) => void;
 
 ### 4.5 路由清理
 
-`/project/:id/stage1/canvas` 路由(`App.tsx`)是否保留?
+`/project/:id/stage1/canvas` 路由(`App.tsx` line 113-122)保留作 fallback,防止外部链接 break;`CreativeCanvasPage` 不删除,但 wizard sidebar 的 module 入口从 sidebar 中消失(改为就地渲染)。
 
-- **保留作为 fallback**:侧边栏模块入口之前 navigate 过去;本次移除 wizard sidebar 的 module 入口,改为就地渲染。路由本身保留(防止外部链接 / 旧 sessionStorage 状态把用户送到那里),但 `CreativeCanvasPage` 在 standalone 模式下(无 `embedded` prop)展示一个 deprecation banner:「画布已整合到向导设置页」+ 跳转到 wizard 的链接。
-- **实施时机**:本 spec **不实现 deprecation banner**(那是后续清理);路由保留 + CreativeCanvasPage 不被删除,但 wizard sidebar 的 module 入口从 sidebar 中消失。
+Standalone 模式行为 **本 spec 不变**:
+- `/stage1/canvas` 仍然展示完整 `CreativeCanvasPage`(有 page-shell header、有 commit 后导航)
+- 后续如果需要正式关闭,把 standalone 模式改成 redirect 到 `/project/:id/workspace?tab=settings` 即可(那是后续 PR 的事,不在本 spec 范围)
 
 ### 4.6 数据流总览
 
@@ -417,9 +446,10 @@ hydrateStep1Surfaces: (surfaces: Step1SurfaceId[]) => void;
 | 文件 | 测试 |
 |---|---|
 | `WizardSidebar.test.tsx` | (1) 渲染 8 个 sidebar item(divergence + canvas + 6 个 step),按 position 排序,无前缀。(2) canvas 与 divergence 同 row,样式 className 相同(都是 baseCls)。(3) 点击 canvas → 触发 setActiveStep1Surface("canvas")。(4) canvas 在 completedStep1Surfaces 时显示 ✓。(5) 两个 surface 都未完成时,step 2 disabled(reachability 走 OR 语义)。 |
-| `WizardContext.test.tsx`(新)| reducer: SET_ACTIVE_STEP1_SURFACE 切换字段;MARK_STEP1_SURFACE_COMPLETED 添加 surface 不重复;HYDRATE_STEP1_SURFACES merge 去重。|
+| `frontend/src/test/WizardContext.test.tsx`(现有,扩展)| reducer: SET_ACTIVE_STEP1_SURFACE 切换字段;MARK_STEP1_SURFACE_COMPLETED 添加 surface 不重复;HYDRATE_STEP1_SURFACES merge 去重。|
 | `WorkspaceWizardPanel.test.tsx` | (1) `currentStep === 1` 且 `activeStep1Surface === "canvas"` 时渲染 CreativeCanvasMountPoint,不渲染 CreativeDivergenceStep。(2) prefill 拉到 canvas.committed_at → completedStep1Surfaces 包含 "canvas"。(3) prefill 同时拉到 divergence 和 canvas 都 done → completedStep1Surfaces 两个都有。|
-| `CreativeCanvasPage.test.tsx` | 新增 `embedded` prop:为 true 时不渲染 page-shell header;commit 后调 `markStep1SurfaceCompleted("canvas")` mock(用 mock wizard context)。|
+| `CreativeCanvasPage.test.tsx` | 新增 `embedded` + `onCommitSuccess` props:为 true 时不渲染 page-shell header;commit 后调 `onCommitSuccess` mock(无需 mock wizard context — page 已解耦)。|
+| `CreativeCanvasMountPoint.test.tsx`(新)| (1) 渲染时把 `embedded=true` 和 `onCommitSuccess` 注入 `CreativeCanvasPage`。(2) mock page 的 commit resolve 后,`onCommitSuccess` 调一次。|
 
 ### 5.2 集成测试
 
@@ -482,8 +512,8 @@ hydrateStep1Surfaces: (surfaces: Step1SurfaceId[]) => void;
 | `frontend/src/components/wizard/WizardSidebar.test.tsx` | 修改 | 移除 modules 相关 test;加 §5.1 表格中的测试 |
 | `frontend/src/components/wizard/WorkspaceWizardPanel.tsx` | 修改 | `useEffect` prefill 拉 canvas state + 派生 completedStep1Surfaces;主区域渲染分支(§4.3);移除 `<WizardSidebar modules onModuleNavigate>` props(commit `dc9197c` 引入)|
 | `frontend/src/components/wizard/WorkspaceWizardPanel.test.tsx` | 修改 | prefill canvas 完成 → completedStep1Surfaces;canvas surface 渲染分支 |
-| `frontend/src/components/wizard/CreativeDivergenceStep.tsx` | 修改 | commit 成功后调 `wizard.markStep1SurfaceCompleted("divergence")`(具体哪个 callback 钩子需要在实施时确认 — 也许是 `onCanvasMutated`、也许是新增 prop)|
-| `frontend/src/pages/CreativeCanvasPage.tsx` | 修改 | 加 `embedded?: boolean` prop;`embedded` 为 true 时不渲染 page-shell header;commit 后调 `wizard.markStep1SurfaceCompleted("canvas")`(通过 context 或 prop 注入)|
+| `frontend/src/components/wizard/CreativeDivergenceStep.tsx` | 修改 | 加 `onCommitSuccess?: () => void` prop,在内部 commit 完成(E 子步)后调用。**不直接调 wizard**;由 `WorkspaceWizardPanel` 注入。|
+| `frontend/src/pages/CreativeCanvasPage.tsx` | 修改 | 加 `embedded?: boolean` 和 `onCommitSuccess?: () => void` props;`embedded` 为 true 时不渲染 page-shell header;commit 成功后调 `onCommitSuccess?.()`。**不直接调 wizard**;由 `CreativeCanvasMountPoint` 注入。|
 | `frontend/src/components/creative-canvas/CreativeCanvasMountPoint.tsx`(新)| 新增 | 薄包装,forward projectId + embedded=true 到 CreativeCanvasPage |
 | `tests/test_canvas_wizard_integration.py`(新)| 新增 | E2E smoke |
 

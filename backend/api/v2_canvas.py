@@ -152,39 +152,40 @@ class SelectRequest(BaseModel):
 # --- /init ---
 
 
-@router.post("/session/init")
-async def init_canvas_v2(project_id: str, body: InitRequest):
-    """Initialize v2 canvas with raw_intent + root_idea dual-write.
+def _empty_canvas_v4() -> dict:
+    """Construct an empty v4 canvas skeleton (PRD §22).
 
-    Writes PRD §22 enriched schema: root_idea (with extracted.genre +
-    extracted.potential_conflict), creative_session, current_concept, top-level
-    scores (with computed_at timestamp), session_metadata.elapsed_seconds, and
-    committed_concept_ref (PRD §23.4).
+    Used by:
+      - POST /init (with root_idea + raw_intent populated by caller)
+      - DELETE /state (resets session; root_idea + raw_intent preserved
+        by copying them in from the existing canvas before write)
+
+    Timestamps (`computed_at`, `created_at`, `last_modified_at`) reflect
+    the time of construction; callers may overwrite `last_modified_at`
+    on reset.
     """
-    _ensure_project(project_id)
-
     now = datetime.now(timezone.utc).isoformat()
-    canvas = {
+    return {
         "schema_version": 4,
         "session_id": str(uuid.uuid4()),
         "root_idea": {
-            "prompt": body.prompt,
-            "genre": body.genre_primary,
-            "premise": body.prompt,
+            "prompt": "",
+            "genre": "",
+            "premise": "",
             "extracted": {
-                "genre": body.genre_primary,
+                "genre": "",
                 "core_elements": [],
                 "potential_conflict": "",
             },
         },
         "raw_intent": {
-            "prompt": body.prompt,
-            "genre_primary": body.genre_primary,
-            "genre_secondary": body.genre_secondary,
-            "target_reader": body.target_reader,
-            "reference_works": body.reference_works or [],
-            "forbidden_directions": body.forbidden_directions or [],
-            "quick_mode": body.quick_mode,
+            "prompt": "",
+            "genre_primary": "",
+            "genre_secondary": None,
+            "target_reader": None,
+            "reference_works": [],
+            "forbidden_directions": [],
+            "quick_mode": False,
             "trope_tags": [],
         },
         "creative_session": {
@@ -192,19 +193,9 @@ async def init_canvas_v2(project_id: str, body: InitRequest):
             "max_steps": 5,
             "status": "active",
         },
-        "creative_path": [{
-            "step": 1,
-            "operation": None,
-            "operation_reason": None,
-            "options": [],
-            "selected_option_id": None,
-            "created_at": now,
-            "selected_at": None,
-            "regenerated_count": 0,
-            "state": "available",
-        }],
+        "creative_path": [],
         "current_concept": {
-            "premise": body.prompt,
+            "premise": "",
             "core_conflict": "",
             "characters": [],
             "world_rules": [],
@@ -230,6 +221,57 @@ async def init_canvas_v2(project_id: str, body: InitRequest):
             "operation_count": 0,
         },
     }
+
+
+@router.post("/session/init")
+async def init_canvas_v2(project_id: str, body: InitRequest):
+    """Initialize v2 canvas with raw_intent + root_idea dual-write.
+
+    Writes PRD §22 enriched schema: root_idea (with extracted.genre +
+    extracted.potential_conflict), creative_session, current_concept, top-level
+    scores (with computed_at timestamp), session_metadata.elapsed_seconds, and
+    committed_concept_ref (PRD §23.4).
+    """
+    _ensure_project(project_id)
+
+    canvas = _empty_canvas_v4()
+    canvas["root_idea"] = {
+        "prompt": body.prompt,
+        "genre": body.genre_primary,
+        "premise": body.prompt,
+        "extracted": {
+            "genre": body.genre_primary,
+            "core_elements": [],
+            "potential_conflict": "",
+        },
+    }
+    canvas["raw_intent"] = {
+        "prompt": body.prompt,
+        "genre_primary": body.genre_primary,
+        "genre_secondary": body.genre_secondary,
+        "target_reader": body.target_reader,
+        "reference_works": body.reference_works or [],
+        "forbidden_directions": body.forbidden_directions or [],
+        "quick_mode": body.quick_mode,
+        "trope_tags": [],
+    }
+    # Pre-populate creative_path with the step 1 entry so the UI can show
+    # an "available" step 1 card immediately on init (matches PRD §22:
+    # creative_path starts as a list with one available entry).
+    now = canvas["scores"]["computed_at"]
+    canvas["creative_path"] = [{
+        "step": 1,
+        "operation": None,
+        "operation_reason": None,
+        "options": [],
+        "selected_option_id": None,
+        "created_at": now,
+        "selected_at": None,
+        "regenerated_count": 0,
+        "state": "available",
+    }]
+    canvas["current_concept"]["premise"] = body.prompt
+
     etag = _compute_etag(canvas)
     canvas["_etag"] = etag
     _write_canvas(project_id, canvas)
@@ -250,6 +292,40 @@ async def get_state_v2(project_id: str):
         )
     canvas["_etag"] = _compute_etag(canvas)
     return canvas
+
+
+@router.delete("/session/state")
+async def delete_canvas_state_v2(project_id: str) -> dict:
+    """PRD §18.2: reset session, preserve root_idea.
+
+    Preserves root_idea + raw_intent; wipes creative_path + scores +
+    creative_session (back to step 1 / active). When no init has been
+    done (no root_idea.prompt on disk), deletes canvas_state.json
+    entirely so subsequent /init starts clean.
+    """
+    _ensure_project(project_id)
+    canvas = _read_canvas(project_id)
+
+    if canvas and canvas.get("root_idea", {}).get("prompt"):
+        reset = _empty_canvas_v4()
+        # Preserve root_idea + raw_intent + create timestamps
+        reset["root_idea"] = canvas["root_idea"]
+        reset["raw_intent"] = canvas.get("raw_intent", reset["raw_intent"])
+        reset["session_metadata"]["created_at"] = (
+            canvas.get("session_metadata", {}).get("created_at")
+            or reset["session_metadata"]["created_at"]
+        )
+        reset["_etag"] = _compute_etag(reset)
+        _write_canvas(project_id, reset)
+    else:
+        # No init ever done (or canvas missing) — delete the file so the
+        # next /init writes a fresh slate.
+        from backend.api.creative_diverge import _get_canvas_path
+        path = _get_canvas_path(project_id)
+        if path.exists():
+            path.unlink()
+
+    return {"ok": True, "reset": "session"}
 
 
 # --- /next-step (impl extracted for testability) ---

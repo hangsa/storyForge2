@@ -224,6 +224,77 @@ def test_select_marks_step_completed_and_unlocks_next(project, client, monkeypat
     assert canvas["creative_path"][0]["selected_option_id"] == "opt_1_b"
 
 
+def test_delete_state_resets_session_preserves_root_idea(project, client, monkeypatch):
+    """PRD §18.2: DELETE /state wipes creative_path but keeps root_idea."""
+    from backend.api import v2_canvas
+    from backend.api.creative_diverge import _read_canvas, _write_canvas
+
+    async def fake_next_step(project_id, current_step):
+        options = [
+            {"id": f"opt_{current_step}_a", "title": "A", "premise": "p",
+             "logic": "", "scores": {}},
+            {"id": f"opt_{current_step}_b", "title": "B", "premise": "p",
+             "logic": "", "scores": {}},
+            {"id": f"opt_{current_step}_c", "title": "C", "premise": "p",
+             "logic": "", "scores": {}},
+        ]
+        canvas = _read_canvas(project_id)
+        while len(canvas["creative_path"]) < current_step:
+            canvas["creative_path"].append({
+                "step": len(canvas["creative_path"]) + 1,
+                "operation": None,
+                "operation_reason": None,
+                "options": [],
+                "selected_option_id": None,
+                "created_at": "2026-09-03T00:00:00",
+                "selected_at": None,
+                "regenerated_count": 0,
+                "state": "locked",
+            })
+        canvas["creative_path"][current_step - 1] = {
+            "step": current_step,
+            "operation": "twist",
+            "operation_reason": "",
+            "options": options,
+            "selected_option_id": None,
+            "created_at": "2026-09-03T00:00:00",
+            "selected_at": None,
+            "regenerated_count": 0,
+            "state": "active",
+        }
+        _write_canvas(project_id, canvas)
+        return {
+            "step": current_step,
+            "operation": {"type": "twist", "name": "twist", "reason": ""},
+            "options": options,
+            "quality_warning": None,
+        }
+    monkeypatch.setattr(v2_canvas, "_next_step_impl", fake_next_step)
+
+    client.post(f"/creative/canvas/{project}/session/init",
+                json={"prompt": "p", "genre_primary": "xianxia"})
+    client.post(f"/creative/canvas/{project}/session/next-step",
+                json={"current_step": 1})
+    client.post(f"/creative/canvas/{project}/session/select",
+                json={"step": 1, "option_id": "opt_1_b"})
+
+    del_resp = client.delete(f"/creative/canvas/{project}/session/state")
+    assert del_resp.status_code == 200
+
+    canvas = json.loads(_canvas_path(project).read_text(encoding="utf-8"))
+    assert canvas["creative_path"] == []
+    assert canvas["creative_session"]["current_step"] == 1
+    assert canvas["root_idea"]["prompt"] == "p"
+    assert canvas["creative_session"]["status"] == "active"
+
+
+def test_delete_state_when_uninitialized_is_idempotent(project, client):
+    """DELETE /state when no init has been done should not 500."""
+    response = client.delete(f"/creative/canvas/{project}/session/state")
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
 def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatch):
     """v2 /commit must output concept_and_dna.json in v3 schema (no v2 new fields)."""
     from backend.api import v2_canvas

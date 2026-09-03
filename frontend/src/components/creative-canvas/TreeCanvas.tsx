@@ -106,10 +106,21 @@ export function TreeCanvas({ canvas, onAdvance }: Props) {
   return (
     <div
       data-testid="tree-canvas"
-      className="relative flex-1 mt-md min-h-[600px]"
+      className="relative flex-1 mt-md min-h-[600px] overflow-x-auto"
       style={{ minWidth: 1200 }}
     >
       <TreePath paths={pathSegments} />
+      {/* Right-edge scroll hint: P2-H. TreeCanvas grows with each step
+          column (200px each + 100px gap). On viewports narrower than
+          1200px+step_columns the content overflows horizontally. The
+          overlay renders a soft gradient pointing right so users
+          notice there's more canvas to scroll to. pointer-events-none
+          keeps clicks on the option nodes working. */}
+      <div
+        data-testid="tree-canvas-scroll-hint"
+        aria-hidden="true"
+        className="sticky right-0 top-0 h-full w-16 bg-gradient-to-l from-surface-container-lowest to-transparent pointer-events-none float-right"
+      />
       <div className="relative z-10 w-full h-full flex">
         <div className="w-[200px] flex flex-col items-center justify-center relative h-[400px]">
           <IdeaRootNode

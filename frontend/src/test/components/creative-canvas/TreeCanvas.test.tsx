@@ -209,4 +209,49 @@ describe("TreeCanvas", () => {
     // Falls back to the 3 empty slots (A/B/C labels).
     expect(screen.getAllByTestId(/^option-node-1-[abc]$/)).toHaveLength(3);
   });
+
+  it("renders a right-edge scroll hint when more than 3 steps are visible", () => {
+    // P2-H: TreeCanvas uses min-width: 1200 and grows with step count.
+    // On a 1366px viewport, 4+ steps force horizontal scrolling. Without
+    // a visual hint users don't realize there's content past the right
+    // edge. Overlay renders a soft gradient pointing right.
+    const manySteps: CanvasV4State = {
+      ...baseState,
+      creative_path: [
+        ...baseState.creative_path,
+        {
+          step: 4,
+          operation: "escalate",
+          operation_reason: "r",
+          options: [
+            { id: "opt_4_a", title: "A", premise: "p", logic: "", scores: {} },
+            { id: "opt_4_b", title: "B", premise: "p", logic: "", scores: {} },
+            { id: "opt_4_c", title: "C", premise: "p", logic: "", scores: {} },
+          ],
+          selected_option_id: "opt_4_b",
+          created_at: "2026-09-03T00:00:00",
+          selected_at: "2026-09-03T00:00:01",
+          regenerated_count: 0,
+          state: "completed",
+        },
+        {
+          step: 5,
+          operation: "dramaturgy",
+          operation_reason: "r",
+          options: [
+            { id: "opt_5_a", title: "A", premise: "p", logic: "", scores: {} },
+            { id: "opt_5_b", title: "B", premise: "p", logic: "", scores: {} },
+            { id: "opt_5_c", title: "C", premise: "p", logic: "", scores: {} },
+          ],
+          selected_option_id: null,
+          created_at: "2026-09-03T00:00:00",
+          selected_at: null,
+          regenerated_count: 0,
+          state: "active",
+        },
+      ],
+    };
+    render(<TreeCanvas canvas={manySteps} />);
+    expect(screen.getByTestId("tree-canvas-scroll-hint")).toBeInTheDocument();
+  });
 });

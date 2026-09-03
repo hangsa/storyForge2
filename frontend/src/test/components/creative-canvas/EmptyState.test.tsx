@@ -28,4 +28,16 @@ describe("EmptyState", () => {
     expect(panel.className).not.toContain("max-w-2xl");
     expect(panel.className).not.toContain("mx-auto");
   });
+
+  it("surfaces expectation-management text so users know what happens after clicking 开始", () => {
+    // User report: clicking 开始创意推演 felt like a dead end because
+    // the post-init canvas state had no clear next-step affordance
+    // (now fixed by P0-A's 继续 button). Defense-in-depth: also set
+    // the expectation up-front in the empty-state copy so users know
+    // "click → 3 AI-generated directions → you pick one → 5 steps total".
+    render(<EmptyState />);
+    expect(screen.getByTestId("empty-state-expectation")).toHaveTextContent(
+      /下一步|3 个|5 步/,
+    );
+  });
 });

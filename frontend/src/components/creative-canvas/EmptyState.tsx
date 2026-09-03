@@ -37,6 +37,12 @@ export function EmptyState({ onInit, loading = false, embedded = false }: Props)
       <p className="text-sm text-on-surface-variant">
         只需要告诉我：「你脑子里现在有什么？」
       </p>
+      <p
+        data-testid="empty-state-expectation"
+        className="text-xs text-on-surface-variant/70 border border-outline-variant/40 rounded-md px-3 py-2"
+      >
+        下一步将生成 <span className="text-primary">3 个创意方向</span>，你选择一个继续，最多走 <span className="text-primary">5 步</span> 形成可提交的剧情创意。
+      </p>
       <textarea
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}

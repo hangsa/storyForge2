@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CreativeCanvasPage from "@/pages/CreativeCanvasPage";
 import type { CanvasV4State } from "@/api/client";
@@ -236,5 +236,57 @@ describe("CreativeCanvasPage", () => {
       </MemoryRouter>
     );
     expect(screen.queryByRole("button", { name: /^提交$/ })).toBeNull();
+  });
+});
+
+describe("CreativeCanvasPage embedded mode", () => {
+  it("does not render page-shell header when embedded=true", () => {
+    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
+    render(<CreativeCanvasPage projectId="proj_test" embedded />);
+    // Page-shell header is the h2 "Creative Canvas" + subtitle + StepIndicator
+    // block. When embedded=true, the wizard provides chrome so we omit it.
+    expect(screen.queryByRole("heading", { name: /Creative Canvas/ })).toBeNull();
+    // Also confirm the wrapper data-testid is absent in embedded mode.
+    expect(screen.queryByTestId("creative-canvas-page")).toBeNull();
+  });
+
+  it("renders page-shell header in standalone (non-embedded) mode", () => {
+    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
+    render(<CreativeCanvasPage projectId="proj_test" />);
+    // Sanity check the inverse — standalone mode keeps the wrapper + header.
+    expect(screen.getByTestId("creative-canvas-page")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Creative Canvas/ })).toBeInTheDocument();
+  });
+
+  it("invokes onCommitSuccess after confirmCommit resolves", async () => {
+    const onCommitSuccess = vi.fn();
+    const confirmCommit = vi.fn().mockResolvedValue(undefined);
+    mockUseCreativeCanvasV2.mockReturnValue({
+      ...defaultHookReturn(baseCanvas),
+      canCommit: true,
+      showPreCommit: true,
+      confirmCommit,
+    });
+    render(
+      <CreativeCanvasPage projectId="proj_test" embedded onCommitSuccess={onCommitSuccess} />
+    );
+    // PreCommitSummary is shown (showPreCommit=true); click the confirm button.
+    fireEvent.click(screen.getByRole("button", { name: /形成概念/ }));
+    await waitFor(() => expect(onCommitSuccess).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(confirmCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invoke onCommitSuccess when not provided (back-compat)", async () => {
+    const confirmCommit = vi.fn().mockResolvedValue(undefined);
+    mockUseCreativeCanvasV2.mockReturnValue({
+      ...defaultHookReturn(baseCanvas),
+      canCommit: true,
+      showPreCommit: true,
+      confirmCommit,
+    });
+    // No onCommitSuccess prop — should not throw.
+    render(<CreativeCanvasPage projectId="proj_test" embedded />);
+    fireEvent.click(screen.getByRole("button", { name: /形成概念/ }));
+    await waitFor(() => expect(confirmCommit).toHaveBeenCalledTimes(1), { timeout: 3000 });
   });
 });

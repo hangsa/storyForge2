@@ -25,9 +25,41 @@ const OPERATION_LABEL_ZH: Record<string, string> = {
 
 type Slot = "A" | "B" | "C";
 
-export default function CreativeCanvasPage() {
-  // Route is /project/:projectId/stage1/canvas (App.tsx:114)
-  const { projectId = "" } = useParams<{ projectId: string }>();
+interface CreativeCanvasPageProps {
+  /**
+   * Project identifier. In standalone mode this falls back to the
+   * `:projectId` URL param (route: /project/:projectId/stage1/canvas,
+   * App.tsx:114); in embedded mode the parent passes it explicitly so
+   * the page can render outside a router (e.g., inside the wizard).
+   * Explicit prop wins over URL param.
+   */
+  projectId?: string;
+  /**
+   * When true, render without the page-shell wrapper + title header —
+   * the wizard provides its own chrome. Used by
+   * CreativeCanvasMountPoint to drop the page into the wizard's main
+   * area as-is.
+   */
+  embedded?: boolean;
+  /**
+   * Invoked once `confirmCommit` resolves successfully. The page
+   * itself does not import WizardContext — the mount point
+   * (CreativeCanvasMountPoint) wires this to
+   * `markStep1SurfaceCompleted("canvas")`. Standalone mode ignores
+   * this prop.
+   */
+  onCommitSuccess?: () => void;
+}
+
+export default function CreativeCanvasPage({
+  projectId: projectIdProp,
+  embedded = false,
+  onCommitSuccess,
+}: CreativeCanvasPageProps = {}) {
+  // Route is /project/:projectId/stage1/canvas (App.tsx:114). Explicit
+  // prop wins over URL param so embedded mode works without a router.
+  const { projectId: projectIdParam = "" } = useParams<{ projectId: string }>();
+  const projectId = projectIdProp ?? projectIdParam;
   const {
     canvas, loadingStep, canCommit,
     showResetDialog, onReset, closeResetDialog, confirmReset,
@@ -40,17 +72,26 @@ export default function CreativeCanvasPage() {
   // `onInit` callback signature is `(prompt, genre)`; map to RawIntent's
   // `genre_primary` field (the backend enum, e.g. "xianxia").
   if (!canvas) {
-    return (
+    return embedded ? (
       <EmptyState
         loading={loadingStep}
         onInit={(prompt, genre) => {
-          initSession({ prompt, genre_primary: genre }).catch(() => {
-            // Hook already surfaces errors via its own error state; the
-            // catch here only prevents an unhandled-rejection warning in
-            // the console when the user retries after a malformed prompt.
-          });
+          initSession({ prompt, genre_primary: genre }).catch(() => {});
         }}
       />
+    ) : (
+      <div data-testid="creative-canvas-page" className="bg-surface-container-lowest min-h-screen p-6">
+        <EmptyState
+          loading={loadingStep}
+          onInit={(prompt, genre) => {
+            initSession({ prompt, genre_primary: genre }).catch(() => {
+              // Hook already surfaces errors via its own error state; the
+              // catch here only prevents an unhandled-rejection warning in
+              // the console when the user retries after a malformed prompt.
+            });
+          }}
+        />
+      </div>
     );
   }
 
@@ -65,27 +106,30 @@ export default function CreativeCanvasPage() {
   const opLabel =
     OPERATION_LABEL_ZH[headerOperation] ?? headerOperation;
 
-  return (
-    <div
-      data-testid="creative-canvas-page"
-      className="bg-surface-container-lowest min-h-screen p-6"
-    >
-      {/* Header: title left, StepIndicator right */}
-      <div className="flex justify-between items-end mb-6">
-        <div>
-          <h2 className="text-headline-lg font-bold text-on-surface">
-            Creative Canvas
-          </h2>
-          <p className="text-on-surface-variant text-sm">
-            Explore and evolve your core concept.
-          </p>
+  // When embedded=true, drop the page-shell wrapper + title header so the
+  // wizard's chrome is the only chrome. The page still owns the bottom
+  // action bar, dialogs, and the canvas tree itself.
+  const main = (
+    <>
+      {/* Header: title left, StepIndicator right. Only shown when the page
+          owns its own chrome (standalone mode). */}
+      {!embedded && (
+        <div className="flex justify-between items-end mb-6">
+          <div>
+            <h2 className="text-headline-lg font-bold text-on-surface">
+              Creative Canvas
+            </h2>
+            <p className="text-on-surface-variant text-sm">
+              Explore and evolve your core concept.
+            </p>
+          </div>
+          <StepIndicator
+            currentStep={canvas.creative_session.current_step}
+            maxSteps={canvas.creative_session.max_steps}
+            operation={headerOperation}
+          />
         </div>
-        <StepIndicator
-          currentStep={canvas.creative_session.current_step}
-          maxSteps={canvas.creative_session.max_steps}
-          operation={headerOperation}
-        />
-      </div>
+      )}
 
       {/* Tree visualization */}
       <TreeCanvas canvas={canvas} />
@@ -158,10 +202,30 @@ export default function CreativeCanvasPage() {
           conflict: Math.round((canvas.scores?.conflict ?? 0) * 100),
         }}
         onCommit={() => {
-          confirmCommit().catch(() => {});
+          // Await the hook's commit and fire onCommitSuccess once it
+          // resolves. The wizard-side mount point wires this callback
+          // to markStep1SurfaceCompleted("canvas") so step 2 unlocks.
+          confirmCommit()
+            .then(() => onCommitSuccess?.())
+            .catch(() => {
+              // Hook already surfaces errors via its own error state;
+              // the catch here only prevents an unhandled-rejection
+              // warning in the console.
+            });
         }}
         onCancel={closePreCommit}
       />
+    </>
+  );
+
+  return embedded ? (
+    main
+  ) : (
+    <div
+      data-testid="creative-canvas-page"
+      className="bg-surface-container-lowest min-h-screen p-6"
+    >
+      {main}
     </div>
   );
 }

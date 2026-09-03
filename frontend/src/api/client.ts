@@ -1738,6 +1738,15 @@ export const api = {
       `/creative/canvas/${encodeURIComponent(projectId)}/session/commit`,
     ),
 
+  // PRD §18.2: DELETE /state resets session while preserving root_idea.
+  // Backend returns {ok: true, reset: "session"}; root_idea + raw_intent are
+  // retained on disk. Wire-up lives in useCreativeCanvasV2.confirmReset.
+  deleteCanvasV2State: (projectId: string): Promise<{ok: boolean; reset: string}> =>
+    request(
+      "DELETE",
+      `/creative/canvas/${encodeURIComponent(projectId)}/session/state`,
+    ),
+
   // --- v1.7 Branch Simulation ---
   runSimulation: (projectId: string, description: string) =>
     request<BranchSimulationReport>("POST", `/v1/projects/${encodeURIComponent(projectId)}/branches/simulate`, { description }),

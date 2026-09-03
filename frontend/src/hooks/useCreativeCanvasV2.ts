@@ -21,12 +21,16 @@ interface UseCreativeCanvasV2 {
   nextStep: (currentStep: number) => Promise<NextStepResponse>;
   selectOption: (step: number, optionId: string) => Promise<void>;
   commitCanvas: () => Promise<void>;
+  // Reset dialog (added in Task 11 — ResetConfirmDialog)
+  showResetDialog: boolean;
+  onReset: () => void;
+  closeResetDialog: () => void;
+  confirmReset: () => Promise<void>;
 }
 
-// TODO(v2-canvas): add a `resetCanvas` action once `deleteCanvasV2State` is
-// added to api/client.ts. The v1 hook has one (see useCreativeCanvas.ts:250),
-// but the v2 client surface (Task 10) ships only the 5 lifecycle endpoints.
-// Out of scope for Task 11 — flagged as a follow-up.
+// Reset-confirm-dialog state added in Task 11 to back ResetConfirmDialog.
+// confirmReset calls DELETE /state (root_idea preserved per PRD §18.2),
+// then re-fetches the canvas so the canvas-derived state reflows.
 
 export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
   const [status, setStatus] = useState<Status>("empty");
@@ -34,6 +38,7 @@ export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
   const [error, setError] = useState<string | null>(null);
   const [loadingStep, setLoadingStep] = useState(false);
   const [committedAt, setCommittedAt] = useState<string | null>(null);
+  const [showResetDialog, setShowResetDialog] = useState(false);
 
   const loadCanvas = useCallback(async () => {
     setStatus("loading");
@@ -97,6 +102,18 @@ export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
     }
   }, [projectId, loadCanvas]);
 
+  const onReset = useCallback(() => setShowResetDialog(true), []);
+  const closeResetDialog = useCallback(() => setShowResetDialog(false), []);
+  const confirmReset = useCallback(async () => {
+    setShowResetDialog(false);
+    try {
+      await api.deleteCanvasV2State(projectId);
+      await loadCanvas();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "reset failed");
+    }
+  }, [projectId, loadCanvas]);
+
   // canCommit: spec §7.5
   const cpath = canvas?.creative_path ?? [];
   const completed = cpath.filter((p) => p.state === "completed");
@@ -111,5 +128,6 @@ export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
   return {
     status, canvas, error, loadingStep, committedAt, canCommit,
     loadCanvas, initSession, nextStep, selectOption, commitCanvas,
+    showResetDialog, onReset, closeResetDialog, confirmReset,
   };
 }

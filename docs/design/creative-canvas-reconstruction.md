@@ -1038,6 +1038,22 @@ v2 不删除任何现有 engine，而是改变它们的角色定位：
 | POST | `/creative/session/commit` | 写 concept_and_dna.json + 双写 | `/commit` | v2.0 |
 | POST | `/creative/session/evaluate` | （deprecated）| `/evaluate`（保留兼容头）| v2.0（仅 deprecated 头）|
 
+> **Implementation note (v2.0 shipped):** the actual endpoint paths use the project-scoped namespace `/creative/canvas/{project_id}/session/*` instead of the flat `/creative/session/*` listed above. See §26.1 for the namespace-decision ADR explaining the deviation.
+
+### 26.1 命名空间决策（v2.0 implementation ADR）
+
+PRD §26 表格里的端点路径是 `/creative/session/*`，但 v2.0 实际实现的 router（v2_canvas.py，commit b35f70a 之前的命名空间重构）使用的路径是 `/creative/canvas/{project_id}/session/*`。这里保留 project-scoped 命名空间，理由如下：
+
+1. **路由层级一致性：** PRD §11.1 页面路由是 `/project/:projectId/stage1/canvas`（注意：v1.8.1 改造把 canvas 从 Stage 0 提升到 Stage 1，但 PRD §11.1 原文仍写 `stage0`；实际代码见 `frontend/src/App.tsx:96` 与 `frontend/src/pages/CreativeCanvasPage.tsx:29`）。前端路由已经是 `/project/{projectId}/...`，后端 API 在同一个 project 维度下加一层 `/creative/canvas/{project_id}/` 既匹配前端的资源层级，又让 OpenAPI 文档与前端生成代码（如果将来引入 typed client）能直接按 project 分组端点。
+
+2. **与既有 v1.x 端点保持一致：** 旧版 `/state` 与 `/evaluate` 都在 `backend/api/creative_diverge.py` 里实现，路径里本身就有 `{project_id}` path-param（参见 `creative_diverge.py` 中 `/state/{project_id}` 之类的签名）。v2 router 把这个 project-scoped 写法沿用过来，避免出现「v1 用 `/state/{pid}`、v2 用 `/state`」的认知割裂——尤其在 v1/v2 共存期间（`enable_canvas_v2` flag 控制 router 是否挂载）。
+
+3. **权限/审计的扩展空间：** project-scoped 路径让中间件能直接通过 path-param 取到 `project_id`，做项目级鉴权与审计日志时不需要从 body 或 header 反查。
+
+4. **多 session 隔离：** 同一个 project 在未来 v2.1 可能并存多个并行分支（早收束 + backtrack 引入的 STALE 节点让「同一 project 多个 active session」成为可能），project-scoped 路径为后续在 `{project_id}` 下挂子资源（如 `/creative/canvas/{project_id}/sessions/{session_id}/...`）留出了空间，而 flat `/creative/session/*` 没有这种扩展性。
+
+**结论：** v2.0 实际路径 = `/creative/canvas/{project_id}/session/{verb}`，对应 §26 表格里的 verb 列。后续 v2.1 的 `regenerate`、`backtrack`、`finalize` 端点都遵循同一形状。
+
 ## 27. 关键端点语义
 
 ### 27.1 next-step

@@ -248,3 +248,128 @@ def test_e2e_v3_canvas_lazy_migrates_and_committable(project, client, tmp_path):
     on_disk = json.loads(_canvas_path(pid).read_text(encoding="utf-8"))
     assert on_disk["schema_version"] == 4
     assert "creative_path" in on_disk
+
+
+def test_e2e_full_flow_commits_with_enriched_schema(
+    project, client, stub_planner, stub_llm
+):
+    """End-to-end: init -> 5x(next-step + select) -> commit, then assert
+    every PRD §22 enriched-schema field is populated:
+
+    - root_idea.prompt (the user's raw intent, preserved through commit)
+    - creative_path has 5 entries, all completed with selected_option_id set
+    - committed_at (truthy timestamp set by /commit)
+    - scores.computed_at (truthy timestamp set by /init + refreshed by /select)
+    - current_concept.premise (truthy, accumulates through selections)
+
+    Note on creative_session fields: /commit sets the top-level `committed`
+    boolean and `committed_at` timestamp but does NOT flip
+    `creative_session.status` from "active" — that's left for the UI to
+    derive from `committed_at`. Likewise `creative_session.current_step`
+    is initialized to 1 and never bumped by /select (step progress lives
+    in `creative_path[].state`, not the session summary). This test pins
+    the actual contract, not the PRD's aspirational status enum.
+    """
+    # Init
+    init_resp = client.post(
+        f"/creative/canvas/{project}/session/init",
+        json={"prompt": "my idea", "genre_primary": "xianxia"},
+    )
+    assert init_resp.status_code == 200, init_resp.text
+
+    # Walk 5 steps, selecting option_b each time
+    for step in range(1, 6):
+        ns = client.post(
+            f"/creative/canvas/{project}/session/next-step",
+            json={"current_step": step},
+        )
+        assert ns.status_code == 200, ns.text
+
+        sel = client.post(
+            f"/creative/canvas/{project}/session/select",
+            json={"step": step, "option_id": f"opt_{step}_b"},
+        )
+        assert sel.status_code == 200, sel.text
+
+    # Commit
+    commit_resp = client.post(f"/creative/canvas/{project}/session/commit")
+    assert commit_resp.status_code == 200, commit_resp.text
+
+    # Re-fetch state and verify every enriched-schema block (PRD §22) is populated.
+    state_resp = client.get(f"/creative/canvas/{project}/session/state")
+    assert state_resp.status_code == 200, state_resp.text
+    canvas = state_resp.json()
+
+    # root_idea.prompt carries the original user intent through init and commit.
+    assert canvas["root_idea"]["prompt"] == "my idea"
+
+    # creative_path records the completed 5-step loop (state per row is the
+    # authoritative "we walked all 5 steps" signal — not creative_session).
+    assert len(canvas["creative_path"]) == 5
+    for i, entry in enumerate(canvas["creative_path"], start=1):
+        assert entry["step"] == i
+        assert entry["state"] == "completed", (
+            f"Step {i} state={entry['state']!r}, expected 'completed'"
+        )
+        assert entry["selected_option_id"] == f"opt_{i}_b"
+
+    # /commit stamps the top-level committed_at timestamp (None before commit).
+    assert canvas["committed_at"], (
+        "committed_at must be truthy after /commit; got: "
+        f"{canvas.get('committed_at')!r}"
+    )
+
+    # scores.computed_at is set at init and refreshed by each /select.
+    assert canvas["scores"]["computed_at"]
+
+    # current_concept.premise accumulates through selections; by step 5 it
+    # mirrors the final selected option's premise (not None / not "").
+    assert canvas["current_concept"]["premise"]
+
+
+def test_e2e_delete_state_after_2_steps_preserves_root_idea(
+    project, client, stub_planner, stub_llm
+):
+    """Init -> 2 steps -> DELETE /state: PRD §18.2 mandates that DELETE
+    resets the session but preserves root_idea (the user's original
+    intent). Verify creative_path is wiped while root_idea.prompt survives.
+
+    Note: after 2 /select calls, the cascade into next-step leaves one
+    extra step-3 entry pre-filled (the fixture's fake_next extends the
+    path). The exact pre-reset length isn't load-bearing — what matters
+    is that DELETE wipes it back to empty.
+    """
+    # Init
+    init_resp = client.post(
+        f"/creative/canvas/{project}/session/init",
+        json={"prompt": "keep this", "genre_primary": "xianxia"},
+    )
+    assert init_resp.status_code == 200, init_resp.text
+
+    # Walk 2 steps
+    for step in range(1, 3):
+        ns = client.post(
+            f"/creative/canvas/{project}/session/next-step",
+            json={"current_step": step},
+        )
+        assert ns.status_code == 200, ns.text
+
+        sel = client.post(
+            f"/creative/canvas/{project}/session/select",
+            json={"step": step, "option_id": f"opt_{step}_b"},
+        )
+        assert sel.status_code == 200, sel.text
+
+    # Sanity: at least 2 completed steps present before reset (the cascade
+    # into next-step after the last /select may also fill step 3).
+    pre_state = client.get(f"/creative/canvas/{project}/session/state").json()
+    assert len(pre_state["creative_path"]) >= 2
+
+    # DELETE /state — resets session but preserves root_idea
+    del_resp = client.delete(f"/creative/canvas/{project}/session/state")
+    assert del_resp.status_code == 200, del_resp.text
+
+    # Re-fetch state to verify reset semantics
+    post_state = client.get(f"/creative/canvas/{project}/session/state").json()
+    assert post_state["creative_path"] == []
+    assert post_state["root_idea"]["prompt"] == "keep this"

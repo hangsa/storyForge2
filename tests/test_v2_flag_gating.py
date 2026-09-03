@@ -59,3 +59,37 @@ def test_v2_state_returns_404_when_flag_enabled_but_no_canvas(
         "The v2 router was NOT actually mounted."
     )
     assert body["detail"]["code"] == "CANVAS_NOT_FOUND"
+
+
+def test_v2_delete_state_returns_404_when_flag_disabled(tmp_path, monkeypatch):
+    """With ENABLE_CANVAS_V2=false, DELETE /state must also return 404
+    (router not mounted). Symmetric to the GET /state disabled case —
+    proves no v2 endpoints leak through when the flag is off.
+    """
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
+    client = _make_client(monkeypatch, enabled=False)
+
+    response = client.delete("/creative/canvas/p_flag_off/session/state")
+
+    # Router not mounted at all → FastAPI's default 404 (no JSON body).
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not Found"}
+
+
+def test_v2_evaluate_returns_404_when_flag_disabled(tmp_path, monkeypatch):
+    """With ENABLE_CANVAS_V2=false, POST /evaluate must return 404 (router
+    not mounted). /evaluate is the deprecated alias for the legacy
+    evaluator (Task 3) — it lives only inside the v2 router, so the flag
+    must gate it identically to /state and DELETE /state.
+    """
+    monkeypatch.setattr(settings, "projects_dir", tmp_path)
+    client = _make_client(monkeypatch, enabled=False)
+
+    response = client.post(
+        "/creative/canvas/p_flag_off/session/evaluate",
+        json={"prompt": "x"},
+    )
+
+    # Router not mounted at all → FastAPI's default 404 (no JSON body).
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not Found"}

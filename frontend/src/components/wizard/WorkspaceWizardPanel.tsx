@@ -1,7 +1,6 @@
-import { useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
-import { WizardProvider, useWizard, type WizardData } from "./WizardContext";
+import { WizardProvider, useWizard, type WizardData, type Step1SurfaceId } from "./WizardContext";
 import WizardSidebar from "./WizardSidebar";
 import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
@@ -10,6 +9,7 @@ import MapStep from "./MapStep";
 import OutlineStep from "./OutlineStep";
 import ChapterOutlineStep from "./ChapterOutlineStep";
 import CreativeDivergenceStep from "./CreativeDivergenceStep";
+import CreativeCanvasMountPoint from "../creative-canvas/CreativeCanvasMountPoint";
 import RegenerateStatusBadge from "./RegenerateStatusBadge";
 
 interface Props { projectId: string }
@@ -34,18 +34,14 @@ export default function WorkspaceWizardPanel({ projectId }: Props) {
 
 function Inner({ projectId }: Props) {
   const wizard = useWizard();
-  const navigate = useNavigate();
-  const handleCanvasNavigate = useCallback(
-    (path: string) => navigate(path),
-    [navigate]
-  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [cd, concept, world, chars, novel, outline] = await Promise.allSettled([
+        const [cd, canvasState, concept, world, chars, novel, outline] = await Promise.allSettled([
           api.getCreativeDivergence(projectId),
+          api.getCanvasV2State(projectId),
           api.getConcept(projectId),
           api.getWorld(projectId),
           api.getCharacter(projectId),
@@ -54,27 +50,27 @@ function Inner({ projectId }: Props) {
         ]);
         if (cancelled) return;
         const completed: number[] = [];
+        const completedStep1Surfaces: Step1SurfaceId[] = [];
         const data: Partial<WizardData> = {};
-        // Step 1 (creative divergence) is "completed" once the user has
-        // committed a selection. Without this, the sidebar's `reachable =
-        // completed || current` test (WizardSidebar.tsx:25) keeps step 1
-        // grayed out even after a divergence run finishes — proj_f0721bdc
-        // 2026-08-31 regression. CreativeDivergenceStep re-fetches its own
-        // state via getDivergeState on mount, so we don't need to populate
-        // `data.creative_divergence`; we only need the completion marker.
-        // Step 1 is "completed" once the divergence flow has stamped
-        // `selected_at`. The Path A canvas /commit endpoint dual-writes a
-        // compat payload with `selected_at=now` and `selected_id=None`
-        // (no variant chosen on Path B), so we gate on `selected_at`
-        // alone — both source="canvas" and source="creative_divergence"
-        // paths land on it. proj_f0721bdc 2026-08-31 was a canvas-source
-        // project where the existing `has_selection && selected_at`
-        // check missed step 1; this is the one true signal that the
-        // user finished the divergence flow.
+
+        // Divergence surface completion: selected_at is the single
+        // source of truth (both source="canvas" and source="creative_divergence"
+        // dual-write at /commit). proj_f0721bdc 2026-08-31 regression.
         const cdPayload = cd.status === "fulfilled" ? cd.value : null;
         if (cdPayload && cdPayload.selected_at) {
           completed.push(1);
+          completedStep1Surfaces.push("divergence");
         }
+
+        // Canvas surface completion: CanvasV4State.committed is the
+        // semantic signal; committed_at non-null is a defensive backstop.
+        const canvasPayload = canvasState.status === "fulfilled" ? canvasState.value : null;
+        if (canvasPayload?.committed === true && canvasPayload.committed_at !== null) {
+          if (!completed.includes(1)) completed.push(1);
+          completedStep1Surfaces.push("canvas");
+        }
+
+        // Existing prefill for steps 2..7 — unchanged.
         const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
         if (conceptPayload && hasContent(conceptPayload)) {
           completed.push(2);
@@ -87,8 +83,15 @@ function Inner({ projectId }: Props) {
         if (chars.status === "fulfilled" && hasContent(chars.value)) { completed.push(4); data.characters = chars.value as CharacterSet; }
         if (novel.status === "fulfilled" && hasContent(novel.value)) { completed.push(6); data.novel_outline = novel.value as NovelOutline; }
         if (outline.status === "fulfilled" && hasContent(outline.value)) { completed.push(7); data.chapter1_outline = outline.value as Outline; }
-        if (completed.length > 0) wizard.hydrateFromFiles(completed, data);
-        else wizard.markPrefillComplete();
+
+        if (completed.length > 0) {
+          wizard.hydrateFromFiles(completed, data);
+        } else {
+          wizard.markPrefillComplete();
+        }
+        if (completedStep1Surfaces.length > 0) {
+          wizard.hydrateStep1Surfaces(completedStep1Surfaces);
+        }
       } catch {
         if (!cancelled) wizard.markPrefillComplete();
       }
@@ -99,16 +102,34 @@ function Inner({ projectId }: Props) {
 
   return (
     <div className="flex" style={{ minHeight: "calc(100vh - 64px)" }}>
-      <WizardSidebar currentStep={wizard.currentStep} completedSteps={wizard.completedSteps}
-                     onJump={(s) => wizard.jumpToStep(s)}
-                     modules={[{ id: "canvas", label: "创意画布", icon: "account_tree",
-                                 path: `/project/${projectId}/stage1/canvas` }]}
-                     onModuleNavigate={handleCanvasNavigate} />
+      <WizardSidebar
+        currentStep={wizard.currentStep}
+        completedSteps={wizard.completedSteps}
+        activeStep1Surface={wizard.activeStep1Surface}
+        completedStep1Surfaces={wizard.completedStep1Surfaces}
+        onJump={(item) => {
+          if (item.kind === "step1-surface") {
+            wizard.setActiveStep1Surface(item.surfaceId!);
+          } else {
+            wizard.jumpToStep(item.position);
+          }
+        }}
+      />
 
       <div className="flex-1 flex flex-col bg-background min-w-0">
         <main className="flex-1 overflow-y-auto">
           <div className="w-full flex flex-col">
-            {wizard.currentStep === 1 && <CreativeDivergenceStep projectId={projectId} />}
+            {wizard.currentStep === 1 && (
+              wizard.activeStep1Surface === "canvas"
+                ? <CreativeCanvasMountPoint projectId={projectId} />
+                : <CreativeDivergenceStep
+                    projectId={projectId}
+                    {...({
+                      onCommitSuccess: () =>
+                        wizard.markStep1SurfaceCompleted("divergence"),
+                    } as { onCommitSuccess?: () => void })}
+                  />
+            )}
             {wizard.currentStep === 2 && <ConceptStep projectId={projectId} />}
             {wizard.currentStep === 3 && <WorldStep projectId={projectId} />}
             {wizard.currentStep === 4 && <CharacterStep projectId={projectId} />}

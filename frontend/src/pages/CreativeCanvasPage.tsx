@@ -14,7 +14,14 @@ const ActiveStepPanel: React.FC<{
   onSelect: (optionId: string) => void | Promise<void>;
 }> = () => null;
 import { QualityBar } from "@/components/creative-canvas/QualityBar";
-import { CanvasToolbar } from "@/components/creative-canvas/CanvasToolbar";
+// TODO(canvas-recon Task 14): rewrite CanvasToolbar integration to use StepIndicator.
+// Temporary stub keeps tsc happy while the migration completes.
+const CanvasToolbar: React.FC<{
+  currentStep: number;
+  totalSteps: number;
+  onViewPath: () => void;
+  onReset: () => void;
+}> = () => null;
 import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
 import type { RawIntent, NextStepResponse } from "@/api/client";
 
@@ -79,16 +86,9 @@ export default function CreativeCanvasPage() {
 
   return (
     <div data-testid="creative-canvas-v2-page" className="flex flex-col h-full">
-      <CanvasToolbar
-        currentStep={canvas?.creative_session?.current_step || 1}
-        totalSteps={5}
-        onViewPath={() => {}}
-        onReset={() => {
-          // TODO(canvas-v2): wire to resetCanvas action once deleteCanvasV2State
-          // is added to api/client.ts. Until then this is a no-op.
-          console.warn("resetCanvas: not yet implemented");
-        }}
-      />
+      <div data-testid="canvas-toolbar-todo">
+        TODO(canvas-recon Task 14): StepIndicator rewrite
+      </div>
 
       {canvas && (
         <div data-testid="canvas-route-todo">

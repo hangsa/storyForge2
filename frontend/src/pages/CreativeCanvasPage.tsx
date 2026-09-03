@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PrimaryButton, PanelCard } from "@/components/ds";
-import { HorizontalPathCanvas } from "@/components/creative-canvas/HorizontalPathCanvas";
+// TODO(canvas-recon Task 14): rewrite CreativeCanvasPage to use TreeCanvas.
+// Temporary stub keeps tsc happy while HorizontalPathCanvas migration completes.
+const HorizontalPathCanvas: React.FC<{ rootIdea: string; path: unknown[] }> = () => null;
 import { ActiveStepPanel } from "@/components/creative-canvas/ActiveStepPanel";
 import { QualityBar } from "@/components/creative-canvas/QualityBar";
 import { CanvasToolbar } from "@/components/creative-canvas/CanvasToolbar";
@@ -81,10 +83,9 @@ export default function CreativeCanvasPage() {
       />
 
       {canvas && (
-        <HorizontalPathCanvas
-          rootIdea={canvas.root_idea.prompt}
-          path={canvas.creative_path}
-        />
+        <div data-testid="canvas-route-todo">
+          TODO(canvas-recon Task 14): TreeCanvas rewrite pending
+        </div>
       )}
 
       <div className="flex-1 overflow-auto p-4">

@@ -308,6 +308,19 @@ def test_delete_state_when_uninitialized_is_idempotent(project, client):
     assert first.json() == second.json()
 
 
+def test_evaluate_returns_deprecation_header(project, client):
+    """PRD §26: /evaluate kept as deprecated compat endpoint."""
+    client.post(f"/creative/canvas/{project}/session/init",
+                json={"prompt": "p", "genre_primary": "xianxia"})
+
+    resp = client.post(f"/creative/canvas/{project}/session/evaluate",
+                       json={"node_id": None})
+    assert resp.status_code == 200, resp.text
+    assert resp.headers.get("deprecation") == "true"
+    body = resp.json()
+    assert body["deprecated"] is True
+
+
 def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatch):
     """v2 /commit must output concept_and_dna.json in v3 schema (no v2 new fields)."""
     from backend.api import v2_canvas

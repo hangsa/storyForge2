@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from backend.api.creative_diverge import (
@@ -528,5 +528,22 @@ in Task 8 to use this order.
     """
     from backend.api.creative_diverge import commit_canvas as _v1_commit
     return await _v1_commit(project_id, {})
+
+
+# --- /evaluate (PRD §26 deprecated alias) ---
+
+
+@router.post("/session/evaluate")
+async def evaluate_deprecated_alias(project_id: str, response: Response) -> dict:
+    """PRD §26: /evaluate is deprecated. Frontend should not call this;
+    next-step auto-fills option.scores. Kept for v1.x compat callers.
+    """
+    response.headers["Deprecation"] = "true"
+    canvas = _read_canvas(project_id)
+    return {
+        "deprecated": True,
+        "warning": "Use option.scores from /next-step instead.",
+        "current_scores": canvas.get("scores", {}) if canvas else {},
+    }
 
 

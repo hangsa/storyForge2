@@ -124,6 +124,9 @@ function Inner({ projectId }: Props) {
                 ? <CreativeCanvasMountPoint projectId={projectId} />
                 : <CreativeDivergenceStep
                     projectId={projectId}
+                    // Forward-compat cast: CreativeDivergenceStep doesn't
+                    // declare onCommitSuccess yet (Task 5 widens Props).
+                    // Remove this spread when Task 5 lands.
                     {...({
                       onCommitSuccess: () =>
                         wizard.markStep1SurfaceCompleted("divergence"),

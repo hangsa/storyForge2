@@ -2102,6 +2102,7 @@ async def commit_canvas(project_id: str, data: dict = {}):
     # state as fully committed. /commit is idempotent and overwrites both
     # files atomically on retry.
     now = datetime.utcnow().isoformat()
+    canvas["committed"] = True
     canvas["committed_at"] = now
     canvas["committed_concept_ref"] = "concept_and_dna.json"
     canvas["updated_at"] = now

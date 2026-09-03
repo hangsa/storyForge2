@@ -41,7 +41,7 @@ export default function Stage1Layout() {
             data-testid={`stage1-tab-${key}`}
             className={`flex items-center gap-2 px-4 py-1.5 rounded-md font-body-ui text-sm transition-colors ${
               active === key
-                ? "bg-secondary-container text-on-secondary-container font-bold scale-[0.98] transition-transform duration-150"
+                ? "bg-primary-container text-on-primary-container font-bold scale-[0.98] transition-transform duration-150"
                 : "text-system-log hover:text-primary"
             }`}
           >

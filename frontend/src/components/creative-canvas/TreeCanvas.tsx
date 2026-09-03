@@ -112,7 +112,10 @@ export function TreeCanvas({ canvas, onAdvance }: Props) {
       <TreePath paths={pathSegments} />
       <div className="relative z-10 w-full h-full flex">
         <div className="w-[200px] flex flex-col items-center justify-center relative h-[400px]">
-          <IdeaRootNode prompt={canvas.root_idea?.prompt ?? ""} />
+          <IdeaRootNode
+            prompt={canvas.root_idea?.prompt ?? ""}
+            genre={canvas.root_idea?.genre || undefined}
+          />
         </div>
         {steps.map((s) => (
           <div

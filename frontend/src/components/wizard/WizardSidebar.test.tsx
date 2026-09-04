@@ -8,8 +8,6 @@ function renderSidebar(overrides: Partial<Parameters<typeof WizardSidebar>[0]> =
     <WizardSidebar
       currentStep={1}
       completedSteps={[]}
-      activeStep1Surface="divergence"
-      completedStep1Surfaces={[]}
       onJump={onJump}
       {...overrides}
     />
@@ -18,98 +16,99 @@ function renderSidebar(overrides: Partial<Parameters<typeof WizardSidebar>[0]> =
 }
 
 describe("WizardSidebar (post-integration)", () => {
-  const labels = ["创意发散", "创意画布", "概念 DNA", "世界观", "角色设计", "地图系统", "全文大纲", "章节大纲"];
+  // Display order matches the SIDEBAR_ITEMS list in WizardSidebar.tsx:
+  //   1. 创意发散 (divergence)
+  //   2. 概念 DNA (concept)
+  //   3. 世界观 (world)
+  //   4. 角色设计 (character)
+  //   5. 地图系统 (map)
+  //   6. 剧情画布 (plot)
+  //   7. 全文大纲 (outline)
+  //   8. 章节大纲 (chapter)
+  const labels = [
+    "创意发散",
+    "概念 DNA",
+    "世界观",
+    "角色设计",
+    "地图系统",
+    "剧情画布",
+    "全文大纲",
+    "章节大纲",
+  ];
+  const ids = ["divergence", "concept", "world", "character", "map", "plot", "outline", "chapter"];
 
   it("renders 8 sidebar items in position order", () => {
     renderSidebar();
     labels.forEach((l) => expect(screen.getByText(l)).toBeInTheDocument());
   });
 
-  it("renders divergence + canvas with identical base class (same row style)", () => {
+  it("renders all sidebar items with correct testids", () => {
     renderSidebar();
-    const div = screen.getByTestId("wizard-sidebar-item-divergence").closest("button, a");
-    const canvas = screen.getByTestId("wizard-sidebar-item-canvas").closest("button, a");
-    expect(div?.className).toContain("px-3 py-2");
-    expect(canvas?.className).toContain("px-3 py-2");
-    expect(div?.className).not.toContain("border-dashed");
-    expect(canvas?.className).not.toContain("border-dashed");
-  });
-
-  it("no separator / dashed border between divergence and canvas", () => {
-    const { container } = renderSidebar();
-    expect(container.querySelector('[data-testid="wizard-sidebar-modules"]')).toBeNull();
-    expect(container.querySelector(".border-dashed")).toBeNull();
-  });
-
-  it("clicking canvas calls onJump with item { kind: 'step1-surface', surfaceId: 'canvas' }", () => {
-    const { onJump } = renderSidebar();
-    fireEvent.click(screen.getByTestId("wizard-sidebar-item-canvas"));
-    expect(onJump).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "step1-surface", surfaceId: "canvas" })
+    ids.forEach((id) =>
+      expect(screen.getByTestId(`wizard-sidebar-item-${id}`)).toBeInTheDocument()
     );
   });
 
-  it("clicking divergence calls onJump with item { kind: 'step1-surface', surfaceId: 'divergence' }", () => {
-    const { onJump } = renderSidebar();
-    fireEvent.click(screen.getByTestId("wizard-sidebar-item-divergence"));
-    expect(onJump).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "step1-surface", surfaceId: "divergence" })
-    );
+  it("step 2 (concept DNA) is enabled when step 1 (divergence) is completed", () => {
+    renderSidebar({ completedSteps: [1] });
+    expect(screen.getByTestId("wizard-sidebar-item-concept")).not.toHaveAttribute("disabled");
   });
 
-  it("clicking concept DNA calls onJump with item { kind: 'step1-surface' undefined, position: 2 }", () => {
-    // Use currentStep=2 so concept is reachable as the active step.
-    // (At currentStep=1 with no surface completed, concept is correctly
-    // disabled — covered by the "step 2 disabled for new project" test.)
-    const { onJump } = renderSidebar({ currentStep: 2 });
-    fireEvent.click(screen.getByTestId("wizard-sidebar-item-concept"));
-    expect(onJump).toHaveBeenCalledWith(expect.objectContaining({ position: 2 }));
+  it("step 2 (concept DNA) is disabled for a new project", () => {
+    renderSidebar();
+    expect(screen.getByTestId("wizard-sidebar-item-concept")).toHaveAttribute("disabled");
   });
 
-  it("marks divergence active when currentStep=1 and activeStep1Surface='divergence'", () => {
-    renderSidebar({ currentStep: 1, activeStep1Surface: "divergence" });
+  // The component's reachability rule is: a step N is enabled when N is the
+  // immediately-next step (currentStep+1) AND currentStep is in completedSteps.
+  // Steps further ahead are disabled until you walk through them in order.
+  it("step 6 (plot) is enabled when currentStep=5 and step 5 is completed", () => {
+    renderSidebar({ currentStep: 5, completedSteps: [1, 2, 3, 4, 5] });
+    expect(screen.getByTestId("wizard-sidebar-item-plot")).not.toHaveAttribute("disabled");
+  });
+
+  it("step 6 (plot) is disabled when currentStep=5 but step 5 is NOT completed", () => {
+    renderSidebar({ currentStep: 5, completedSteps: [1, 2, 3, 4] });
+    expect(screen.getByTestId("wizard-sidebar-item-plot")).toHaveAttribute("disabled");
+  });
+
+  it("step 6 (plot) is disabled when currentStep=1 even with all earlier steps completed", () => {
+    // Furthest-ahead steps aren't auto-unlocked; the user must walk through.
+    renderSidebar({ currentStep: 1, completedSteps: [1, 2, 3, 4, 5] });
+    expect(screen.getByTestId("wizard-sidebar-item-plot")).toHaveAttribute("disabled");
+  });
+
+  it("marks divergence active when currentStep=1", () => {
+    renderSidebar({ currentStep: 1 });
     const item = screen.getByTestId("wizard-sidebar-item-divergence");
     expect(item.getAttribute("data-state")).toBe("current");
   });
 
-  it("marks canvas active when currentStep=1 and activeStep1Surface='canvas'", () => {
-    renderSidebar({ currentStep: 1, activeStep1Surface: "canvas" });
-    const item = screen.getByTestId("wizard-sidebar-item-canvas");
+  it("marks plot active when currentStep=6", () => {
+    renderSidebar({ currentStep: 6 });
+    const item = screen.getByTestId("wizard-sidebar-item-plot");
     expect(item.getAttribute("data-state")).toBe("current");
   });
 
-  it("shows ✓ on divergence when completedStep1Surfaces contains 'divergence'", () => {
-    renderSidebar({ completedStep1Surfaces: ["divergence"] });
+  it("marks step completed when in completedSteps and not current", () => {
+    renderSidebar({ currentStep: 2, completedSteps: [1] });
     const item = screen.getByTestId("wizard-sidebar-item-divergence");
     expect(item.getAttribute("data-state")).toBe("completed");
   });
 
-  it("shows ✓ on canvas independently of divergence (互不污染)", () => {
-    renderSidebar({ completedStep1Surfaces: ["canvas"] });
-    expect(screen.getByTestId("wizard-sidebar-item-canvas").getAttribute("data-state")).toBe("completed");
-    expect(screen.getByTestId("wizard-sidebar-item-divergence").getAttribute("data-state")).not.toBe("completed");
+  it("clicking a reachable item calls onJump with the full SidebarItem", () => {
+    // currentStep=5 with step 5 in completedSteps makes plot (position 6) the
+    // immediately-next reachable step.
+    const { onJump } = renderSidebar({ currentStep: 5, completedSteps: [1, 2, 3, 4, 5] });
+    fireEvent.click(screen.getByTestId("wizard-sidebar-item-plot"));
+    expect(onJump).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "plot", label: "剧情画布", position: 6 })
+    );
   });
 
-  it("step 2 (concept DNA) is enabled when any surface completed (OR semantic)", () => {
-    renderSidebar({ completedStep1Surfaces: ["canvas"] });
-    const concept = screen.getByTestId("wizard-sidebar-item-concept");
-    expect(concept).not.toHaveAttribute("disabled");
-  });
-
-  it("step 2 (concept DNA) is enabled when completedSteps already contains 1", () => {
-    renderSidebar({ completedSteps: [1] });
-    const concept = screen.getByTestId("wizard-sidebar-item-concept");
-    expect(concept).not.toHaveAttribute("disabled");
-  });
-
-  it("step 2 (concept DNA) is disabled when no surface done", () => {
-    renderSidebar({ completedSteps: [], completedStep1Surfaces: [] });
-    const concept = screen.getByTestId("wizard-sidebar-item-concept");
-    expect(concept).toHaveAttribute("disabled");
-  });
-
-  it("step 2 disabled for new project — neither surface completed", () => {
-    renderSidebar();
-    expect(screen.getByTestId("wizard-sidebar-item-concept")).toHaveAttribute("disabled");
+  it("clicking a disabled (unreachable) item does NOT call onJump", () => {
+    const { onJump } = renderSidebar();
+    fireEvent.click(screen.getByTestId("wizard-sidebar-item-plot"));
+    expect(onJump).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,6 @@
-# 剧情画布（Creative Canvas）模块综述
+# 剧情画布（Plot Canvas）模块综述
+
+> **⚠️ 本文档描述 v1.x single-canvas API**（展开节点 / 选路径 / 变异 / 评分）—— 路由 `/project/:projectId/stage0/canvas`、React Flow 全屏树、`useCreativeCanvas` 状态机。当前代码已迁移到 v2 step-by-step tree（5 step × 3 options，plot operations twist / break / fuse / invert / escalate / dramaturgy），由 `docs/design/creative-canvas-reconstruction.md` 维护为单一真相源。本文件作为 v1 历史参考保留；如发现内容冲突，以 reconstruction.md 为准。
 
 ---
 
@@ -9,7 +11,7 @@
 它处在整条流水线的**最上游**：
 
 ```
-灵感 → 剧情画布（Creative Canvas）→ 概念确认（Stage 1）→ 世界观（Stage 2）→ 角色（Stage 3）→ 大纲（Stage 3 outline）→ 写作工作台（Workspace）
+灵感 → 剧情画布（Plot Canvas）→ 概念确认（Stage 1）→ 世界观（Stage 2）→ 角色（Stage 3）→ 大纲（Stage 3 outline）→ 写作工作台（Workspace）
 ```
 
 **核心用户价值**：
@@ -65,8 +67,8 @@
 
 | 组件 | 职责 |
 |---|---|
-| `CreativeCanvasPage`（`pages/CreativeCanvasPage.tsx`）| 页面容器，调 `useCreativeCanvas` hook + 协调子组件 |
-| `useCreativeCanvas`（`hooks/useCreativeCanvas.ts`）| 状态机 hook，封装 20+ 操作（init/expand/select/evaluate/mutate/regenerate/reset/commit） |
+| `PlotCanvasPage`（`pages/PlotCanvasPage.tsx`，v2 重命名自 `CreativeCanvasPage`）| 页面容器，调 `usePlotCanvasV2` hook + 协调子组件 |
+| `usePlotCanvasV2`（`hooks/usePlotCanvasV2.ts`，v2 重命名自 `useCreativeCanvas`）| 状态机 hook，封装 init / nextStep / selectOption / commit / reset 操作 |
 | `WhatIfTree` | React Flow 画布，支持节点拖拽、缩放、fit-view |
 | `CanvasNode` | 节点卡片，显示 premise + children_ids + branch_status |
 | `CanvasToolbar` | 节点计数 + 过滤选项 + 重置 / 适配视图 |
@@ -228,7 +230,7 @@
 
 ### 6.1 Hook 状态机
 
-`useCreativeCanvas(projectId)` 维护的状态：
+`usePlotCanvasV2(projectId)`（v2 重命名自 `useCreativeCanvas`）维护的状态：
 
 ```ts
 {
@@ -254,7 +256,7 @@
 
 ### 6.2 路径持久化副作用
 
-`CreativeCanvasPage` 维护 `lastSyncedPathRef`，仅在 `selectedPath` 实际变化时才 `api.selectPath()` 同步到后端——避免 mount 时把 server 已保存的路径重写一遍（会清掉 `committed_at` marker 导致「已提交」chip 消失）。这条修复来自 B2 fix 注释。
+`PlotCanvasPage`（v2 重命名自 `CreativeCanvasPage`）维护 `lastSyncedPathRef`，仅在 `selectedPath` 实际变化时才 `api.selectPath()` 同步到后端——避免 mount 时把 server 已保存的路径重写一遍（会清掉 `committed_at` marker 导致「已提交」chip 消失）。这条修复来自 B2 fix 注释。
 
 ### 6.3 提交后跳转
 
@@ -288,13 +290,13 @@
 ```
 frontend/src/
 ├── pages/
-│   └── CreativeCanvasPage.tsx                    # 独立画布页面
+│   └── PlotCanvasPage.tsx                    # 独立画布页面（v2 重命名自 CreativeCanvasPage）
 ├── hooks/
-│   └── useCreativeCanvas.ts                      # 状态机 hook
+│   └── usePlotCanvasV2.ts                    # 状态机 hook（v2 重命名自 useCreativeCanvas）
 ├── api/
 │   └── client.ts                                 # /diverge 12 端点封装
 └── components/
-    └── creative-canvas/
+    └── plot-canvas/
         ├── WhatIfTree.tsx                         # React Flow 画布
         ├── CanvasNode.tsx                         # 节点卡片
         ├── CanvasToolbar.tsx                      # 顶部工具条

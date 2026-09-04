@@ -1,4 +1,3 @@
-import { useWizard } from "../wizard/WizardContext";
 import PlotCanvasPage from "../../pages/PlotCanvasPage";
 
 interface Props {
@@ -6,32 +5,20 @@ interface Props {
 }
 
 /**
- * Wizard-side wrapper around PlotCanvasPage. Owns the wizard
- * context dependency so the page itself stays standalone-capable
- * (i.e., still works at /project/:id/stage1/canvas without a
- * WizardProvider). When the user commits a path, we notify the
- * wizard via `markStepGenerated(6, {})` so step 6 (剧情画布) is
- * pushed into `completedSteps` immediately — without waiting for
- * the next prefill rerun to re-read canvas state from disk.
- *
- * The `data-testid="plot-canvas-mount-point"` is part of the
- * wizard's render-branch public contract — WorkspaceWizardPanel tests
- * assert the sidebar item click switches the main area to the canvas
- * surface via this anchor. (Task 11 will rename it to
- * `plot-canvas-mount-point`; intentionally preserved here.)
+ * Wizard-side wrapper around PlotCanvasPage. Owns the
+ * `plot-canvas-mount-point` testid anchor that WorkspaceWizardPanel
+ * tests assert on step-6 navigation. The page itself is now
+ * standalone-only (no embedded/onCommitSuccess props) — the wizard's
+ * prefill flow picks up `canvas.committed=true` from disk and marks
+ * step 6 done, so no callback wiring is needed here.
  */
 export default function PlotCanvasMountPoint({ projectId }: Props) {
-  const wizard = useWizard();
   return (
     <div
       data-testid="plot-canvas-mount-point"
       data-project-id={projectId}
     >
-      <PlotCanvasPage
-        projectId={projectId}
-        embedded
-        onCommitSuccess={() => wizard.markStepGenerated(6, {})}
-      />
+      <PlotCanvasPage projectId={projectId} />
     </div>
   );
 }

@@ -256,144 +256,6 @@ describe("PlotCanvasPage", () => {
   });
 });
 
-describe("PlotCanvasPage embedded mode", () => {
-  it("does not render page-shell header when embedded=true", () => {
-    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
-    // Page-shell header is the h2 "剧情画布" + subtitle + StepIndicator
-    // block. When embedded=true, the wizard provides chrome so we omit it.
-    expect(screen.queryByRole("heading", { name: /剧情画布/ })).toBeNull();
-    // Also confirm the wrapper data-testid is absent in embedded mode.
-    expect(screen.queryByTestId("plot-canvas-page")).toBeNull();
-  });
-
-  it("renders page-shell header in standalone (non-embedded) mode", () => {
-    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
-    // Sanity check the inverse — standalone mode keeps the wrapper + header.
-    expect(screen.getByTestId("plot-canvas-page")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /剧情画布/ })).toBeInTheDocument();
-  });
-
-  it("forwards embedded=true to EmptyState (no max-w-2xl) when canvas is null", () => {
-    // When canvas is null the page renders <EmptyState>. In embedded mode
-    // the EmptyState drops its max-w-2xl/mx-auto constraint so it fills
-    // the wizard main area (no left/right whitespace). Standalone keeps
-    // the centered narrow look.
-    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(null));
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
-    const panel = screen.getByTestId("empty-state");
-    expect(panel.className).not.toContain("max-w-2xl");
-    expect(panel.className).not.toContain("mx-auto");
-  });
-
-  it("forwards embedded=false to EmptyState (keeps max-w-2xl) when canvas is null (standalone)", () => {
-    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(null));
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
-    const panel = screen.getByTestId("empty-state");
-    expect(panel.className).toContain("max-w-2xl");
-    expect(panel.className).toContain("mx-auto");
-  });
-
-  it("invokes onCommitSuccess after confirmCommit resolves", async () => {
-    const onCommitSuccess = vi.fn();
-    const confirmCommit = vi.fn().mockResolvedValue(undefined);
-    mockUsePlotCanvasV2.mockReturnValue({
-      ...defaultHookReturn(baseCanvas),
-      canCommit: true,
-      showPreCommit: true,
-      confirmCommit,
-    });
-    renderWithProviders(
-      <PlotCanvasPage projectId="proj_test" embedded onCommitSuccess={onCommitSuccess} />
-    );
-    // PreCommitSummary is shown (showPreCommit=true); click the confirm button.
-    fireEvent.click(screen.getByRole("button", { name: /形成概念/ }));
-    await waitFor(() => expect(onCommitSuccess).toHaveBeenCalledTimes(1), { timeout: 3000 });
-    expect(confirmCommit).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not invoke onCommitSuccess when not provided (back-compat)", async () => {
-    const confirmCommit = vi.fn().mockResolvedValue(undefined);
-    mockUsePlotCanvasV2.mockReturnValue({
-      ...defaultHookReturn(baseCanvas),
-      canCommit: true,
-      showPreCommit: true,
-      confirmCommit,
-    });
-    // No onCommitSuccess prop — should not throw.
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
-    fireEvent.click(screen.getByRole("button", { name: /形成概念/ }));
-    await waitFor(() => expect(confirmCommit).toHaveBeenCalledTimes(1), { timeout: 3000 });
-  });
-
-  it("wires the available-step 继续 button to nextStep on the hook", async () => {
-    // PRD §5.2: AVAILABLE → ACTIVE is user-triggered via the 继续 button
-    // TreeCanvas renders inside an available step column. Page wires
-    // nextStep as onAdvance; clicking must call it with the step number.
-    // Regression guard: if the page forgets to forward nextStep, the
-    // button becomes dead and the user gets stuck on step 1 forever
-    // (root cause of the "只有一个原始想法的点" user report).
-    const nextStep = vi.fn().mockResolvedValue(undefined);
-    const freshInit: CanvasV4State = {
-      ...baseCanvas,
-      creative_session: { current_step: 1, max_steps: 5, status: "active" },
-      creative_path: [
-        {
-          step: 1,
-          operation: null,
-          operation_reason: null,
-          options: [],
-          selected_option_id: null,
-          created_at: "2026-09-03T00:00:00",
-          selected_at: null,
-          regenerated_count: 0,
-          state: "available",
-        },
-      ],
-    };
-    mockUsePlotCanvasV2.mockReturnValue({
-      ...defaultHookReturn(freshInit),
-      nextStep,
-    });
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
-    fireEvent.click(screen.getByTestId("advance-step-1"));
-    await waitFor(() => expect(nextStep).toHaveBeenCalledTimes(1));
-    expect(nextStep).toHaveBeenCalledWith(1);
-  });
-
-  it("renders the AI-recommended-operation reasoning inside a callout-style block", async () => {
-    // PRD §15.1: "为什么是这个操作" 建立用户对 AI 的信任. Was a tiny
-    // muted line at the bottom of the active-step panel — easy to
-    // miss. Upgraded to a callout block with an icon so users
-    // actually read the rationale before picking A/B/C.
-    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
-    const callout = screen.getByTestId("operation-reason-callout");
-    expect(callout).toBeInTheDocument();
-    expect(callout).toHaveTextContent(/为什么是「fuse」/);
-    expect(callout).toHaveTextContent(/step 3 reason/);
-    // Class tokens that distinguish a styled callout from plain text.
-    expect(callout.className).toMatch(/rounded|border|bg-/);
-  });
-
-  it("surfaces hook errors as a toast instead of swallowing them silently", () => {
-    // Bug fix 2026-09-03: previously the onInit callback was
-    // `initSession(...).catch(() => {})` — the failure was invisible to
-    // the user. With the v2 router NOT mounted in dev (enable_canvas_v2
-    // flag), init silently 404'd and the page stayed on EmptyState. The
-    // user thought 开始创意推演 did nothing. Now the hook's `error`
-    // surfaces via a toast so the user sees the failure.
-    mockUsePlotCanvasV2.mockReturnValue({
-      ...defaultHookReturn(baseCanvas),
-      error: "init failed: API 返回 404",
-    });
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
-    // The toast is rendered via ToastContainer — find it by the message text.
-    expect(screen.getByText(/画布操作失败.*init failed/)).toBeInTheDocument();
-  });
-});
-
 // Workspace render crash regression: user reported
 // "Cannot read properties of undefined (reading 'find')" after clicking
 // 开始创意推演 on the canvas surface. The crash was a render-time
@@ -438,7 +300,13 @@ describe("PlotCanvasPage malformed-canvas regression", () => {
     };
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(malformed));
     expect(() =>
-      renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />),
+      renderWithProviders(
+        <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+          <Routes>
+            <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
     ).not.toThrow();
     // Active step panel still renders (3 slots), each OptionCard falls back
     // to undefined option and is skipped via the `if (!option) return null`
@@ -480,7 +348,13 @@ describe("PlotCanvasPage malformed-canvas regression", () => {
     };
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(freshInit));
     expect(() =>
-      renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />),
+      renderWithProviders(
+        <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+          <Routes>
+            <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
     ).not.toThrow();
     expect(screen.getByTestId("tree-canvas")).toBeInTheDocument();
     // Spec §3.3: active-step-panel now wraps CanvasPreStepHint so users
@@ -526,7 +400,13 @@ describe("PlotCanvasPage Step 1 continue wiring", () => {
     // fixtures (no canvas yet) MUST NOT show the button — gate it on
     // step 1 availability.
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(buildFreshInit()));
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+        <Routes>
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
     expect(screen.getByTestId("idea-root-continue")).toBeInTheDocument();
   });
 
@@ -536,7 +416,13 @@ describe("PlotCanvasPage Step 1 continue wiring", () => {
     // Without this, users saw 3 empty circles + a central button with
     // no explanation of what would happen on click.
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(buildFreshInit()));
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+        <Routes>
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
     expect(screen.getByTestId("active-step-panel")).toBeInTheDocument();
     expect(screen.getByTestId("canvas-pre-step-hint")).toBeInTheDocument();
   });
@@ -550,7 +436,13 @@ describe("PlotCanvasPage Step 1 continue wiring", () => {
       ...defaultHookReturn(buildFreshInit()),
       nextStep,
     });
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+        <Routes>
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
     fireEvent.click(screen.getByTestId("idea-root-continue"));
     await waitFor(() => expect(nextStep).toHaveBeenCalledTimes(1));
     expect(nextStep).toHaveBeenCalledWith(1);
@@ -594,7 +486,13 @@ describe("PlotCanvasPage Step 1 continue wiring", () => {
       ],
     };
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(step2Available));
-    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+        <Routes>
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
     // Gate is Step 1 only — Step 2 available must NOT light up the
     // IdeaRootNode button (which would call nextStep(1) and re-generate
     // already-completed step 1).

@@ -67,7 +67,7 @@ describe("PlotCanvasMountPoint", () => {
     sessionStorage.clear();
   });
 
-  it("mounts PlotCanvasPage with embedded=true (no page-shell header)", () => {
+  it("mounts PlotCanvasPage inside the wizard wrapper", () => {
     render(
       <ToastProvider>
         <WizardProvider projectId="proj_test">
@@ -87,13 +87,11 @@ describe("PlotCanvasMountPoint", () => {
         </WizardProvider>
       </ToastProvider>
     );
-    // embedded=true should hide the page-shell header. The mount point
-    // forwards `embedded` to PlotCanvasPage, which omits the h2 +
-    // wrapper data-testid when embedded.
-    expect(screen.queryByRole("heading", { name: /Creative Canvas/ })).toBeNull();
-    expect(screen.queryByTestId("plot-canvas-page")).toBeNull();
-    // Sanity: the page DID render — EmptyState's data-testid is present
-    // because the stubbed canvas hook returned canvas=null.
+    // Sanity: the mount-point wrapper is present (testid preserved for
+    // WorkspaceWizardPanel's step-6 assertion) and the page DID render
+    // — EmptyState's data-testid is present because the stubbed canvas
+    // hook returned canvas=null.
+    expect(screen.getByTestId("plot-canvas-mount-point")).toBeInTheDocument();
     expect(screen.getByTestId("empty-state")).toBeInTheDocument();
   });
 

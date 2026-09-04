@@ -33,35 +33,15 @@ interface PlotCanvasPageProps {
   /**
    * Project identifier. In standalone mode this falls back to the
    * `:projectId` URL param (route: /project/:projectId/stage1/canvas,
-   * App.tsx:114); in embedded mode the parent passes it explicitly so
-   * the page can render outside a router (e.g., inside the wizard).
-   * Explicit prop wins over URL param.
+   * App.tsx:114). Explicit prop wins over URL param.
    */
   projectId?: string;
-  /**
-   * When true, render without the page-shell wrapper + title header —
-   * the wizard provides its own chrome. Used by
-   * CreativeCanvasMountPoint to drop the page into the wizard's main
-   * area as-is.
-   */
-  embedded?: boolean;
-  /**
-   * Invoked once `confirmCommit` resolves successfully. The page
-   * itself does not import WizardContext — the mount point
-   * (CreativeCanvasMountPoint) wires this to
-   * `markStep1SurfaceCompleted("canvas")`. Standalone mode ignores
-   * this prop.
-   */
-  onCommitSuccess?: () => void;
 }
 
 export default function PlotCanvasPage({
   projectId: projectIdProp,
-  embedded = false,
-  onCommitSuccess,
 }: PlotCanvasPageProps = {}) {
-  // Route is /project/:projectId/stage1/canvas (App.tsx:114). Explicit
-  // prop wins over URL param so embedded mode works without a router.
+  // Route is /project/:projectId/stage1/canvas (App.tsx:114).
   const { projectId: projectIdParam = "" } = useParams<{ projectId: string }>();
   const projectId = projectIdProp ?? projectIdParam;
   const {
@@ -88,26 +68,15 @@ export default function PlotCanvasPage({
   // `onInit` callback signature is `(prompt, genre)`; map to RawIntent's
   // `genre_primary` field (the backend enum, e.g. "xianxia").
   if (!canvas) {
-    return embedded ? (
-      <EmptyState
-        loading={loadingStep}
-        embedded={embedded}
-        onInit={(prompt, genre) => {
-          // The hook already surfaces failures via the `error` state, which
-          // the useEffect above turns into a toast. The .catch here just
-          // prevents an unhandled-rejection warning if the user retries
-          // before the previous promise settled.
-          initSession({ prompt, genre_primary: genre }).catch(() => {});
-        }}
-      />
-    ) : (
+    return (
       <div data-testid="plot-canvas-page" className="bg-surface-container-lowest min-h-screen p-6">
         <EmptyState
           loading={loadingStep}
-          embedded={embedded}
           onInit={(prompt, genre) => {
-            // Same rationale as the embedded branch above — silent catch,
-            // surface via toast (see useEffect on `error`).
+            // The hook already surfaces failures via the `error` state, which
+            // the useEffect above turns into a toast. The .catch here just
+            // prevents an unhandled-rejection warning if the user retries
+            // before the previous promise settled.
             initSession({ prompt, genre_primary: genre }).catch(() => {});
           }}
         />
@@ -144,30 +113,26 @@ export default function PlotCanvasPage({
   const opLabel =
     OPERATION_LABEL_ZH[headerOperation] ?? headerOperation;
 
-  // When embedded=true, drop the page-shell wrapper + title header so the
-  // wizard's chrome is the only chrome. The page still owns the bottom
-  // action bar, dialogs, and the canvas tree itself.
+  // Page owns its own chrome (standalone route). It still renders the
+  // bottom action bar, dialogs, and the canvas tree itself.
   const main = (
     <>
-      {/* Header: title left, StepIndicator right. Only shown when the page
-          owns its own chrome (standalone mode). */}
-      {!embedded && (
-        <div className="flex justify-between items-end mb-6">
-          <div>
-            <h2 className="text-headline-lg font-bold text-on-surface">
-              剧情画布
-            </h2>
-            <p className="text-on-surface-variant text-sm">
-              通过 WhatIf 树形结构可视化探索故事的不同发展方向。
-            </p>
-          </div>
-          <StepIndicator
-            currentStep={canvas.creative_session.current_step}
-            maxSteps={canvas.creative_session.max_steps}
-            operation={headerOperation}
-          />
+      {/* Header: title left, StepIndicator right. */}
+      <div className="flex justify-between items-end mb-6">
+        <div>
+          <h2 className="text-headline-lg font-bold text-on-surface">
+            剧情画布
+          </h2>
+          <p className="text-on-surface-variant text-sm">
+            通过 WhatIf 树形结构可视化探索故事的不同发展方向。
+          </p>
         </div>
-      )}
+        <StepIndicator
+          currentStep={canvas.creative_session.current_step}
+          maxSteps={canvas.creative_session.max_steps}
+          operation={headerOperation}
+        />
+      </div>
 
       {/* Tree visualization */}
       <TreeCanvas
@@ -227,7 +192,6 @@ export default function PlotCanvasPage({
               story_potential: canvas.scores.story_potential ?? 0,
               uniqueness: canvas.scores.uniqueness ?? 0,
             }}
-            embedded={embedded}
           />
         </div>
       )}
@@ -325,25 +289,17 @@ export default function PlotCanvasPage({
           conflict: Math.round((canvas.scores?.conflict ?? 0) * 100),
         }}
         onCommit={() => {
-          // Await the hook's commit and fire onCommitSuccess once it
-          // resolves. The wizard-side mount point wires this callback
-          // to markStep1SurfaceCompleted("canvas") so step 2 unlocks.
-          confirmCommit()
-            .then(() => onCommitSuccess?.())
-            .catch(() => {
-              // Hook already surfaces errors via its own error state;
-              // the catch here only prevents an unhandled-rejection
-              // warning in the console.
-            });
+          // Hook already surfaces errors via its own error state;
+          // the catch here only prevents an unhandled-rejection
+          // warning in the console.
+          confirmCommit().catch(() => {});
         }}
         onCancel={closePreCommit}
       />
     </>
   );
 
-  return embedded ? (
-    main
-  ) : (
+  return (
     <div
       data-testid="plot-canvas-page"
       className="bg-surface-container-lowest min-h-screen p-6"

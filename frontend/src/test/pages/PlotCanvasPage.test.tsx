@@ -260,9 +260,9 @@ describe("PlotCanvasPage embedded mode", () => {
   it("does not render page-shell header when embedded=true", () => {
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
-    // Page-shell header is the h2 "Creative Canvas" + subtitle + StepIndicator
+    // Page-shell header is the h2 "剧情画布" + subtitle + StepIndicator
     // block. When embedded=true, the wizard provides chrome so we omit it.
-    expect(screen.queryByRole("heading", { name: /Creative Canvas/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /剧情画布/ })).toBeNull();
     // Also confirm the wrapper data-testid is absent in embedded mode.
     expect(screen.queryByTestId("creative-canvas-page")).toBeNull();
   });
@@ -272,7 +272,7 @@ describe("PlotCanvasPage embedded mode", () => {
     renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
     // Sanity check the inverse — standalone mode keeps the wrapper + header.
     expect(screen.getByTestId("creative-canvas-page")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Creative Canvas/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /剧情画布/ })).toBeInTheDocument();
   });
 
   it("forwards embedded=true to EmptyState (no max-w-2xl) when canvas is null", () => {

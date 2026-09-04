@@ -26,7 +26,7 @@ export default function CanvasEmptyState({ onInit, loading, error, defaultPremis
         <span className="material-symbols-outlined text-6xl text-system-log/20 mb-4 block">
           account_tree
         </span>
-        <h2 className="font-display text-2xl text-primary-container mb-2">创意画布</h2>
+        <h2 className="font-display text-2xl text-primary-container mb-2">剧情画布</h2>
         <p className="font-body-ui text-system-log mb-3 leading-relaxed">
           通过 WhatIf 树形结构可视化探索故事的不同发展方向。
         </p>

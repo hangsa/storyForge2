@@ -155,10 +155,10 @@ export default function PlotCanvasPage({
         <div className="flex justify-between items-end mb-6">
           <div>
             <h2 className="text-headline-lg font-bold text-on-surface">
-              Creative Canvas
+              剧情画布
             </h2>
             <p className="text-on-surface-variant text-sm">
-              Explore and evolve your core concept.
+              通过 WhatIf 树形结构可视化探索故事的不同发展方向。
             </p>
           </div>
           <StepIndicator

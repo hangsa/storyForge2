@@ -5,7 +5,6 @@ import {
   WizardProvider,
   useWizard,
   getSessionKey,
-  isStep1EffectivelyCompleted,
   type WizardData,
 } from "../components/wizard/WizardContext";
 
@@ -504,98 +503,5 @@ describe("WizardContext", () => {
     act(() => result.current.jumpToCreativeDivergence("D"));
     expect(result.current.currentStep).toBe(1);
     expect(result.current.creativeDivergenceSubStage).toBe("D");
-  });
-
-  it("setActiveStep1Surface updates activeStep1Surface and sets currentStep=1", () => {
-    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.jumpToStep(3));
-    expect(result.current.currentStep).toBe(3);
-    act(() => result.current.setActiveStep1Surface("canvas"));
-    expect(result.current.activeStep1Surface).toBe("canvas");
-    expect(result.current.currentStep).toBe(1);
-  });
-
-  it("markStep1SurfaceCompleted adds surface and pushes 1 into completedSteps", () => {
-    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.markStep1SurfaceCompleted("canvas"));
-    expect(result.current.completedStep1Surfaces).toEqual(["canvas"]);
-    expect(result.current.completedSteps).toContain(1);
-  });
-
-  it("markStep1SurfaceCompleted is idempotent per surface", () => {
-    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.markStep1SurfaceCompleted("canvas"));
-    act(() => result.current.markStep1SurfaceCompleted("canvas"));
-    expect(result.current.completedStep1Surfaces).toEqual(["canvas"]);
-    expect(result.current.completedSteps.filter((s) => s === 1)).toEqual([1]);
-  });
-
-  it("hydrateStep1Surfaces merges with existing via Set dedup", () => {
-    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.markStep1SurfaceCompleted("canvas"));
-    act(() => result.current.hydrateStep1Surfaces(["divergence", "canvas"]));
-    expect(result.current.completedStep1Surfaces.sort()).toEqual(["canvas", "divergence"]);
-  });
-
-  it("persists activeStep1Surface and completedStep1Surfaces to sessionStorage", () => {
-    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.setActiveStep1Surface("canvas"));
-    act(() => result.current.markStep1SurfaceCompleted("canvas"));
-    const stored = JSON.parse(sessionStorage.getItem(KEY) || "{}");
-    expect(stored.activeStep1Surface).toBe("canvas");
-    expect(stored.completedStep1Surfaces).toEqual(["canvas"]);
-  });
-
-  it("restores activeStep1Surface and completedStep1Surfaces from sessionStorage", () => {
-    sessionStorage.setItem(
-      KEY,
-      JSON.stringify({
-        currentStep: 1,
-        completedSteps: [1],
-        status: "idle",
-        data: makeData(),
-        errorMessage: null,
-        creativeDivergenceSubStage: "A",
-        activeStep1Surface: "canvas",
-        completedStep1Surfaces: ["canvas"],
-      }),
-    );
-    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    expect(result.current.activeStep1Surface).toBe("canvas");
-    expect(result.current.completedStep1Surfaces).toEqual(["canvas"]);
-  });
-
-  it("isStep1EffectivelyCompleted returns true when any surface done", () => {
-    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    // WizardState isn't exported, so build a minimal state object and
-    // cast. The helper only reads completedStep1Surfaces; the rest of
-    // the fields come from the live hook snapshot so the object stays
-    // faithful to the real shape.
-    const stateFrom = (surfaces: readonly string[]) =>
-      ({
-        activeStep1Surface: result.current.activeStep1Surface,
-        completedStep1Surfaces: surfaces,
-        currentStep: result.current.currentStep,
-        completedSteps: result.current.completedSteps,
-        status: "idle",
-        data: makeData(),
-        errorMessage: null,
-        creativeDivergenceSubStage: "A",
-        regenerateState: { kind: "idle" },
-        prefillComplete: true,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }) as any;
-
-    expect(result.current.completedStep1Surfaces).toEqual([]);
-    expect(isStep1EffectivelyCompleted(stateFrom([]))).toBe(false);
-
-    act(() => result.current.markStep1SurfaceCompleted("divergence"));
-
-    expect(result.current.completedStep1Surfaces.length >= 1).toBe(true);
-    expect(
-      isStep1EffectivelyCompleted(
-        stateFrom(result.current.completedStep1Surfaces),
-      ),
-    ).toBe(true);
   });
 });

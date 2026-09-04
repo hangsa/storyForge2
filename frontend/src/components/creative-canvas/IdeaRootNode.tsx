@@ -7,6 +7,19 @@ interface Props {
    * empty/undefined to avoid rendering an empty chip.
    */
   genre?: string;
+  /**
+   * Click handler for the "继续" button. When undefined, no button is
+   * rendered — IdeaRootNode stays a pure-display card. The parent
+   * (CreativeCanvasPage) provides this callback only when Step 1 is in
+   * the "available" state (i.e., /init has run but /next-step has not),
+   * so the button doubles as a Step 1 "advance" affordance.
+   */
+  onContinue?: () => void;
+  /**
+   * When true, the 继续 button shows a spinner and is disabled to indicate an
+   * in-flight async operation. Defaults to false.
+   */
+  continueLoading?: boolean;
 }
 
 // Map of backend genre IDs → user-visible zh labels. Kept short and
@@ -21,35 +34,78 @@ const GENRE_LABELS: Record<string, string> = {
   fantasy: "玄幻",
 };
 
-export function IdeaRootNode({ prompt, genre }: Props) {
+export function IdeaRootNode({
+  prompt,
+  genre,
+  onContinue,
+  continueLoading = false,
+}: Props) {
   const hasPrompt = prompt.trim().length > 0;
   const genreLabel = genre ? GENRE_LABELS[genre] ?? genre : null;
 
   return (
     <div
       data-testid="idea-root-node"
-      className="relative z-10 flex flex-col items-center bg-surface p-3 rounded-lg w-[180px]"
+      className="relative z-10 flex flex-row items-center gap-3 bg-surface p-3 rounded-lg w-fit"
     >
-      <div className="w-12 h-12 rounded-full bg-surface-container border-2 border-primary flex items-center justify-center mb-sm shrink-0">
-        <span className="material-symbols-outlined text-primary text-sm">flag</span>
-      </div>
-      <span className="font-label-sm text-label-sm text-on-surface-variant text-center uppercase tracking-wider mb-xs">
-        原始想法
-      </span>
-      <p
-        data-testid="idea-root-prompt"
-        className="text-sm text-on-surface text-center break-words leading-snug max-h-[120px] overflow-y-auto"
-        title={hasPrompt ? prompt : ""}
-      >
-        {hasPrompt ? prompt : <span className="text-on-surface-variant/60">（暂无内容）</span>}
-      </p>
-      {genreLabel && (
-        <span
-          data-testid="idea-root-genre"
-          className="mt-sm px-2 py-0.5 rounded-full bg-surface-container text-xs text-primary border border-primary/30"
-        >
-          {genreLabel}
+      {/* Original column (flag + label + prompt + genre) */}
+      <div className="flex flex-col items-center w-[180px]">
+        <div className="w-12 h-12 rounded-full bg-surface-container border-2 border-primary flex items-center justify-center mb-sm shrink-0">
+          <span className="material-symbols-outlined text-primary text-sm">flag</span>
+        </div>
+        <span className="font-label-sm text-label-sm text-on-surface-variant text-center uppercase tracking-wider mb-xs">
+          原始想法
         </span>
+        <p
+          data-testid="idea-root-prompt"
+          className="text-sm text-on-surface text-center break-words leading-snug max-h-[120px] overflow-y-auto"
+          title={hasPrompt ? prompt : ""}
+        >
+          {hasPrompt ? prompt : <span className="text-on-surface-variant/60">（暂无内容）</span>}
+        </p>
+        {genreLabel && (
+          <span
+            data-testid="idea-root-genre"
+            className="mt-sm px-2 py-0.5 rounded-full bg-surface-container text-xs text-primary border border-primary/30"
+          >
+            {genreLabel}
+          </span>
+        )}
+      </div>
+
+      {/* Continue button — only shown when onContinue is provided. The
+          testid + aria-label keep this affordance discoverable to
+          Playwright / RTL and to screen readers. The visual is a
+          right-arrow icon button so it reads as "advance" without
+          requiring a long label, but the aria-label carries the full
+          "继续" / "推进下一步" semantics. */}
+      {onContinue && (
+        <button
+          type="button"
+          data-testid="idea-root-continue"
+          aria-label="继续生成下一步"
+          aria-busy={continueLoading || undefined}
+          disabled={continueLoading}
+          onClick={onContinue}
+          className="shrink-0 w-12 h-12 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {continueLoading ? (
+            <span
+              data-testid="idea-root-continue-spinner"
+              className="material-symbols-outlined animate-spin text-2xl"
+              aria-hidden="true"
+            >
+              progress_activity
+            </span>
+          ) : (
+            <span
+              className="material-symbols-outlined text-2xl"
+              aria-hidden="true"
+            >
+              arrow_forward
+            </span>
+          )}
+        </button>
       )}
     </div>
   );

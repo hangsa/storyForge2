@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { IdeaRootNode } from "@/components/creative-canvas/IdeaRootNode";
 
 describe("IdeaRootNode", () => {
@@ -40,5 +40,66 @@ describe("IdeaRootNode", () => {
     render(<IdeaRootNode prompt="" />);
     expect(screen.getByTestId("idea-root-node")).toBeInTheDocument();
     expect(screen.getByTestId("idea-root-node")).toHaveTextContent(/原始想法|暂无/);
+  });
+});
+
+describe("IdeaRootNode onContinue", () => {
+  it("does not render 继续 button when onContinue is undefined", () => {
+    render(<IdeaRootNode prompt="修仙对抗外星" genre="xianxia" />);
+    expect(screen.queryByTestId("idea-root-continue")).toBeNull();
+  });
+
+  it("renders 继续 button when onContinue is provided", () => {
+    render(
+      <IdeaRootNode
+        prompt="修仙对抗外星"
+        genre="xianxia"
+        onContinue={() => {}}
+      />,
+    );
+    const btn = screen.getByTestId("idea-root-continue");
+    expect(btn).toBeInTheDocument();
+    // Accessible label points to 继续 / 推进 / generate-next semantics.
+    expect(btn).toHaveAttribute("aria-label", "继续生成下一步");
+  });
+
+  it("invokes onContinue callback when the button is clicked", () => {
+    const onContinue = vi.fn();
+    render(
+      <IdeaRootNode
+        prompt="修仙对抗外星"
+        genre="xianxia"
+        onContinue={onContinue}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("idea-root-continue"));
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows spinner + disables button when continueLoading=true", () => {
+    render(
+      <IdeaRootNode
+        prompt="修仙对抗外星"
+        genre="xianxia"
+        onContinue={() => {}}
+        continueLoading
+      />,
+    );
+    expect(screen.getByTestId("idea-root-continue")).toBeDisabled();
+    expect(screen.getByTestId("idea-root-continue-spinner")).toBeInTheDocument();
+  });
+
+  it("does not invoke onContinue when the button is disabled (loading)", () => {
+    const onContinue = vi.fn();
+    render(
+      <IdeaRootNode
+        prompt="修仙对抗外星"
+        genre="xianxia"
+        onContinue={onContinue}
+        continueLoading
+      />,
+    );
+    fireEvent.click(screen.getByTestId("idea-root-continue"));
+    expect(onContinue).not.toHaveBeenCalled();
   });
 });

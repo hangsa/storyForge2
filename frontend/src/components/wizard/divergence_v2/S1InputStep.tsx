@@ -1,11 +1,11 @@
 import { useState } from "react";
 import api from "@/api/client";
-import type { RawIntent } from "./types";
+import type { DivergeResponse, RawIntent } from "./types";
 
 interface Props {
   projectId: string;
   initial: RawIntent | null;
-  onSubmitted: (intent: RawIntent, divergeResp: Record<string, unknown>) => void;
+  onSubmitted: (intent: RawIntent, divergeResp: DivergeResponse) => void;
 }
 
 export default function S1InputStep({ projectId, initial, onSubmitted }: Props) {

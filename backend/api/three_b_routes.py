@@ -200,6 +200,17 @@ async def post_commit(project_id: str, body: CommitRequest) -> dict:
                 "detail": {},
             },
         ) from exc
+    except Exception as exc:
+        logger.exception("three-b commit failed")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": True,
+                "code": "COMMIT_FAILED",
+                "message": f"3B 概念合成失败: {exc}",
+                "detail": {},
+            },
+        ) from exc
 
 
 @router.post("/regenerate-candidate")
@@ -208,48 +219,21 @@ async def post_regenerate(
 ) -> dict:
     """Re-run a single operator LLM call for one candidate (regenerated_count++)."""
     _ensure_project(project_id)
-    state = load_state(project_id)
-    if state is None:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": True,
-                "code": "STATE_NOT_FOUND",
-                "message": "项目尚未发散",
-                "detail": {},
-            },
+    try:
+        fresh = await _get_engine().regenerate_candidate(
+            project_id, body.candidate_id,
         )
-    cand = next(
-        (c for c in state.stage2_candidates if c.id == body.candidate_id), None
-    )
-    if cand is None:
+    except ValueError as exc:
+        # Missing state OR missing source candidate both surface as 404
+        # with CANDIDATE_NOT_FOUND — the existing route contract (preserved).
         raise HTTPException(
             status_code=404,
             detail={
                 "error": True,
                 "code": "CANDIDATE_NOT_FOUND",
-                "message": f"candidate {body.candidate_id} 不存在",
+                "message": str(exc),
                 "detail": {},
             },
-        )
-    # Re-call operator; replace candidate in place
-    new_candidates = await _get_engine()._call_operator(cand.operator, state.raw_intent)
-    if not new_candidates:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": True,
-                "code": "REGEN_EMPTY",
-                "message": "重新生成未返回任何候选",
-                "detail": {},
-            },
-        )
-    fresh = new_candidates[0]
-    fresh.id = cand.id  # preserve ID
-    fresh.regenerated_count = cand.regenerated_count + 1
-    state.stage2_candidates = [
-        fresh if c.id == cand.id else c for c in state.stage2_candidates
-    ]
-    atomic_write_state(project_id, state)
+        ) from exc
     from dataclasses import asdict
     return {"candidate": asdict(fresh)}

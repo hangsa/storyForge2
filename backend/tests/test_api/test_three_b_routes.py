@@ -186,3 +186,20 @@ def test_commit_validates_id_count(client, tmp_path, monkeypatch):
         json={"deepened_ids": []},
     )
     assert resp.status_code == 422
+
+
+def test_commit_runtime_error_returns_503(client, tmp_path, monkeypatch):
+    """Any non-ValueError exception from engine.commit() must surface as
+    503 COMMIT_FAILED (matching the post_diverge contract), not a raw 500.
+    """
+    _seed_state("p_commit_503", monkeypatch, tmp_path)
+    with patch("backend.api.three_b_routes.ThreeBEngine") as MockEngine:
+        instance = MockEngine.return_value
+        instance.commit = AsyncMock(side_effect=RuntimeError("boom"))
+        resp = client.post(
+            "/api/v1/projects/p_commit_503/creative/diverge/three-b/commit",
+            json={"deepened_ids": ["deep_x1"]},
+        )
+    assert resp.status_code == 503
+    assert resp.json()["detail"]["code"] == "COMMIT_FAILED"
+    assert "3B 概念合成失败" in resp.json()["detail"]["message"]

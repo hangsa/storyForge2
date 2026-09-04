@@ -208,6 +208,37 @@ class ThreeBEngine:
             "by_operator": {op: [asdict(c) for c in cs] for op, cs in by_operator.items()},
         }
 
+    async def regenerate_candidate(
+        self,
+        project_id: str,
+        candidate_id: str,
+    ) -> Candidate:
+        """Re-run the operator LLM for one Stage 2 candidate and replace in place.
+
+        Preserves the candidate's id (so the frontend's references stay stable)
+        and bumps regenerated_count. Raises ValueError if the project hasn't
+        diverged yet or if candidate_id isn't found in state.
+        """
+        state = load_state(project_id)
+        if state is None or state.raw_intent is None:
+            raise ValueError(f"项目 {project_id} 尚未发散,无候选可重新生成")
+        source = next(
+            (c for c in state.stage2_candidates if c.id == candidate_id), None
+        )
+        if source is None:
+            raise ValueError(f"candidate {candidate_id} 不存在")
+        new_candidates = await self._call_operator(source.operator, state.raw_intent)
+        if not new_candidates:
+            raise ValueError("重新生成未返回任何候选")
+        fresh = new_candidates[0]
+        fresh.id = source.id  # preserve ID
+        fresh.regenerated_count = source.regenerated_count + 1
+        state.stage2_candidates = [
+            fresh if c.id == source.id else c for c in state.stage2_candidates
+        ]
+        atomic_write_state(project_id, state)
+        return fresh
+
     async def _call_operator(
         self, operator: str, raw_intent: RawIntent
     ) -> list[Candidate]:

@@ -1,7 +1,8 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import WorkspaceWizardPanel from "./WorkspaceWizardPanel";
+import { ToastProvider } from "../../hooks/useToast";
 import api from "../../api/client";
 
 vi.mock("../../api/client", () => ({
@@ -51,12 +52,11 @@ vi.mock("../../api/client", () => ({
 
 beforeEach(() => {
   // WizardProvider hydrates from sessionStorage by projectId. Tests
-  // share the jsdom sessionStorage, so without this the post-integration
-  // tests inherit stale completedStep1Surfaces / activeStep1Surface
-  // from earlier tests in this file (e.g. the canvas prefill test
-  // leaves ["canvas","divergence"] behind, which makes the
-  // CreativeCanvasMountPoint test see canvas as completed before
-  // any click).
+  // share the jsdom sessionStorage, so without this earlier tests in
+  // this file would leak currentStep / completedSteps into later
+  // tests, masking the fresh-state behaviour we want to verify
+  // (e.g., the plot-canvas mount-point test should see step 1 as
+  // current, not whatever the previous test left behind).
   sessionStorage.clear();
   vi.clearAllMocks();
 });
@@ -70,13 +70,13 @@ describe("WorkspaceWizardPanel", () => {
     await waitFor(() => expect(screen.getAllByText("创意发散").length).toBeGreaterThanOrEqual(1));
   });
 
-  it("renders 创意画布 between 创意发散 and 概念 DNA as a peer step-1 surface", async () => {
+  it("renders 剧情画布 at sidebar position 6 (between 地图系统 and 全文大纲)", async () => {
     render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
     await waitFor(() =>
-      expect(screen.getByTestId("wizard-sidebar-item-canvas")).toBeInTheDocument()
+      expect(screen.getByTestId("wizard-sidebar-item-plot")).toBeInTheDocument()
     );
-    const canvas = screen.getByTestId("wizard-sidebar-item-canvas");
-    expect(canvas).toHaveTextContent("创意画布");
+    const plot = screen.getByTestId("wizard-sidebar-item-plot");
+    expect(plot).toHaveTextContent("剧情画布");
   });
 
   it("calls the remaining prefill endpoints on mount", async () => {
@@ -133,7 +133,7 @@ describe("WorkspaceWizardPanel", () => {
 });
 
 describe("WorkspaceWizardPanel (post-integration)", () => {
-  it("prefill with canvas.committed=true populates completedStep1Surfaces with 'canvas'", async () => {
+  it("prefill with canvas.committed=true populates completedSteps=[1,6]", async () => {
     (api.getCanvasV2State as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       schema_version: 4,
       session_id: "s",
@@ -154,19 +154,43 @@ describe("WorkspaceWizardPanel (post-integration)", () => {
       scores: { novelty: 0, conflict: 0, story_potential: 0, uniqueness: 0, computed_at: "" },
       session_metadata: {},
     });
+    // selected_at set → step 1 (divergence) is also marked completed via
+    // the prefill branch in WorkspaceWizardPanel (proj_f0721bdc 2026-08-31
+    // regression: canvas.committed alone used to leave divergence incomplete).
     (api.getCreativeDivergence as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      has_selection: false,
-      selected_at: null,
-      selected_id: null,
-      variants: [],
+      has_selection: true,
+      selected_at: "2026-09-03T00:00:05.000000",
+      selected_id: "v1",
+      variants: [{ id: "v1", label: "A", title: "T", description: "D", tags: [], created_at: "2026-09-03T00:00:00Z" }],
     });
     render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
     await waitFor(() => {
-      expect(screen.getByTestId("wizard-sidebar-item-canvas").getAttribute("data-state")).toBe("completed");
+      // Step 6 (剧情画布) is now completed in completedSteps, so its
+      // sidebar item renders data-state="completed".
+      expect(screen.getByTestId("wizard-sidebar-item-plot").getAttribute("data-state")).toBe("completed");
+      // And step 1 (创意发散) is also completed — divergence and canvas
+      // are independent steps in the post-abstraction model.
+      expect(screen.getByTestId("wizard-sidebar-item-divergence").getAttribute("data-state")).toBe("completed");
     });
   });
 
-  it("renders CreativeCanvasMountPoint when currentStep=1 + activeStep1Surface='canvas'", async () => {
+  it("renders PlotCanvasMountPoint when currentStep=6", async () => {
+    // Hydrate the wizard at currentStep=6 (剧情画布) via sessionStorage so
+    // the panel renders PlotCanvasMountPoint on mount. This bypasses the
+    // sidebar's "next-step reachable" gating, which would otherwise require
+    // either completing step 5 first or stepping through every prior step
+    // — neither of which is the unit under test.
+    sessionStorage.setItem(
+      "storyforge.wizard.state.proj_test",
+      JSON.stringify({
+        currentStep: 6,
+        completedSteps: [1, 2, 3, 4, 5],
+        status: "idle",
+        data: {},
+        errorMessage: null,
+        creativeDivergenceSubStage: "A",
+      })
+    );
     (api.getCanvasV2State as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       schema_version: 4,
       session_id: "s",
@@ -193,13 +217,13 @@ describe("WorkspaceWizardPanel (post-integration)", () => {
       selected_id: null,
       variants: [],
     });
-    // First render lands on step 1 + divergence (default). Click canvas.
-    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
+    render(
+      <ToastProvider>
+        <MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>
+      </ToastProvider>
+    );
     await waitFor(() => {
-      fireEvent.click(screen.getByTestId("wizard-sidebar-item-canvas"));
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("wizard-sidebar-item-canvas").getAttribute("data-state")).toBe("current");
+      expect(screen.getByTestId("wizard-sidebar-item-plot").getAttribute("data-state")).toBe("current");
       expect(screen.getByTestId("plot-canvas-mount-point")).toBeInTheDocument();
     });
   });

@@ -6,18 +6,18 @@ import PlotCanvasMountPoint from "./PlotCanvasMountPoint";
 
 // Mock the canvas hook so the page doesn't try to actually load v2 state.
 // We import the mocked function after vi.mock so `vi.mocked()` can type-cast.
-vi.mock("@/hooks/useCreativeCanvasV2", () => ({
-  useCreativeCanvasV2: vi.fn(),
+vi.mock("@/hooks/usePlotCanvasV2", () => ({
+  usePlotCanvasV2: vi.fn(),
 }));
-import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
-const mockUseCreativeCanvasV2 = vi.mocked(useCreativeCanvasV2);
+import { usePlotCanvasV2 } from "@/hooks/usePlotCanvasV2";
+const mockUsePlotCanvasV2 = vi.mocked(usePlotCanvasV2);
 
 // Stub the canvas-v2 hook to return an empty state. The mount point itself
 // doesn't care about canvas contents — only that the page renders and the
 // page-shell header is suppressed. EmptyState has its own data-testid
 // ("empty-state") which we use in the embed assertion to confirm the page
 // actually mounted.
-mockUseCreativeCanvasV2.mockReturnValue({
+mockUsePlotCanvasV2.mockReturnValue({
   status: "empty",
   canvas: null,
   error: null,

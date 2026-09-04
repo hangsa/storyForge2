@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
+import { usePlotCanvasV2 } from "@/hooks/usePlotCanvasV2";
 import { useToast } from "@/hooks/useToast";
 import { TreeCanvas } from "@/components/plot-canvas/TreeCanvas";
 import { CanvasPreStepHint } from "@/components/plot-canvas/CanvasPreStepHint";
@@ -69,7 +69,7 @@ export default function PlotCanvasPage({
     showResetDialog, onReset, closeResetDialog, confirmReset,
     showPreCommit, onCommitClick, closePreCommit, confirmCommit,
     initSession, selectOption, nextStep,
-  } = useCreativeCanvasV2(projectId);
+  } = usePlotCanvasV2(projectId);
   const { show: showToast } = useToast();
 
   // Surface hook errors (init/select/nextStep failures) as a toast. Before

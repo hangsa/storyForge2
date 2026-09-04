@@ -7,7 +7,7 @@ import api, {
 
 type Status = "empty" | "active" | "completed" | "committed" | "loading";
 
-interface UseCreativeCanvasV2 {
+interface UsePlotCanvasV2 {
   // State
   status: Status;
   canvas: CanvasV4State | null;
@@ -37,7 +37,7 @@ interface UseCreativeCanvasV2 {
 // confirmReset calls DELETE /state (root_idea preserved per PRD §18.2),
 // then re-fetches the canvas so the canvas-derived state reflows.
 
-export function useCreativeCanvasV2(projectId: string): UseCreativeCanvasV2 {
+export function usePlotCanvasV2(projectId: string): UsePlotCanvasV2 {
   const [status, setStatus] = useState<Status>("empty");
   const [canvas, setCanvas] = useState<CanvasV4State | null>(null);
   const [error, setError] = useState<string | null>(null);

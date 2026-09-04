@@ -8,12 +8,12 @@ import ToastContainer from "@/components/shared/ToastContainer";
 
 // Mock the hook at module-scope so each test can override its return value.
 // We import the mocked function after vi.mock so `vi.mocked()` can type-cast.
-vi.mock("@/hooks/useCreativeCanvasV2", () => ({
-  useCreativeCanvasV2: vi.fn(),
+vi.mock("@/hooks/usePlotCanvasV2", () => ({
+  usePlotCanvasV2: vi.fn(),
 }));
 
-import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
-const mockUseCreativeCanvasV2 = vi.mocked(useCreativeCanvasV2);
+import { usePlotCanvasV2 } from "@/hooks/usePlotCanvasV2";
+const mockUsePlotCanvasV2 = vi.mocked(usePlotCanvasV2);
 
 // ToastProvider wrapper — PlotCanvasPage calls useToast() to surface
 // hook errors (init / select / nextStep failures). Without this wrapper
@@ -147,7 +147,7 @@ function defaultHookReturn(canvas: CanvasV4State | null = baseCanvas) {
 
 describe("PlotCanvasPage", () => {
   it("renders EmptyState when canvas is null", () => {
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(null));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(null));
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
@@ -159,7 +159,7 @@ describe("PlotCanvasPage", () => {
   });
 
   it("renders StepIndicator + TreeCanvas when canvas is active", () => {
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
@@ -176,7 +176,7 @@ describe("PlotCanvasPage", () => {
 
   it("opens ResetConfirmDialog when 重新开始 is clicked", () => {
     const onReset = vi.fn();
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(baseCanvas),
       onReset,
     });
@@ -192,7 +192,7 @@ describe("PlotCanvasPage", () => {
   });
 
   it("shows ResetConfirmDialog when showResetDialog is true", () => {
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(baseCanvas),
       showResetDialog: true,
     });
@@ -208,7 +208,7 @@ describe("PlotCanvasPage", () => {
 
   it("opens PreCommitSummary when 提交 is clicked", () => {
     const onCommitClick = vi.fn();
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(baseCanvas),
       canCommit: true,
       onCommitClick,
@@ -225,7 +225,7 @@ describe("PlotCanvasPage", () => {
   });
 
   it("shows PreCommitSummary when showPreCommit is true", () => {
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(baseCanvas),
       canCommit: true,
       showPreCommit: true,
@@ -241,7 +241,7 @@ describe("PlotCanvasPage", () => {
   });
 
   it("hides 提交 button when canCommit is false", () => {
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(baseCanvas),
       canCommit: false,
     });
@@ -258,7 +258,7 @@ describe("PlotCanvasPage", () => {
 
 describe("PlotCanvasPage embedded mode", () => {
   it("does not render page-shell header when embedded=true", () => {
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     // Page-shell header is the h2 "Creative Canvas" + subtitle + StepIndicator
     // block. When embedded=true, the wizard provides chrome so we omit it.
@@ -268,7 +268,7 @@ describe("PlotCanvasPage embedded mode", () => {
   });
 
   it("renders page-shell header in standalone (non-embedded) mode", () => {
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
     // Sanity check the inverse — standalone mode keeps the wrapper + header.
     expect(screen.getByTestId("creative-canvas-page")).toBeInTheDocument();
@@ -280,7 +280,7 @@ describe("PlotCanvasPage embedded mode", () => {
     // the EmptyState drops its max-w-2xl/mx-auto constraint so it fills
     // the wizard main area (no left/right whitespace). Standalone keeps
     // the centered narrow look.
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(null));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(null));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     const panel = screen.getByTestId("empty-state");
     expect(panel.className).not.toContain("max-w-2xl");
@@ -288,7 +288,7 @@ describe("PlotCanvasPage embedded mode", () => {
   });
 
   it("forwards embedded=false to EmptyState (keeps max-w-2xl) when canvas is null (standalone)", () => {
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(null));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(null));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
     const panel = screen.getByTestId("empty-state");
     expect(panel.className).toContain("max-w-2xl");
@@ -298,7 +298,7 @@ describe("PlotCanvasPage embedded mode", () => {
   it("invokes onCommitSuccess after confirmCommit resolves", async () => {
     const onCommitSuccess = vi.fn();
     const confirmCommit = vi.fn().mockResolvedValue(undefined);
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(baseCanvas),
       canCommit: true,
       showPreCommit: true,
@@ -315,7 +315,7 @@ describe("PlotCanvasPage embedded mode", () => {
 
   it("does not invoke onCommitSuccess when not provided (back-compat)", async () => {
     const confirmCommit = vi.fn().mockResolvedValue(undefined);
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(baseCanvas),
       canCommit: true,
       showPreCommit: true,
@@ -352,7 +352,7 @@ describe("PlotCanvasPage embedded mode", () => {
         },
       ],
     };
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(freshInit),
       nextStep,
     });
@@ -367,7 +367,7 @@ describe("PlotCanvasPage embedded mode", () => {
     // muted line at the bottom of the active-step panel — easy to
     // miss. Upgraded to a callout block with an icon so users
     // actually read the rationale before picking A/B/C.
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     const callout = screen.getByTestId("operation-reason-callout");
     expect(callout).toBeInTheDocument();
@@ -384,7 +384,7 @@ describe("PlotCanvasPage embedded mode", () => {
     // flag), init silently 404'd and the page stayed on EmptyState. The
     // user thought 开始创意推演 did nothing. Now the hook's `error`
     // surfaces via a toast so the user sees the failure.
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(baseCanvas),
       error: "init failed: API 返回 404",
     });
@@ -408,7 +408,7 @@ describe("PlotCanvasPage malformed-canvas regression", () => {
       ...baseCanvas,
       creative_path: undefined as never,
     };
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(malformed));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(malformed));
     expect(() =>
       renderWithProviders(
         <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
@@ -436,7 +436,7 @@ describe("PlotCanvasPage malformed-canvas regression", () => {
         },
       ],
     };
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(malformed));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(malformed));
     expect(() =>
       renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />),
     ).not.toThrow();
@@ -478,7 +478,7 @@ describe("PlotCanvasPage malformed-canvas regression", () => {
         },
       ],
     };
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(freshInit));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(freshInit));
     expect(() =>
       renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />),
     ).not.toThrow();
@@ -525,7 +525,7 @@ describe("PlotCanvasPage Step 1 continue wiring", () => {
     // onContinue so the right-side button is rendered. Pure-display
     // fixtures (no canvas yet) MUST NOT show the button — gate it on
     // step 1 availability.
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(buildFreshInit()));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(buildFreshInit()));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     expect(screen.getByTestId("idea-root-continue")).toBeInTheDocument();
   });
@@ -535,7 +535,7 @@ describe("PlotCanvasPage Step 1 continue wiring", () => {
     // the active-step area must contain the PreStepHint placeholder.
     // Without this, users saw 3 empty circles + a central button with
     // no explanation of what would happen on click.
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(buildFreshInit()));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(buildFreshInit()));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     expect(screen.getByTestId("active-step-panel")).toBeInTheDocument();
     expect(screen.getByTestId("canvas-pre-step-hint")).toBeInTheDocument();
@@ -546,7 +546,7 @@ describe("PlotCanvasPage Step 1 continue wiring", () => {
     // and forwards nextStep(1) via onContinue. Without this wiring the
     // button is dead and the canvas never leaves the available state.
     const nextStep = vi.fn().mockResolvedValue(undefined);
-    mockUseCreativeCanvasV2.mockReturnValue({
+    mockUsePlotCanvasV2.mockReturnValue({
       ...defaultHookReturn(buildFreshInit()),
       nextStep,
     });
@@ -593,7 +593,7 @@ describe("PlotCanvasPage Step 1 continue wiring", () => {
         },
       ],
     };
-    mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(step2Available));
+    mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(step2Available));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     // Gate is Step 1 only — Step 2 available must NOT light up the
     // IdeaRootNode button (which would call nextStep(1) and re-generate

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
+import { usePlotCanvasV2 } from "@/hooks/usePlotCanvasV2";
 import api from "@/api/client";
 
 vi.mock("@/api/client", () => ({
@@ -47,13 +47,13 @@ const mockedApi = api as unknown as {
   postCanvasV2Commit: ReturnType<typeof vi.fn>;
 };
 
-describe("useCreativeCanvasV2", () => {
+describe("usePlotCanvasV2", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("loadCanvas fetches state and populates canvas", async () => {
-    const { result } = renderHook(() => useCreativeCanvasV2("proj_x"));
+    const { result } = renderHook(() => usePlotCanvasV2("proj_x"));
     await act(async () => {
       await result.current.loadCanvas();
     });
@@ -63,7 +63,7 @@ describe("useCreativeCanvasV2", () => {
   });
 
   it("initSession calls postCanvasV2Init then loadCanvas", async () => {
-    const { result } = renderHook(() => useCreativeCanvasV2("proj_x"));
+    const { result } = renderHook(() => usePlotCanvasV2("proj_x"));
     await act(async () => {
       await result.current.initSession({ prompt: "p", genre_primary: "xianxia" });
     });
@@ -72,7 +72,7 @@ describe("useCreativeCanvasV2", () => {
   });
 
   it("nextStep returns operation + 3 options", async () => {
-    const { result } = renderHook(() => useCreativeCanvasV2("proj_x"));
+    const { result } = renderHook(() => usePlotCanvasV2("proj_x"));
     let resp;
     await act(async () => {
       resp = await result.current.nextStep(1);
@@ -82,7 +82,7 @@ describe("useCreativeCanvasV2", () => {
   });
 
   it("selectOption calls API + reloads state", async () => {
-    const { result } = renderHook(() => useCreativeCanvasV2("proj_x"));
+    const { result } = renderHook(() => usePlotCanvasV2("proj_x"));
     await act(async () => {
       await result.current.selectOption(1, "opt_1_b");
     });
@@ -99,7 +99,7 @@ describe("useCreativeCanvasV2", () => {
       creative_path: [], committed: true,
       committed_at: "2026-09-02T10:00:00",
     });
-    const { result } = renderHook(() => useCreativeCanvasV2("proj_x"));
+    const { result } = renderHook(() => usePlotCanvasV2("proj_x"));
     await act(async () => {
       await result.current.commitCanvas();
     });
@@ -119,7 +119,7 @@ describe("useCreativeCanvasV2", () => {
       })),
       committed: false, committed_at: null,
     });
-    const { result } = renderHook(() => useCreativeCanvasV2("proj_x"));
+    const { result } = renderHook(() => usePlotCanvasV2("proj_x"));
     await act(async () => {
       await result.current.loadCanvas();
     });
@@ -142,7 +142,7 @@ describe("useCreativeCanvasV2", () => {
       ],
       committed: false, committed_at: null,
     });
-    const { result } = renderHook(() => useCreativeCanvasV2("proj_x"));
+    const { result } = renderHook(() => usePlotCanvasV2("proj_x"));
     await act(async () => {
       await result.current.loadCanvas();
     });

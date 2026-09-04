@@ -47,6 +47,18 @@ vi.mock("../../api/client", () => ({
     getCharacter: vi.fn().mockRejectedValue(new Error("404")),
     getNovelOutline: vi.fn().mockRejectedValue(new Error("404")),
     getOutline: vi.fn().mockRejectedValue(new Error("404")),
+    // 3B divergence (Plan 2026-09-05): useThreeBDivergence fires
+    // getThreeBState on mount. Mock empty-state so the hook's HYDRATE
+    // runs without throwing.
+    getThreeBState: vi.fn().mockResolvedValue({
+      schema_version: 1,
+      project_id: "proj_test",
+      raw_intent: null,
+      stage2_candidates: [],
+      stage3_deepened: [],
+      committed: false,
+    }),
+    deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
 

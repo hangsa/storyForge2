@@ -55,6 +55,18 @@ vi.mock("../api/client", () => ({
       project_id: "p", total_chapters: 0, issues: [],
       summary: { p0_count: 0, p1_count: 0, p2_count: 0 },
     }),
+    // 3B divergence (Plan 2026-09-05): useThreeBDivergence fires
+    // getThreeBState on mount. Mock empty-state so the hook's HYDRATE
+    // runs without throwing.
+    getThreeBState: vi.fn().mockResolvedValue({
+      schema_version: 1,
+      project_id: "proj_x",
+      raw_intent: null,
+      stage2_candidates: [],
+      stage3_deepened: [],
+      committed: false,
+    }),
+    deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
 

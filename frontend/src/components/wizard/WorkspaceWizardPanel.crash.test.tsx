@@ -63,6 +63,18 @@ vi.mock("../../api/client", () => ({
     getCharacter: vi.fn().mockResolvedValue({}),
     getNovelOutline: vi.fn().mockResolvedValue({}),
     getOutline: vi.fn().mockResolvedValue({}),
+    // 3B divergence (Plan 2026-09-05): useThreeBDivergence fires
+    // getThreeBState on mount. Mock empty-state so the hook's HYDRATE
+    // runs without throwing.
+    getThreeBState: vi.fn().mockResolvedValue({
+      schema_version: 1,
+      project_id: "proj_test",
+      raw_intent: null,
+      stage2_candidates: [],
+      stage3_deepened: [],
+      committed: false,
+    }),
+    deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
   },
 }));
 
@@ -109,6 +121,16 @@ describe("WorkspaceWizardPanel crash repro", () => {
         getCharacter: vi.fn().mockResolvedValue(null),
         getNovelOutline: vi.fn().mockResolvedValue(null),
         getOutline: vi.fn().mockResolvedValue(null),
+        // 3B divergence (Plan 2026-09-05): mirror first-block mock.
+        getThreeBState: vi.fn().mockResolvedValue({
+          schema_version: 1,
+          project_id: "proj_test",
+          raw_intent: null,
+          stage2_candidates: [],
+          stage3_deepened: [],
+          committed: false,
+        }),
+        deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
       },
     }));
 

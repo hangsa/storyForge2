@@ -158,7 +158,7 @@ function App() {
             }
           />
         </Route>
-        {/* Stage4–6 redirects → /workspace. Use replace, not push, so back-button goes to caller. */}
+        {/* Stage4–5 redirects → /workspace. Use replace, not push, so back-button goes to caller. */}
         <Route
           path="/project/:projectId/stage4"
           element={<StageRedirect to="workspace?mode=manual" />}
@@ -177,6 +177,10 @@ function App() {
             </Suspense>
           }
         >
+          <Route
+            index
+            element={<StageRedirect to="workspace?mode=manual&panel=export" />}
+          />
           <Route
             path="plot"
             element={

@@ -42,7 +42,7 @@ def _canvas_path(pid: str) -> Path:
 def test_init_writes_enriched_v4_schema_with_root_idea(project, client):
     """PRD §22 + §23.4 + UI design (root_idea card column)."""
     init_resp = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "修仙对抗外星舰队的可能性", "genre_primary": "xianxia"},
     )
     assert init_resp.status_code == 200, init_resp.text
@@ -65,7 +65,7 @@ def test_init_writes_enriched_v4_schema_with_root_idea(project, client):
 
 def test_init_writes_v4_with_raw_intent_and_root_idea(project, client):
     response = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={
             "prompt": "长生者寻死",
             "genre_primary": "xianxia",
@@ -90,12 +90,12 @@ def test_init_writes_v4_with_raw_intent_and_root_idea(project, client):
 
 def test_state_returns_v4_after_init(project, client):
     init_response = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "p", "genre_primary": "xianxia"},
     )
     assert init_response.status_code == 200, init_response.text
 
-    response = client.get(f"/creative/canvas/{project}/session/state")
+    response = client.get(f"/api/creative/canvas/{project}/session/state")
     assert response.status_code == 200
     data = response.json()
     assert data["schema_version"] == 4
@@ -103,7 +103,7 @@ def test_state_returns_v4_after_init(project, client):
 
 def test_next_step_404_when_canvas_not_initialized(project, client):
     response = client.post(
-        f"/creative/canvas/{project}/session/next-step",
+        f"/api/creative/canvas/{project}/session/next-step",
         json={"current_step": 1},
     )
     assert response.status_code in (400, 404)
@@ -111,7 +111,7 @@ def test_next_step_404_when_canvas_not_initialized(project, client):
 
 def test_next_step_returns_operation_and_3_options(project, client, monkeypatch):
     init_response = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "p", "genre_primary": "xianxia"},
     )
     assert init_response.status_code == 200, init_response.text
@@ -136,7 +136,7 @@ def test_next_step_returns_operation_and_3_options(project, client, monkeypatch)
     monkeypatch.setattr(v2_canvas, "_call_llm_with_retry", fake_retry)
 
     response = client.post(
-        f"/creative/canvas/{project}/session/next-step",
+        f"/api/creative/canvas/{project}/session/next-step",
         json={"current_step": 1},
     )
     assert response.status_code == 200, response.text
@@ -152,7 +152,7 @@ def test_next_step_returns_operation_and_3_options(project, client, monkeypatch)
 
 def test_select_marks_step_completed_and_unlocks_next(project, client, monkeypatch):
     init_response = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "p", "genre_primary": "xianxia"},
     )
     assert init_response.status_code == 200, init_response.text
@@ -204,13 +204,13 @@ def test_select_marks_step_completed_and_unlocks_next(project, client, monkeypat
     monkeypatch.setattr(v2_canvas, "_next_step_impl", fake_next_step)
 
     ns_resp = client.post(
-        f"/creative/canvas/{project}/session/next-step",
+        f"/api/creative/canvas/{project}/session/next-step",
         json={"current_step": 1},
     )
     assert ns_resp.status_code == 200, ns_resp.text
 
     response = client.post(
-        f"/creative/canvas/{project}/session/select",
+        f"/api/creative/canvas/{project}/session/select",
         json={"step": 1, "option_id": "opt_1_b"},
     )
     assert response.status_code == 200, response.text
@@ -271,14 +271,14 @@ def test_delete_state_resets_session_preserves_root_idea(project, client, monkey
         }
     monkeypatch.setattr(v2_canvas, "_next_step_impl", fake_next_step)
 
-    client.post(f"/creative/canvas/{project}/session/init",
+    client.post(f"/api/creative/canvas/{project}/session/init",
                 json={"prompt": "p", "genre_primary": "xianxia"})
-    client.post(f"/creative/canvas/{project}/session/next-step",
+    client.post(f"/api/creative/canvas/{project}/session/next-step",
                 json={"current_step": 1})
-    client.post(f"/creative/canvas/{project}/session/select",
+    client.post(f"/api/creative/canvas/{project}/session/select",
                 json={"step": 1, "option_id": "opt_1_b"})
 
-    del_resp = client.delete(f"/creative/canvas/{project}/session/state")
+    del_resp = client.delete(f"/api/creative/canvas/{project}/session/state")
     assert del_resp.status_code == 200
 
     canvas = json.loads(_canvas_path(project).read_text(encoding="utf-8"))
@@ -293,13 +293,13 @@ def test_delete_state_when_uninitialized_is_idempotent(project, client):
     canvas_file = _canvas_path(project)
 
     # First DELETE on uninitialized project — should not 500
-    first = client.delete(f"/creative/canvas/{project}/session/state")
+    first = client.delete(f"/api/creative/canvas/{project}/session/state")
     assert first.status_code == 200
     assert first.json()["ok"] is True
     assert not canvas_file.exists(), "canvas_state.json should not exist after first DELETE"
 
     # Second DELETE — must also be 200 (no-op since there is still no canvas)
-    second = client.delete(f"/creative/canvas/{project}/session/state")
+    second = client.delete(f"/api/creative/canvas/{project}/session/state")
     assert second.status_code == 200
     assert second.json()["ok"] is True
     assert not canvas_file.exists(), "canvas_state.json should not exist after second DELETE"
@@ -310,10 +310,10 @@ def test_delete_state_when_uninitialized_is_idempotent(project, client):
 
 def test_evaluate_returns_deprecation_header(project, client):
     """PRD §26: /evaluate kept as deprecated compat endpoint."""
-    client.post(f"/creative/canvas/{project}/session/init",
+    client.post(f"/api/creative/canvas/{project}/session/init",
                 json={"prompt": "p", "genre_primary": "xianxia"})
 
-    resp = client.post(f"/creative/canvas/{project}/session/evaluate",
+    resp = client.post(f"/api/creative/canvas/{project}/session/evaluate",
                        json={"node_id": None})
     assert resp.status_code == 200, resp.text
     assert resp.headers.get("deprecation") == "true"
@@ -350,7 +350,7 @@ def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatc
     monkeypatch.setattr(PlannerAgent, "generate_concept_from_canvas", fake_generate)
 
     # Init + walk 5 steps + select
-    client.post(f"/creative/canvas/{project}/session/init",
+    client.post(f"/api/creative/canvas/{project}/session/init",
                 json={"prompt": "p", "genre_primary": "xianxia"})
 
     async def fake_next(project_id, current_step):
@@ -396,12 +396,12 @@ def test_commit_writes_v3_compatible_concept_and_dna(project, client, monkeypatc
     monkeypatch.setattr(v2_canvas, "_next_step_impl", fake_next)
 
     for step in range(1, 6):
-        client.post(f"/creative/canvas/{project}/session/next-step",
+        client.post(f"/api/creative/canvas/{project}/session/next-step",
                     json={"current_step": step})
-        client.post(f"/creative/canvas/{project}/session/select",
+        client.post(f"/api/creative/canvas/{project}/session/select",
                     json={"step": step, "option_id": f"opt_{step}_b"})
 
-    response = client.post(f"/creative/canvas/{project}/session/commit")
+    response = client.post(f"/api/creative/canvas/{project}/session/commit")
     assert response.status_code == 200, response.text
 
     # Verify v3 schema
@@ -452,13 +452,13 @@ def test_next_step_prompt_renders_axis_hint_block(project, client, monkeypatch):
     )
 
     init_resp = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "p", "genre_primary": "xianxia"},
     )
     assert init_resp.status_code == 200, init_resp.text
 
     ns = client.post(
-        f"/creative/canvas/{project}/session/next-step",
+        f"/api/creative/canvas/{project}/session/next-step",
         json={"current_step": 1},
     )
     assert ns.status_code == 200, ns.text
@@ -571,7 +571,7 @@ def test_select_refreshes_top_level_scores(project, client, monkeypatch):
     )
 
     init_resp = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "p", "genre_primary": "xianxia"},
     )
     assert init_resp.status_code == 200, init_resp.text
@@ -621,13 +621,13 @@ def test_select_refreshes_top_level_scores(project, client, monkeypatch):
 
     # Generate options for step 1.
     ns = client.post(
-        f"/creative/canvas/{project}/session/next-step",
+        f"/api/creative/canvas/{project}/session/next-step",
         json={"current_step": 1},
     )
     assert ns.status_code == 200, ns.text
 
     sel = client.post(
-        f"/creative/canvas/{project}/session/select",
+        f"/api/creative/canvas/{project}/session/select",
         json={"step": 1, "option_id": "opt_1_b"},
     )
     assert sel.status_code == 200, sel.text
@@ -671,7 +671,7 @@ def test_select_preserves_existing_scores_on_evaluator_failure(project, client, 
     # Seed the canvas with non-default scores so we can prove they
     # survive the failed refresh.
     init_resp = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "p", "genre_primary": "xianxia"},
     )
     assert init_resp.status_code == 200, init_resp.text
@@ -708,7 +708,7 @@ def test_select_preserves_existing_scores_on_evaluator_failure(project, client, 
     monkeypatch.setattr(v2_canvas, "_next_step_impl", fake_next_step)
 
     sel = client.post(
-        f"/creative/canvas/{project}/session/select",
+        f"/api/creative/canvas/{project}/session/select",
         json={"step": 1, "option_id": "opt_1_b"},
     )
     assert sel.status_code == 200, sel.text
@@ -769,14 +769,14 @@ def test_next_step_auto_regenerates_on_consistency_fail(project, client, monkeyp
 
     # 3. Init canvas
     init_resp = client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "p", "genre_primary": "xianxia"},
     )
     assert init_resp.status_code == 200, init_resp.text
 
     # 4. Call /next-step — this should trigger the regen path internally.
     ns = client.post(
-        f"/creative/canvas/{project}/session/next-step",
+        f"/api/creative/canvas/{project}/session/next-step",
         json={"current_step": 1},
     )
     assert ns.status_code == 200, ns.text
@@ -827,11 +827,11 @@ def test_next_step_no_regen_on_novelty_only_failure(project, client, monkeypatch
     monkeypatch.setattr(v2_canvas, "check_consistency", fake_check)
 
     client.post(
-        f"/creative/canvas/{project}/session/init",
+        f"/api/creative/canvas/{project}/session/init",
         json={"prompt": "p", "genre_primary": "xianxia"},
     )
     ns = client.post(
-        f"/creative/canvas/{project}/session/next-step",
+        f"/api/creative/canvas/{project}/session/next-step",
         json={"current_step": 1},
     )
     assert ns.status_code == 200, ns.text

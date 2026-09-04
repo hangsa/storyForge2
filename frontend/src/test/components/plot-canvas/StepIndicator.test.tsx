@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { StepIndicator } from "@/components/creative-canvas/StepIndicator";
+import { StepIndicator } from "@/components/plot-canvas/StepIndicator";
 
 describe("StepIndicator", () => {
   it("renders step number and operation in pill", () => {

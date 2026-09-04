@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ScoresBar } from "@/components/creative-canvas/ScoresBar";
+import { ScoresBar } from "@/components/plot-canvas/ScoresBar";
 
 describe("ScoresBar", () => {
   it("renders all 4 PRD §16 quality dimensions with their labels", () => {

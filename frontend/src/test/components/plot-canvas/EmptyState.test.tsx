@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { EmptyState } from "@/components/creative-canvas/EmptyState";
+import { EmptyState } from "@/components/plot-canvas/EmptyState";
 
 describe("EmptyState", () => {
   it("renders PRD §11.2 copy", () => {

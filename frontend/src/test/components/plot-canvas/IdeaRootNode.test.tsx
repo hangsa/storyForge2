@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { IdeaRootNode } from "@/components/creative-canvas/IdeaRootNode";
+import { IdeaRootNode } from "@/components/plot-canvas/IdeaRootNode";
 
 describe("IdeaRootNode", () => {
   it("renders the full prompt text without truncation", () => {

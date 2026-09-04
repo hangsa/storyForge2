@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { TreeCanvas } from "@/components/creative-canvas/TreeCanvas";
+import { TreeCanvas } from "@/components/plot-canvas/TreeCanvas";
 import type { CanvasV4State } from "@/api/client";
 
 const baseState: CanvasV4State = {

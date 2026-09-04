@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { OptionCard } from "@/components/creative-canvas/OptionCard";
+import { OptionCard } from "@/components/plot-canvas/OptionCard";
 import type { CreativeOption } from "@/api/client";
 
 const baseOption: CreativeOption = {

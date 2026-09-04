@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { ResetConfirmDialog } from "@/components/creative-canvas/ResetConfirmDialog";
+import { ResetConfirmDialog } from "@/components/plot-canvas/ResetConfirmDialog";
 
 describe("ResetConfirmDialog", () => {
   it("renders PRD §18.2 copy", () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { CanvasPreStepHint } from "@/components/creative-canvas/CanvasPreStepHint";
+import { CanvasPreStepHint } from "@/components/plot-canvas/CanvasPreStepHint";
 
 describe("CanvasPreStepHint", () => {
   it("renders the step number dynamically (default step=1)", () => {

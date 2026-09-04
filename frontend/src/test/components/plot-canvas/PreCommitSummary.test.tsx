@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { PreCommitSummary } from "@/components/creative-canvas/PreCommitSummary";
+import { PreCommitSummary } from "@/components/plot-canvas/PreCommitSummary";
 
 describe("PreCommitSummary", () => {
   const stats = { depth: 4, novelty: 87, conflict: 91 };

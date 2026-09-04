@@ -1,15 +1,15 @@
-# 创意画布（Creative Canvas）模块综述
+# 剧情画布（Creative Canvas）模块综述
 
 ---
 
 ## 1. 用户需求与产品定位
 
-创意画布要回答的核心产品问题是：**"用户只有一个模糊的灵感点子，如何把它收拢成一个有冲突、有路径、有新颖度评分的创作前提？"**。
+剧情画布要回答的核心产品问题是：**"用户只有一个模糊的灵感点子，如何把它收拢成一个有冲突、有路径、有新颖度评分的创作前提？"**。
 
 它处在整条流水线的**最上游**：
 
 ```
-灵感 → 创意画布（Creative Canvas）→ 概念确认（Stage 1）→ 世界观（Stage 2）→ 角色（Stage 3）→ 大纲（Stage 3 outline）→ 写作工作台（Workspace）
+灵感 → 剧情画布（Creative Canvas）→ 概念确认（Stage 1）→ 世界观（Stage 2）→ 角色（Stage 3）→ 大纲（Stage 3 outline）→ 写作工作台（Workspace）
 ```
 
 **核心用户价值**：
@@ -347,4 +347,4 @@ docs/
 
 ## 9. 一句话总结
 
-创意画布 = **CreativeOS 5 大引擎**（WhatIf / Mutation / Contradiction / GenreFusion / Novelty）通过 **`/creative/diverge/*` 路由层**驱动 **`canvas_state.json` v3 单一真相源**，前端 `/stage0/canvas` 路由下用 React Flow 全屏画布承载 **展开 / 变异 / 评分 / 选路径 / 提交** 全套交互，15 分钟把模糊灵感收拢成带矛盾 + 带路径 + 带新颖度评分的可提交 concept，落库后接 Stage 1 概念讨论。当前 v1.1+v1.2 已落地，v1.3 类型融合接线 spec 已完成待实施。
+剧情画布 = **CreativeOS 5 大引擎**（WhatIf / Mutation / Contradiction / GenreFusion / Novelty）通过 **`/creative/diverge/*` 路由层**驱动 **`canvas_state.json` v3 单一真相源**，前端 `/stage0/canvas` 路由下用 React Flow 全屏画布承载 **展开 / 变异 / 评分 / 选路径 / 提交** 全套交互，15 分钟把模糊灵感收拢成带矛盾 + 带路径 + 带新颖度评分的可提交 concept，落库后接 Stage 1 概念讨论。当前 v1.1+v1.2 已落地，v1.3 类型融合接线 spec 已完成待实施。

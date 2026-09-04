@@ -40,9 +40,8 @@ mockUseCreativeCanvasV2.mockReturnValue({
 });
 
 /**
- * Test-only child that probes wizard context state. Lets us assert that
- * the mount point's onCommitSuccess callback actually invokes
- * markStep1SurfaceCompleted on the wizard.
+ * Test-only child that probes wizard context state. Verifies that calling
+ * markStepGenerated(6) pushes 6 into the wizard's completedSteps array.
  */
 function WizardProbe() {
   const wizard = useWizard();
@@ -50,14 +49,14 @@ function WizardProbe() {
     <div>
       <button
         data-testid="probe-mark-completed"
-        onClick={() => wizard.markStep1SurfaceCompleted("canvas")}
+        onClick={() => wizard.markStepGenerated(6, {})}
       >
         mark
       </button>
       <span data-testid="probe-completed">
-        {wizard.completedStep1Surfaces.includes("canvas") ? "yes" : "no"}
+        {wizard.completedSteps.includes(6) ? "yes" : "no"}
       </span>
-      <span data-testid="probe-active">{wizard.activeStep1Surface}</span>
+      <span data-testid="probe-active">{wizard.currentStep}</span>
     </div>
   );
 }
@@ -95,7 +94,7 @@ describe("PlotCanvasMountPoint", () => {
     expect(screen.getByTestId("empty-state")).toBeInTheDocument();
   });
 
-  it("wizard.markStep1SurfaceCompleted is callable from a child of the same provider", () => {
+  it("wizard.markStepGenerated(6) pushes 6 into completedSteps", () => {
     render(
       <WizardProvider projectId="proj_test">
         <MemoryRouter initialEntries={["/project/proj_test/stage1/canvas"]}>
@@ -118,7 +117,7 @@ describe("PlotCanvasMountPoint", () => {
     expect(screen.getByTestId("probe-completed").textContent).toBe("yes");
   });
 
-  it("default activeStep1Surface is 'divergence' on fresh provider", () => {
+  it("wizard context currentStep starts at 1 on fresh provider", () => {
     render(
       <WizardProvider projectId="proj_test">
         <MemoryRouter initialEntries={["/project/proj_test/stage1/canvas"]}>
@@ -136,6 +135,6 @@ describe("PlotCanvasMountPoint", () => {
         </MemoryRouter>
       </WizardProvider>
     );
-    expect(screen.getByTestId("probe-active").textContent).toBe("divergence");
+    expect(screen.getByTestId("probe-active").textContent).toBe("1");
   });
 });

@@ -11,7 +11,10 @@ State 文件: <project>/creative_os/three_b_state.json
 
 from __future__ import annotations
 
+import asyncio
 import json
+import json as _json
+import logging
 import os
 import tempfile
 import uuid
@@ -22,6 +25,7 @@ from typing import Optional
 
 from backend.config import settings
 from backend.utils.file_manager import FileManager
+from backend.services.prompt_override_store import load_prompt_effective
 
 
 def _file_manager() -> FileManager:
@@ -32,6 +36,9 @@ def _file_manager() -> FileManager:
     `settings.projects_dir` get a fresh manager via this helper.
     """
     return FileManager(settings.projects_dir)
+
+
+logger = logging.getLogger(__name__)
 
 
 STATE_FILE = "three_b_state.json"
@@ -153,3 +160,106 @@ def _now_iso() -> str:
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:6]}"
+
+
+class ThreeBEngine:
+    """3B 创造力法则专用引擎。"""
+
+    def __init__(self, model_router=None) -> None:
+        self._router = model_router
+
+    async def diverge(
+        self, project_id: str, raw_intent: RawIntent
+    ) -> dict:
+        """3 个算子 asyncio.gather 并行发散,返回 candidates + by_operator。"""
+        sem = asyncio.Semaphore(3)
+
+        async def _guarded(op: str):
+            async with sem:
+                return await self._call_operator(op, raw_intent)
+
+        results = await asyncio.gather(
+            *[_guarded(op) for op in OPERATORS],
+            return_exceptions=True,
+        )
+
+        by_operator: dict[str, list[Candidate]] = {op: [] for op in OPERATORS}
+        for op, res in zip(OPERATORS, results):
+            if isinstance(res, Exception):
+                logger.warning("3B operator %s failed: %s", op, res)
+                by_operator[op] = []
+            else:
+                by_operator[op] = res
+
+        flat = [c for cs in by_operator.values() for c in cs]
+        now = _now_iso()
+
+        # Persist state (create if missing)
+        state = load_state(project_id) or ThreeBState(project_id=project_id)
+        state.raw_intent = raw_intent
+        state.stage2_started_at = now
+        state.stage2_completed_at = now
+        state.stage2_candidates = flat
+        atomic_write_state(project_id, state)
+
+        return {
+            "candidates": [asdict(c) for c in flat],
+            "by_operator": {op: [asdict(c) for c in cs] for op, cs in by_operator.items()},
+            "elapsed_ms": 0,  # placeholder; routers can compute if needed
+        }
+
+    async def _call_operator(
+        self, operator: str, raw_intent: RawIntent
+    ) -> list[Candidate]:
+        """单算子 LLM 调用。"""
+        prompt_data = load_prompt_effective(f"creative/three_b_{operator}")
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = prompt_data["user_prompt_template"].format(
+            prompt=raw_intent.prompt,
+            genre_primary=raw_intent.genre_primary,
+            genre_secondary=raw_intent.genre_secondary or "(无)",
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        response = await self._router.execute(
+            agent_name="three_b",
+            task_name=operator,
+            messages=messages,
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.9),
+            max_tokens=prompt_data.get("max_tokens", 4096),
+        )
+        raw_text = response.get("content", "")
+        cands = self._parse_operator_output(raw_text, operator)
+        return cands
+
+    def _parse_operator_output(
+        self, raw_text: str, operator: str
+    ) -> list[Candidate]:
+        """Parse LLM JSON output → Candidate list with field coercion."""
+        try:
+            data = _json.loads(raw_text)
+        except _json.JSONDecodeError:
+            logger.warning("3B %s returned non-JSON; coercing to empty", operator)
+            return []
+        if not isinstance(data, list):
+            return []
+        out: list[Candidate] = []
+        for idx, item in enumerate(data):
+            if not isinstance(item, dict):
+                continue
+            out.append(Candidate(
+                id=_new_id("cand"),
+                operator=operator,
+                sub_dimension=item.get("sub_dimension", "") or "",
+                sub_dimension_index=idx,
+                premise_one_line=item.get("premise_one_line", "") or "",
+                rationale=item.get("rationale", "") or "",
+                novelty_hook=item.get("novelty_hook", "") or "",
+                recognition_score=float(item.get("recognition_score", 0.0) or 0.0),
+                strangeness_score=float(item.get("strangeness_score", 0.0) or 0.0),
+                llm_raw=raw_text,
+            ))
+        return out

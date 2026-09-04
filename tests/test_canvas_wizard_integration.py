@@ -1,13 +1,19 @@
 """E2E smoke for the canvas-to-wizard dual-write contract.
 
-The frontend wizard reads `creative_divergence.json` to detect step-1
-completion. The v4 canvas commit endpoint dual-writes this file with
-`selected_at=<now>` and `source="canvas"`, so the wizard's prefill
-recognizes the canvas commit as step-1 completion and unlocks step 2
-(概念 DNA). These tests guard that contract from regressing.
+The frontend wizard reads two files to detect completion:
+- `creative_divergence.json` — divergence commit (step 1). The
+  selected_at field is the prefill signal for unlocking step 2.
+- `canvas_state.json` — canvas commit (step 6 = 剧情画布). The
+  `committed` + `committed_at` flags together are the prefill signal
+  for marking step 6 complete (independent of divergence).
 
-The wizard integration logic is frontend-only — these tests guard the
-backend contract the frontend depends on.
+The v4 canvas commit endpoint dual-writes creative_divergence.json
+with `selected_at=<now>` and `source="canvas"` so divergence's
+selected_at stays truthy (legacy compatibility). The canvas-side
+signal itself lives on canvas_state.json's committed fields.
+
+These tests guard the backend contract the frontend depends on.
+The wizard integration logic is frontend-only.
 """
 import json
 from pathlib import Path
@@ -131,25 +137,25 @@ def stub_llm(monkeypatch):
 def _walk_and_commit(client, project_id, prompt="test idea"):
     """Helper: init -> 5x(next-step+select) -> commit. Returns commit response."""
     init_resp = client.post(
-        f"/creative/canvas/{project_id}/session/init",
+        f"/api/creative/canvas/{project_id}/session/init",
         json={"prompt": prompt, "genre_primary": "xianxia"},
     )
     assert init_resp.status_code == 200, init_resp.text
 
     for step in range(1, 6):
         ns = client.post(
-            f"/creative/canvas/{project_id}/session/next-step",
+            f"/api/creative/canvas/{project_id}/session/next-step",
             json={"current_step": step},
         )
         assert ns.status_code == 200, ns.text
 
         sel = client.post(
-            f"/creative/canvas/{project_id}/session/select",
+            f"/api/creative/canvas/{project_id}/session/select",
             json={"step": step, "option_id": f"opt_{step}_b"},
         )
         assert sel.status_code == 200, sel.text
 
-    commit_resp = client.post(f"/creative/canvas/{project_id}/session/commit")
+    commit_resp = client.post(f"/api/creative/canvas/{project_id}/session/commit")
     return commit_resp
 
 
@@ -159,9 +165,12 @@ def test_canvas_commit_writes_creative_divergence_with_selected_at(
     """End-to-end: init -> 5x(next-step+select) -> commit.
 
     Asserts creative_divergence.json exists with selected_at set
-    (the wizard's prefill signal — completedSteps.includes(1) and
-    completedStep1Surfaces contains both "canvas" and "divergence"
-    via different code paths).
+    (the wizard's prefill signal — WorkspaceWizardPanel reads
+    selected_at to push 1 into completedSteps for step 1
+    (divergence). After the 2026-09-04 canvas rename + step
+    reorder, the canvas-side signal lives on canvas_state.json's
+    committed + committed_at, which pushes 6 into completedSteps.
+    Both signals are independent).
     """
     commit_resp = _walk_and_commit(client, project, prompt="test idea")
     assert commit_resp.status_code == 200, commit_resp.text
@@ -201,7 +210,7 @@ def test_canvas_commit_sets_committed_flag_and_timestamp(
     assert commit_resp.status_code == 200, commit_resp.text
 
     # Re-fetch state
-    state_resp = client.get(f"/creative/canvas/{project}/session/state")
+    state_resp = client.get(f"/api/creative/canvas/{project}/session/state")
     assert state_resp.status_code == 200
     canvas = state_resp.json()
 
@@ -240,7 +249,7 @@ def test_canvas_commit_idempotent_creative_divergence_write(
     # creative_divergence.json file still has selected_at set (no
     # regression). If a second commit were attempted and failed
     # midway, the file should still be present.
-    second = client.post(f"/creative/canvas/{project}/session/commit")
+    second = client.post(f"/api/creative/canvas/{project}/session/commit")
     cd_after = json.loads(cd_path.read_text(encoding="utf-8"))
     assert cd_after.get("selected_at"), (
         "selected_at must remain truthy after a (potentially re-entrant) commit; "

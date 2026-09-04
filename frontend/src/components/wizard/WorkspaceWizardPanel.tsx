@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
-import { WizardProvider, useWizard, type WizardData, type Step1SurfaceId } from "./WizardContext";
+import { WizardProvider, useWizard, type WizardData } from "./WizardContext";
 import WizardSidebar from "./WizardSidebar";
 import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
@@ -50,29 +50,28 @@ function Inner({ projectId }: Props) {
         ]);
         if (cancelled) return;
         const completed: number[] = [];
-        const completedStep1Surfaces: Step1SurfaceId[] = [];
         const data: Partial<WizardData> = {};
 
-        // Divergence surface completion: selected_at is the single
+        // Divergence completion: selected_at is the single
         // source of truth (both source="canvas" and source="creative_divergence"
         // dual-write at /commit). proj_f0721bdc 2026-08-31 regression.
         const cdPayload = cd.status === "fulfilled" ? cd.value : null;
         if (cdPayload && cdPayload.selected_at) {
           completed.push(1);
-          completedStep1Surfaces.push("divergence");
         }
 
-        // Canvas surface completion: committed is the semantic signal;
+        // Plot canvas completion: committed is the semantic signal;
         // committed_at !== null is a defensive backstop ensuring both
         // flags agree on read (the backend stamps both atomically today,
-        // but defense-in-depth for disk-derived signals).
+        // but defense-in-depth for disk-derived signals). Marks step 6
+        // (剧情画布) as completed; divergence and canvas are now
+        // independent steps.
         const canvasPayload = canvasState.status === "fulfilled" ? canvasState.value : null;
         if (canvasPayload?.committed === true && canvasPayload.committed_at !== null) {
-          if (!completed.includes(1)) completed.push(1);
-          completedStep1Surfaces.push("canvas");
+          completed.push(6);
         }
 
-        // Existing prefill for steps 2..7 — unchanged.
+        // Existing prefill for steps 2..8 — unchanged.
         const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
         if (conceptPayload && hasContent(conceptPayload)) {
           completed.push(2);
@@ -83,19 +82,16 @@ function Inner({ projectId }: Props) {
         }
         if (world.status === "fulfilled" && hasContent(world.value)) { completed.push(3); data.world = world.value as World; }
         if (chars.status === "fulfilled" && hasContent(chars.value)) { completed.push(4); data.characters = chars.value as CharacterSet; }
-        if (novel.status === "fulfilled" && hasContent(novel.value)) { completed.push(6); data.novel_outline = novel.value as NovelOutline; }
-        if (outline.status === "fulfilled" && hasContent(outline.value)) { completed.push(7); data.chapter1_outline = outline.value as Outline; }
+        // Step mappings — must stay in sync with SIDEBAR_ITEMS in WizardSidebar:
+        //   7 = novel_outline.json (全文大纲)
+        //   8 = outline.json     (章节大纲 / chapter1_outline)
+        if (novel.status === "fulfilled" && hasContent(novel.value)) { completed.push(7); data.novel_outline = novel.value as NovelOutline; }
+        if (outline.status === "fulfilled" && hasContent(outline.value)) { completed.push(8); data.chapter1_outline = outline.value as Outline; }
 
         if (completed.length > 0) {
           wizard.hydrateFromFiles(completed, data);
         } else {
           wizard.markPrefillComplete();
-        }
-        // Note: HYDRATE_STEP1_SURFACES does not flip prefillComplete; if
-        // only step-1 surfaces completed (no step 2+ files), the
-        // markPrefillComplete() above covers the gate.
-        if (completedStep1Surfaces.length > 0) {
-          wizard.hydrateStep1Surfaces(completedStep1Surfaces);
         }
       } catch {
         if (!cancelled) wizard.markPrefillComplete();
@@ -110,14 +106,8 @@ function Inner({ projectId }: Props) {
       <WizardSidebar
         currentStep={wizard.currentStep}
         completedSteps={wizard.completedSteps}
-        activeStep1Surface={wizard.activeStep1Surface}
-        completedStep1Surfaces={wizard.completedStep1Surfaces}
         onJump={(item) => {
-          if (item.kind === "step1-surface") {
-            wizard.setActiveStep1Surface(item.surfaceId!);
-          } else {
-            wizard.jumpToStep(item.position);
-          }
+          wizard.jumpToStep(item.position);
         }}
       />
 
@@ -125,19 +115,18 @@ function Inner({ projectId }: Props) {
         <main className="flex-1 overflow-y-auto">
           <div className="w-full flex flex-col">
             {wizard.currentStep === 1 && (
-              wizard.activeStep1Surface === "canvas"
-                ? <CreativeCanvasMountPoint projectId={projectId} />
-                : <CreativeDivergenceStep
-                    projectId={projectId}
-                    onCommitSuccess={() => wizard.markStep1SurfaceCompleted("divergence")}
-                  />
+              <CreativeDivergenceStep
+                projectId={projectId}
+                onCommitSuccess={() => wizard.markStepGenerated(1, {})}
+              />
             )}
             {wizard.currentStep === 2 && <ConceptStep projectId={projectId} />}
             {wizard.currentStep === 3 && <WorldStep projectId={projectId} />}
             {wizard.currentStep === 4 && <CharacterStep projectId={projectId} />}
             {wizard.currentStep === 5 && <MapStep />}
-            {wizard.currentStep === 6 && <OutlineStep projectId={projectId} />}
-            {wizard.currentStep === 7 && (
+            {wizard.currentStep === 6 && <CreativeCanvasMountPoint projectId={projectId} />}
+            {wizard.currentStep === 7 && <OutlineStep projectId={projectId} />}
+            {wizard.currentStep === 8 && (
               <ChapterOutlineStep projectId={projectId} onFinish={() => { /* WorkspacePage handles tab switch */ }} />
             )}
           </div>

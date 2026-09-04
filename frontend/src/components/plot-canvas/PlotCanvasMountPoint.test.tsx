@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { WizardProvider, useWizard } from "../wizard/WizardContext";
-import CreativeCanvasMountPoint from "./CreativeCanvasMountPoint";
+import PlotCanvasMountPoint from "./PlotCanvasMountPoint";
 
 // Mock the canvas hook so the page doesn't try to actually load v2 state.
 // We import the mocked function after vi.mock so `vi.mocked()` can type-cast.
@@ -62,7 +62,7 @@ function WizardProbe() {
   );
 }
 
-describe("CreativeCanvasMountPoint", () => {
+describe("PlotCanvasMountPoint", () => {
   beforeEach(() => {
     sessionStorage.clear();
   });
@@ -76,7 +76,7 @@ describe("CreativeCanvasMountPoint", () => {
               path="/project/:projectId/stage1/canvas"
               element={
                 <>
-                  <CreativeCanvasMountPoint projectId="proj_test" />
+                  <PlotCanvasMountPoint projectId="proj_test" />
                   <WizardProbe />
                 </>
               }
@@ -104,7 +104,7 @@ describe("CreativeCanvasMountPoint", () => {
               path="/project/:projectId/stage1/canvas"
               element={
                 <>
-                  <CreativeCanvasMountPoint projectId="proj_test" />
+                  <PlotCanvasMountPoint projectId="proj_test" />
                   <WizardProbe />
                 </>
               }
@@ -127,7 +127,7 @@ describe("CreativeCanvasMountPoint", () => {
               path="/project/:projectId/stage1/canvas"
               element={
                 <>
-                  <CreativeCanvasMountPoint projectId="proj_test" />
+                  <PlotCanvasMountPoint projectId="proj_test" />
                   <WizardProbe />
                 </>
               }

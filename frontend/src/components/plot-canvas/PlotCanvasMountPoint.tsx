@@ -18,7 +18,7 @@ interface Props {
  * assert the sidebar item click switches the main area to the canvas
  * surface via this anchor.
  */
-export default function CreativeCanvasMountPoint({ projectId }: Props) {
+export default function PlotCanvasMountPoint({ projectId }: Props) {
   const wizard = useWizard();
   return (
     <div

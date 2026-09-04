@@ -9,7 +9,7 @@ import MapStep from "./MapStep";
 import OutlineStep from "./OutlineStep";
 import ChapterOutlineStep from "./ChapterOutlineStep";
 import CreativeDivergenceStep from "./CreativeDivergenceStep";
-import CreativeCanvasMountPoint from "../creative-canvas/CreativeCanvasMountPoint";
+import PlotCanvasMountPoint from "../plot-canvas/PlotCanvasMountPoint";
 import RegenerateStatusBadge from "./RegenerateStatusBadge";
 
 interface Props { projectId: string }
@@ -124,7 +124,7 @@ function Inner({ projectId }: Props) {
             {wizard.currentStep === 3 && <WorldStep projectId={projectId} />}
             {wizard.currentStep === 4 && <CharacterStep projectId={projectId} />}
             {wizard.currentStep === 5 && <MapStep />}
-            {wizard.currentStep === 6 && <CreativeCanvasMountPoint projectId={projectId} />}
+            {wizard.currentStep === 6 && <PlotCanvasMountPoint projectId={projectId} />}
             {wizard.currentStep === 7 && <OutlineStep projectId={projectId} />}
             {wizard.currentStep === 8 && (
               <ChapterOutlineStep projectId={projectId} onFinish={() => { /* WorkspacePage handles tab switch */ }} />

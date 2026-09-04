@@ -54,7 +54,7 @@ const CENTER_Y = 200;
 
 export function TreeCanvas({ canvas, onAdvance, ideaOnContinue, ideaContinueLoading }: Props) {
   // Guard against missing/non-array creative_path — same defensive pattern
-  // as CreativeCanvasPage. Backend contract says it's always an array,
+  // as PlotCanvasPage. Backend contract says it's always an array,
   // but the page should render (showing the root idea + nothing) rather
   // than crash if a malformed payload reaches us.
   const steps = Array.isArray(canvas.creative_path) ? canvas.creative_path : [];

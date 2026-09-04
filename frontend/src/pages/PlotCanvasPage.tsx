@@ -2,14 +2,14 @@ import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
 import { useToast } from "@/hooks/useToast";
-import { TreeCanvas } from "@/components/creative-canvas/TreeCanvas";
-import { CanvasPreStepHint } from "@/components/creative-canvas/CanvasPreStepHint";
-import { StepIndicator } from "@/components/creative-canvas/StepIndicator";
-import { OptionCard } from "@/components/creative-canvas/OptionCard";
-import { EmptyState } from "@/components/creative-canvas/EmptyState";
-import { ResetConfirmDialog } from "@/components/creative-canvas/ResetConfirmDialog";
-import { PreCommitSummary } from "@/components/creative-canvas/PreCommitSummary";
-import { ScoresBar } from "@/components/creative-canvas/ScoresBar";
+import { TreeCanvas } from "@/components/plot-canvas/TreeCanvas";
+import { CanvasPreStepHint } from "@/components/plot-canvas/CanvasPreStepHint";
+import { StepIndicator } from "@/components/plot-canvas/StepIndicator";
+import { OptionCard } from "@/components/plot-canvas/OptionCard";
+import { EmptyState } from "@/components/plot-canvas/EmptyState";
+import { ResetConfirmDialog } from "@/components/plot-canvas/ResetConfirmDialog";
+import { PreCommitSummary } from "@/components/plot-canvas/PreCommitSummary";
+import { ScoresBar } from "@/components/plot-canvas/ScoresBar";
 import { GhostButton, PrimaryButton } from "@/components/ds";
 import type { CreativeOption } from "@/api/client";
 
@@ -29,7 +29,7 @@ const OPERATION_LABEL_ZH: Record<string, string> = {
 
 type Slot = "A" | "B" | "C";
 
-interface CreativeCanvasPageProps {
+interface PlotCanvasPageProps {
   /**
    * Project identifier. In standalone mode this falls back to the
    * `:projectId` URL param (route: /project/:projectId/stage1/canvas,
@@ -55,11 +55,11 @@ interface CreativeCanvasPageProps {
   onCommitSuccess?: () => void;
 }
 
-export default function CreativeCanvasPage({
+export default function PlotCanvasPage({
   projectId: projectIdProp,
   embedded = false,
   onCommitSuccess,
-}: CreativeCanvasPageProps = {}) {
+}: PlotCanvasPageProps = {}) {
   // Route is /project/:projectId/stage1/canvas (App.tsx:114). Explicit
   // prop wins over URL param so embedded mode works without a router.
   const { projectId: projectIdParam = "" } = useParams<{ projectId: string }>();

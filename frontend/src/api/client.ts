@@ -1588,7 +1588,7 @@ export const api = {
   // sibling. Backend lives at /api/v1/projects/{pid}/creative/diverge/
   // choose-branch. The unrelated api.chooseBranch (creative/canvas/) is a
   // pre-existing method with a stale URL — not touching it here because
-  // CreativeCanvasPage depends on it.
+  // PlotCanvasPage depends on it.
   postDivergeChooseBranch: (
     projectId: string,
     parentNodeId: string,

@@ -1,12 +1,12 @@
 import { useWizard } from "../wizard/WizardContext";
-import CreativeCanvasPage from "../../pages/CreativeCanvasPage";
+import PlotCanvasPage from "../../pages/PlotCanvasPage";
 
 interface Props {
   projectId: string;
 }
 
 /**
- * Wizard-side wrapper around CreativeCanvasPage. Owns the wizard
+ * Wizard-side wrapper around PlotCanvasPage. Owns the wizard
  * context dependency so the page itself stays standalone-capable
  * (i.e., still works at /project/:id/stage1/canvas without a
  * WizardProvider). When the user commits a path, we notify the
@@ -27,7 +27,7 @@ export default function PlotCanvasMountPoint({ projectId }: Props) {
       data-testid="creative-canvas-mount-point"
       data-project-id={projectId}
     >
-      <CreativeCanvasPage
+      <PlotCanvasPage
         projectId={projectId}
         embedded
         onCommitSuccess={() => wizard.markStepGenerated(6, {})}

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render as _rawRender, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import CreativeCanvasPage from "@/pages/CreativeCanvasPage";
+import PlotCanvasPage from "@/pages/PlotCanvasPage";
 import type { CanvasV4State } from "@/api/client";
 import { ToastProvider } from "@/hooks/useToast";
 import ToastContainer from "@/components/shared/ToastContainer";
@@ -15,7 +15,7 @@ vi.mock("@/hooks/useCreativeCanvasV2", () => ({
 import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
 const mockUseCreativeCanvasV2 = vi.mocked(useCreativeCanvasV2);
 
-// ToastProvider wrapper — CreativeCanvasPage calls useToast() to surface
+// ToastProvider wrapper — PlotCanvasPage calls useToast() to surface
 // hook errors (init / select / nextStep failures). Without this wrapper
 // useToast throws. ToastContainer renders the actual DOM so we can assert
 // on toast text. In production both live in App.tsx (provider wraps the
@@ -145,13 +145,13 @@ function defaultHookReturn(canvas: CanvasV4State | null = baseCanvas) {
   };
 }
 
-describe("CreativeCanvasPage", () => {
+describe("PlotCanvasPage", () => {
   it("renders EmptyState when canvas is null", () => {
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(null));
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -163,7 +163,7 @@ describe("CreativeCanvasPage", () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -183,7 +183,7 @@ describe("CreativeCanvasPage", () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -199,7 +199,7 @@ describe("CreativeCanvasPage", () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -216,7 +216,7 @@ describe("CreativeCanvasPage", () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -233,7 +233,7 @@ describe("CreativeCanvasPage", () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -248,7 +248,7 @@ describe("CreativeCanvasPage", () => {
     renderWithProviders(
       <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -256,10 +256,10 @@ describe("CreativeCanvasPage", () => {
   });
 });
 
-describe("CreativeCanvasPage embedded mode", () => {
+describe("PlotCanvasPage embedded mode", () => {
   it("does not render page-shell header when embedded=true", () => {
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     // Page-shell header is the h2 "Creative Canvas" + subtitle + StepIndicator
     // block. When embedded=true, the wizard provides chrome so we omit it.
     expect(screen.queryByRole("heading", { name: /Creative Canvas/ })).toBeNull();
@@ -269,7 +269,7 @@ describe("CreativeCanvasPage embedded mode", () => {
 
   it("renders page-shell header in standalone (non-embedded) mode", () => {
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
     // Sanity check the inverse — standalone mode keeps the wrapper + header.
     expect(screen.getByTestId("creative-canvas-page")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Creative Canvas/ })).toBeInTheDocument();
@@ -281,7 +281,7 @@ describe("CreativeCanvasPage embedded mode", () => {
     // the wizard main area (no left/right whitespace). Standalone keeps
     // the centered narrow look.
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(null));
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     const panel = screen.getByTestId("empty-state");
     expect(panel.className).not.toContain("max-w-2xl");
     expect(panel.className).not.toContain("mx-auto");
@@ -289,7 +289,7 @@ describe("CreativeCanvasPage embedded mode", () => {
 
   it("forwards embedded=false to EmptyState (keeps max-w-2xl) when canvas is null (standalone)", () => {
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(null));
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
     const panel = screen.getByTestId("empty-state");
     expect(panel.className).toContain("max-w-2xl");
     expect(panel.className).toContain("mx-auto");
@@ -305,7 +305,7 @@ describe("CreativeCanvasPage embedded mode", () => {
       confirmCommit,
     });
     renderWithProviders(
-      <CreativeCanvasPage projectId="proj_test" embedded onCommitSuccess={onCommitSuccess} />
+      <PlotCanvasPage projectId="proj_test" embedded onCommitSuccess={onCommitSuccess} />
     );
     // PreCommitSummary is shown (showPreCommit=true); click the confirm button.
     fireEvent.click(screen.getByRole("button", { name: /形成概念/ }));
@@ -322,7 +322,7 @@ describe("CreativeCanvasPage embedded mode", () => {
       confirmCommit,
     });
     // No onCommitSuccess prop — should not throw.
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     fireEvent.click(screen.getByRole("button", { name: /形成概念/ }));
     await waitFor(() => expect(confirmCommit).toHaveBeenCalledTimes(1), { timeout: 3000 });
   });
@@ -356,7 +356,7 @@ describe("CreativeCanvasPage embedded mode", () => {
       ...defaultHookReturn(freshInit),
       nextStep,
     });
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     fireEvent.click(screen.getByTestId("advance-step-1"));
     await waitFor(() => expect(nextStep).toHaveBeenCalledTimes(1));
     expect(nextStep).toHaveBeenCalledWith(1);
@@ -368,7 +368,7 @@ describe("CreativeCanvasPage embedded mode", () => {
     // miss. Upgraded to a callout block with an icon so users
     // actually read the rationale before picking A/B/C.
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     const callout = screen.getByTestId("operation-reason-callout");
     expect(callout).toBeInTheDocument();
     expect(callout).toHaveTextContent(/为什么是「fuse」/);
@@ -388,7 +388,7 @@ describe("CreativeCanvasPage embedded mode", () => {
       ...defaultHookReturn(baseCanvas),
       error: "init failed: API 返回 404",
     });
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
     // The toast is rendered via ToastContainer — find it by the message text.
     expect(screen.getByText(/画布操作失败.*init failed/)).toBeInTheDocument();
   });
@@ -402,7 +402,7 @@ describe("CreativeCanvasPage embedded mode", () => {
 // :110) when the backend response shape drifted from the TS contract.
 // Page now treats a missing/non-array creative_path or options as [] so
 // the user sees an empty tree + no active step instead of a hard crash.
-describe("CreativeCanvasPage malformed-canvas regression", () => {
+describe("PlotCanvasPage malformed-canvas regression", () => {
   it("does not crash when canvas.creative_path is undefined", () => {
     const malformed = {
       ...baseCanvas,
@@ -413,7 +413,7 @@ describe("CreativeCanvasPage malformed-canvas regression", () => {
       renderWithProviders(
         <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
           <Routes>
-            <Route path="/project/:projectId/stage1/canvas" element={<CreativeCanvasPage />} />
+            <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
           </Routes>
         </MemoryRouter>,
       ),
@@ -438,7 +438,7 @@ describe("CreativeCanvasPage malformed-canvas regression", () => {
     };
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(malformed));
     expect(() =>
-      renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />),
+      renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />),
     ).not.toThrow();
     // Active step panel still renders (3 slots), each OptionCard falls back
     // to undefined option and is skipped via the `if (!option) return null`
@@ -480,7 +480,7 @@ describe("CreativeCanvasPage malformed-canvas regression", () => {
     };
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(freshInit));
     expect(() =>
-      renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />),
+      renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />),
     ).not.toThrow();
     expect(screen.getByTestId("tree-canvas")).toBeInTheDocument();
     // Spec §3.3: active-step-panel now wraps CanvasPreStepHint so users
@@ -501,7 +501,7 @@ describe("CreativeCanvasPage malformed-canvas regression", () => {
 // Plus the active-step area renders a CanvasPreStepHint pointing at
 // affordance (1). Step 2-5 cascade from /select and never hit
 // "available" in real flow, so the IdeaRootNode button is Step-1-only.
-describe("CreativeCanvasPage Step 1 continue wiring", () => {
+describe("PlotCanvasPage Step 1 continue wiring", () => {
   const buildFreshInit = (): CanvasV4State => ({
     ...baseCanvas,
     creative_session: { current_step: 1, max_steps: 5, status: "active" },
@@ -526,7 +526,7 @@ describe("CreativeCanvasPage Step 1 continue wiring", () => {
     // fixtures (no canvas yet) MUST NOT show the button — gate it on
     // step 1 availability.
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(buildFreshInit()));
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     expect(screen.getByTestId("idea-root-continue")).toBeInTheDocument();
   });
 
@@ -536,7 +536,7 @@ describe("CreativeCanvasPage Step 1 continue wiring", () => {
     // Without this, users saw 3 empty circles + a central button with
     // no explanation of what would happen on click.
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(buildFreshInit()));
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     expect(screen.getByTestId("active-step-panel")).toBeInTheDocument();
     expect(screen.getByTestId("canvas-pre-step-hint")).toBeInTheDocument();
   });
@@ -550,7 +550,7 @@ describe("CreativeCanvasPage Step 1 continue wiring", () => {
       ...defaultHookReturn(buildFreshInit()),
       nextStep,
     });
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     fireEvent.click(screen.getByTestId("idea-root-continue"));
     await waitFor(() => expect(nextStep).toHaveBeenCalledTimes(1));
     expect(nextStep).toHaveBeenCalledWith(1);
@@ -594,7 +594,7 @@ describe("CreativeCanvasPage Step 1 continue wiring", () => {
       ],
     };
     mockUseCreativeCanvasV2.mockReturnValue(defaultHookReturn(step2Available));
-    renderWithProviders(<CreativeCanvasPage projectId="proj_test" embedded />);
+    renderWithProviders(<PlotCanvasPage projectId="proj_test" embedded />);
     // Gate is Step 1 only — Step 2 available must NOT light up the
     // IdeaRootNode button (which would call nextStep(1) and re-generate
     // already-completed step 1).

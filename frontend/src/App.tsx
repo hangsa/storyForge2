@@ -18,7 +18,7 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ChapterReviewPage = lazy(() => import("./pages/ChapterReviewPage"));
 const ImpactAnalysisPage = lazy(() => import("./pages/ImpactAnalysisPage"));
 const StoryOSPage = lazy(() => import("./pages/StoryOSPage"));
-const CreativeCanvasPage = lazy(() => import("./pages/CreativeCanvasPage"));
+const PlotCanvasPage = lazy(() => import("./pages/PlotCanvasPage"));
 const BranchSimulationPage = lazy(() => import("./pages/BranchSimulationPage"));
 const Stage3Layout = lazy(() => import("./components/layout/Stage3Layout"));
 const WizardDeepLinkPage = lazy(() => import("./pages/WizardDeepLinkPage"));
@@ -115,7 +115,7 @@ function App() {
             element={
               <Suspense fallback={<LoadingFallback />}>
                 <StageWrapper name="stage1-canvas">
-                  <CreativeCanvasPage />
+                  <PlotCanvasPage />
                 </StageWrapper>
               </Suspense>
             }

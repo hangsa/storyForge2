@@ -66,7 +66,7 @@ describe("PlotCanvasMountPoint", () => {
     sessionStorage.clear();
   });
 
-  it("mounts CreativeCanvasPage with embedded=true (no page-shell header)", () => {
+  it("mounts PlotCanvasPage with embedded=true (no page-shell header)", () => {
     render(
       <WizardProvider projectId="proj_test">
         <MemoryRouter initialEntries={["/project/proj_test/stage1/canvas"]}>
@@ -85,7 +85,7 @@ describe("PlotCanvasMountPoint", () => {
       </WizardProvider>
     );
     // embedded=true should hide the page-shell header. The mount point
-    // forwards `embedded` to CreativeCanvasPage, which omits the h2 +
+    // forwards `embedded` to PlotCanvasPage, which omits the h2 +
     // wrapper data-testid when embedded.
     expect(screen.queryByRole("heading", { name: /Creative Canvas/ })).toBeNull();
     expect(screen.queryByTestId("creative-canvas-page")).toBeNull();

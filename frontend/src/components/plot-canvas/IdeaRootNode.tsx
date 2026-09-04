@@ -10,7 +10,7 @@ interface Props {
   /**
    * Click handler for the "继续" button. When undefined, no button is
    * rendered — IdeaRootNode stays a pure-display card. The parent
-   * (CreativeCanvasPage) provides this callback only when Step 1 is in
+   * (PlotCanvasPage) provides this callback only when Step 1 is in
    * the "available" state (i.e., /init has run but /next-step has not),
    * so the button doubles as a Step 1 "advance" affordance.
    */

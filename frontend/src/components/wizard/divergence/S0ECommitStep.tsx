@@ -5,7 +5,7 @@ import api, {
   type NoveltyScoreDetail,
   type ValueStackLayer,
 } from "@/api/client";
-import NoveltyRadar from "@/components/creative-canvas/NoveltyRadar";
+import NoveltyRadar from "@/components/plot-canvas/NoveltyRadar";
 import { RegenerateModal } from "../../shared/RegenerateModal";
 
 interface Props {

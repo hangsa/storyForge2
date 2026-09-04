@@ -86,6 +86,23 @@ def _migrate_v3_to_v4(canvas: dict) -> dict:
     """Lazy migration. Pure function — does NOT mutate input.
 
     See spec §3.2 for full field mapping table.
+
+    The migrated v4 view is a SUPERSET — it carries the v4 fields above
+    AND preserves the original v3 fields (`root_node_id`, `nodes`, `edges`,
+    `selected_path`, `branch_choices`, `idea_variants`, `core_contradiction`,
+    `evaluations`, `created_at`, `updated_at`). Both divergence (v1
+    creative_diverge router) and plot canvas (v2 v2_canvas router) read
+    the same `creative_os/canvas_state.json` file — divergence UI expects
+    v3 fields (`state.root_node_id`, etc.) while plot canvas UI expects
+    v4 fields (`state.creative_path`, etc.). Stripping v3 fields on read
+    broke divergence Step B (S0BMutationStep reads `state.root_node_id`
+    to find the root for /expand + /apply-mutation; without v3 fields
+    preserved, /state always returns an empty v4 view and S0B throws
+    "画布尚未初始化,请先完成 Step A" even immediately after /init).
+
+    The v2_canvas router is permissive about extra fields — its /init
+    template only writes v4 keys, and its readers don't reject unknown
+    fields, so the additive migration is safe in both directions.
     """
     v3 = canvas
     is_committed = bool(v3.get("committed_at"))
@@ -93,6 +110,7 @@ def _migrate_v3_to_v4(canvas: dict) -> dict:
     core = v3.get("core_contradiction") or {}
 
     v4 = {
+        # --- v4 fields ---
         "schema_version": 4,
         "session_id": v3.get("session_id"),
         "root_idea": _build_root_idea_from_raw_intent(raw_intent),
@@ -110,5 +128,30 @@ def _migrate_v3_to_v4(canvas: dict) -> dict:
         "committed_concept_ref": v3.get("committed_concept_ref"),
         "scores": v3.get("novelty_scores") or {},
         "session_metadata": v3.get("session_metadata", {}),
+        # --- v3 fields preserved (see docstring above) ---
+        "root_node_id": v3.get("root_node_id"),
+        "nodes": v3.get("nodes", {}),
+        "edges": _derive_edges_from_v3_nodes(v3.get("nodes", {})),
+        "selected_path": v3.get("selected_path", []),
+        "branch_choices": v3.get("branch_choices", {}),
+        "idea_variants": v3.get("idea_variants", []),
+        "core_contradiction": v3.get("core_contradiction"),
+        "evaluations": v3.get("evaluations", {}),
+        "created_at": v3.get("created_at"),
+        "updated_at": v3.get("updated_at"),
     }
     return v4
+
+
+def _derive_edges_from_v3_nodes(nodes: dict) -> list:
+    """Re-derive the v3 `edges` array from each node's `children_ids`.
+
+    Mirrors `creative_diverge._derive_edges_from_nodes` — kept local to
+    avoid a backend.api → backend.api circular import (migration module
+    is leaf-level; creative_diverge imports it).
+    """
+    edges = []
+    for parent_id, node in nodes.items():
+        for child_id in node.get("children_ids", []) or []:
+            edges.append({"from": parent_id, "to": child_id})
+    return edges

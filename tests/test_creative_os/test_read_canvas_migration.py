@@ -72,10 +72,35 @@ def test_read_canvas_v3_uncommitted_migrates_and_writes_back(tmp_projects_dir):
     disk_data = json.loads(
         (tmp_projects_dir / pid / "creative_os" / "canvas_state.json").read_text()
     )
-    # v3 fields dropped
-    assert "nodes" not in disk_data
-    assert "selected_path" not in disk_data
-    assert "root_node_id" not in disk_data
+    # v3 fields preserved (additive migration). Both divergence (v1) and
+    # plot canvas (v2) routers read this file — divergence needs
+    # root_node_id/nodes/etc. to drive S0B; plot canvas uses v4 fields.
+    # Stripping v3 on migrate broke S0B which throws
+    # "画布尚未初始化,请先完成 Step A" immediately after /init (proj_01214ec3
+    # 2026-09-04).
+    assert disk_data["root_node_id"] == "wi_001_00"
+    assert disk_data["nodes"] == v3["nodes"]
+    assert disk_data["selected_path"] == ["wi_001_00"]
+    assert disk_data["branch_choices"] == {}
+    assert disk_data["evaluations"] == {}
+    assert disk_data["idea_variants"] == []
+    assert disk_data["core_contradiction"] is None
+    assert disk_data["created_at"] == "2026-08-30T10:00:00"
+    # updated_at is intentionally bumped on every write-through read by
+    # _read_canvas (line 176) — assert it transitions rather than matches.
+    assert disk_data["updated_at"] != "2026-08-30T10:00:00"
+    assert "T" in disk_data["updated_at"]
+    # edges is derived from nodes.children_ids (no children → empty)
+    assert disk_data["edges"] == []
+    # v4 fields also present
+    assert "creative_path" in disk_data
+    assert "root_idea" in disk_data
+    assert "raw_intent" in disk_data
+    # And the returned view (in-memory dict) carries root_node_id so the
+    # divergence frontend's state.root_node_id reads non-None on the
+    # first /state call after /init.
+    assert result["root_node_id"] == "wi_001_00"
+    assert result["nodes"] == v3["nodes"]
 
 
 def test_read_canvas_v3_committed_does_NOT_write_back(tmp_projects_dir):
@@ -128,3 +153,65 @@ def test_read_canvas_raises_for_unknown_schema(tmp_projects_dir):
         creative_diverge._read_canvas(pid)
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail["code"] == "UNKNOWN_SCHEMA_VERSION"
+
+
+def test_read_canvas_v3_preserves_root_node_id_for_divergence_s0b(tmp_projects_dir):
+    """Regression test for the S0B "画布尚未初始化" error on proj_01214ec3 (2026-09-04).
+
+    Concrete bug: divergence Step B (S0BMutationStep) reads
+    `state.root_node_id` from the /state response to find the root node
+    for /expand + /apply-mutation. If the lazy v3→v4 migration in
+    _read_canvas strips root_node_id, S0B throws
+    "画布尚未初始化,请先完成 Step A" immediately after /init.
+
+    Fix: migration is additive — v3 fields (root_node_id, nodes,
+    selected_path, branch_choices, idea_variants, core_contradiction,
+    evaluations, created_at) survive into the v4 view (both in the
+    returned dict AND on disk after write-through).
+    """
+    pid = "p_divergence_s0b"
+    root_id = "wi_001_00"
+    v3 = {
+        "schema_version": 3,
+        "root_node_id": root_id,
+        "nodes": {
+            root_id: {
+                "id": root_id, "content": "root",
+                "novelty_score": 70, "children_ids": [],
+                "depth": 0, "parent_id": None,
+                "trope_tags": [], "saturation_warning": False,
+                "mutation_context": None, "is_expanded": True,
+                "branch_status": "active",
+            }
+        },
+        "edges": [], "selected_path": [root_id],
+        "branch_choices": {}, "evaluations": {},
+        "created_at": "2026-08-30T10:00:00",
+        "updated_at": "2026-08-30T10:00:00",
+        "committed_at": None, "committed_concept_ref": None,
+        "idea_variants": [], "core_contradiction": None,
+        "novelty_scores": None,
+        "raw_intent": {"prompt": "p", "genre_primary": "xianxia",
+                       "trope_tags": []},
+        "session_metadata": {},
+    }
+    _setup_project(tmp_projects_dir, pid, v3)
+
+    # Simulate the divergence /state flow: read canvas (triggers lazy
+    # migration + write-through for uncommitted v3).
+    result = creative_diverge._read_canvas(pid)
+
+    # The frontend S0BMutationStep does:
+    #   const state = await api.getDivergeState(projectId);
+    #   const rootId = state?.root_node_id as string | undefined;
+    #   if (!rootId) throw new Error("画布尚未初始化,请先完成 Step A");
+    # → root_node_id MUST be present AND truthy
+    assert result["root_node_id"] == root_id
+    assert result["root_node_id"] is not None
+    # And the file on disk should carry it too (so subsequent /state
+    # calls don't re-migrate from an already-upgraded v4 and lose state)
+    disk_data = json.loads(
+        (tmp_projects_dir / pid / "creative_os" / "canvas_state.json").read_text()
+    )
+    assert disk_data["root_node_id"] == root_id
+    assert disk_data["schema_version"] == 4

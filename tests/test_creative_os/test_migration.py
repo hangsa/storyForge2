@@ -69,13 +69,38 @@ def test_migrate_preserves_session_id():
     assert v4["session_id"] == "sess-1"
 
 
-def test_migrate_drops_v3_nodes_field():
+def test_migrate_preserves_v3_fields_additively():
+    """Migration is additive: v3 fields survive into the v4 view.
+
+    Both divergence (v1 creative_diverge router) and plot canvas (v2
+    v2_canvas router) read the same `creative_os/canvas_state.json` file.
+    Divergence UI expects v3 fields (`state.root_node_id`,
+    `state.nodes`, etc.) for S0BMutationStep; plot canvas UI expects
+    v4 fields (`state.creative_path`, etc.). Stripping v3 fields on
+    migration broke divergence Step B which throws
+    "画布尚未初始化,请先完成 Step A" immediately after /init
+    (proj_01214ec3, 2026-09-04).
+
+    The v2_canvas router is permissive about extra fields, so additive
+    migration is safe in both directions.
+    """
     v4 = _migrate_v3_to_v4(V3_MINIMAL)
-    assert "nodes" not in v4
-    assert "edges" not in v4
-    assert "branch_choices" not in v4
-    assert "selected_path" not in v4
-    assert "root_node_id" not in v4
+    assert v4["root_node_id"] == "wi_001_00"
+    assert v4["nodes"] == V3_MINIMAL["nodes"]
+    assert v4["selected_path"] == ["wi_001_00", "wi_002_00"]
+    assert v4["branch_choices"] == {"wi_001_00": "wi_002_00"}
+    assert v4["idea_variants"] == []
+    assert v4["core_contradiction"] == V3_MINIMAL["core_contradiction"]
+    assert v4["evaluations"] == {}
+    assert v4["created_at"] == "2026-08-30T10:00:00"
+    assert v4["updated_at"] == "2026-08-30T10:00:00"
+    # edges is re-derived from nodes.children_ids (matches disk write-through)
+    assert v4["edges"] == [{"from": "wi_001_00", "to": "wi_002_00"}]
+    # v4 fields are also present (not mutually exclusive)
+    assert v4["schema_version"] == 4
+    assert "creative_path" in v4
+    assert "root_idea" in v4
+    assert "current_concept" in v4
 
 
 def test_migrate_builds_root_idea_from_raw_intent():

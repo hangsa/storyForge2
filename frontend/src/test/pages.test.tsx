@@ -133,9 +133,10 @@ function renderPage(ui: React.ReactNode, path = "/project/test-project/stage1") 
 }
 
 describe("Stage1Page", () => {
-  it("renders title and empty state", () => {
+  it("renders layout header and empty state", () => {
+    // Stage1Layout owns the page header since the canvas-tab removal.
     renderPage(<Stage1Page />);
-    expect(screen.getByText("概念讨论")).toBeInTheDocument();
+    expect(screen.getByText("Stage 1 — 概念")).toBeInTheDocument();
     expect(screen.getByText(/点击.*生成概念.*开始阶段 1/)).toBeInTheDocument();
   });
 
@@ -144,26 +145,14 @@ describe("Stage1Page", () => {
     expect(screen.getByText("生成概念")).toBeInTheDocument();
   });
 
-  it("renders both subtabs from the layout with the quick tab active", () => {
+  it("renders layout header without subtabs", () => {
+    // The 快速生成 / 创意画布 pill switcher was removed when the canvas
+    // tab was dropped from Stage1Layout. Guard against accidental
+    // re-introduction of subtabs on this layout.
     renderPage(<Stage1Page />);
-    const quickTab = screen.getByRole("button", { name: /快速生成/ });
-    const canvasTab = screen.getByRole("button", { name: /创意画布/ });
-    expect(quickTab).toBeInTheDocument();
-    expect(canvasTab).toBeInTheDocument();
-    // Quick tab is active (primary-container background)
-    expect(quickTab.className).toMatch(/bg-primary-container/);
-    // Canvas tab is inactive
-    expect(canvasTab.className).not.toMatch(/bg-primary-container/);
-  });
-
-  it("renders the tab switcher in pill style matching STAGE2", () => {
-    renderPage(<Stage1Page />);
-    // The pill container has bg-surface-container + rounded-lg + p-1
-    const quickTab = screen.getByRole("button", { name: /快速生成/ });
-    const pill = quickTab.parentElement!;
-    expect(pill.className).toMatch(/bg-surface-container/);
-    expect(pill.className).toMatch(/rounded-lg/);
-    expect(pill.className).toMatch(/p-1/);
+    expect(screen.getByText("Stage 1 — 概念")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /快速生成/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /创意画布/ })).toBeNull();
   });
 });
 

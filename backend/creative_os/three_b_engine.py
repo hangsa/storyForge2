@@ -353,3 +353,182 @@ class ThreeBEngine:
             llm_raw=raw_text,
             deepen_count=1,
         )
+
+    async def commit(
+        self,
+        project_id: str,
+        deepened_ids: list[str],
+    ) -> dict:
+        """LLM 合成单一 concept,落盘 concept_and_dna.json + creative_divergence.json。"""
+        if not (MIN_DEEPENED_IDS <= len(deepened_ids) <= MAX_DEEPENED_IDS):
+            raise ValueError(
+                f"deepened_ids 数量必须是 {MIN_DEEPENED_IDS}-{MAX_DEEPENED_IDS},"
+                f"当前 {len(deepened_ids)}"
+            )
+        state = load_state(project_id)
+        if state is None or state.raw_intent is None:
+            raise ValueError("项目尚未发散,无法 commit")
+
+        by_id = {d.id: d for d in state.stage3_deepened}
+        missing = [d_id for d_id in deepened_ids if d_id not in by_id]
+        if missing:
+            raise ValueError(f"deepened_ids 引用不存在: {missing}")
+        chosen = [by_id[d_id] for d_id in deepened_ids]
+
+        # Stage 3 LLM synthesis
+        concept = await self._synthesize_concept(state.raw_intent, chosen)
+
+        # Novelty evaluation: best-effort Tier 3 trope_extraction via router.
+        # Skips the full NoveltyEvaluator pipeline (which needs TropePool +
+        # ContradictionEngine + embedder) and computes a 4-dim summary from
+        # the LLM-extracted trope list + neutral defaults. Same shape as
+        # creative_diverge.py:_regenerate_concept_novelty payload so the
+        # downstream UI doesn't need a different parser.
+        novelty = await self._compute_novelty_scores(concept.get("expanded", ""))
+
+        # 1) concept_and_dna.json
+        now = _now_iso()
+        concept_payload = {
+            "concept": concept,
+            "source": "creative_divergence",
+            "three_b_snapshot": {
+                "deepened_ids": deepened_ids,
+                "committed_at": now,
+            },
+        }
+        _file_manager().write_json(project_id, "concept_and_dna.json", concept_payload)
+
+        # 2) creative_divergence.json (compat with stage1_concept.py guard)
+        cd_compat = {
+            "prompt": (state.raw_intent.prompt or "")[:1700],
+            "variants": [],
+            "selected_id": None,
+            "selected_at": now,
+            "source": "creative_divergence",
+        }
+        _file_manager().write_json(project_id, "creative_divergence.json", cd_compat)
+
+        # 3) Flip state.committed
+        state.committed = True
+        state.committed_at = now
+        atomic_write_state(project_id, state)
+
+        return {
+            "concept_and_dna": concept,
+            "novelty_scores": novelty,
+            "message": "概念已写入 concept_and_dna.json",
+        }
+
+    async def _synthesize_concept(
+        self, raw_intent: RawIntent, chosen: list[DeepenedCandidate]
+    ) -> dict:
+        prompt_data = load_prompt_effective("creative/three_b_commit")
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        candidates_payload = [
+            {
+                "premise_one_line": d.premise_one_line,
+                "rationale": d.rationale,
+                "novelty_hook": d.novelty_hook,
+                "source_operator": d.source_operator,
+                "applied_operator": d.applied_operator,
+            }
+            for d in chosen
+        ]
+        user = prompt_data["user_prompt_template"].format(
+            prompt=raw_intent.prompt,
+            genre_primary=raw_intent.genre_primary,
+            genre_secondary=raw_intent.genre_secondary or "(无)",
+            deepened_candidates_json=json.dumps(candidates_payload, ensure_ascii=False, indent=2),
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        response = await self._router.execute(
+            agent_name="three_b",
+            task_name="commit",
+            messages=messages,
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.7),
+            max_tokens=prompt_data.get("max_tokens", 4096),
+        )
+        raw_text = response.get("content", "")
+        try:
+            return json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"three_b_commit returned non-JSON: {exc}") from exc
+
+    async def _compute_novelty_scores(self, concept_text: str) -> dict:
+        """Best-effort novelty scoring via Tier 3 trope_extraction LLM call.
+
+        Mirrors `NoveltyEvaluator.fill_trope_tags_async`'s approach (direct
+        router call, no TropePool dependency) but produces a payload shape
+        compatible with `creative_diverge.py` `_regenerate_concept_novelty`
+        so downstream consumers don't need a special case.
+
+        All four 4-dim scores default to 50.0 (neutral) on any failure —
+        the same fallback strategy used by `creative_diverge.py:_regen_*`
+        when the evaluator is unavailable.
+        """
+        defaults = {
+            "market_saturation": 50.0,
+            "trope_similarity": 50.0,
+            "contradiction_depth": 50.0,
+            "discussion_potential": 50.0,
+            "composite": 50.0,
+            "grade": "中等",
+            "trope_tags": [],
+            "trope_extraction_status": "skipped",
+        }
+        try:
+            prompt_data = load_prompt_effective("trope_extraction")
+        except FileNotFoundError as exc:
+            logger.warning("trope_extraction prompt missing: %s", exc)
+            return defaults
+        try:
+            system = prompt_data.get("system_prompt", "").strip()
+            user = prompt_data.get("user_prompt_template", "").format(prompt=concept_text or "")
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ]
+            response = await self._router.execute(
+                agent_name="novelty",
+                task_name="trope_extraction",
+                messages=messages,
+                json_mode=True,
+                temperature=prompt_data.get("temperature", 0.3),
+                max_tokens=prompt_data.get("max_tokens", 512),
+            )
+            raw_text = response.get("content", "")
+            trope_tags = json.loads(raw_text) if raw_text else []
+            if not isinstance(trope_tags, list):
+                trope_tags = []
+        except Exception as exc:
+            logger.warning("trope_extraction LLM call failed: %s", exc)
+            return defaults
+
+        # Lightweight heuristic: empty trope list → max-saturation-uncertainty
+        # defaults (50.0). Non-empty list nudges market_saturation down
+        # proportionally to detected tropes (more tropes → higher saturation).
+        n = len(trope_tags)
+        market_saturation = max(0.0, min(100.0, 50.0 - n * 5.0))
+        composite = (
+            market_saturation * 0.30
+            + 50.0 * 0.25
+            + 50.0 * 0.25
+            + 50.0 * 0.20
+        )
+        grade = "高新颖度" if composite >= 75 else (
+            "中等" if composite >= 55 else ("偏低" if composite >= 35 else "低")
+        )
+        return {
+            "market_saturation": round(market_saturation, 1),
+            "trope_similarity": 50.0,
+            "contradiction_depth": 50.0,
+            "discussion_potential": 50.0,
+            "composite": round(composite, 1),
+            "grade": grade,
+            "trope_tags": trope_tags,
+            "trope_extraction_status": "ok",
+        }

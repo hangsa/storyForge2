@@ -316,9 +316,9 @@ async def test_commit_writes_three_files(mock_router, tmp_path, monkeypatch):
 
     # commit triggers 2 LLM calls:
     #   1) three_b_commit.yaml → synthesize concept
-    #   2) trope_extraction → for novelty scoring
+    #   2) trope_extraction → for novelty scoring (plain text, comma-separated)
     mock_router.execute.side_effect = [
-        # 1) concept synthesis
+        # 1) concept synthesis (JSON)
         {
             "content": json.dumps({
                 "one_line": "一句话概念",
@@ -329,9 +329,10 @@ async def test_commit_writes_three_files(mock_router, tmp_path, monkeypatch):
             }, ensure_ascii=False),
             "usage": {"input": 100, "output": 200},
         },
-        # 2) trope_extraction (NoveltyEvaluator); returns empty list = no tropes detected
+        # 2) trope_extraction returns PLAIN TEXT (comma-separated tags),
+        # NOT JSON. trope_extraction.yaml declares output_format.type: text.
         {
-            "content": json.dumps([], ensure_ascii=False),
+            "content": "英雄之旅, 修仙逆袭, 师徒反目",
             "usage": {"input": 50, "output": 50},
         },
     ]
@@ -348,6 +349,18 @@ async def test_commit_writes_three_files(mock_router, tmp_path, monkeypatch):
     assert cad["source"] == "creative_divergence"
     assert cad["concept"]["one_line"] == "一句话概念"
     assert "logline" in cad["concept"]
+    # story_dna MUST exist (stage2_world_char.py:141 reads it)
+    assert "story_dna" in cad
+    assert cad["story_dna"]["core_contradiction"]["statement"] == "核心张力"
+    assert cad["story_dna"]["tone"] == "暗黑悬疑"
+    assert cad["story_dna"]["value_stack"] == []
+
+    # Novelty: 3 tropes → market_saturation = 50 + 3*5 = 65.0 (more tropes
+    # = closer to market patterns = higher saturation).
+    novelty = result["novelty_scores"]
+    assert novelty["trope_tags"] == ["英雄之旅", "修仙逆袭", "师徒反目"]
+    assert novelty["market_saturation"] == 65.0
+    assert novelty["trope_extraction_status"] == "ok"
 
     cd = json.loads((proj / "creative_divergence.json").read_text(encoding="utf-8"))
     assert cd["source"] == "creative_divergence"

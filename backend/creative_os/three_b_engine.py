@@ -26,6 +26,7 @@ from typing import Optional
 from backend.config import settings
 from backend.utils.file_manager import FileManager
 from backend.services.prompt_override_store import load_prompt_effective
+from backend.creative_os.novelty_evaluator import _parse_trope_tags
 
 
 def _file_manager() -> FileManager:
@@ -205,7 +206,6 @@ class ThreeBEngine:
         return {
             "candidates": [asdict(c) for c in flat],
             "by_operator": {op: [asdict(c) for c in cs] for op, cs in by_operator.items()},
-            "elapsed_ms": 0,  # placeholder; routers can compute if needed
         }
 
     async def _call_operator(
@@ -388,8 +388,19 @@ class ThreeBEngine:
 
         # 1) concept_and_dna.json
         now = _now_iso()
+        # stage2_world_char.py:141 reads concept_and_dna["story_dna"], so we
+        # must always emit a story_dna key. The 3B path doesn't synthesize a
+        # full value stack — derive what we can from the synthesized concept.
+        story_dna = {
+            "core_contradiction": {
+                "statement": concept.get("core_tension", ""),
+            },
+            "value_stack": [],
+            "tone": concept.get("tone", ""),
+        }
         concept_payload = {
             "concept": concept,
+            "story_dna": story_dna,
             "source": "creative_divergence",
             "three_b_snapshot": {
                 "deepened_ids": deepened_ids,
@@ -466,9 +477,23 @@ class ThreeBEngine:
         compatible with `creative_diverge.py` `_regenerate_concept_novelty`
         so downstream consumers don't need a special case.
 
+        `trope_extraction.yaml` declares `output_format.type: text` and asks
+        for comma-separated tags. Earlier this code called `json.loads()`
+        on the response, which raised JSONDecodeError on every real LLM call
+        and silently fell through to the all-50.0 defaults. We now pass
+        `json_mode=False` and reuse `_parse_trope_tags` from
+        `novelty_evaluator.py` — that helper also strips `<think>` pollution
+        from reasoning models (MiniMax-M3 wraps the answer in a think-block,
+        leaving a JSON-shaped string outside it).
+
         All four 4-dim scores default to 50.0 (neutral) on any failure —
         the same fallback strategy used by `creative_diverge.py:_regen_*`
         when the evaluator is unavailable.
+
+        Sign convention: `market_saturation` is HIGH when the story
+        resembles existing market patterns (more detected tropes → closer
+        to saturated genres → higher saturation score). 0 tropes →
+        neutral 50.0; each additional trope nudges saturation up by 5.
         """
         defaults = {
             "market_saturation": 50.0,
@@ -487,7 +512,8 @@ class ThreeBEngine:
             return defaults
         try:
             system = prompt_data.get("system_prompt", "").strip()
-            user = prompt_data.get("user_prompt_template", "").format(prompt=concept_text or "")
+            user_template = prompt_data.get("user_prompt_template", "")
+            user = user_template.format(prompt=concept_text or "")
             messages = [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -496,23 +522,22 @@ class ThreeBEngine:
                 agent_name="novelty",
                 task_name="trope_extraction",
                 messages=messages,
-                json_mode=True,
+                json_mode=False,  # trope_extraction returns plain text
                 temperature=prompt_data.get("temperature", 0.3),
                 max_tokens=prompt_data.get("max_tokens", 512),
             )
-            raw_text = response.get("content", "")
-            trope_tags = json.loads(raw_text) if raw_text else []
-            if not isinstance(trope_tags, list):
-                trope_tags = []
+            raw_text = response.get("content", "") or ""
+            trope_tags = _parse_trope_tags(raw_text)
         except Exception as exc:
             logger.warning("trope_extraction LLM call failed: %s", exc)
             return defaults
 
         # Lightweight heuristic: empty trope list → max-saturation-uncertainty
-        # defaults (50.0). Non-empty list nudges market_saturation down
-        # proportionally to detected tropes (more tropes → higher saturation).
+        # defaults (50.0). Non-empty list nudges market_saturation up
+        # proportionally to detected tropes (more tropes → closer to existing
+        # market patterns → higher saturation).
         n = len(trope_tags)
-        market_saturation = max(0.0, min(100.0, 50.0 - n * 5.0))
+        market_saturation = max(0.0, min(100.0, 50.0 + n * 5.0))
         composite = (
             market_saturation * 0.30
             + 50.0 * 0.25
@@ -530,5 +555,5 @@ class ThreeBEngine:
             "composite": round(composite, 1),
             "grade": grade,
             "trope_tags": trope_tags,
-            "trope_extraction_status": "ok",
+            "trope_extraction_status": "ok" if trope_tags else "skipped",
         }

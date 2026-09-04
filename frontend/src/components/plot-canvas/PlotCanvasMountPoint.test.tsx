@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { WizardProvider, useWizard } from "../wizard/WizardContext";
+import { ToastProvider } from "@/hooks/useToast";
 import PlotCanvasMountPoint from "./PlotCanvasMountPoint";
 
 // Mock the canvas hook so the page doesn't try to actually load v2 state.
@@ -68,21 +69,23 @@ describe("PlotCanvasMountPoint", () => {
 
   it("mounts PlotCanvasPage with embedded=true (no page-shell header)", () => {
     render(
-      <WizardProvider projectId="proj_test">
-        <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
-          <Routes>
-            <Route
-              path="/project/:projectId/stage6/plot"
-              element={
-                <>
-                  <PlotCanvasMountPoint projectId="proj_test" />
-                  <WizardProbe />
-                </>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </WizardProvider>
+      <ToastProvider>
+        <WizardProvider projectId="proj_test">
+          <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+            <Routes>
+              <Route
+                path="/project/:projectId/stage6/plot"
+                element={
+                  <>
+                    <PlotCanvasMountPoint projectId="proj_test" />
+                    <WizardProbe />
+                  </>
+                }
+              />
+            </Routes>
+          </MemoryRouter>
+        </WizardProvider>
+      </ToastProvider>
     );
     // embedded=true should hide the page-shell header. The mount point
     // forwards `embedded` to PlotCanvasPage, which omits the h2 +
@@ -96,21 +99,23 @@ describe("PlotCanvasMountPoint", () => {
 
   it("wizard.markStepGenerated(6) pushes 6 into completedSteps", () => {
     render(
-      <WizardProvider projectId="proj_test">
-        <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
-          <Routes>
-            <Route
-              path="/project/:projectId/stage6/plot"
-              element={
-                <>
-                  <PlotCanvasMountPoint projectId="proj_test" />
-                  <WizardProbe />
-                </>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </WizardProvider>
+      <ToastProvider>
+        <WizardProvider projectId="proj_test">
+          <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+            <Routes>
+              <Route
+                path="/project/:projectId/stage6/plot"
+                element={
+                  <>
+                    <PlotCanvasMountPoint projectId="proj_test" />
+                    <WizardProbe />
+                  </>
+                }
+              />
+            </Routes>
+          </MemoryRouter>
+        </WizardProvider>
+      </ToastProvider>
     );
     expect(screen.getByTestId("probe-completed").textContent).toBe("no");
     fireEvent.click(screen.getByTestId("probe-mark-completed"));
@@ -119,21 +124,23 @@ describe("PlotCanvasMountPoint", () => {
 
   it("wizard context currentStep starts at 1 on fresh provider", () => {
     render(
-      <WizardProvider projectId="proj_test">
-        <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
-          <Routes>
-            <Route
-              path="/project/:projectId/stage6/plot"
-              element={
-                <>
-                  <PlotCanvasMountPoint projectId="proj_test" />
-                  <WizardProbe />
-                </>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </WizardProvider>
+      <ToastProvider>
+        <WizardProvider projectId="proj_test">
+          <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
+            <Routes>
+              <Route
+                path="/project/:projectId/stage6/plot"
+                element={
+                  <>
+                    <PlotCanvasMountPoint projectId="proj_test" />
+                    <WizardProbe />
+                  </>
+                }
+              />
+            </Routes>
+          </MemoryRouter>
+        </WizardProvider>
+      </ToastProvider>
     );
     expect(screen.getByTestId("probe-active").textContent).toBe("1");
   });

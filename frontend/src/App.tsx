@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, useParams, Navigate } from "react-router-dom";
+import { Routes, Route, Outlet, useParams, Navigate } from "react-router-dom";
 import MainLayout from "./components/layout/MainLayout";
 import HomeLayout from "./components/layout/HomeLayout";
 import HomePage from "./pages/HomePage";
@@ -110,16 +110,6 @@ function App() {
               </Suspense>
             }
           />
-          <Route
-            path="canvas"
-            element={
-              <Suspense fallback={<LoadingFallback />}>
-                <StageWrapper name="stage1-canvas">
-                  <PlotCanvasPage />
-                </StageWrapper>
-              </Suspense>
-            }
-          />
         </Route>
         <Route
           path="/project/:projectId/stage2"
@@ -179,8 +169,23 @@ function App() {
         />
         <Route
           path="/project/:projectId/stage6"
-          element={<StageRedirect to="workspace?mode=manual&panel=export" />}
-        />
+          element={
+            <Suspense fallback={<LoadingFallback />}>
+              <StageWrapper name="stage6">
+                <Outlet />
+              </StageWrapper>
+            </Suspense>
+          }
+        >
+          <Route
+            path="plot"
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <PlotCanvasPage />
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="/project/:projectId/style"
           element={

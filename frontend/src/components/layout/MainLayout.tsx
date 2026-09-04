@@ -20,6 +20,7 @@ const STAGE_FROM_PATH: Record<string, string> = {
   "stage1/canvas": "STAGE1",
   "stage3/outline": "STAGE3",
   "stage3/branches": "STAGE3",
+  "stage6/plot": "STAGE6",
   // v1.8.1: /workspace is a top-level route (no longer nested under
   // MainLayout), so these mappings are dead. Kept commented for the
   // duration of this release in case the v1.9 plan reintroduces a

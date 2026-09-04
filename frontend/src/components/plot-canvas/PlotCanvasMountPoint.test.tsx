@@ -69,10 +69,10 @@ describe("PlotCanvasMountPoint", () => {
   it("mounts PlotCanvasPage with embedded=true (no page-shell header)", () => {
     render(
       <WizardProvider projectId="proj_test">
-        <MemoryRouter initialEntries={["/project/proj_test/stage1/canvas"]}>
+        <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
           <Routes>
             <Route
-              path="/project/:projectId/stage1/canvas"
+              path="/project/:projectId/stage6/plot"
               element={
                 <>
                   <PlotCanvasMountPoint projectId="proj_test" />
@@ -97,10 +97,10 @@ describe("PlotCanvasMountPoint", () => {
   it("wizard.markStepGenerated(6) pushes 6 into completedSteps", () => {
     render(
       <WizardProvider projectId="proj_test">
-        <MemoryRouter initialEntries={["/project/proj_test/stage1/canvas"]}>
+        <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
           <Routes>
             <Route
-              path="/project/:projectId/stage1/canvas"
+              path="/project/:projectId/stage6/plot"
               element={
                 <>
                   <PlotCanvasMountPoint projectId="proj_test" />
@@ -120,10 +120,10 @@ describe("PlotCanvasMountPoint", () => {
   it("wizard context currentStep starts at 1 on fresh provider", () => {
     render(
       <WizardProvider projectId="proj_test">
-        <MemoryRouter initialEntries={["/project/proj_test/stage1/canvas"]}>
+        <MemoryRouter initialEntries={["/project/proj_test/stage6/plot"]}>
           <Routes>
             <Route
-              path="/project/:projectId/stage1/canvas"
+              path="/project/:projectId/stage6/plot"
               element={
                 <>
                   <PlotCanvasMountPoint projectId="proj_test" />

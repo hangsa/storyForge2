@@ -149,9 +149,9 @@ describe("PlotCanvasPage", () => {
   it("renders EmptyState when canvas is null", () => {
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(null));
     renderWithProviders(
-      <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+      <MemoryRouter initialEntries={["/project/p1/stage6/plot"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -161,9 +161,9 @@ describe("PlotCanvasPage", () => {
   it("renders StepIndicator + TreeCanvas when canvas is active", () => {
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
     renderWithProviders(
-      <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+      <MemoryRouter initialEntries={["/project/p1/stage6/plot"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -181,9 +181,9 @@ describe("PlotCanvasPage", () => {
       onReset,
     });
     renderWithProviders(
-      <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+      <MemoryRouter initialEntries={["/project/p1/stage6/plot"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -197,9 +197,9 @@ describe("PlotCanvasPage", () => {
       showResetDialog: true,
     });
     renderWithProviders(
-      <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+      <MemoryRouter initialEntries={["/project/p1/stage6/plot"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -214,9 +214,9 @@ describe("PlotCanvasPage", () => {
       onCommitClick,
     });
     renderWithProviders(
-      <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+      <MemoryRouter initialEntries={["/project/p1/stage6/plot"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -231,9 +231,9 @@ describe("PlotCanvasPage", () => {
       showPreCommit: true,
     });
     renderWithProviders(
-      <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+      <MemoryRouter initialEntries={["/project/p1/stage6/plot"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -246,9 +246,9 @@ describe("PlotCanvasPage", () => {
       canCommit: false,
     });
     renderWithProviders(
-      <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+      <MemoryRouter initialEntries={["/project/p1/stage6/plot"]}>
         <Routes>
-          <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
+          <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
         </Routes>
       </MemoryRouter>
     );
@@ -411,9 +411,9 @@ describe("PlotCanvasPage malformed-canvas regression", () => {
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(malformed));
     expect(() =>
       renderWithProviders(
-        <MemoryRouter initialEntries={["/project/p1/stage1/canvas"]}>
+        <MemoryRouter initialEntries={["/project/p1/stage6/plot"]}>
           <Routes>
-            <Route path="/project/:projectId/stage1/canvas" element={<PlotCanvasPage />} />
+            <Route path="/project/:projectId/stage6/plot" element={<PlotCanvasPage />} />
           </Routes>
         </MemoryRouter>,
       ),

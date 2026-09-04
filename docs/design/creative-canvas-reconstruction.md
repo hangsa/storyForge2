@@ -1,7 +1,7 @@
-# Creative Canvas 创意画布模块重构 PRD
+# Plot Canvas 剧情画布模块重构 PRD
 
 **版本**：v2.0
-**模块**：Creative Canvas / 创意画布
+**模块**：Plot Canvas / 剧情画布
 **状态**：产品重构方案
 **上游**：用户 Idea
 **下游**：Concept DNA → 世界观 → 角色设计 → 地图系统 → 大纲
@@ -1038,21 +1038,23 @@ v2 不删除任何现有 engine，而是改变它们的角色定位：
 | POST | `/creative/session/commit` | 写 concept_and_dna.json + 双写 | `/commit` | v2.0 |
 | POST | `/creative/session/evaluate` | （deprecated）| `/evaluate`（保留兼容头）| v2.0（仅 deprecated 头）|
 
-> **Implementation note (v2.0 shipped):** the actual endpoint paths use the project-scoped namespace `/creative/canvas/{project_id}/session/*` instead of the flat `/creative/session/*` listed above. See §26.1 for the namespace-decision ADR explaining the deviation.
+> **Implementation note (v2.0 shipped):** the actual endpoint paths use the project-scoped namespace `/api/creative/canvas/{project_id}/session/*` instead of the flat `/creative/session/*` listed above. See §26.1 for the namespace-decision ADR explaining the deviation.
 
 ### 26.1 命名空间决策（v2.0 implementation ADR）
 
-PRD §26 表格里的端点路径是 `/creative/session/*`，但 v2.0 实际实现的 router（v2_canvas.py，commit b35f70a 之前的命名空间重构）使用的路径是 `/creative/canvas/{project_id}/session/*`。这里保留 project-scoped 命名空间，理由如下：
+PRD §26 表格里的端点路径是 `/creative/session/*`，但 v2.0 实际实现的 router（`backend/api/v2_canvas.py`）使用的路径是 `/api/creative/canvas/{project_id}/session/*`。这里保留 project-scoped 命名空间（并在前面加 `/api` 前缀），理由如下：
 
-1. **路由层级一致性：** PRD §11.1 页面路由是 `/project/:projectId/stage1/canvas`（注意：v1.8.1 改造把 canvas 从 Stage 0 提升到 Stage 1，但 PRD §11.1 原文仍写 `stage0`；实际代码见 `frontend/src/App.tsx:96` 与 `frontend/src/pages/CreativeCanvasPage.tsx:29`）。前端路由已经是 `/project/{projectId}/...`，后端 API 在同一个 project 维度下加一层 `/creative/canvas/{project_id}/` 既匹配前端的资源层级，又让 OpenAPI 文档与前端生成代码（如果将来引入 typed client）能直接按 project 分组端点。
+1. **路由层级一致性：** PRD §11.1 页面路由是 `/project/:projectId/stage6/plot`（**路径演进史**：v1.x 阶段位于 Stage 0（`/project/:projectId/stage0/canvas`）；v1.8.1 改造把 canvas 从 Stage 0 提升到 Stage 1，作为与 divergence 并列的 Step 1 入口，路由变为 `/project/:projectId/stage1/canvas`；2026-09-04 重命名 + 步骤重排把它移到 Map 和 Outline 之间（Step 6），同时更名为「剧情画布 / Plot Canvas」，当前路由为 `/project/:projectId/stage6/plot`，实际代码见 `frontend/src/App.tsx` 与 `frontend/src/pages/PlotCanvasPage.tsx`）。前端路由已经是 `/project/{projectId}/...`，后端 API 在同一个 project 维度下加一层 `/api/creative/canvas/{project_id}/` 既匹配前端的资源层级，又让 OpenAPI 文档与前端生成代码（如果将来引入 typed client）能直接按 project 分组端点。**注意：后端 API 路径（`/api/creative/canvas/{project_id}/`）保持不变，仅前端路由随步骤重排而调整。**
 
-2. **与既有 v1.x 端点保持一致：** 旧版 `/state` 与 `/evaluate` 都在 `backend/api/creative_diverge.py` 里实现，路径里本身就有 `{project_id}` path-param（参见 `creative_diverge.py` 中 `/state/{project_id}` 之类的签名）。v2 router 把这个 project-scoped 写法沿用过来，避免出现「v1 用 `/state/{pid}`、v2 用 `/state`」的认知割裂——尤其在 v1/v2 共存期间（`enable_canvas_v2` flag 控制 router 是否挂载）。
+2. **与既有 v1.x 端点保持一致：** 旧版 v1 divergence endpoints 都在 `backend/api/creative_diverge.py` 里实现，路径里本身就有 `{project_id}` path-param（参见 `creative_diverge.py:46` 的 `prefix="/api/v1/projects/{project_id}/creative/diverge"`）。v2 router 把这个 project-scoped 写法沿用过来，避免出现「v1 用 `/state/{pid}`、v2 用 `/state`」的认知割裂——尤其在 v1/v2 共存期间（`enable_canvas_v2` flag 控制 router 是否挂载）。
 
-3. **权限/审计的扩展空间：** project-scoped 路径让中间件能直接通过 path-param 取到 `project_id`，做项目级鉴权与审计日志时不需要从 body 或 header 反查。
+3. **`/api` 前缀对齐：** 2026-09-03 的 bug 修复（无提示的 404 → 用户看到「暂无内容」）发现，**`/api` 前缀不能省**。前端 `request()` helper（`frontend/src/api/client.ts:5,43`）会自动给所有路径加 `/api` 前缀（与 v1 divergence 的 `/api/v1/...` 对齐）；如果后端 v2 router 只用 `/creative/canvas/...`，请求永远到不了后端，前端拿到的永远是 404。修复方式：v2 router prefix 加 `/api`，与 v1 divergence 一致。这点反过来给将来加子资源（如 `/api/creative/canvas/{pid}/sessions/{sid}/...`）留出了空间。
 
-4. **多 session 隔离：** 同一个 project 在未来 v2.1 可能并存多个并行分支（早收束 + backtrack 引入的 STALE 节点让「同一 project 多个 active session」成为可能），project-scoped 路径为后续在 `{project_id}` 下挂子资源（如 `/creative/canvas/{project_id}/sessions/{session_id}/...`）留出了空间，而 flat `/creative/session/*` 没有这种扩展性。
+4. **权限/审计的扩展空间：** project-scoped 路径让中间件能直接通过 path-param 取到 `project_id`，做项目级鉴权与审计日志时不需要从 body 或 header 反查。
 
-**结论：** v2.0 实际路径 = `/creative/canvas/{project_id}/session/{verb}`，对应 §26 表格里的 verb 列。后续 v2.1 的 `regenerate`、`backtrack`、`finalize` 端点都遵循同一形状。
+5. **多 session 隔离：** 同一个 project 在未来 v2.1 可能并存多个并行分支（早收束 + backtrack 引入的 STALE 节点让「同一 project 多个 active session」成为可能），project-scoped 路径为后续在 `{project_id}` 下挂子资源（如 `/creative/canvas/{project_id}/sessions/{session_id}/...`）留出了空间，而 flat `/creative/session/*` 没有这种扩展性。
+
+**结论：** v2.0 实际路径 = `/api/creative/canvas/{project_id}/session/{verb}`，对应 §26 表格里的 verb 列。后续 v2.1 的 `regenerate`、`backtrack`、`finalize` 端点都遵循同一形状。
 
 ## 27. 关键端点语义
 
@@ -1270,6 +1272,8 @@ Creative Canvas
        ↓
    Stage 3 Map
        ↓
+   剧情画布 (Step 6)        // 2026-09-04：v2.0 重构后将 canvas 重命名 + 步骤重排至 Map 与 Outline 之间
+       ↓
    Stage 3 Outline
 ```
 
@@ -1321,21 +1325,21 @@ v2 通过 §5.3 关键不变量 + §27.6 commit 校验根除。
 
 ## 35. 与现有 wizard 流程的集成
 
-Creative Canvas 是 Stage 0 的子页面。提交成功后跳转路径：
+剧情画布（Plot Canvas）是 wizard 流程的 Step 6，位于 Map（Step 5）和 Outline（Step 7）之间。提交成功后跳转路径：
 
 ```text
-canvas commit 成功
+plot canvas commit 成功
        ↓
 写入 concept_and_dna.json + creative_divergence.json
        ↓
-navigate(/project/:id/stage0)  // 落在 Stage 0 Tab
+navigate(/project/:id/stage3)  // 落在 Stage 3 Tab
        ↓
-用户点 Concept Tab
+用户点 Step 6 (剧情画布) 入口回到画布，或继续向 Step 7 (Outline) 推进
        ↓
-GET /stage1/concept → ConceptStep.tsx 渲染
+GET /stage1/concept → ConceptStep.tsx 渲染（如需修改 Concept，回到更早的 wizard 步骤）
 ```
 
-与 v1.x 行为一致，不改动 wizard 路由。
+> **历史说明：** 早期版本（v1.x 阶段）剧情画布位于 Stage 0，作为子页面 `/project/:id/stage0/canvas`；v1.8.1 提升至 Stage 1（与 divergence 并列的 Step 1 入口）；2026-09-04 重命名 + 步骤重排把它移到 Map 与 Outline 之间（Step 6），后端 API 路径（`/api/creative/canvas/{project_id}/`）保持不变。
 
 ---
 

@@ -27,7 +27,6 @@
 
 | 阶段 | 文件落地 | 路由前缀 | Agent |
 |---|---|---|---|
-| 0 创意发散（Canvas / Divergence） | `creative_os/canvas_state.json` 或 `creative_divergence.json` | `/api/v1/projects/{id}/creative/canvas/*` 或 `/api/projects/{id}/creative-divergence/*` | CreativeDirector / PlannerAgent |
 | 1 概念 DNA | `concept_and_dna.json` | `/api/stage1/*` | PlannerAgent |
 | 2 世界观 | `world.json` | `/api/stage2/*` | PlannerAgent |
 | 2 角色设计 | `characters.json` | `/api/stage2/*` | PlannerAgent |
@@ -35,42 +34,49 @@
 | 3a 全文大纲 | `novel_outline.json` | `/api/stage3/*` | PlannerAgent |
 | 3b 章节大纲 | `outline.json` | `/api/stage3/*` | PlannerAgent |
 
+> 注：Wizard 流程的 Step 1（创意发散 / divergence）由 `creative_diverge.py` 提供变体生成；Step 6（剧情画布 / plot canvas）由 `v2_canvas.py` 提供 What-If 树。详见 §1。
+
 ---
 
-## 1. Stage 0 — 创意发散（**两条并行路径，能力不对称**）
+## 1. Wizard Step 1 + Step 6 — 创意发散与剧情画布（**顺序两步**）
 
-链路里最不一致的环节。后端同时存在两套实现：
+v1.x 时代有两条**平行路径**（Path A 创意画布 + Path B 创意发散），能力不对称——Path A 调完整 CreativeOS，Path B 是占位 stub。v2 重构后两条路径改成 wizard 流程里**顺序执行的两步**：
 
-### 1.1 Path A — Creative Canvas（完整 CreativeOS）
+- **Step 1 创意发散（Path B）** — wizard 第 1 步，concept_and_dna 的前置依赖。轻量实现，仅生成变体让用户收拢灵感，不展开 WhatIf 树。
+- **Step 6 剧情画布（Path A）** — wizard 第 6 步（地图系统 + 全文大纲之间）。完整 CreativeOS：5 步 WhatIf 树展开 + 评分 + 提交。
 
-- 后端：`backend/api/creative_canvas.py`、引擎在 `backend/creative_os/`
-- 入口：路由 `/api/v1/projects/{id}/creative/canvas/*`（独立页面 `/creative-canvas`）
+两步顺序执行：用户先在 Step 1 通过 divergence 收拢出 premise（写 `creative_divergence.json`），经 Step 2-5（概念 / 世界观 / 角色 / 地图）后再到 Step 6 通过 plot canvas 验证剧情张力，最后产出 concept_and_dna 进入 Step 7 outline。
+
+### 1.1 Step 1 — 创意发散（Creative Divergence，占位 stub）
+
+- 后端：`backend/api/creative_diverge.py`，引擎在 `backend/creative_os/`（仅轻量调用）
+- 入口：路由 `/api/v1/projects/{id}/creative/diverge/*`，Wizard 第 1 步 `CreativeDivergenceStep.tsx`
+- `_generate_variants` 是**确定性 stub**：仅从 prompt 文本合成变体标题，**完全不调用 LLM 引擎**。文件自身注释承认 `backend.creative_os.mutation_engine.mutate_idea` 与 `idea_pool.sample_idea_pool` 在当前代码库里不存在
+- 落地：`<project>/creative_divergence.json` → 选中后写 `concept_and_dna.json`，**写入 `source="creative_divergence"`**
+
+### 1.2 Step 6 — 剧情画布（Plot Canvas，完整 CreativeOS）
+
+- 后端：`backend/api/v2_canvas.py`，引擎在 `backend/creative_os/`
+- 入口：路由 `/api/creative/canvas/{project_id}/session/*`，Wizard 第 6 步渲染 `PlotCanvasPage.tsx`（embedded via `PlotCanvasMountPoint`）
 - 引擎：
   - `MutationEngine`（4 ops：inversion / fusion / escalation / subversion）
   - `WhatIfEngine`（depth=3, breadth=3）
   - `ContradictionEngine`（5 模板：ABILITY_VS_LIMIT / ETERNAL_VS_FLEETING / IDENTITY_VS_SECRET / GOAL_VS_COST / POWER_AS_WEAKNESS）
   - `GenreFusionEngine`（BFS 距离矩阵）
   - `NoveltyEvaluator`（4 维评分：market_saturation 30% + trope_similarity 25% + contradiction_depth 25% + discussion_potential 20%）
-- 落地：`<project>/creative_os/canvas_state.json`（schema_version=2，含 nodes / edges / branch_choices / selected_path）
-- 提交：`/commit` 调用 `PlannerAgent.generate_concept_from_canvas`（独立模板 `canvas_to_concept.yaml`）→ `concept_and_dna.json`，**写入 `source="canvas"`**
-- 前端：`frontend/src/components/creative-canvas/`（CanvasNode、WhatIfTree、NoveltyRadar、MutationSuggestion、NodeDetailPanel）
-
-### 1.2 Path B — Creative Divergence Step（**占位实现**）
-
-- 后端：`backend/api/creative_divergence.py`
-- 入口：路由 `/api/projects/{id}/creative-divergence/*`，Wizard 第 1 步 `CreativeDivergenceStep.tsx`
-- `_generate_variants` 是**确定性 stub**：仅从 prompt 文本合成变体标题，**完全不调用 LLM 引擎**。文件自身注释承认 `backend.creative_os.mutation_engine.mutate_idea` 与 `idea_pool.sample_idea_pool` 在当前代码库里不存在
-- 落地：`<project>/creative_divergence.json` → 选中后写 `concept_and_dna.json`，**写入 `source="creative_divergence"`**
+- 落地：`<project>/creative_os/canvas_state.json`（schema_version=4，含 creative_path[5] + operation + options[3] + scores）
+- 提交：`/commit_canvas` 调用 `PlannerAgent.generate_concept_from_canvas`（独立模板 `canvas_to_concept.yaml`）→ `concept_and_dna.json`，**写入 `source="canvas"`**
+- 前端：`frontend/src/components/plot-canvas/`（IdeaRootNode、TreeCanvas、OptionCard、CanvasPreStepHint、PreCommitSummary、ScoresBar）
 
 ### 1.3 架构含义
 
-走 Wizard（Path B）的用户**永远拿不到**创意发散引擎的真实能力（变异推荐、What-If 树、新颖度评分、Trope 饱和度）。
+v2 取消了"两条平行路径"的设计——Step 1 divergence 与 Step 6 canvas 是 wizard 流程里顺序执行的两步，**用户会先后经历两者**。能力不对称仍然存在但不再是"用户可选择性跳过"的不对称，而是"早期步骤仅作前置依赖，完整能力集中在 Step 6"。
 
 源标记的合法性边界：
 
-- `ALLOWED_CONCEPT_SOURCES = {"manual", "creative_divergence"}`（`stage1_concept.py`）
-- Canvas 路径的 `source="canvas"` 只能通过 `/commit` 写入，普通 PUT 不接受
-- 若用户走完 Canvas 后再回到 Step 1 手动改写，必须经 `/api/stage1/concept` PUT，会被改写成 `source="manual"`
+- `ALLOWED_CONCEPT_SOURCES = {"manual", "creative_divergence"}`（`stage1_concept.py`） — Step 6 的 `source="canvas"` 走独立 commit 端点，与普通 PUT 的合法性互不影响
+- Step 6 canvas 路径的 `source="canvas"` 只能通过 `/commit_canvas` 写入，普通 PUT 不接受
+- 若用户走完 Step 6 canvas 后再回到 Step 2 手动改写 concept，必须经 `/api/stage1/concept` PUT，会被改写成 `source="manual"`
 
 详见 `project_creative_divergence_two_paths.md`（CLAUDE.md 已记忆）。
 

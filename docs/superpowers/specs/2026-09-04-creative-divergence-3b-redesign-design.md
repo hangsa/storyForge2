@@ -97,7 +97,7 @@ Wizard 侧栏第一项「创意发散」(CreativeDivergenceStep) 走 5 阶段线
   },
   "stage1": {
     "completed_at": "2026-09-04T12:00:00",
-    "source": "creative_divergence_v2"
+    "source": "creative_divergence"
   },
   "stage2": {
     "started_at": "2026-09-04T12:01:00",

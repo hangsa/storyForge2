@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useCreativeCanvasV2 } from "@/hooks/useCreativeCanvasV2";
+import { useToast } from "@/hooks/useToast";
 import { TreeCanvas } from "@/components/creative-canvas/TreeCanvas";
+import { CanvasPreStepHint } from "@/components/creative-canvas/CanvasPreStepHint";
 import { StepIndicator } from "@/components/creative-canvas/StepIndicator";
 import { OptionCard } from "@/components/creative-canvas/OptionCard";
 import { EmptyState } from "@/components/creative-canvas/EmptyState";
@@ -62,11 +65,23 @@ export default function CreativeCanvasPage({
   const { projectId: projectIdParam = "" } = useParams<{ projectId: string }>();
   const projectId = projectIdProp ?? projectIdParam;
   const {
-    canvas, loadingStep, canCommit,
+    canvas, loadingStep, canCommit, error,
     showResetDialog, onReset, closeResetDialog, confirmReset,
     showPreCommit, onCommitClick, closePreCommit, confirmCommit,
     initSession, selectOption, nextStep,
   } = useCreativeCanvasV2(projectId);
+  const { show: showToast } = useToast();
+
+  // Surface hook errors (init/select/nextStep failures) as a toast. Before
+  // this was added, the page's `.catch(() => {})` silently swallowed the
+  // init failure when the v2 router wasn't mounted — user clicked 开始创意
+  // 推演, saw nothing happen, and the canvas never transitioned out of
+  // EmptyState. Now they at least get a red toast telling them why.
+  useEffect(() => {
+    if (error) {
+      showToast(`画布操作失败：${error}`);
+    }
+  }, [error, showToast]);
 
   // Empty state — no canvas yet. The EmptyState owns its own form controls
   // and gates initSession on prompt length (>=10 chars). EmptyState's
@@ -78,6 +93,10 @@ export default function CreativeCanvasPage({
         loading={loadingStep}
         embedded={embedded}
         onInit={(prompt, genre) => {
+          // The hook already surfaces failures via the `error` state, which
+          // the useEffect above turns into a toast. The .catch here just
+          // prevents an unhandled-rejection warning if the user retries
+          // before the previous promise settled.
           initSession({ prompt, genre_primary: genre }).catch(() => {});
         }}
       />
@@ -87,11 +106,9 @@ export default function CreativeCanvasPage({
           loading={loadingStep}
           embedded={embedded}
           onInit={(prompt, genre) => {
-            initSession({ prompt, genre_primary: genre }).catch(() => {
-              // Hook already surfaces errors via its own error state; the
-              // catch here only prevents an unhandled-rejection warning in
-              // the console when the user retries after a malformed prompt.
-            });
+            // Same rationale as the embedded branch above — silent catch,
+            // surface via toast (see useEffect on `error`).
+            initSession({ prompt, genre_primary: genre }).catch(() => {});
           }}
         />
       </div>
@@ -106,6 +123,20 @@ export default function CreativeCanvasPage({
   const cpath = Array.isArray(canvas.creative_path) ? canvas.creative_path : [];
   const activeStep = cpath.find((s) => s?.state === "active");
   const completedCount = cpath.filter((s) => s?.state === "completed").length;
+
+  // Spec §3.2/§3.3 (2026-09-04-canvas-init-next-step-design.md):
+  // After /init, Step 1 lands in state="available" with empty options
+  // (v2_canvas.py:271). The user needs two affordances to advance:
+  //   1. A 继续 button on the IdeaRootNode card itself (right side).
+  //   2. The central column 继续 button already rendered by TreeCanvas.
+  // Both call /next-step(1). Affordance (1) is Step-1-only — Step 2-5
+  // cascade from /select and never hit "available" in actual flow.
+  // Gating is strict (step === 1 AND state === "available") so a
+  // mid-reset state where Step 2 lands in "available" does NOT
+  // misroute nextStep(1) and clobber already-completed Step 1.
+  const step1 = cpath[0];
+  const isStep1Available =
+    step1?.state === "available" && step1?.step === 1;
 
   // Header defaults to "twist" when no active step exists yet (committed or
   // pre-init states) so the pill stays populated.
@@ -150,7 +181,37 @@ export default function CreativeCanvasPage({
             nextStep(step).catch(() => {});
           }
         }}
+        ideaOnContinue={
+          isStep1Available
+            ? () => {
+                // Mirror the onAdvance guard — only fire when not
+                // already in flight. The click feedback (spinner on
+                // the button) is wired via `ideaContinueLoading`
+                // below, so the user gets the same loading affordance
+                // as the central column button.
+                if (!loadingStep) {
+                  nextStep(1).catch(() => {});
+                }
+              }
+            : undefined
+        }
+        ideaContinueLoading={loadingStep}
       />
+
+      {/* Pre-step guidance placeholder — spec §3.3. When no active step
+          exists yet but Step 1 is available, the active-step area was
+          previously blank — users saw 3 empty circles + a central 继续
+          button with no explanation. Now we render CanvasPreStepHint
+          INSIDE the `active-step-panel` wrapper (testid preserved) so
+          the hint replaces the empty area and explicitly points at the
+          IdeaRootNode 继续 affordance. Only Step 1 triggers this; Step
+          2-5 cascade from /select and never enter the available state
+          in real flow. */}
+      {!activeStep && isStep1Available && (
+        <div className="mt-6" data-testid="active-step-panel">
+          <CanvasPreStepHint step={1} />
+        </div>
+      )}
 
       {/* Creative quality scores — PRD §16. Reads canvas.scores which
           is refreshed by /select's _refresh_top_level_scores helper.

@@ -14,8 +14,29 @@ interface Props {
    * when LLM generation kicks in. Pure-display callers (tests, docs)
    * can omit this prop and the column falls back to the empty 3-slot
    * visualization.
+   *
+   * Parallel affordance: `ideaOnContinue` powers a 继续 button on the
+   * IdeaRootNode card itself. Both call into the same `/next-step(N)`
+   * endpoint — the central column button is kept for back-compat and
+   * for any future state where a step lands in "available" without a
+   * root-node affordance (e.g., mid-reset flows). Spec §3.2 of
+   * 2026-09-04-canvas-init-next-step-design.md.
    */
   onAdvance?: (step: number) => void;
+  /**
+   * Invoked when the user clicks the 继续 button on the IdeaRootNode
+   * card (right side). Provided only when Step 1 is in "available"
+   * state — Step 2-5 cascade from /select and never hit "available" in
+   * real flow, so the IdeaRootNode affordance is Step-1-only. When
+   * omitted, IdeaRootNode stays a pure-display card.
+   */
+  ideaOnContinue?: () => void;
+  /**
+   * When true, the IdeaRootNode 继续 button shows a spinner and is
+   * disabled. Mirrors `loadingStep` on the hook so the click feedback
+   * matches the in-flight /next-step call.
+   */
+  ideaContinueLoading?: boolean;
 }
 
 // Coordinate system (matches docs/design/canvas-reconstruction/code.html lines 226-371).
@@ -31,7 +52,7 @@ const COL_START_X = 300; // x coordinate where a step column's leftmost node sit
 const SLOT_Y: Record<Slot, number> = { a: 50, b: 200, c: 350 };
 const CENTER_Y = 200;
 
-export function TreeCanvas({ canvas, onAdvance }: Props) {
+export function TreeCanvas({ canvas, onAdvance, ideaOnContinue, ideaContinueLoading }: Props) {
   // Guard against missing/non-array creative_path — same defensive pattern
   // as CreativeCanvasPage. Backend contract says it's always an array,
   // but the page should render (showing the root idea + nothing) rather
@@ -126,6 +147,8 @@ export function TreeCanvas({ canvas, onAdvance }: Props) {
           <IdeaRootNode
             prompt={canvas.root_idea?.prompt ?? ""}
             genre={canvas.root_idea?.genre || undefined}
+            onContinue={ideaOnContinue}
+            continueLoading={ideaContinueLoading}
           />
         </div>
         {steps.map((s) => (

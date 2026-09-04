@@ -110,3 +110,133 @@ async def test_diverge_writes_state_file(mock_router, tmp_path, monkeypatch):
     assert len(state.stage2_candidates) == 3
     assert state.stage2_started_at is not None
     assert state.stage2_completed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_deepen_rejects_same_operator(mock_router, tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", str(tmp_path / "projects"))
+    (tmp_path / "projects" / "p1" / "creative_os").mkdir(parents=True)
+
+    # Seed state with a breaking candidate
+    state = ThreeBState(
+        project_id="p1",
+        raw_intent=RawIntent(prompt="x" * 20, genre_primary="玄幻", genre_secondary=None),
+        stage2_candidates=[
+            Candidate(
+                id="cand_a1",
+                operator="breaking",
+                sub_dimension="打破线性/时间顺序",
+                sub_dimension_index=0,
+                premise_one_line="倒叙",
+                rationale="倒回去",
+                novelty_hook="信息倒置",
+            )
+        ],
+    )
+    atomic_write_state("p1", state)
+
+    engine = ThreeBEngine(model_router=mock_router)
+    with pytest.raises(ValueError, match="必须选择不同的算子"):
+        await engine.deepen("p1", "cand_a1", "breaking")
+
+
+@pytest.mark.asyncio
+async def test_deepen_appends_to_state(mock_router, tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", str(tmp_path / "projects"))
+    (tmp_path / "projects" / "p1" / "creative_os").mkdir(parents=True)
+
+    state = ThreeBState(
+        project_id="p1",
+        raw_intent=RawIntent(prompt="x" * 20, genre_primary="玄幻", genre_secondary=None),
+        stage2_candidates=[
+            Candidate(
+                id="cand_a1",
+                operator="breaking",
+                sub_dimension="打破线性/时间顺序",
+                sub_dimension_index=0,
+                premise_one_line="倒叙",
+                rationale="倒回去",
+                novelty_hook="信息倒置",
+            )
+        ],
+    )
+    atomic_write_state("p1", state)
+
+    mock_router.execute.return_value = _llm_response([{
+        "sub_dimension": "尺度扭曲",
+        "premise_one_line": "压缩到一呼之间",
+        "rationale": "把打破线性后的故事再尺度扭曲",
+        "novelty_hook": "梦境密度的全篇倒叙",
+    }])
+
+    engine = ThreeBEngine(model_router=mock_router)
+    deepened = await engine.deepen("p1", "cand_a1", "bending")
+
+    assert deepened.source_candidate_id == "cand_a1"
+    assert deepened.source_operator == "breaking"
+    assert deepened.applied_operator == "bending"
+    assert deepened.premise_one_line == "压缩到一呼之间"
+
+    # State persisted with the deepening
+    from backend.creative_os.three_b_engine import load_state
+    state_after = load_state("p1")
+    assert len(state_after.stage3_deepened) == 1
+    assert state_after.stage3_deepened[0].id == deepened.id
+
+
+@pytest.mark.asyncio
+async def test_deepen_missing_candidate_raises(mock_router, tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", str(tmp_path / "projects"))
+    (tmp_path / "projects" / "p1" / "creative_os").mkdir(parents=True)
+
+    # Seed a state that has NO stage2 candidates — but exists, so the
+    # missing-candidate path triggers instead of the no-state path.
+    atomic_write_state(
+        "p1",
+        ThreeBState(
+            project_id="p1",
+            raw_intent=RawIntent(prompt="x" * 20, genre_primary="玄幻", genre_secondary=None),
+        ),
+    )
+
+    engine = ThreeBEngine(model_router=mock_router)
+    with pytest.raises(ValueError, match="不存在"):
+        await engine.deepen("p1", "cand_does_not_exist", "bending")
+
+
+@pytest.mark.asyncio
+async def test_deepen_count_capped_at_5(mock_router, tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", str(tmp_path / "projects"))
+    (tmp_path / "projects" / "p1" / "creative_os").mkdir(parents=True)
+
+    state = ThreeBState(
+        project_id="p1",
+        raw_intent=RawIntent(prompt="x" * 20, genre_primary="玄幻", genre_secondary=None),
+        stage2_candidates=[
+            Candidate(id="cand_a1", operator="breaking",
+                      sub_dimension="打破线性/时间顺序", sub_dimension_index=0,
+                      premise_one_line="x", rationale="y", novelty_hook="z")
+        ],
+        stage3_deepened=[
+            # 5 existing deepenings for this candidate — must use real
+            # DeepenedCandidate dataclass so atomic_write_state's asdict() works.
+            DeepenedCandidate(
+                id=f"deep_{i}",
+                source_candidate_id="cand_a1",
+                source_operator="breaking",
+                applied_operator="bending",
+                applied_sub_dimension="尺度扭曲",
+                applied_sub_dimension_index=0,
+                premise_one_line=f"premise {i}",
+                rationale=f"rationale {i}",
+                novelty_hook=f"hook {i}",
+                deepen_count=i + 1,
+            )
+            for i in range(5)
+        ],
+    )
+    atomic_write_state("p1", state)
+
+    engine = ThreeBEngine(model_router=mock_router)
+    with pytest.raises(ValueError, match="deepen_count"):
+        await engine.deepen("p1", "cand_a1", "bending")

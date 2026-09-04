@@ -263,3 +263,93 @@ class ThreeBEngine:
                 llm_raw=raw_text,
             ))
         return out
+
+    async def deepen(
+        self,
+        project_id: str,
+        candidate_id: str,
+        applied_operator: str,
+    ) -> DeepenedCandidate:
+        """单候选二次算子深化,追加到 state.stage3_deepened[]。"""
+        if applied_operator not in OPERATORS:
+            raise ValueError(f"applied_operator 必须是 {OPERATORS} 之一")
+        state = load_state(project_id)
+        if state is None:
+            raise ValueError(f"项目 {project_id} 尚未发散,无候选可深化")
+        source = next(
+            (c for c in state.stage2_candidates if c.id == candidate_id), None
+        )
+        if source is None:
+            raise ValueError(f"candidate {candidate_id} 不存在")
+        if applied_operator == source.operator:
+            raise ValueError("必须选择不同的算子(applied_operator != source_operator)")
+
+        existing_for_source = [
+            d for d in state.stage3_deepened if d.source_candidate_id == candidate_id
+        ]
+        if len(existing_for_source) >= MAX_DEEPEN_COUNT_PER_CANDIDATE:
+            raise ValueError(
+                f"candidate {candidate_id} 已达 deepen_count 上限 "
+                f"{MAX_DEEPEN_COUNT_PER_CANDIDATE}"
+            )
+
+        deepened = await self._deepen_candidate(state.raw_intent, source, applied_operator)
+
+        state.stage3_deepened.append(deepened)
+        atomic_write_state(project_id, state)
+        return deepened
+
+    async def _deepen_candidate(
+        self,
+        raw_intent: RawIntent,
+        source: Candidate,
+        applied_operator: str,
+    ) -> DeepenedCandidate:
+        prompt_data = load_prompt_effective(f"creative/three_b_{applied_operator}")
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = prompt_data["user_prompt_template"].format(
+            prompt=raw_intent.prompt,
+            genre_primary=raw_intent.genre_primary,
+            genre_secondary=raw_intent.genre_secondary or "(无)",
+        )
+        # Inject source candidate context into user prompt
+        user += (
+            f"\n\n## 待深化的源候选(来自 {source.operator})\n"
+            f"- premise_one_line: {source.premise_one_line}\n"
+            f"- rationale: {source.rationale}\n"
+            f"- novelty_hook: {source.novelty_hook}\n"
+            f"\n请基于这个源候选,选 1 个最值得展开的「{applied_operator}」子维度深化。"
+            f"输出 JSON 数组(长度为 1),元素结构同常规要求。"
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        response = await self._router.execute(
+            agent_name="three_b",
+            task_name=f"{applied_operator}_deepen",
+            messages=messages,
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.9),
+            max_tokens=prompt_data.get("max_tokens", 4096),
+        )
+        raw_text = response.get("content", "")
+        items = self._parse_operator_output(raw_text, applied_operator)
+        if not items:
+            raise ValueError(f"3B deepen({applied_operator}) returned empty")
+        item = items[0]
+        return DeepenedCandidate(
+            id=_new_id("deep"),
+            source_candidate_id=source.id,
+            source_operator=source.operator,
+            applied_operator=applied_operator,
+            applied_sub_dimension=item.sub_dimension,
+            applied_sub_dimension_index=item.sub_dimension_index,
+            premise_one_line=item.premise_one_line,
+            rationale=item.rationale,
+            novelty_hook=item.novelty_hook,
+            recognition_score=item.recognition_score,
+            strangeness_score=item.strangeness_score,
+            llm_raw=raw_text,
+            deepen_count=1,
+        )

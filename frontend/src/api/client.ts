@@ -1,6 +1,27 @@
 import type { Genre } from "../hooks/useGenres";
+import type {
+  Candidate,
+  CommitResponse as ThreeBCommitResponse,
+  DeepenedCandidate,
+  DeepenResponse,
+  DivergeResponse,
+  RawIntent as ThreeBRawIntent,
+} from "../components/wizard/divergence_v2/types";
 
 export type { Genre };
+
+// Re-export so callers can import the 3B payload types from a single canonical
+// place (the divergence_v2 module is the source of truth). NOTE: we deliberately
+// do NOT re-export `CommitResponse` here because the file already exports a
+// v1.x-shaped `CommitResponse` (line ~688) used by `postDivergeCommit` — callers
+// who need the 3B-shaped commit response should import it directly from
+// `@/components/wizard/divergence_v2/types`.
+export type {
+  Candidate,
+  DeepenedCandidate,
+  DeepenResponse,
+  DivergeResponse,
+} from "../components/wizard/divergence_v2/types";
 
 const API_BASE = "/api";
 const TIMEOUT_MS = 600_000;
@@ -1852,7 +1873,78 @@ export const api = {
 
   getLLMUsage: (limit: number = 100) =>
     request<LLMUsageEntry[]>("GET", `/settings/llm-usage?limit=${limit}`),
+
+  // --- 3B Three-stage divergence ---
+  // Router prefix: /api/v1/projects/{project_id}/creative/diverge/three-b/*.
+  // See backend/api/three_b_routes.py. The 3B path is a clean rewrite of the
+  // older /creative/diverge/* canvas-mutation flow (which now lives at
+  // /creative/canvas/*). Distinct export prefix (postThreeB*) keeps both
+  // surfaces importable side-by-side until the old flow is removed
+  // (Tasks 21-22 of the 3B plan).
+
+  postThreeBDiverge: (projectId: string, body: ThreeBRawIntent) =>
+    request<DivergeResponse>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/diverge`,
+      body,
+    ),
+
+  postThreeBDeepen: (
+    projectId: string,
+    body: { candidate_id: string; applied_operator: string },
+  ) =>
+    request<DeepenResponse>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/deepen`,
+      body,
+    ),
+
+  postThreeBCommit: (
+    projectId: string,
+    body: { deepened_ids: string[] },
+  ) =>
+    request<ThreeBCommitResponse>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/commit`,
+      body,
+    ),
+
+  getThreeBState: (projectId: string) =>
+    request<ThreeBStatePayload>(
+      "GET",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/state`,
+    ),
+
+  deleteThreeBState: (projectId: string) =>
+    request<{ ok: boolean }>(
+      "DELETE",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/state`,
+    ),
+
+  postThreeBRegenerateCandidate: (
+    projectId: string,
+    body: { candidate_id: string },
+  ) =>
+    request<{ candidate: Candidate }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/regenerate-candidate`,
+      body,
+    ),
 };
+
+// --- 3B Three-stage divergence: payload types ---
+// ThreeBStatePayload lives at module scope so callers (and tests) can import
+// it without going through the api object. The Candidate/DeepenedCandidate
+// arrays match the backend `dataclasses.asdict()` shape exactly (the engine
+// serializes them via asdict in three_b_engine.py line ~207).
+export interface ThreeBStatePayload {
+  schema_version: number;
+  project_id: string;
+  raw_intent: ThreeBRawIntent | null;
+  stage2_candidates: Candidate[];
+  stage3_deepened: DeepenedCandidate[];
+  committed: boolean;
+}
 
 export interface LLMUsageEntry {
   timestamp: string;

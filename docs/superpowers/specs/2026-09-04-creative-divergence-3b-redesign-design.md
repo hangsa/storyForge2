@@ -705,21 +705,30 @@ const STAGES = [
 
 ### 6.3 删除(Canvas 双轨集成清理)
 
+> **现状核查**(2026-09-04 commit `de293ba` / `5b250a6` / `fab678a` 已部分回退 dual step-1 surface 集成):
+> - `WizardContext.tsx` 的 `activeStep1Surface` / `completedStep1Surfaces` 状态已删除 → **本 spec 无须再处理**
+> - `WizardSidebar.tsx` 已恢复单条 step 1 条目 → **无须再处理**
+> - `frontend/src/components/creative-canvas/` 目录已被删,`PlotCanvasMountPoint` 不存在 → **无须再处理**
+> - `WorkspaceWizardPanel.tsx:44` 的 `api.getCanvasV2State` 调用**不能删除**:它是驱动 step 6(剧情画布)prefill completion 的合法信号(`canvasPayload?.committed === true`),与 dual step-1 surface 集成无关
+> - `CreativeDivergenceStep.tsx` 的 `onCommitSuccess` prop 是真实在用的(WorkspaceWizardPanel 在 `step === 1` 时把它绑到 `wizard.markStepGenerated(1, {})`),**不能删除**。仅需更新 3 处过时注释(第 28-29 行 / 第 451 行 / 第 599-601 行),其中提及的 `markStep1SurfaceCompleted("divergence")` 函数已不存在
+> - 旧 `divergence/` 目录的 5 个子组件 (S0A/S0B/S0C/S0D/S0E) 仍被当前 `CreativeDivergenceStep.tsx` import,**不能在本次重构中删除**——重写 `CreativeDivergenceStep.tsx` 后才能删除它们
+
+**实际清理清单**(远小于 spec 起草时假设的):
+
 | 文件 | 操作 |
 |---|---|
-| `frontend/src/components/wizard/WizardSidebar.tsx` | 移除 dual step-1(divergence + canvas)OR 语义;`SIDEBAR_ITEMS` 恢复单一条目 |
-| `frontend/src/components/wizard/WizardContext.tsx` | 移除 `activeStep1Surface` / `completedStep1Surfaces` / `setActiveStep1Surface` / `markStep1SurfaceCompleted` / `hydrateStep1Surfaces` / `isStep1EffectivelyCompleted` + 对应 actions + sessionStorage 字段 |
-| `frontend/src/components/wizard/WorkspaceWizardPanel.tsx` | 移除 `getCanvasV2State` prefill 与 dual render 逻辑 |
-| `frontend/src/pages/CreativeCanvasPage.tsx` | 移除 `embedded` / `onCommitSuccess` props(保留独立 canvas 路由) |
-| `frontend/src/test/WizardContext.test.tsx` | 删除 7 个新增 surface 相关测试 |
-| `frontend/src/test/WizardSidebar.test.tsx` | 移除 dual step-1 测试;恢复单一条目测试 |
-| `frontend/src/test/WorkspaceWizardPanel.test.tsx` | 移除 canvas prefill → surface 推导测试 |
-| `frontend/src/test/pages/CreativeCanvasPage.test.tsx` | 移除 embedded/onCommitSuccess 测试 |
-| `frontend/src/components/wizard/divergence/` | 旧 5 阶段目录可整体删除(S0A/S0B/S0C/S0D/S0E + StepIndicator),仅保留 git 历史 |
-| `frontend/src/components/creative-canvas/CreativeCanvasMountPoint.tsx` | 删除 |
-| `frontend/src/components/creative-canvas/CreativeCanvasMountPoint.test.tsx` | 删除 |
+| `frontend/src/pages/PlotCanvasPage.tsx` | 移除 `embedded?: boolean` + `onCommitSuccess?: () => void` 两个 props + 相关内部逻辑(原由已删除的 `PlotCanvasMountPoint` 注入,现无任何调用方) |
+| `frontend/src/components/wizard/CreativeDivergenceStep.tsx` | 更新 3 处过时注释(L28-29 / L451 / L599-601),移除 `markStep1SurfaceCompleted("divergence")` 引用,改写为对当前 `wizard.markStepGenerated(1, {})` 调用的准确描述。功能代码不动。 |
+| `frontend/src/components/wizard/divergence/S0AInputStep.tsx` | 重写为 S1InputStep 的等价实现后删除(任务 10 完成后) |
+| `frontend/src/components/wizard/divergence/S0BMutationStep.tsx` | 重写为 S2DivergenceStep 的等价实现后删除 |
+| `frontend/src/components/wizard/divergence/S0CContradictionStep.tsx` | 删除(不被新 S3DeepenStep 使用) |
+| `frontend/src/components/wizard/divergence/S0DWhatIfStep.tsx` | 删除(不被新 S3DeepenStep 使用) |
+| `frontend/src/components/wizard/divergence/S0ECommitStep.tsx` | 删除(commit 走 `/three-b/commit`) |
+| `frontend/src/components/wizard/divergence/StepIndicator.tsx` | 重写为 3 阶段版本后删除(任务 9 完成后) |
+| `frontend/src/test/wizard/divergence/*` | 删除整目录,被 `divergence_v2/*` 测试取代 |
+| `frontend/src/test/wizard/CreativeDivergenceStep.test.tsx` | 重写为 3 阶段 orchestrator 测试,旧 5 阶段 stub 全部删除 |
 
-**保留**:独立 `/project/:id/canvas` 路由与 Canvas 页(`CreativeCanvasPage.tsx` 减 props 后保留)。
+**保留**:独立 `/project/:id/canvas` 路由(`PlotCanvasPage` 减 props 后保留)。`WorkspaceWizardPanel.tsx:44` 的 `api.getCanvasV2State` 保留(驱动 step 6 prefill)。
 
 ---
 
@@ -750,17 +759,19 @@ const STAGES = [
 
 ### 7.3 清理回归测试
 
-需要确认下列测试用例**全部被移除**且不破坏其他测试:
+清理目标比 spec 起草时小很多(部分已由 `de293ba` / `5b250a6` / `fab678a` 完成)。需要确认下列**剩余**测试用例**全部被移除或更新**:
 
-| 来源文件 | 移除用例 |
+| 来源文件 | 操作 |
 |---|---|
-| `WizardContext.test.tsx` | 7 个新增 surface tests(`setActiveStep1Surface` / `markStep1SurfaceCompleted` / `hydrateStep1Surfaces` / `isStep1EffectivelyCompleted` 等) |
-| `WizardSidebar.test.tsx` | dual step-1 OR-semantic 测试;8-item vs 双 surface 渲染分支 |
-| `WorkspaceWizardPanel.test.tsx` | canvas prefill → `completedStep1Surfaces` 推导;main area dual render |
-| `CreativeCanvasMountPoint.test.tsx` | 全部删除 |
-| `CreativeCanvasPage.test.tsx` | embedded + `onCommitSuccess` props 测试 |
+| `frontend/src/test/wizard/divergence/S0AInputStep.test.tsx` | 删除(被 S1InputStep.test.tsx 取代) |
+| `frontend/src/test/wizard/divergence/S0BMutationStep.test.tsx` | 删除(被 S2DivergenceStep.test.tsx 取代) |
+| `frontend/src/test/wizard/divergence/S0CContradictionStep.test.tsx` | 删除(不再使用) |
+| `frontend/src/test/wizard/divergence/S0DWhatIfStep.test.tsx` | 删除(不再使用) |
+| `frontend/src/test/wizard/divergence/S0ECommitStep.test.tsx` | 删除(commit 走新端点) |
+| `frontend/src/test/wizard/divergence/CreativeDivergenceStep.test.tsx` | 删除(被新 `CreativeDivergenceStep.test.tsx` 取代) |
+| `frontend/src/test/pages/PlotCanvasPage.test.tsx` | 更新:删除所有 mock `useWizard` / `markStep1SurfaceCompleted` / `embedded=true` / `onCommitSuccess` 的测试用例;保留 standalone 路由 + `/project/:id/canvas` 入口测试 |
 
-**保留**:CreativeCanvasPage 独立访问的现有测试(`/project/:id/canvas` 路由仍工作)。
+**保留不变**:`WizardContext.test.tsx` 的所有现有测试(surface 测试已于 `5b250a6` 删除,无需再处理);`WizardSidebar.test.tsx`(已恢复 7-item 单 step 1);`WorkspaceWizardPanel.test.tsx`(canvas prefill 仍驱动 step 6 completion,功能不变)。
 
 ### 7.4 E2E(手动 smoke + 可选自动化)
 
@@ -817,12 +828,12 @@ const STAGES = [
 
 ### 9.4 附加目标:清理 Canvas 集成
 
-- [ ] `WizardSidebar.tsx` 第一项仅显示「创意发散」(无 Canvas 平行入口)
-- [ ] `WizardContext.tsx` 移除 surface 相关 state / actions / methods
-- [ ] `CreativeCanvasMountPoint.tsx` 文件删除
-- [ ] `CreativeCanvasPage.tsx` 移除 `embedded` / `onCommitSuccess` props
-- [ ] 独立 `/project/:id/canvas` 路由仍可访问(页面独立工作)
-- [ ] 所有 surface 相关测试用例删除
+- [ ] `PlotCanvasPage.tsx` 移除 `embedded` / `onCommitSuccess` 两个 props(无调用方)
+- [ ] `CreativeDivergenceStep.tsx` 3 处过时注释更新(移除 `markStep1SurfaceCompleted` 引用,改写为 `markStepGenerated` 描述)
+- [ ] 旧 `divergence/` 目录 5 个子组件 + 旧测试目录 `test/wizard/divergence/*` 全部删除
+- [ ] `PlotCanvasPage.test.tsx` 删除所有 `embedded` / `onCommitSuccess` 相关 mock 测试
+- [ ] 独立 `/project/:id/canvas` 路由仍可访问(standalone 模式)
+- [ ] `WorkspaceWizardPanel.tsx:44` 的 `api.getCanvasV2State` 调用**保留**(驱动 step 6 prefill,与 dual step-1 集成无关)
 
 ### 9.5 兼容性
 

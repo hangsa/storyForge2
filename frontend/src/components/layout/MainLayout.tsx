@@ -17,7 +17,6 @@ const STAGE_FROM_PATH: Record<string, string> = {
   review: "REVIEW",
   impact: "IMPACT",
   storyos: "STORYOS",
-  "stage1/canvas": "STAGE1",
   "stage3/outline": "STAGE3",
   "stage3/branches": "STAGE3",
   "stage6/plot": "STAGE6",

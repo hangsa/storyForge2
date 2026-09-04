@@ -264,14 +264,14 @@ describe("PlotCanvasPage embedded mode", () => {
     // block. When embedded=true, the wizard provides chrome so we omit it.
     expect(screen.queryByRole("heading", { name: /剧情画布/ })).toBeNull();
     // Also confirm the wrapper data-testid is absent in embedded mode.
-    expect(screen.queryByTestId("creative-canvas-page")).toBeNull();
+    expect(screen.queryByTestId("plot-canvas-page")).toBeNull();
   });
 
   it("renders page-shell header in standalone (non-embedded) mode", () => {
     mockUsePlotCanvasV2.mockReturnValue(defaultHookReturn(baseCanvas));
     renderWithProviders(<PlotCanvasPage projectId="proj_test" />);
     // Sanity check the inverse — standalone mode keeps the wrapper + header.
-    expect(screen.getByTestId("creative-canvas-page")).toBeInTheDocument();
+    expect(screen.getByTestId("plot-canvas-page")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /剧情画布/ })).toBeInTheDocument();
   });
 

@@ -88,7 +88,7 @@ describe("PlotCanvasMountPoint", () => {
     // forwards `embedded` to PlotCanvasPage, which omits the h2 +
     // wrapper data-testid when embedded.
     expect(screen.queryByRole("heading", { name: /Creative Canvas/ })).toBeNull();
-    expect(screen.queryByTestId("creative-canvas-page")).toBeNull();
+    expect(screen.queryByTestId("plot-canvas-page")).toBeNull();
     // Sanity: the page DID render — EmptyState's data-testid is present
     // because the stubbed canvas hook returned canvas=null.
     expect(screen.getByTestId("empty-state")).toBeInTheDocument();

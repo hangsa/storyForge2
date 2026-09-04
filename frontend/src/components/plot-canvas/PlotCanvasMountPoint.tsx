@@ -14,7 +14,7 @@ interface Props {
  * pushed into `completedSteps` immediately — without waiting for
  * the next prefill rerun to re-read canvas state from disk.
  *
- * The `data-testid="creative-canvas-mount-point"` is part of the
+ * The `data-testid="plot-canvas-mount-point"` is part of the
  * wizard's render-branch public contract — WorkspaceWizardPanel tests
  * assert the sidebar item click switches the main area to the canvas
  * surface via this anchor. (Task 11 will rename it to
@@ -24,7 +24,7 @@ export default function PlotCanvasMountPoint({ projectId }: Props) {
   const wizard = useWizard();
   return (
     <div
-      data-testid="creative-canvas-mount-point"
+      data-testid="plot-canvas-mount-point"
       data-project-id={projectId}
     >
       <PlotCanvasPage

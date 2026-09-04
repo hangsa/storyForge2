@@ -101,7 +101,7 @@ export default function PlotCanvasPage({
         }}
       />
     ) : (
-      <div data-testid="creative-canvas-page" className="bg-surface-container-lowest min-h-screen p-6">
+      <div data-testid="plot-canvas-page" className="bg-surface-container-lowest min-h-screen p-6">
         <EmptyState
           loading={loadingStep}
           embedded={embedded}
@@ -345,7 +345,7 @@ export default function PlotCanvasPage({
     main
   ) : (
     <div
-      data-testid="creative-canvas-page"
+      data-testid="plot-canvas-page"
       className="bg-surface-container-lowest min-h-screen p-6"
     >
       {main}

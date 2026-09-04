@@ -200,7 +200,7 @@ describe("WorkspaceWizardPanel (post-integration)", () => {
     });
     await waitFor(() => {
       expect(screen.getByTestId("wizard-sidebar-item-canvas").getAttribute("data-state")).toBe("current");
-      expect(screen.getByTestId("creative-canvas-mount-point")).toBeInTheDocument();
+      expect(screen.getByTestId("plot-canvas-mount-point")).toBeInTheDocument();
     });
   });
 });

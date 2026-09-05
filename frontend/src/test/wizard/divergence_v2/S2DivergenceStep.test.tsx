@@ -31,9 +31,13 @@ describe("S2DivergenceStep", () => {
         onNext={() => {}}
       />,
     );
-    expect(screen.getByText(/打破 \(1\)/)).toBeTruthy();
-    expect(screen.getByText(/扭曲 \(1\)/)).toBeTruthy();
-    expect(screen.getByText(/融合 \(0\)/)).toBeTruthy();
+    // Header now uses split spans: operator label + count chip are siblings,
+    // not concatenated text. Verify each label appears with its count.
+    expect(screen.getByText("打破")).toBeTruthy();
+    expect(screen.getByText("扭曲")).toBeTruthy();
+    expect(screen.getByText("融合")).toBeTruthy();
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0").length).toBeGreaterThan(0);
   });
 
   it("disables next when nothing selected", () => {

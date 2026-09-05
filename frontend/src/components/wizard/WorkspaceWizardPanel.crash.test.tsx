@@ -75,6 +75,8 @@ vi.mock("../../api/client", () => ({
       committed: false,
     }),
     deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
+    // Theme migration (2026-09-05): S1InputStep calls useGenres → api.listGenres
+    listGenres: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -131,6 +133,8 @@ describe("WorkspaceWizardPanel crash repro", () => {
           committed: false,
         }),
         deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
+        // Theme migration (2026-09-05): mirror first-block mock
+        listGenres: vi.fn().mockResolvedValue([]),
       },
     }));
 

@@ -3,6 +3,7 @@ import S2DivergenceStep from "./divergence_v2/S2DivergenceStep";
 import S3DeepenStep from "./divergence_v2/S3DeepenStep";
 import StepIndicator from "./divergence_v2/StepIndicator";
 import { useThreeBDivergence } from "./divergence_v2/useThreeBDivergence";
+import { GhostButton } from "@/components/ds";
 import type {
   Candidate,
   DivergeResponse,
@@ -45,10 +46,6 @@ export default function CreativeDivergenceStep({
   // this callback; we just thread the response into the reducer (which
   // moves the user to sub-stage 2 with the candidates loaded).
   function handleStage1Submit(intent: RawIntent, resp: DivergeResponse) {
-    // Also notify any error path the hook might want to surface (the
-    // hook itself is transport-free for Stage 1 — the request happens in
-    // S1 — but keeping the call-site consistent in case future S1
-    // implementations call onDivergeError from a separate try/catch).
     void intent;
     onDivergeSuccess(resp);
     jumpTo("2");
@@ -60,66 +57,74 @@ export default function CreativeDivergenceStep({
   void onDivergeError;
 
   return (
-    <div data-testid="creative-divergence-step" className="space-y-6">
+    <div data-testid="creative-divergence-step" className="flex flex-col flex-1 min-h-0">
       <StepIndicator
         current={state.currentSubStage}
         completed={state.completedSubStages}
         onJump={jumpTo}
       />
 
-      {state.currentSubStage === "1" && (
-        <S1InputStep
-          projectId={projectId}
-          initial={state.rawIntent}
-          onSubmitted={handleStage1Submit}
-        />
-      )}
+      <div className="flex-1 flex flex-col px-6 py-4 gap-4 min-h-0">
+        {state.stage2Error && (
+          <div className="p-4 bg-error-container/20 border border-error rounded-lg text-error font-body text-body-md text-sm">
+            {state.stage2Error}
+          </div>
+        )}
 
-      {state.currentSubStage === "2" && (
-        <>
-          {state.stage2Loading && (
-            <div className="text-center text-gray-500">3 个算子并行发散中…</div>
-          )}
-          {state.stage2Error && (
-            <div className="bg-red-50 text-red-700 p-3 rounded">
-              {state.stage2Error}
-            </div>
-          )}
-          <S2DivergenceStep
-            candidates={state.candidates}
-            byOperator={state.byOperator}
-            selectedIds={state.stage3SelectedIds}
-            onToggleSelect={toggleSelect}
-            onRegenerateOne={regenerateOne}
-            onRegenerateAll={regenerateAll}
-            onNext={() => jumpTo("3")}
+        {state.currentSubStage === "1" && (
+          <S1InputStep
+            projectId={projectId}
+            initial={state.rawIntent}
+            onSubmitted={handleStage1Submit}
           />
-          <button
-            type="button"
-            onClick={async () => {
-              await reset();
-              jumpTo("1");
-            }}
-            className="text-xs text-gray-500 underline"
-          >
-            重新输入
-          </button>
-        </>
-      )}
+        )}
 
-      {state.currentSubStage === "3" && (
-        <S3DeepenStep
-          selectedCandidates={selectedCandidates}
-          deepened={state.stage3Deepened}
-          appliedOperators={state.stage3AppliedOperators}
-          onAppliedOperatorChange={(id, op) => deepenOne(id, op)}
-          projectId={projectId}
-          onCommitSuccess={() => {
-            void commitHook();
-            onCommitSuccess?.();
-          }}
-        />
-      )}
+        {state.currentSubStage === "2" && (
+          <>
+            {state.stage2Loading && (
+              <div className="flex items-center gap-2 px-md py-2 rounded-lg bg-primary-container/15 text-primary-container text-body-md">
+                <span className="material-symbols-outlined text-base animate-spin inline-block">
+                  progress_activity
+                </span>
+                3 个算子并行发散中…
+              </div>
+            )}
+            <S2DivergenceStep
+              candidates={state.candidates}
+              byOperator={state.byOperator}
+              selectedIds={state.stage3SelectedIds}
+              onToggleSelect={toggleSelect}
+              onRegenerateOne={regenerateOne}
+              onRegenerateAll={regenerateAll}
+              onNext={() => jumpTo("3")}
+            />
+            <div className="flex justify-start">
+              <GhostButton
+                label="重新输入"
+                size="sm"
+                onClick={async () => {
+                  await reset();
+                  jumpTo("1");
+                }}
+              />
+            </div>
+          </>
+        )}
+
+        {state.currentSubStage === "3" && (
+          <S3DeepenStep
+            selectedCandidates={selectedCandidates}
+            deepened={state.stage3Deepened}
+            appliedOperators={state.stage3AppliedOperators}
+            onAppliedOperatorChange={(id, op) => deepenOne(id, op)}
+            projectId={projectId}
+            onCommitSuccess={() => {
+              void commitHook();
+              onCommitSuccess?.();
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ vi.mock("@/api/client", () => ({
     postThreeBCommit: vi.fn(),
     deleteThreeBState: vi.fn(),
     postThreeBRegenerateCandidate: vi.fn(),
+    listGenres: vi.fn().mockResolvedValue([]),
   },
 }));
 

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import api from "@/api/client";
+import { PrimaryButton } from "@/components/ds";
 import {
-  OPERATORS, OPERATOR_LABELS, type Candidate, type DeepenedCandidate, type Operator,
+  OPERATORS, OPERATOR_LABELS, OPERATOR_ICONS, type DeepenedCandidate, type Operator,
 } from "./types";
 
 interface Props {
-  selectedCandidates: Candidate[];
+  selectedCandidates: import("./types").Candidate[];
   deepened: DeepenedCandidate[];
   appliedOperators: Record<string, Operator>;
   onAppliedOperatorChange: (candidateId: string, op: Operator) => void;
@@ -39,66 +40,102 @@ export default function S3DeepenStep({
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold">深化候选</h2>
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="space-y-4 flex-1 min-h-0">
+        <header className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
+          Stage 3 · 深化候选
+        </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-[1fr,2fr] gap-4">
-        <div className="space-y-2">
-          <h3 className="font-medium">已选候选 ({selectedCandidates.length})</h3>
-          {selectedCandidates.map((c) => (
-            <div key={c.id} className="border rounded p-2 text-sm">
-              <div className="font-medium">[{OPERATOR_LABELS[c.operator]}] {c.sub_dimension}</div>
-              <div>{c.premise_one_line}</div>
-              <div className="mt-2 flex gap-2">
-                {OPERATORS.filter((op) => op !== c.operator).map((op) => (
-                  <button
-                    key={op}
-                    type="button"
-                    onClick={() => onAppliedOperatorChange(c.id, op)}
-                    className={
-                      "px-2 py-1 text-xs border rounded " +
-                      (appliedOperators[c.id] === op
-                        ? "bg-blue-500 text-white"
-                        : "")
-                    }
-                  >
-                    {OPERATOR_LABELS[op]}
-                  </button>
-                ))}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr,2fr] gap-3">
+          <section className="bg-surface-container-low border border-outline-variant rounded-lg p-3 space-y-2">
+            <h3 className="flex items-center gap-2 font-mono text-primary-container text-[10px] uppercase tracking-wider">
+              已选候选
+              <span className="ml-auto font-mono text-on-surface-variant text-xs">
+                {selectedCandidates.length}
+              </span>
+            </h3>
+            {selectedCandidates.length === 0 ? (
+              <div className="text-sm text-on-surface-variant py-4 text-center">
+                尚未选择候选 — 回到 Stage 2 挑选
               </div>
-            </div>
-          ))}
-        </div>
+            ) : (
+              selectedCandidates.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-surface-container border border-outline-variant rounded-lg p-3 text-sm space-y-2"
+                >
+                  <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
+                    [{OPERATOR_LABELS[c.operator]}] {c.sub_dimension}
+                  </div>
+                  <div className="text-primary">{c.premise_one_line}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {OPERATORS.filter((op) => op !== c.operator).map((op) => {
+                      const isActive = appliedOperators[c.id] === op;
+                      return (
+                        <button
+                          key={op}
+                          type="button"
+                          onClick={() => onAppliedOperatorChange(c.id, op)}
+                          className={
+                            "px-3 py-1.5 rounded-full border text-sm transition-colors " +
+                            (isActive
+                              ? "bg-primary text-on-primary border-primary font-medium"
+                              : "border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary-container/50")
+                          }
+                        >
+                          <span aria-hidden="true" className="mr-1">
+                            {OPERATOR_ICONS[op]}
+                          </span>
+                          {OPERATOR_LABELS[op]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </section>
 
-        <div className="space-y-2">
-          <h3 className="font-medium">深化结果</h3>
-          {deepened.map((d) => (
-            <div key={d.id} className="border rounded p-2 text-sm bg-blue-50">
-              <div className="text-xs text-gray-500">
-                算子: {OPERATOR_LABELS[d.applied_operator]} · 子维度: {d.applied_sub_dimension}
+          <section className="bg-surface-container-low border border-outline-variant rounded-lg p-3 space-y-2">
+            <h3 className="flex items-center gap-2 font-mono text-primary-container text-[10px] uppercase tracking-wider">
+              深化结果
+              <span className="ml-auto font-mono text-on-surface-variant text-xs">
+                {deepened.length}
+              </span>
+            </h3>
+            {deepened.length === 0 ? (
+              <div className="text-sm text-on-surface-variant py-4 text-center">
+                尚未深化 — 在左侧选算子触发自动深化
               </div>
-              <div>{d.premise_one_line}</div>
-            </div>
-          ))}
-          {deepened.length === 0 && (
-            <div className="text-sm text-gray-500">尚未深化(在左侧选算子触发自动深化)</div>
-          )}
+            ) : (
+              deepened.map((d) => (
+                <div
+                  key={d.id}
+                  className="bg-primary-container/10 border border-primary-container/40 rounded-lg p-3 text-sm"
+                >
+                  <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
+                    {OPERATOR_ICONS[d.applied_operator]} {OPERATOR_LABELS[d.applied_operator]} · {d.applied_sub_dimension}
+                  </div>
+                  <div className="text-primary mt-1">{d.premise_one_line}</div>
+                </div>
+              ))
+            )}
+          </section>
         </div>
       </div>
 
-      <div className="border-t pt-3 flex justify-between items-center">
-        <span className="text-sm text-gray-600">
+      <footer className="flex items-center justify-between px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
+        <span className="text-sm text-on-surface-variant">
           已深化 {deepened.length} / {selectedCandidates.length}
         </span>
-        <button
-          type="button"
+        <PrimaryButton
+          label={committing ? "提交中…" : "提交创意发散"}
+          icon={committing ? undefined : "rocket_launch"}
+          loading={committing}
           disabled={!canCommit}
           onClick={handleCommit}
-          className="px-4 py-2 bg-green-500 text-white rounded disabled:bg-gray-300"
-        >
-          {committing ? "提交中…" : "提交创意发散"}
-        </button>
-      </div>
+        />
+      </footer>
     </div>
   );
 }

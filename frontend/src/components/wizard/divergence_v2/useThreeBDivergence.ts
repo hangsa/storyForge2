@@ -139,8 +139,13 @@ export function useThreeBDivergence(projectId: string) {
       .then((s) => {
         if (cancelled) return;
         const completed: SubStage[] = ["1"];
-        if ((s.stage2_candidates ?? []).length > 0) completed.push("2");
-        if (s.committed) completed.push("3");
+        // S2 is reachable once any candidate exists. S3 is also reachable
+        // (the in-page 下一步：深化 button goes 2→3 in one click), so its
+        // chip should not be grey on hydrate either — otherwise a user who
+        // reloads between diverge and commit can't get back to S3 via the
+        // chip indicator.
+        if ((s.stage2_candidates ?? []).length > 0) completed.push("2", "3");
+        if (s.committed) completed.push("3"); // already pushed above
         dispatch({
           type: "HYDRATE",
           state: {
@@ -277,8 +282,19 @@ export function useThreeBDivergence(projectId: string) {
   }, [projectId, state.stage3Deepened]);
 
   const jumpTo = useCallback((stage: SubStage) => {
-    dispatch({ type: "HYDRATE", state: { currentSubStage: stage } });
-  }, []);
+    // Mark the target sub-stage as completed so the StepIndicator chip stays
+    // clickable when the user later navigates back. Set semantics dedup
+    // repeat visits. Without this, navigating S3 → S2 leaves the "3. 深化提交"
+    // chip grey (it's only marked completed on COMMIT_SUCCESS), so the user
+    // can never return to S3 via the chip — only via the in-page button.
+    dispatch({
+      type: "HYDRATE",
+      state: {
+        currentSubStage: stage,
+        completedSubStages: [...new Set<SubStage>([...state.completedSubStages, stage])],
+      },
+    });
+  }, [state.completedSubStages]);
 
   const reset = useCallback(async () => {
     await api.deleteThreeBState(projectId);

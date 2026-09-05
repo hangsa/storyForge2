@@ -133,6 +133,32 @@ agent_mapping:
   style_sandbox:
     preview:
       tier: tier_3
+  three_b:
+    breaking:
+      tier: tier_1
+      model: default
+    bending:
+      tier: tier_1
+      model: default
+    blending:
+      tier: tier_1
+      model: default
+    breaking_deepen:
+      tier: tier_1
+      model: default
+    bending_deepen:
+      tier: tier_1
+      model: default
+    blending_deepen:
+      tier: tier_1
+      model: default
+    commit:
+      tier: tier_1
+      model: default
+  novelty:
+    trope_extraction:
+      tier: tier_3
+      model: default
 providers:
   deepseek:
     type: openai_compatible

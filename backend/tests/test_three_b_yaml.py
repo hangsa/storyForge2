@@ -387,3 +387,25 @@ def test_three_b_decompose_yaml_schema():
     assert "{prompt}" in data["user_prompt_template"]
     assert "causal_map" in data["system_prompt"] or "causal_map" in data["user_prompt_template"]
     assert "top_level_summary" in data["system_prompt"] or "top_level_summary" in data["user_prompt_template"]
+
+
+# --- three_b_adaptive_diverge (Stage 2→3 prompt, added in rewrite Task 11) -----
+
+
+def test_three_b_adaptive_diverge_yaml_exists():
+    from pathlib import Path
+    p = Path("backend/prompts/creative/three_b_adaptive_diverge.yaml")
+    assert p.exists()
+
+
+def test_three_b_adaptive_diverge_yaml_includes_4_operators_and_chain_reaction():
+    import yaml
+    from pathlib import Path
+    p = Path("backend/prompts/creative/three_b_adaptive_diverge.yaml")
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    content = data["system_prompt"] + data["user_prompt_template"]
+    for op in ("扭曲", "打破", "融合", "组合链"):
+        assert op in content, f"算子 {op} 不在 prompt 中"
+    assert "chain_reaction" in content
+    assert "{unit_name}" in data["user_prompt_template"]
+    assert "{unit_description}" in data["user_prompt_template"]

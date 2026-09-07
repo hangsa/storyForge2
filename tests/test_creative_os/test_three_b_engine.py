@@ -497,6 +497,36 @@ async def test_regenerate_unit_replaces_candidates_for_that_unit_only(tmp_path, 
     assert reloaded_b_cands[0].description == "old_b"
 
 
+@pytest.mark.asyncio
+async def test_regenerate_unit_clears_committed_concept(tmp_path, monkeypatch, mock_router):
+    """Regenerating a unit must invalidate any prior committed_concept (mirrors diverge)."""
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="x", genre_primary="y"),
+        committed_concept={"one_line": "old"},
+        novelty_scores={"novelty": 0.7},
+        commit_started_at="2026-09-01T00:00:00",
+        commit_completed_at="2026-09-01T00:00:05",
+        dimensions=[DimensionDecomposition(
+            dimension=DimLabel.ONTOLOGY, insight="i",
+            units=[Unit(id="unit_a", dimension=DimLabel.ONTOLOGY, unit_name="a", description="da")],
+            candidates=[UnitCandidate(id="c1", unit_id="unit_a", unit_name="a", description="old", chain_reaction="r", main_operator="distort")],
+        )],
+    )
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": json.dumps({
+        "candidates": [{"description": "new", "chain_reaction": "r", "main_operator": "break", "selection_rank": 0}],
+    })}
+    await engine.regenerate_unit("proj_test", "unit_a")
+    reloaded = load_state("proj_test")
+    assert reloaded.committed_concept is None
+    assert reloaded.novelty_scores is None
+    assert reloaded.commit_started_at is None
+    assert reloaded.commit_completed_at is None
+
+
 def test_select_unit_candidate_swaps_rank(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
     engine = ThreeBEngine()

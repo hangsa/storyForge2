@@ -474,22 +474,25 @@ class ThreeBEngine:
                     return u
         return None
 
+    def _find_unit_with_dim(
+        self, state: ThreeBState, unit_id: str
+    ) -> Optional[tuple[DimensionDecomposition, Unit]]:
+        """Find unit + its parent dim. Returns (dim, unit) or None."""
+        for d in state.dimensions:
+            for u in d.units:
+                if u.id == unit_id:
+                    return (d, u)
+        return None
+
     async def regenerate_unit(self, project_id: str, unit_id: str) -> list[UnitCandidate]:
         """重跑该 unit 的发散,只替换该 unit 的 candidates。"""
         state = load_state(project_id)
         if state is None or state.raw_intent is None:
             raise ValueError(f"项目 {project_id} 未发散")
-        target_dim = None
-        target_unit = None
-        for d in state.dimensions:
-            for u in d.units:
-                if u.id == unit_id:
-                    target_dim, target_unit = d, u
-                    break
-            if target_unit:
-                break
-        if target_unit is None:
+        found = self._find_unit_with_dim(state, unit_id)
+        if found is None:
             raise ValueError(f"unit {unit_id} 不存在")
+        target_dim, target_unit = found
 
         new_cands = await self._diverge_single_unit(state.raw_intent, target_dim, target_unit)
         if not new_cands:
@@ -497,6 +500,12 @@ class ThreeBEngine:
 
         # 替换 target_dim.candidates 中属于该 unit 的部分
         target_dim.candidates = [c for c in target_dim.candidates if c.unit_id != unit_id] + new_cands
+        target_dim.dimension_status = "diverged" if target_dim.candidates else "divergence_failed"
+        # 下游清空(镜像 diverge)
+        state.committed_concept = None
+        state.novelty_scores = None
+        state.commit_started_at = None
+        state.commit_completed_at = None
         atomic_write_state(project_id, state)
         return new_cands
 

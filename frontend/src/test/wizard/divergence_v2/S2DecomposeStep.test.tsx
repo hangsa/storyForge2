@@ -59,4 +59,12 @@ describe("S2DecomposeStep", () => {
     fireEvent.click(screen.getByText("确认追问"));
     expect(onFollowUp).toHaveBeenCalledWith("u1", null);
   });
+
+  it("switching follow-up units clears prior text (regression test for state leak)", () => {
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("follow-up-u1"));
+    fireEvent.change(screen.getByTestId("follow-up-input-u1"), { target: { value: "STALE" } });
+    fireEvent.click(screen.getByTestId("follow-up-u3"));
+    expect(screen.getByTestId("follow-up-input-u3")).toHaveValue("");
+  });
 });

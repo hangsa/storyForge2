@@ -78,7 +78,6 @@ function DimensionBlock({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [followUpUnitId, setFollowUpUnitId] = useState<string | null>(null);
-  const [followUpText, setFollowUpText] = useState("");
 
   return (
     <section className="bg-surface-container-low border border-outline-variant rounded-lg p-3" data-testid={`dimension-${dimension.dimension}`}>
@@ -105,17 +104,13 @@ function DimensionBlock({
               unit={u}
               loading={followUpLoadingUnitId === u.id}
               followUpUnitId={followUpUnitId}
-              followUpText={followUpText}
               setFollowUpUnitId={setFollowUpUnitId}
-              setFollowUpText={setFollowUpText}
-              onSubmit={() => {
-                onFollowUp(u.id, followUpText.trim() || null);
+              onSubmit={(text) => {
+                onFollowUp(u.id, text.trim() || null);
                 setFollowUpUnitId(null);
-                setFollowUpText("");
               }}
               onCancel={() => {
                 setFollowUpUnitId(null);
-                setFollowUpText("");
               }}
             />
           ))}
@@ -126,18 +121,17 @@ function DimensionBlock({
 }
 
 function UnitCard({
-  unit, loading, followUpUnitId, followUpText,
-  setFollowUpUnitId, setFollowUpText, onSubmit, onCancel,
+  unit, loading, followUpUnitId,
+  setFollowUpUnitId, onSubmit, onCancel,
 }: {
   unit: Unit;
   loading: boolean;
   followUpUnitId: string | null;
-  followUpText: string;
   setFollowUpUnitId: (id: string | null) => void;
-  setFollowUpText: (s: string) => void;
-  onSubmit: () => void;
+  onSubmit: (text: string) => void;
   onCancel: () => void;
 }) {
+  const [followUpText, setFollowUpText] = useState("");
   const showDialog = followUpUnitId === unit.id;
   return (
     <div
@@ -192,7 +186,7 @@ function UnitCard({
             </button>
             <button
               type="button"
-              onClick={onSubmit}
+              onClick={() => onSubmit(followUpText)}
               className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
             >
               确认追问

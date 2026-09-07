@@ -1,7 +1,14 @@
-"""Tests for the four 3B creativity-law prompt YAML files.
+"""Tests for the v2 3B creativity-decomposition prompt YAML files.
 
-Each of the four YAML files (three_b_breaking / three_b_bending / three_b_blending /
-three_b_commit) is a single prompt template consumed by ThreeBEngine via
+The v2 rewrite replaces the four v1 operator prompts (breaking / bending /
+blending / commit) with four prompts that follow the new 4-stage pipeline:
+
+  - three_b_decompose           (Stage 1 → 2: 5-dimension decomposition)
+  - three_b_follow_up          (Stage 2: per-unit follow-up deepening)
+  - three_b_adaptive_diverge   (Stage 2 → 3: adaptive divergence with chain reaction)
+  - three_b_commit             (Stage 3 → 4: synthesis using causal_map + summary)
+
+Each is a single prompt template consumed by ThreeBEngine via
 `load_prompt_effective` from `backend.services.prompt_override_store`. They must
 also auto-appear in the Prompt Plaza UI because Plaza discovers them via
 `GlobalPromptOverrideStore._iter_yaml_files()`.
@@ -10,10 +17,9 @@ These tests lock in:
 - File presence at the expected path
 - Valid YAML + matching `name` field
 - `negative_constraints: ""` as a top-level key (codebase convention)
-- Required `{prompt}`, `{genre_primary}`, `{genre_secondary}` placeholders in
-  `user_prompt_template` (commit also needs `{deepened_candidates_json}`)
 - `{negative_constraints}` placeholder in `system_prompt`
 - Plaza's `_iter_yaml_files()` discovers all four by stem
+- Per-prompt placeholder contracts (see individual tests below)
 """
 from pathlib import Path
 
@@ -30,18 +36,12 @@ from backend.services.global_prompt_override_store import (
 
 # --- Constants -----------------------------------------------------------------
 
-EXPECTED_NAMES = ("three_b_breaking", "three_b_bending", "three_b_blending", "three_b_commit")
-
-# Each of the 4 files uses these placeholders in `user_prompt_template`.
-COMMON_USER_PLACEHOLDERS = ("{prompt}", "{genre_primary}", "{genre_secondary}")
-
-# Sub-dimension count claimed in each prompt's system_prompt (sanity-check on
-# the "N sub-dimensions" headline so a number drift is caught loudly).
-EXPECTED_SUB_DIMENSION_COUNT = {
-    "three_b_breaking": 5,
-    "three_b_bending": 6,
-    "three_b_blending": 6,
-}
+EXPECTED_NAMES = (
+    "three_b_decompose",
+    "three_b_follow_up",
+    "three_b_adaptive_diverge",
+    "three_b_commit",
+)
 
 # Names that look like 3B prompts but are NOT part of this batch.
 NON_THREE_B_NAMES = (
@@ -169,64 +169,6 @@ def test_system_prompt_contains_negative_constraints_placeholder(name: str, all_
     )
 
 
-@pytest.mark.parametrize("name", EXPECTED_NAMES)
-@pytest.mark.parametrize("placeholder", COMMON_USER_PLACEHOLDERS)
-def test_user_prompt_template_has_common_placeholder(
-    name: str, placeholder: str, all_yaml_data
-):
-    data = all_yaml_data.get(name)
-    assert data is not None
-    assert placeholder in data["user_prompt_template"], (
-        f"{name}.yaml: 'user_prompt_template' must contain {placeholder}"
-    )
-
-
-def test_commit_user_prompt_template_has_deepened_candidates_json(all_yaml_data):
-    """Only three_b_commit needs {deepened_candidates_json} — the other 3
-    operate on the raw {prompt} and don't see per-candidate detail."""
-    data = all_yaml_data.get("three_b_commit")
-    assert data is not None
-    assert "{deepened_candidates_json}" in data["user_prompt_template"], (
-        "three_b_commit.yaml: user_prompt_template must contain "
-        "{deepened_candidates_json} (Stage-3 synthesis consumes per-candidate "
-        "premise/rationale/novelty_hook)"
-    )
-
-
-@pytest.mark.parametrize("name", ("three_b_breaking", "three_b_bending", "three_b_blending"))
-def test_stage_user_prompts_do_not_reference_deepened_candidates(name: str, all_yaml_data):
-    """Inverse of the commit test: Stage 1/2 prompts receive only the raw
-    prompt, not the per-candidate JSON. If someone copy-pastes the commit
-    template into a stage prompt by accident, this test catches it."""
-    data = all_yaml_data.get(name)
-    assert data is not None
-    assert "{deepened_candidates_json}" not in data["user_prompt_template"], (
-        f"{name}.yaml: Stage-1/2 prompts must NOT reference "
-        "{{deepened_candidates_json}} — only Stage 3 (commit) consumes the "
-        "deepened candidate list"
-    )
-
-
-# --- Sub-dimension count sanity ------------------------------------------------
-
-
-@pytest.mark.parametrize("name", list(EXPECTED_SUB_DIMENSION_COUNT))
-def test_system_prompt_advertises_expected_sub_dimension_count(name: str, all_yaml_data):
-    """Sanity-check the headline count (5 / 6 / 6) so the LLM instruction stays
-    consistent with the JSON example it asks the model to emit."""
-    expected = EXPECTED_SUB_DIMENSION_COUNT[name]
-    data = all_yaml_data.get(name)
-    assert data is not None
-    sys = data["system_prompt"]
-    # The system prompt enumerates sub-dimensions as "1. ... 2. ... N. ..." in
-    # numbered headings. We check that the N-th sub-dimension heading exists.
-    needle = f"{expected}. **"
-    assert needle in sys, (
-        f"{name}.yaml: system_prompt must enumerate {expected} sub-dimensions; "
-        f"expected to find heading {needle!r}"
-    )
-
-
 # --- Plaza auto-discovery ------------------------------------------------------
 
 
@@ -310,15 +252,15 @@ def test_plaza_three_b_get_effective_round_trip(reset_plaza_store):
 
 def test_load_prompt_effective_resolves_subdir_three_b_by_bare_stem(reset_plaza_store):
     """Regression for 2026-09-06 Plaza bug: per-project Plaza's `get_prompt`
-    called `load_prompt_effective("three_b_breaking")` which routed through
+    called `load_prompt_effective("three_b_follow_up")` which routed through
     `_load_yaml_prompt` with direct-path-only matching. That raised
-    FileNotFoundError because `three_b_breaking.yaml` only exists under
+    FileNotFoundError because `three_b_follow_up.yaml` only exists under
     `creative/`, returning a 404 ("Prompt template not found") to the UI.
 
     After the fix `_load_yaml_prompt` falls back to a recursive walk when the
     direct path is absent, so bare-stem lookups resolve subdir files. The
-    engine itself was also switched to bare stems (`three_b_breaking` instead
-    of `creative/three_b_breaking`) so the override JSON key Plaza saves under
+    engine itself was also switched to bare stems (`three_b_follow_up` instead
+    of `creative/three_b_follow_up`) so the override JSON key Plaza saves under
     matches what the engine reads back — otherwise user edits silently had no
     effect at runtime.
     """
@@ -409,3 +351,46 @@ def test_three_b_adaptive_diverge_yaml_includes_4_operators_and_chain_reaction()
     assert "chain_reaction" in content
     assert "{unit_name}" in data["user_prompt_template"]
     assert "{unit_description}" in data["user_prompt_template"]
+
+
+# --- three_b_follow_up (Stage 2 per-unit follow-up, added in rewrite Task 12) -
+
+
+def test_old_3b_yamls_deleted():
+    from pathlib import Path
+    for name in ("three_b_breaking", "three_b_bending", "three_b_blending"):
+        p = Path(f"backend/prompts/creative/{name}.yaml")
+        assert not p.exists(), f"旧 {name}.yaml 应已删除"
+
+
+def test_three_b_follow_up_yaml_exists():
+    from pathlib import Path
+    p = Path("backend/prompts/creative/three_b_follow_up.yaml")
+    assert p.exists()
+
+
+def test_three_b_follow_up_yaml_schema():
+    import yaml
+    from pathlib import Path
+    p = Path("backend/prompts/creative/three_b_follow_up.yaml")
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert data["name"] == "three_b_follow_up"
+    assert "{unit_name}" in data["user_prompt_template"]
+
+
+def test_three_b_commit_yaml_uses_causal_map_and_summary():
+    import yaml
+    from pathlib import Path
+    p = Path("backend/prompts/creative/three_b_commit.yaml")
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    tpl = data["user_prompt_template"]
+    assert "{causal_map}" in tpl
+    assert "{top_level_summary}" in tpl
+    assert "{selected_units}" in tpl
+
+
+def test_all_v2_yamls_in_creative_dir():
+    from pathlib import Path
+    expected = {"three_b_decompose", "three_b_follow_up", "three_b_adaptive_diverge", "three_b_commit"}
+    found = {p.stem for p in Path("backend/prompts/creative/").glob("three_b_*.yaml")}
+    assert expected.issubset(found)

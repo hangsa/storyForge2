@@ -223,3 +223,83 @@ class ThreeBEngine:
 
     def __init__(self, model_router=None) -> None:
         self._router = model_router
+
+    async def decompose(
+        self, project_id: str, raw_intent: RawIntent
+    ) -> tuple[list[DimensionDecomposition], str, str]:
+        """1 LLM call → (dimensions, causal_map, top_level_summary)."""
+        prompt_data = load_prompt_effective(DECOMPOSE_PROMPT)
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = prompt_data["user_prompt_template"].format(
+            prompt=raw_intent.prompt,
+            genre_primary=raw_intent.genre_primary,
+            genre_secondary=raw_intent.genre_secondary or "(无)",
+        )
+        response = await self._router.execute(
+            agent_name="three_b",
+            task_name="decompose",
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.7),
+            max_tokens=prompt_data.get("max_tokens", 8192),
+        )
+        raw_text = response.get("content", "")
+        dims, causal_map, summary = self._parse_decompose_output(raw_text)
+        now = _now_iso()
+        state = load_state(project_id) or ThreeBState(project_id=project_id)
+        # 清空下游(decompose 自身的 dimensions 字段会被覆盖)
+        state.dimensions = dims
+        state.causal_map = causal_map
+        state.top_level_summary = summary
+        state.raw_intent = raw_intent
+        state.decompose_started_at = now
+        state.decompose_completed_at = now
+        # 下游清空
+        for d in state.dimensions:
+            d.candidates = []
+            d.dimension_status = "decomposed"
+        state.diverge_started_at = None
+        state.diverge_completed_at = None
+        state.committed_concept = None
+        state.novelty_scores = None
+        state.commit_started_at = None
+        state.commit_completed_at = None
+        atomic_write_state(project_id, state)
+        return state.dimensions, state.causal_map, state.top_level_summary
+
+    def _parse_decompose_output(self, raw_text: str) -> tuple[list[DimensionDecomposition], str, str]:
+        try:
+            data = json.loads(raw_text)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"decompose: LLM 返回非 JSON: {e}") from e
+        if not isinstance(data, dict):
+            raise ValueError("decompose: LLM 输出不是 dict")
+        dims_raw = data.get("dimensions", [])
+        if len(dims_raw) != 5:
+            raise ValueError(f"decompose: LLM 返回 {len(dims_raw)} 维度,需 5")
+        dims: list[DimensionDecomposition] = []
+        for d in dims_raw:
+            dim_str = d.get("dimension", "")
+            try:
+                dim = Dimension(dim_str)
+            except ValueError as e:
+                raise ValueError(f"decompose: 未知 dimension '{dim_str}'") from e
+            units = [
+                Unit(
+                    id=_new_id("unit"),
+                    dimension=dim,
+                    unit_name=u.get("unit_name", "") or "",
+                    description=u.get("description", "") or "",
+                )
+                for u in d.get("units", [])
+                if isinstance(u, dict)
+            ]
+            dims.append(DimensionDecomposition(
+                dimension=dim,
+                insight=d.get("insight", "") or "",
+                units=units,
+                dimension_status="decomposed",
+            ))
+        causal_map = data.get("causal_map", "") or ""
+        top_level_summary = data.get("top_level_summary", "") or ""
+        return dims, causal_map, top_level_summary

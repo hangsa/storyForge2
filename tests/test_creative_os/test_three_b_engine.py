@@ -115,3 +115,100 @@ def test_migrate_passes_v2_state_through(tmp_path, monkeypatch):
     result = migrate_state_on_load("proj_test")
     assert result is not None
     assert result.schema_version == 2
+
+
+# ---- decompose ----
+
+@pytest.mark.asyncio
+async def test_decompose_returns_5_dimensions_with_insight_and_summary(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    mock_router.execute.return_value = {"content": json.dumps({
+        "dimensions": [
+            {"dimension": "ontology", "insight": "本土 vs 异域天道",
+             "units": [{"unit_name": "灵窍", "description": "能量接口"}, {"unit_name": "本源", "description": "底层储备"}]},
+            {"dimension": "energetics", "insight": "能量调谐",
+             "units": [{"unit_name": "修行", "description": "能量通道"}]},
+            {"dimension": "power_structure", "insight": "三要素",
+             "units": [{"unit_name": "资源控制", "description": "统治基础"}]},
+            {"dimension": "protagonist_engine", "insight": "跨世界信息",
+             "units": [{"unit_name": "穿越", "description": "跨世界迁移"}]},
+            {"dimension": "narrative_physics", "insight": "底层冲突",
+             "units": [{"unit_name": "核心矛盾", "description": "不可调和"}]},
+        ],
+        "causal_map": "ontology → energetics → power_structure → protagonist_engine → narrative_physics",
+        "top_level_summary": "这是一个穿越者在双规则天道下的觉醒与变革故事。",
+    }, ensure_ascii=False)}
+
+    intent = RawIntent(prompt="修仙", genre_primary="修仙")
+    result = await engine.decompose("proj_test", intent)
+    dimensions, causal_map, summary = result
+    assert len(dimensions) == 5
+    assert dimensions[0].dimension == DimLabel.ONTOLOGY
+    assert dimensions[0].insight == "本土 vs 异域天道"
+    assert dimensions[0].units[0].unit_name == "灵窍"
+    assert causal_map.startswith("ontology")
+    assert "觉醒与变革" in summary
+
+    # State should be persisted
+    state = load_state("proj_test")
+    assert state is not None
+    assert state.dimensions[0].insight == "本土 vs 异域天道"
+    assert state.causal_map.startswith("ontology")
+
+
+@pytest.mark.asyncio
+async def test_decompose_clears_downstream_state(tmp_path, monkeypatch, mock_router):
+    """Re-decomposing should clear candidates + committed_concept from prior runs."""
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    # Seed prior state
+    state = ThreeBState(
+        project_id="proj_test",
+        dimensions=[DimensionDecomposition(
+            dimension=DimLabel.ONTOLOGY, insight="旧",
+            units=[Unit(id="unit_old", dimension=DimLabel.ONTOLOGY, unit_name="旧", description="旧")],
+            candidates=[UnitCandidate(id="cand_old", unit_id="unit_old", unit_name="旧", description="x", chain_reaction="y", main_operator="distort")],
+            dimension_status="diverged",
+        )],
+        committed_concept={"one_line": "old"},
+    )
+    atomic_write_state("proj_test", state)
+
+    mock_router.execute.return_value = {"content": json.dumps({
+        "dimensions": [
+            {"dimension": "ontology", "insight": "新", "units": [{"unit_name": "新u", "description": "新d"}]},
+            {"dimension": "energetics", "insight": "新2", "units": []},
+            {"dimension": "power_structure", "insight": "新3", "units": []},
+            {"dimension": "protagonist_engine", "insight": "新4", "units": []},
+            {"dimension": "narrative_physics", "insight": "新5", "units": []},
+        ],
+        "causal_map": "new", "top_level_summary": "新总结",
+    }, ensure_ascii=False)}
+
+    await engine.decompose("proj_test", RawIntent(prompt="新", genre_primary="修仙"))
+    loaded = load_state("proj_test")
+    assert loaded.dimensions[0].insight == "新"
+    assert loaded.dimensions[0].candidates == []  # downstream cleared
+    assert loaded.committed_concept is None  # downstream cleared
+
+
+@pytest.mark.asyncio
+async def test_decompose_raises_on_invalid_json(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    mock_router.execute.return_value = {"content": "not json"}
+    with pytest.raises(Exception):
+        await engine.decompose("proj_test", RawIntent(prompt="x", genre_primary="y"))
+
+
+@pytest.mark.asyncio
+async def test_decompose_raises_when_less_than_5_dimensions(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    mock_router.execute.return_value = {"content": json.dumps({
+        "dimensions": [{"dimension": "ontology", "insight": "x", "units": []}],
+        "causal_map": "y", "top_level_summary": "z",
+    }, ensure_ascii=False)}
+    with pytest.raises(ValueError, match=r"维度"):
+        await engine.decompose("proj_test", RawIntent(prompt="x", genre_primary="y"))

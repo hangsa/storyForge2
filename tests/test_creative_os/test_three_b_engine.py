@@ -155,6 +155,10 @@ async def test_decompose_returns_5_dimensions_with_insight_and_summary(tmp_path,
     assert state is not None
     assert state.dimensions[0].insight == "本土 vs 异域天道"
     assert state.causal_map.startswith("ontology")
+    # started_at must be captured before LLM call so duration is non-zero
+    assert state.decompose_started_at != ""
+    assert state.decompose_completed_at != ""
+    assert state.decompose_started_at <= state.decompose_completed_at
 
 
 @pytest.mark.asyncio

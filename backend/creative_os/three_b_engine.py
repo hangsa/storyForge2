@@ -30,7 +30,6 @@ from backend.config import settings
 from backend.services.dimension_labels import Dimension  # noqa: F401  (re-exported)
 from backend.utils.file_manager import FileManager
 from backend.services.prompt_override_store import load_prompt_effective
-from backend.creative_os.novelty_evaluator import _parse_trope_tags
 
 
 def _file_manager() -> FileManager:
@@ -235,6 +234,7 @@ class ThreeBEngine:
             genre_primary=raw_intent.genre_primary,
             genre_secondary=raw_intent.genre_secondary or "(无)",
         )
+        started_at = _now_iso()
         response = await self._router.execute(
             agent_name="three_b",
             task_name="decompose",
@@ -245,15 +245,15 @@ class ThreeBEngine:
         )
         raw_text = response.get("content", "")
         dims, causal_map, summary = self._parse_decompose_output(raw_text)
-        now = _now_iso()
+        completed_at = _now_iso()
         state = load_state(project_id) or ThreeBState(project_id=project_id)
         # 清空下游(decompose 自身的 dimensions 字段会被覆盖)
         state.dimensions = dims
         state.causal_map = causal_map
         state.top_level_summary = summary
         state.raw_intent = raw_intent
-        state.decompose_started_at = now
-        state.decompose_completed_at = now
+        state.decompose_started_at = started_at
+        state.decompose_completed_at = completed_at
         # 下游清空
         for d in state.dimensions:
             d.candidates = []

@@ -1,38 +1,32 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import StepIndicator from "@/components/wizard/divergence_v2/StepIndicator";
-import type { SubStage } from "@/components/wizard/divergence_v2/types";
+import { StepIndicator } from "@/components/wizard/divergence_v2/StepIndicator";
 
-describe("StepIndicator (3B)", () => {
-  it("renders 3 stages", () => {
-    render(
-      <StepIndicator
-        current="1"
-        completed={[]}
-        onJump={() => {}}
-      />,
-    );
-    // Text is broken across nodes by `{s.key}. {s.label}` JSX, so use
-    // a function matcher (Testing Library recommended pattern for split text).
-    expect(screen.getByText((_, el) => el?.tagName === "BUTTON" && /输入灵感/.test(el.textContent ?? ""))).toBeTruthy();
-    expect(screen.getByText((_, el) => el?.tagName === "BUTTON" && /3B 发散/.test(el.textContent ?? ""))).toBeTruthy();
-    expect(screen.getByText((_, el) => el?.tagName === "BUTTON" && /深化提交/.test(el.textContent ?? ""))).toBeTruthy();
+describe("StepIndicator (4 stages)", () => {
+  it("renders 4 stage buttons", () => {
+    render(<StepIndicator current="1" completed={[]} onStageClick={vi.fn()} />);
+    expect(screen.getByTestId("step-indicator-1")).toBeInTheDocument();
+    expect(screen.getByTestId("step-indicator-2")).toBeInTheDocument();
+    expect(screen.getByTestId("step-indicator-3")).toBeInTheDocument();
+    expect(screen.getByTestId("step-indicator-4")).toBeInTheDocument();
   });
 
-  it("invokes onJump for completed stages only", () => {
-    const onJump = vi.fn();
-    render(
-      <StepIndicator
-        current="2"
-        completed={["1"]}
-        onJump={onJump}
-      />,
-    );
-    fireEvent.click(screen.getByText((_, el) => el?.tagName === "BUTTON" && /输入灵感/.test(el.textContent ?? "")));
-    expect(onJump).toHaveBeenCalledWith("1");
+  it("completed stages are clickable", () => {
+    const onClick = vi.fn();
+    render(<StepIndicator current="3" completed={["1", "2", "3"]} onStageClick={onClick} />);
+    fireEvent.click(screen.getByTestId("step-indicator-1"));
+    expect(onClick).toHaveBeenCalledWith("1");
+  });
 
-    onJump.mockReset();
-    fireEvent.click(screen.getByText((_, el) => el?.tagName === "BUTTON" && /深化提交/.test(el.textContent ?? "")));
-    expect(onJump).not.toHaveBeenCalled();
+  it("current stage is not clickable", () => {
+    const onClick = vi.fn();
+    render(<StepIndicator current="3" completed={["1", "2", "3"]} onStageClick={onClick} />);
+    fireEvent.click(screen.getByTestId("step-indicator-3"));
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("uncompleted stages are disabled", () => {
+    render(<StepIndicator current="1" completed={[]} onStageClick={vi.fn()} />);
+    expect(screen.getByTestId("step-indicator-4")).toBeDisabled();
   });
 });

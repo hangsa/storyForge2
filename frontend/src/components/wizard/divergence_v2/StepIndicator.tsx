@@ -1,47 +1,48 @@
-import { SUB_STAGES, type SubStage } from "./types";
+import React from "react";
+import type { SubStage } from "./types";
+
+const STAGES: { key: SubStage; label: string }[] = [
+  { key: "1", label: "1. 输入灵感" },
+  { key: "2", label: "2. 第一性拆解" },
+  { key: "3", label: "3. 自适应发散" },
+  { key: "4", label: "4. 提交" },
+];
 
 interface Props {
   current: SubStage;
   completed: SubStage[];
-  onJump: (stage: SubStage) => void;
+  onStageClick: (stage: SubStage) => void;
 }
 
-export default function StepIndicator({ current, completed, onJump }: Props) {
+export function StepIndicator({ current, completed, onStageClick }: Props) {
   return (
-    <div className="px-6 py-3 border-b border-outline-variant">
-      <nav
-        aria-label="3B 三阶段"
-        className="flex items-center gap-2 text-sm"
-        data-testid="step-indicator"
-      >
-        {SUB_STAGES.map((s, i) => {
-          const isCurrent = s.key === current;
-          const isCompleted = completed.includes(s.key);
-          const clickable = isCompleted && !isCurrent;
-          const chipClass = isCurrent
-            ? "bg-primary text-on-primary rounded-full text-sm font-medium"
-            : isCompleted
-            ? "bg-surface-container text-primary hover:bg-surface-container-low rounded-full text-sm"
-            : "bg-surface-container-lowest text-on-surface-variant opacity-50 cursor-not-allowed rounded-full text-sm";
-          return (
-            <div key={s.key} className="flex items-center gap-2">
-              {i > 0 && (
-                <span className="text-outline-variant" aria-hidden="true">
-                  ›
-                </span>
-              )}
-              <button
-                type="button"
-                disabled={!clickable}
-                onClick={() => clickable && onJump(s.key)}
-                className={`px-3 py-1 transition-colors ${chipClass}`}
-              >
-                {i + 1}. {s.label}
-              </button>
-            </div>
-          );
-        })}
-      </nav>
+    <div className="flex items-center gap-2 mb-6">
+      {STAGES.map((s, idx) => {
+        const isCurrent = current === s.key;
+        const isCompleted = completed.includes(s.key);
+        const canJump = isCompleted && !isCurrent;
+        return (
+          <React.Fragment key={s.key}>
+            <button
+              type="button"
+              disabled={!canJump}
+              onClick={() => onStageClick(s.key)}
+              className={[
+                "px-3 py-1.5 rounded text-sm transition-colors",
+                isCurrent
+                  ? "bg-blue-600 text-white"
+                  : isCompleted
+                    ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
+                    : "bg-gray-100 text-gray-400 cursor-not-allowed",
+              ].join(" ")}
+              data-testid={`step-indicator-${s.key}`}
+            >
+              {s.label}
+            </button>
+            {idx < STAGES.length - 1 && <span className="text-gray-300">›</span>}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }

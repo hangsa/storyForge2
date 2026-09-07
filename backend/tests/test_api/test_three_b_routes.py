@@ -650,11 +650,11 @@ def test_commit_happy_path(mock_router):
         "edited_by_user": False,
     }
     novelty = {
-        "total": 0.62,
-        "market_saturation_score": 0.7,
-        "trope_similarity_score": 0.5,
-        "contradiction_depth_score": 0.65,
-        "discussion_potential_score": 0.6,
+        "composite": 0.62,
+        "market_saturation": 0.7,
+        "trope_similarity": 0.5,
+        "contradiction_depth": 0.65,
+        "discussion_potential": 0.6,
         "grade": "B",
     }
 
@@ -668,7 +668,7 @@ def test_commit_happy_path(mock_router):
     assert resp.status_code == 200
     data = resp.json()
     assert data["committed_concept"]["one_line"] == "一句话"
-    assert data["novelty_scores"]["total"] == 0.62
+    assert data["novelty_scores"]["composite"] == 0.62
 
 
 def test_commit_422_on_value_error(mock_router):

@@ -611,11 +611,11 @@ class ThreeBEngine:
         evaluator = self._build_novelty_evaluator(project_id)
         novelty = evaluator.evaluate(state.committed_concept)
         state.novelty_scores = {
-            "total": novelty.total,
-            "market_saturation_score": novelty.market_saturation_score,
-            "trope_similarity_score": novelty.trope_similarity_score,
-            "contradiction_depth_score": novelty.contradiction_depth_score,
-            "discussion_potential_score": novelty.discussion_potential_score,
+            "composite": novelty.total,
+            "market_saturation": novelty.market_saturation_score,
+            "trope_similarity": novelty.trope_similarity_score,
+            "contradiction_depth": novelty.contradiction_depth_score,
+            "discussion_potential": novelty.discussion_potential_score,
             "grade": novelty.grade,
         }
         state.commit_completed_at = _now_iso()

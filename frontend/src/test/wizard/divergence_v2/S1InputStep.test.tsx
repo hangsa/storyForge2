@@ -1,17 +1,10 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import S1InputStep from "@/components/wizard/divergence_v2/S1InputStep";
-import api from "@/api/client";
 
 vi.mock("@/api/client", () => ({
   __esModule: true,
   default: {
-    postThreeBDiverge: vi.fn(),
-    postThreeBDeepen: vi.fn(),
-    postThreeBCommit: vi.fn(),
-    postThreeBRegenerateCandidate: vi.fn(),
-    getThreeBState: vi.fn(),
-    deleteThreeBState: vi.fn(),
     listGenres: vi.fn().mockResolvedValue([]),
   },
 }));
@@ -48,9 +41,7 @@ describe("S1InputStep", () => {
     expect(btn).toBeDisabled();
   });
 
-  it("calls api.postThreeBDiverge on submit", async () => {
-    (api.postThreeBDiverge as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({ candidates: [], by_operator: {} });
+  it("emits RawIntent via onSubmitted on submit (no API call)", async () => {
     const onSubmitted = vi.fn();
     render(
       <S1InputStep
@@ -67,12 +58,11 @@ describe("S1InputStep", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /开始 3B 发散/i }));
     await waitFor(() => {
-      expect(api.postThreeBDiverge).toHaveBeenCalledWith("p1", {
+      expect(onSubmitted).toHaveBeenCalledWith({
         prompt: "足够长的原始灵感点子",
         genre_primary: "玄幻",
         genre_secondary: null,
       });
     });
-    expect(onSubmitted).toHaveBeenCalled();
   });
 });

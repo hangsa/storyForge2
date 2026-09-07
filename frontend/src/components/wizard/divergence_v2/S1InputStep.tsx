@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
-import api from "@/api/client";
 import { useGenres } from "@/hooks/useGenres";
 import { DropdownSelect, PrimaryButton } from "@/components/ds";
-import type { DivergeResponse, RawIntent } from "./types";
+import type { RawIntent } from "./types";
 
 interface Props {
   projectId: string;
   initial: RawIntent | null;
-  onSubmitted: (intent: RawIntent, divergeResp: DivergeResponse) => void;
+  onSubmitted: (intent: RawIntent) => void;
 }
 
 const NO_SECONDARY = "__none__";
@@ -39,11 +38,10 @@ export default function S1InputStep({ projectId, initial, onSubmitted }: Props) 
       const intent: RawIntent = {
         prompt,
         genre_primary: genrePrimary,
-        genre_secondary:
-          genreSecondary === NO_SECONDARY ? null : genreSecondary,
+        genre_secondary: genreSecondary === NO_SECONDARY ? null : genreSecondary,
       };
-      const resp = await api.postThreeBDiverge(projectId, intent);
-      onSubmitted(intent, resp);
+      // 父级 orchestrator 负责触发 /decompose + /diverge
+      onSubmitted(intent);
     } finally {
       setSubmitting(false);
     }
@@ -127,7 +125,6 @@ export default function S1InputStep({ projectId, initial, onSubmitted }: Props) 
       <div className="flex justify-end">
         <PrimaryButton
           label={submitting ? "发散中…" : "开始 3B 发散"}
-          icon={submitting ? undefined : "auto_awesome"}
           loading={submitting}
           disabled={!valid}
           onClick={handleSubmit}

@@ -18,12 +18,19 @@ system_prompt: |
     "logline": "≤80 字,影视 logline 风格的故事简介"
   }}
 
+  ## selected_units 输入格式
+  selected_units 是一个 bullet list,每个条目形如:
+  - [dimension] unit_name: description
+    连锁推演: <chain_reaction>
+
+  请将其作为故事骨架的多个有机组成,综合为统一的概念。
+
   ## 合成原则
   - one_line 应直击用户原始创意的核心意图(与 top_level_summary 对齐)
   - core_tension 应从 causal_map 中提炼最核心的因果冲突
   - tone 应与用户主类型(genre_primary)匹配
   - logline 应能独立成句,作为下游 stage2_world_char 的种子
-  - 未参与的 unit([unit X 未参与])不写入 concept,但保持因果合理性
+  - 未参与的 unit([unit <id> 未参与])不写入 concept,但保持因果合理性
 
   {negative_constraints}
 

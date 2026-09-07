@@ -75,7 +75,7 @@ export default function S3DivergeStep({
                     <>
                       <div className="text-xs text-on-surface-variant">
                         算子: {OPERATOR_LABELS[unitCandidates[selectedIdx]?.main_operator ?? "distort"]}
-                        {unitCandidates[selectedIdx]?.aux_operator && ` · ${OPERATOR_LABELS[unitCandidates[selectedIdx]!.aux_operator!]}`}
+                        {unitCandidates[selectedIdx]?.aux_operator && ` · ${OPERATOR_LABELS[unitCandidates[selectedIdx]?.aux_operator ?? "distort"]}`}
                       </div>
                       <div className="space-y-1">
                         {unitCandidates.map((c) => (

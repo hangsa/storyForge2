@@ -60,4 +60,22 @@ describe("S3DivergeStep", () => {
     fireEvent.click(screen.getByText("全部重新生成"));
     expect(onAll).toHaveBeenCalled();
   });
+
+  it("renders safely when no candidate has selection_rank 0 (no crash)", () => {
+    const noSelection: DimensionDecomposition[] = [
+      {
+        dimension: "ontology",
+        insight: "",
+        units: [{ id: "u1", dimension: "ontology", unit_name: "灵窍", description: "d", follow_up_count: 0, is_irreducible: false }],
+        candidates: [
+          { id: "c1", unit_id: "u1", unit_name: "灵窍", description: "A", chain_reaction: "chain A", main_operator: "distort", aux_operator: null, selection_rank: 5 },
+          { id: "c2", unit_id: "u1", unit_name: "灵窍", description: "B", chain_reaction: "chain B", main_operator: "break", aux_operator: "blend", selection_rank: 7 },
+        ],
+        dimension_status: "diverged",
+      },
+    ];
+    expect(() =>
+      render(<S3DivergeStep dimensions={noSelection} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />),
+    ).not.toThrow();
+  });
 });

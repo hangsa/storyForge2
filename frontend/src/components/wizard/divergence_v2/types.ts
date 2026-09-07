@@ -80,3 +80,10 @@ export interface ThreeBState {
 
 // UI 辅助类型
 export type SubStage = "1" | "2" | "3" | "4";
+
+// StepIndicator 在 Task 16 改写为 4 阶段时同步更新
+export const SUB_STAGES: Array<{ key: SubStage; label: string }> = [
+  { key: "1", label: "输入灵感" },
+  { key: "2", label: "3B 发散" },
+  { key: "3", label: "深化提交" },
+];

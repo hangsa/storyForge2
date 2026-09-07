@@ -348,6 +348,124 @@ class ThreeBEngine:
         atomic_write_state(project_id, state)
         return target
 
+    async def diverge(self, project_id: str) -> list[DimensionDecomposition]:
+        """对所有 units 并行调用自适应发散。N units × 1 LLM, asyncio.gather + Semaphore(5)。"""
+        state = load_state(project_id)
+        if state is None or not state.dimensions:
+            raise ValueError(f"项目 {project_id} 未拆解")
+
+        all_units = [(d, u) for d in state.dimensions for u in d.units]
+        if not all_units:
+            raise ValueError("无 units 可发散")
+
+        sem = asyncio.Semaphore(DIVERGE_CONCURRENCY)
+
+        async def _diverge_unit(dim: DimensionDecomposition, unit: Unit) -> list[UnitCandidate]:
+            async with sem:
+                return await self._diverge_single_unit(state.raw_intent, dim, unit)
+
+        started_at = _now_iso()
+        tasks = [_diverge_unit(d, u) for d, u in all_units]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        completed_at = _now_iso()
+
+        # 全部失败检查(写盘前,失败时不落任何状态)
+        if all(isinstance(res, BaseException) or not res for res in results):
+            raise RuntimeError("全部 unit 发散失败")
+
+        # 组装 candidates 到对应 dimension(整轮重跑 → 先清空,避免重复累积)
+        for dim in state.dimensions:
+            dim.candidates = []
+        for (dim, unit), res in zip(all_units, results):
+            if isinstance(res, BaseException):
+                logger.warning("diverge unit %s failed: %s", unit.id, res)
+                continue
+            dim.candidates.extend(res)
+
+        # dimension_status 推算:该维度所有 unit 的 candidates 汇总
+        for dim in state.dimensions:
+            dim.dimension_status = "diverged" if dim.candidates else "divergence_failed"
+
+        state.diverge_started_at = started_at
+        state.diverge_completed_at = completed_at
+        # 下游清空
+        state.committed_concept = None
+        state.novelty_scores = None
+        state.commit_started_at = None
+        state.commit_completed_at = None
+        atomic_write_state(project_id, state)
+        return state.dimensions
+
+    async def _diverge_single_unit(
+        self, raw_intent: Optional[RawIntent], dim: DimensionDecomposition, unit: Unit
+    ) -> list[UnitCandidate]:
+        if raw_intent is None:
+            return []
+        prompt_data = load_prompt_effective(ADAPTIVE_DIVERGE_PROMPT)
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = prompt_data["user_prompt_template"].format(
+            prompt=raw_intent.prompt,
+            genre_primary=raw_intent.genre_primary,
+            genre_secondary=raw_intent.genre_secondary or "(无)",
+            dimension=dim.dimension.value,
+            unit_name=unit.unit_name,
+            unit_description=unit.description,
+        )
+        response = await self._router.execute(
+            agent_name="three_b",
+            task_name="diverge_unit",
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.9),
+            max_tokens=prompt_data.get("max_tokens", 4096),
+        )
+        return self._parse_adaptive_diverge_output(response.get("content", ""), unit)
+
+    def _parse_adaptive_diverge_output(self, raw_text: str, unit: Unit) -> list[UnitCandidate]:
+        """Parse per-unit divergence output. Degrades to [] instead of raising."""
+        try:
+            data = json.loads(raw_text)
+        except json.JSONDecodeError:
+            logger.warning("adaptive_diverge returned non-JSON for unit %s", unit.id)
+            return []
+        cands_raw = data.get("candidates", []) if isinstance(data, dict) else data
+        if not isinstance(cands_raw, list):
+            return []
+        out: list[UnitCandidate] = []
+        for c in cands_raw:
+            if not isinstance(c, dict):
+                continue
+            main_op = c.get("main_operator", "")
+            if main_op not in OPERATORS:
+                logger.warning(
+                    "adaptive_diverge: unit %s candidate has bad main_operator %r, skipped",
+                    unit.id, main_op,
+                )
+                continue
+            if "chain_reaction" not in c:
+                logger.warning(
+                    "adaptive_diverge: unit %s candidate missing chain_reaction, skipped", unit.id
+                )
+                continue
+            aux = c.get("aux_operator")
+            if aux is not None and aux not in OPERATORS:
+                aux = None
+            try:
+                rank = int(c.get("selection_rank", 0))
+            except (TypeError, ValueError):
+                rank = 0
+            out.append(UnitCandidate(
+                id=_new_id("cand"),
+                unit_id=unit.id,
+                unit_name=unit.unit_name,
+                description=c.get("description", "") or "",
+                chain_reaction=c.get("chain_reaction", "") or "",
+                main_operator=main_op,
+                aux_operator=aux,
+                selection_rank=rank,
+            ))
+        return out
+
     def _find_unit(self, state: ThreeBState, unit_id: str) -> Optional[Unit]:
         for d in state.dimensions:
             for u in d.units:

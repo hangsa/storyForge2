@@ -305,3 +305,152 @@ async def test_follow_up_unit_raises_on_invalid_json(tmp_path, monkeypatch, mock
     mock_router.execute.return_value = {"content": "not json"}
     with pytest.raises(ValueError, match=r"非 JSON"):
         await engine.follow_up_unit("proj_test", "unit_abc", user_question=None)
+
+
+# ---- engine.diverge ----
+
+@pytest.mark.asyncio
+async def test_diverge_runs_one_llm_per_unit_in_parallel(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    units = [
+        Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}")
+        for i in range(3)
+    ]
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
+        dimensions=[
+            DimensionDecomposition(dimension=DimLabel.ONTOLOGY, insight="i", units=units),
+        ],
+    )
+    atomic_write_state("proj_test", state)
+
+    async def fake_execute(*args, **kwargs):
+        return {"content": json.dumps({
+            "candidates": [
+                {"description": f"v{i}", "chain_reaction": f"cr{i}", "main_operator": "distort", "selection_rank": i}
+                for i in range(2)
+            ],
+        }, ensure_ascii=False)}
+    mock_router.execute.side_effect = fake_execute
+
+    dims = await engine.diverge("proj_test")
+    assert len(dims) == 1
+    assert mock_router.execute.call_count == 3  # per-unit LLM 调用
+    assert dims[0].dimension_status == "diverged"
+    # 每个 unit 2 候选
+    for unit in units:
+        cands = [c for c in dims[0].candidates if c.unit_id == unit.id]
+        assert len(cands) == 2
+        assert cands[0].unit_name == unit.unit_name
+
+    reloaded = load_state("proj_test")
+    assert len(reloaded.dimensions[0].candidates) == 6
+    assert reloaded.diverge_started_at is not None
+    assert reloaded.diverge_completed_at is not None
+    assert reloaded.diverge_started_at <= reloaded.diverge_completed_at
+
+
+@pytest.mark.asyncio
+async def test_diverge_degrades_per_unit_on_failure(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(3)]
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
+        dimensions=[DimensionDecomposition(
+            dimension=DimLabel.ONTOLOGY, insight="i", units=units,
+        )],
+    )
+    atomic_write_state("proj_test", state)
+
+    async def fake_execute(*args, **kwargs):
+        # unit_0 的 unit_name 是 "u0",出现在 user message 里
+        user_msg = kwargs.get("messages", [{}, {}])[1].get("content", "")
+        if "单元描述: d0" in user_msg:
+            raise RuntimeError("LLM 超时")
+        return {"content": json.dumps({"candidates": [
+            {"description": "v", "chain_reaction": "cr", "main_operator": "distort", "selection_rank": 0},
+        ]})}
+    mock_router.execute.side_effect = fake_execute
+
+    dims = await engine.diverge("proj_test")
+    cands_per_unit = {c.unit_id: c for u in units for c in dims[0].candidates if c.unit_id == u.id}
+    assert "unit_0" not in cands_per_unit  # unit_0 失败,candidates 空
+    assert "unit_1" in cands_per_unit
+    assert "unit_2" in cands_per_unit
+    assert dims[0].dimension_status == "diverged"  # 部分成功仍算 diverged
+
+
+@pytest.mark.asyncio
+async def test_diverge_clears_committed_concept(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
+        committed_concept={"one_line": "old"},
+        novelty_scores={"total": 0.8},
+        commit_started_at="2026-09-01T00:00:00+00:00",
+        commit_completed_at="2026-09-01T00:01:00+00:00",
+        dimensions=[DimensionDecomposition(
+            dimension=DimLabel.ONTOLOGY, insight="i",
+            units=[Unit(id="unit_1", dimension=DimLabel.ONTOLOGY, unit_name="u", description="d")],
+        )],
+    )
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": json.dumps({"candidates": [{"description": "v", "chain_reaction": "cr", "main_operator": "distort", "selection_rank": 0}]})}
+    await engine.diverge("proj_test")
+    reloaded = load_state("proj_test")
+    assert reloaded.committed_concept is None
+    assert reloaded.novelty_scores is None
+    assert reloaded.commit_started_at is None
+    assert reloaded.commit_completed_at is None
+
+
+@pytest.mark.asyncio
+async def test_diverge_raises_when_all_units_fail(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(2)]
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
+        dimensions=[DimensionDecomposition(
+            dimension=DimLabel.ONTOLOGY, insight="i", units=units,
+        )],
+    )
+    atomic_write_state("proj_test", state)
+    mock_router.execute.side_effect = RuntimeError("全部失败")
+    with pytest.raises(RuntimeError, match="全部"):
+        await engine.diverge("proj_test")
+    # 失败不应写盘(committed 之前的状态保持)
+    reloaded = load_state("proj_test")
+    assert reloaded.dimensions[0].candidates == []
+    assert reloaded.diverge_completed_at is None
+
+
+@pytest.mark.asyncio
+async def test_diverge_rerun_replaces_candidates_not_appends(tmp_path, monkeypatch, mock_router):
+    """整轮重跑 diverge 应替换 candidates,而非累积。"""
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
+        dimensions=[DimensionDecomposition(
+            dimension=DimLabel.ONTOLOGY, insight="i",
+            units=[Unit(id="unit_1", dimension=DimLabel.ONTOLOGY, unit_name="u", description="d")],
+        )],
+    )
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": json.dumps({"candidates": [
+        {"description": "v", "chain_reaction": "cr", "main_operator": "distort", "selection_rank": 0},
+        {"description": "v2", "chain_reaction": "cr2", "main_operator": "break", "selection_rank": 1},
+    ]})}
+    await engine.diverge("proj_test")
+    dims = await engine.diverge("proj_test")
+    assert len(dims[0].candidates) == 2  # not 4
+    assert len(load_state("proj_test").dimensions[0].candidates) == 2

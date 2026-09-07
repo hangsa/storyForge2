@@ -143,6 +143,17 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:6]}"
 
 
+def _parse_json_or_raise(raw_text: str, op: str) -> dict:
+    """Parse LLM JSON output; raise engine-friendly ValueError on failure."""
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{op}: LLM 返回非 JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(f"{op}: LLM 输出不是 dict")
+    return data
+
+
 def atomic_write_state(project_id: str, state: ThreeBState) -> None:
     """Atomic write via .tmp + rename."""
     path = _state_path(project_id)
@@ -268,12 +279,7 @@ class ThreeBEngine:
         return state.dimensions, state.causal_map, state.top_level_summary
 
     def _parse_decompose_output(self, raw_text: str) -> tuple[list[DimensionDecomposition], str, str]:
-        try:
-            data = json.loads(raw_text)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"decompose: LLM 返回非 JSON: {e}") from e
-        if not isinstance(data, dict):
-            raise ValueError("decompose: LLM 输出不是 dict")
+        data = _parse_json_or_raise(raw_text, "decompose")
         dims_raw = data.get("dimensions", [])
         if len(dims_raw) != 5:
             raise ValueError(f"decompose: LLM 返回 {len(dims_raw)} 维度,需 5")
@@ -332,7 +338,7 @@ class ThreeBEngine:
             temperature=prompt_data.get("temperature", 0.7),
             max_tokens=prompt_data.get("max_tokens", 2048),
         )
-        raw = json.loads(response.get("content", ""))
+        raw = _parse_json_or_raise(response.get("content", ""), "follow_up_unit")
         target.description = raw.get("description", target.description) or target.description
         if raw.get("unit_name"):
             target.unit_name = raw["unit_name"]

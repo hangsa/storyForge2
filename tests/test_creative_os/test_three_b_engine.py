@@ -272,6 +272,8 @@ async def test_follow_up_unit_rejects_irreducible(tmp_path, monkeypatch, mock_ro
     atomic_write_state("proj_test", state)
     with pytest.raises(ValueError, match="不可约化"):
         await engine.follow_up_unit("proj_test", "unit_abc", user_question="x")
+    reloaded = load_state("proj_test")
+    assert reloaded.dimensions[0].units[0].follow_up_count == 0  # rejected call must not mutate state
 
 
 @pytest.mark.asyncio
@@ -286,3 +288,20 @@ async def test_follow_up_unit_preserves_is_irreducible_flag(tmp_path, monkeypatc
     mock_router.execute.return_value = {"content": json.dumps({"unit_name": "x", "description": "d2", "is_irreducible": True})}
     unit = await engine.follow_up_unit("proj_test", "unit_abc", user_question="x")
     assert unit.is_irreducible is True
+    reloaded = load_state("proj_test")
+    assert reloaded.dimensions[0].units[0].is_irreducible is True  # persisted
+
+
+@pytest.mark.asyncio
+async def test_follow_up_unit_raises_on_invalid_json(tmp_path, monkeypatch, mock_router):
+    """Non-JSON LLM response should raise engine-friendly ValueError (not raw json.JSONDecodeError)."""
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+        dimension=DimLabel.ONTOLOGY, insight="i",
+        units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="x", description="d")],
+    )])
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": "not json"}
+    with pytest.raises(ValueError, match=r"非 JSON"):
+        await engine.follow_up_unit("proj_test", "unit_abc", user_question=None)

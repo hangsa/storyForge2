@@ -7,6 +7,7 @@ import type {
   CommittedConcept,
   NoveltyScores,
   SubStage,
+  RawIntent,
 } from "./types";
 
 interface State {
@@ -37,7 +38,9 @@ type Action =
   | { type: "DIVERGE_SUCCESS"; dimensions: DimensionDecomposition[] }
   | { type: "DIVERGE_ERROR"; message: string }
   | { type: "REGENERATE_UNIT_SUCCESS"; dimension: DimensionDecomposition }
+  | { type: "REGENERATE_UNIT_ERROR"; message: string }
   | { type: "SELECT_UNIT_CANDIDATE"; unitId: string; candidateIndex: number; dimension: DimensionDecomposition }
+  | { type: "SELECT_UNIT_ERROR"; message: string }
   | { type: "COMMIT_START" }
   | { type: "COMMIT_SUCCESS"; committedConcept: CommittedConcept; noveltyScores: NoveltyScores }
   | { type: "COMMIT_ERROR"; message: string }
@@ -140,13 +143,26 @@ function reducer(state: State, action: Action): State {
           d.dimension === action.dimension.dimension ? action.dimension : d,
         ),
       };
-    case "SELECT_UNIT_CANDIDATE":
+    case "REGENERATE_UNIT_ERROR":
+      return { ...state, error: action.message };
+    case "SELECT_UNIT_CANDIDATE": {
+      const matchesUnit = state.dimensions.some((d) =>
+        d.units.some((u) => u.id === action.unitId),
+      );
+      if (!matchesUnit) return state;
+      const expectedDimension = state.dimensions.find((d) =>
+        d.units.some((u) => u.id === action.unitId),
+      )?.dimension;
+      if (action.dimension.dimension !== expectedDimension) return state;
       return {
         ...state,
         dimensions: state.dimensions.map((d) =>
           d.dimension === action.dimension.dimension ? action.dimension : d,
         ),
       };
+    }
+    case "SELECT_UNIT_ERROR":
+      return { ...state, error: action.message };
     case "COMMIT_SUCCESS":
       return {
         ...state,
@@ -257,7 +273,7 @@ export function useThreeBDivergence(projectId: string) {
           dispatch({ type: "REGENERATE_UNIT_SUCCESS", dimension: updatedDim });
         }
       } catch (e: any) {
-        dispatch({ type: "DIVERGE_ERROR", message: e.message });
+        dispatch({ type: "REGENERATE_UNIT_ERROR", message: e.message });
       }
     },
     [projectId, state.dimensions],
@@ -274,7 +290,7 @@ export function useThreeBDivergence(projectId: string) {
           dimension: r.dimension,
         });
       } catch (e: any) {
-        dispatch({ type: "DIVERGE_ERROR", message: e.message });
+        dispatch({ type: "SELECT_UNIT_ERROR", message: e.message });
       }
     },
     [projectId],

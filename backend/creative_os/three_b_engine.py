@@ -638,6 +638,48 @@ class ThreeBEngine:
         atomic_write_state(project_id, state)
         return {"committed_concept": state.committed_concept}
 
+    async def advance(self, project_id: str) -> dict:
+        """写盘:若 committed_concept 为 null 先 commit;否则直接写。"""
+        state = load_state(project_id)
+        if state is None:
+            raise ValueError(f"项目 {project_id} 无 state")
+        if state.committed_concept is None:
+            await self.commit(project_id)
+            state = load_state(project_id)
+        # 写 concept_and_dna.json
+        concept = {k: v for k, v in state.committed_concept.items() if k != "edited_by_user"}
+        dna_payload = {
+            "concept": concept,
+            "story_dna": {
+                "core_contradiction": {"statement": state.committed_concept["core_tension"]},
+                "value_stack": [],
+                "tone": state.committed_concept["tone"],
+            },
+            "novelty_scores": state.novelty_scores,
+            "source": "creative_divergence",
+            "three_b_snapshot": {
+                "schema_version": 2,
+                "committed_at": state.commit_completed_at or _now_iso(),
+            },
+        }
+        dna_path = Path(settings.projects_dir) / project_id / "concept_and_dna.json"
+        dna_path.parent.mkdir(parents=True, exist_ok=True)
+        dna_path.write_text(json.dumps(dna_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        # 写 creative_divergence.json(compat)
+        intent = state.raw_intent
+        div_payload = {
+            "prompt": (intent.prompt if intent else "")[:1700],
+            "variants": [],
+            "selected_id": None,
+            "selected_at": _now_iso(),
+            "source": "creative_divergence",
+        }
+        div_path = Path(settings.projects_dir) / project_id / "creative_divergence.json"
+        div_path.write_text(json.dumps(div_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        return {"written": True, "committed_at": dna_payload["three_b_snapshot"]["committed_at"]}
+
     def _build_commit_user_prompt(
         self, user_prompt_template: str, state: ThreeBState
     ) -> str:

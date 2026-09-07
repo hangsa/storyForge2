@@ -700,3 +700,77 @@ async def test_edit_committed_concept_rejects_when_no_concept(tmp_path, monkeypa
     atomic_write_state("proj_test", state)
     with pytest.raises(ValueError, match="未提交"):
         await engine.edit_committed_concept("proj_test", {"one_line": "x"})
+
+
+# ---- Task 9: engine.advance ----
+
+@pytest.mark.asyncio
+async def test_advance_writes_concept_and_dna_and_divergence(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
+        committed_concept={"one_line": "x", "expanded": "y", "core_tension": "z", "tone": "w", "logline": "v", "edited_by_user": False},
+        novelty_scores={"composite": 60, "grade": "B+"},
+    )
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": json.dumps({"one_line": "x", "expanded": "y", "core_tension": "z", "tone": "w", "logline": "v"})}
+
+    result = await engine.advance("proj_test")
+    assert result["written"] is True
+    assert "committed_at" in result
+
+    # concept_and_dna.json
+    dna_path = tmp_path / "proj_test" / "concept_and_dna.json"
+    assert dna_path.exists()
+    dna = json.loads(dna_path.read_text(encoding="utf-8"))
+    assert dna["concept"]["one_line"] == "x"
+    assert dna["story_dna"]["tone"] == "w"
+    assert dna["novelty_scores"]["grade"] == "B+"
+    assert dna["three_b_snapshot"]["schema_version"] == 2
+
+    # creative_divergence.json
+    div_path = tmp_path / "proj_test" / "creative_divergence.json"
+    assert div_path.exists()
+    div = json.loads(div_path.read_text(encoding="utf-8"))
+    assert div["source"] == "creative_divergence"
+    assert "修仙" in div["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_advance_calls_commit_when_no_concept(tmp_path, monkeypatch, mock_router, fake_novelty_evaluator):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
+    # 设 state 但 committed_concept = None + 充分 units 有候选
+    units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(5)]
+    candidates = [
+        UnitCandidate(id=f"cand_{i}", unit_id=f"unit_{i}", unit_name=f"u{i}", description=f"cd{i}",
+                      chain_reaction=f"cr{i}", main_operator="distort", selection_rank=0)
+        for i in range(5)
+    ]
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="x", genre_primary="y"),
+        dimensions=[DimensionDecomposition(dimension=DimLabel.ONTOLOGY, insight="i", units=units, candidates=candidates)],
+    )
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": json.dumps({"one_line": "auto", "expanded": "auto", "core_tension": "auto", "tone": "auto", "logline": "auto"})}
+
+    await engine.advance("proj_test")
+    reloaded = load_state("proj_test")
+    assert reloaded.committed_concept["one_line"] == "auto"
+    assert (tmp_path / "proj_test" / "concept_and_dna.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_advance_is_idempotent(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(project_id="proj_test", committed_concept={"one_line": "x", "expanded": "y", "core_tension": "z", "tone": "w", "logline": "v", "edited_by_user": False})
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": json.dumps({"one_line": "x"})}  # 不该被调用
+    await engine.advance("proj_test")
+    await engine.advance("proj_test")  # 第二次
+    # mock_router.execute 应只调用 0 次(committed_concept 已存在)
+    assert mock_router.execute.call_count == 0

@@ -303,3 +303,48 @@ class ThreeBEngine:
         causal_map = data.get("causal_map", "") or ""
         top_level_summary = data.get("top_level_summary", "") or ""
         return dims, causal_map, top_level_summary
+
+    async def follow_up_unit(
+        self, project_id: str, unit_id: str, user_question: Optional[str]
+    ) -> Unit:
+        """LLM 原地替换 description,记录 follow_up_count。"""
+        state = load_state(project_id)
+        if state is None:
+            raise ValueError(f"项目 {project_id} 未拆解")
+        target = self._find_unit(state, unit_id)
+        if target is None:
+            raise ValueError(f"unit {unit_id} 不存在")
+        if target.is_irreducible:
+            raise ValueError(f"unit {unit_id} 已不可约化")
+
+        prompt_data = load_prompt_effective(FOLLOW_UP_PROMPT)
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = prompt_data["user_prompt_template"].format(
+            unit_name=target.unit_name,
+            description=target.description,
+            user_question=user_question or "(无明确问题,请基于该单元当前描述做一次深化)",
+        )
+        response = await self._router.execute(
+            agent_name="three_b",
+            task_name="follow_up",
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.7),
+            max_tokens=prompt_data.get("max_tokens", 2048),
+        )
+        raw = json.loads(response.get("content", ""))
+        target.description = raw.get("description", target.description) or target.description
+        if raw.get("unit_name"):
+            target.unit_name = raw["unit_name"]
+        if raw.get("is_irreducible") is True:
+            target.is_irreducible = True
+        target.follow_up_count += 1
+        atomic_write_state(project_id, state)
+        return target
+
+    def _find_unit(self, state: ThreeBState, unit_id: str) -> Optional[Unit]:
+        for d in state.dimensions:
+            for u in d.units:
+                if u.id == unit_id:
+                    return u
+        return None

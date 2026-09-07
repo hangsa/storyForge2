@@ -216,3 +216,73 @@ async def test_decompose_raises_when_less_than_5_dimensions(tmp_path, monkeypatc
     }, ensure_ascii=False)}
     with pytest.raises(ValueError, match=r"维度"):
         await engine.decompose("proj_test", RawIntent(prompt="x", genre_primary="y"))
+
+
+# ---- engine.follow_up_unit ----
+
+@pytest.mark.asyncio
+async def test_follow_up_unit_replaces_description_in_place(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(
+        project_id="proj_test",
+        dimensions=[DimensionDecomposition(
+            dimension=DimLabel.ONTOLOGY, insight="i",
+            units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="灵窍", description="old desc")],
+        )],
+    )
+    atomic_write_state("proj_test", state)
+
+    mock_router.execute.return_value = {"content": json.dumps({
+        "unit_name": "灵窍", "description": "new desc",
+    }, ensure_ascii=False)}
+
+    unit = await engine.follow_up_unit("proj_test", "unit_abc", user_question="能更具体吗?")
+    assert unit.description == "new desc"
+    assert unit.follow_up_count == 1
+
+    reloaded = load_state("proj_test")
+    assert reloaded.dimensions[0].units[0].description == "new desc"
+    assert reloaded.dimensions[0].units[0].follow_up_count == 1
+
+
+@pytest.mark.asyncio
+async def test_follow_up_unit_empty_question_uses_default(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+        dimension=DimLabel.ONTOLOGY, insight="i",
+        units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="x", description="d")],
+    )])
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": json.dumps({"unit_name": "x", "description": "d2"})}
+    unit = await engine.follow_up_unit("proj_test", "unit_abc", user_question=None)
+    assert unit.follow_up_count == 1
+    assert unit.description == "d2"
+
+
+@pytest.mark.asyncio
+async def test_follow_up_unit_rejects_irreducible(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+        dimension=DimLabel.ONTOLOGY, insight="i",
+        units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="x", description="d", is_irreducible=True)],
+    )])
+    atomic_write_state("proj_test", state)
+    with pytest.raises(ValueError, match="不可约化"):
+        await engine.follow_up_unit("proj_test", "unit_abc", user_question="x")
+
+
+@pytest.mark.asyncio
+async def test_follow_up_unit_preserves_is_irreducible_flag(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+        dimension=DimLabel.ONTOLOGY, insight="i",
+        units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="x", description="d")],
+    )])
+    atomic_write_state("proj_test", state)
+    mock_router.execute.return_value = {"content": json.dumps({"unit_name": "x", "description": "d2", "is_irreducible": True})}
+    unit = await engine.follow_up_unit("proj_test", "unit_abc", user_question="x")
+    assert unit.is_irreducible is True

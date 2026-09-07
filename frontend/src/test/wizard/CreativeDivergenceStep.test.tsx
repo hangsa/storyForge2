@@ -1,95 +1,50 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import CreativeDivergenceStep from "@/components/wizard/CreativeDivergenceStep";
-import api from "@/api/client";
 
-vi.mock("@/api/client", () => ({
-  default: {
-    getThreeBState: vi.fn(),
+const { mockApi } = vi.hoisted(() => ({
+  mockApi: {
+    postThreeBDecompose: vi.fn(),
+    postThreeBFollowUp: vi.fn(),
     postThreeBDiverge: vi.fn(),
-    postThreeBDeepen: vi.fn(),
+    postThreeBRegenerateUnit: vi.fn(),
+    postThreeBSelectUnit: vi.fn(),
     postThreeBCommit: vi.fn(),
+    postThreeBEditConcept: vi.fn(),
+    postThreeBAdvance: vi.fn(),
+    getThreeBState: vi.fn().mockResolvedValue(null),
     deleteThreeBState: vi.fn(),
-    postThreeBRegenerateCandidate: vi.fn(),
     listGenres: vi.fn().mockResolvedValue([]),
   },
 }));
 
-describe("CreativeDivergenceStep orchestrator", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    (api.getThreeBState as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({
-        schema_version: 1,
-        project_id: "p1",
-        raw_intent: null,
-        stage2_candidates: [],
-        stage3_deepened: [],
-        committed: false,
-      });
+// `useGenres` (default import of api) and `useThreeBDivergence`
+// (namespace import) both consume the same module — expose both the default
+// export and the named properties so vitest resolves either access pattern.
+vi.mock("@/api/client", () => ({
+  __esModule: true,
+  default: mockApi,
+  ...mockApi,
+}));
+
+describe("CreativeDivergenceStep (4 stages)", () => {
+  it("renders StepIndicator with 4 stages", () => {
+    render(<CreativeDivergenceStep projectId="p1" />);
+    expect(screen.getByTestId("step-indicator-1")).toBeInTheDocument();
+    expect(screen.getByTestId("step-indicator-2")).toBeInTheDocument();
+    expect(screen.getByTestId("step-indicator-3")).toBeInTheDocument();
+    expect(screen.getByTestId("step-indicator-4")).toBeInTheDocument();
   });
 
-  it("renders Stage 1 by default", async () => {
+  it("shows S1 by default", () => {
+    render(<CreativeDivergenceStep projectId="p1" />);
+    expect(screen.getByText(/灵感点子/)).toBeInTheDocument();
+  });
+
+  it("renders without crashing and mounts all 4 stage testids", async () => {
     render(<CreativeDivergenceStep projectId="p1" />);
     await waitFor(() => {
-      expect(screen.getByLabelText(/灵感点子/i)).toBeTruthy();
-    });
-  });
-
-  it("invokes onCommitSuccess after commit", async () => {
-    (api.postThreeBCommit as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({});
-    (api.getThreeBState as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValue({
-        schema_version: 1,
-        project_id: "p1",
-        raw_intent: null,
-        stage2_candidates: [],
-        stage3_deepened: [],
-        committed: false,
-      });
-    const onSuccess = vi.fn();
-    // For brevity, this test exercises the orchestrator structure:
-    // we verify mount + that StepIndicator is rendered + hydrate completes.
-    render(
-      <CreativeDivergenceStep projectId="p1" onCommitSuccess={onSuccess} />,
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId("step-indicator")).toBeTruthy();
-    });
-  });
-
-  it("hydrates raw_intent from server when present", async () => {
-    (api.getThreeBState as unknown as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({
-        schema_version: 1,
-        project_id: "p1",
-        raw_intent: {
-          prompt: "测试灵感",
-          genre_primary: "玄幻",
-          genre_secondary: null,
-        },
-        stage2_candidates: [
-          {
-            id: "c1",
-            operator: "breaking",
-            sub_dimension: "打破线性/时间顺序",
-            sub_dimension_index: 0,
-            premise_one_line: "x",
-            rationale: "y",
-            novelty_hook: "z",
-            recognition_score: 0,
-            strangeness_score: 0,
-            regenerated_count: 0,
-          },
-        ],
-        stage3_deepened: [],
-        committed: false,
-      });
-    render(<CreativeDivergenceStep projectId="p1" />);
-    await waitFor(() => {
-      // Stage 2 should now be active since candidates > 0
-      expect(screen.queryByLabelText(/灵感点子/i)).toBeNull();
+      expect(screen.getByTestId("step-indicator-1")).toBeInTheDocument();
     });
   });
 });

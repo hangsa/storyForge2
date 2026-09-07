@@ -28,6 +28,30 @@ def mock_router():
     return router
 
 
+class _FakeNoveltyScore:
+    """Stand-in for backend.models.creative_os.NoveltyScore — duck-typed to the
+    attributes engine.commit serializes into state.novelty_scores."""
+    def __init__(self) -> None:
+        self.total = 0.0
+        self.market_saturation_score = 0.0
+        self.trope_similarity_score = 0.0
+        self.contradiction_depth_score = 0.0
+        self.discussion_potential_score = 0.0
+        self.grade = "n/a"
+
+
+class _FakeNoveltyEvaluator:
+    """Stand-in for NoveltyEvaluator; sidesteps TropePool catalog dependency
+    that breaks when tests patch settings.projects_dir to tmp_path."""
+    def evaluate(self, content):
+        return _FakeNoveltyScore()
+
+
+@pytest.fixture
+def fake_novelty_evaluator():
+    return _FakeNoveltyEvaluator()
+
+
 # ---- dataclass round-trip ----
 
 def test_state_round_trip(tmp_path, monkeypatch):
@@ -556,3 +580,87 @@ def test_select_unit_candidate_rejects_out_of_range(tmp_path, monkeypatch):
     atomic_write_state("proj_test", state)
     with pytest.raises(ValueError, match="超出范围"):
         engine.select_unit_candidate("proj_test", "u", candidate_index=5)
+
+
+# ---- engine.commit ----
+
+@pytest.mark.asyncio
+async def test_commit_synthesizes_5_fields(tmp_path, monkeypatch, mock_router, fake_novelty_evaluator):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
+    units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(5)]
+    candidates = [
+        UnitCandidate(id=f"cand_{i}", unit_id=f"unit_{i}", unit_name=f"u{i}", description=f"cd{i}",
+                      chain_reaction=f"cr{i}", main_operator="distort", selection_rank=0)
+        for i in range(5)
+    ]
+    state = ThreeBState(
+        project_id="proj_test",
+        causal_map="A → B → C",
+        top_level_summary="一句话总结",
+        raw_intent=RawIntent(prompt="x", genre_primary="y"),
+        dimensions=[DimensionDecomposition(dimension=DimLabel.ONTOLOGY, insight="i", units=units, candidates=candidates)],
+    )
+    atomic_write_state("proj_test", state)
+
+    mock_router.execute.return_value = {"content": json.dumps({
+        "one_line": "一句话", "expanded": "100-200字", "core_tension": "50-80字",
+        "tone": "暗黑", "logline": "≤80字",
+    }, ensure_ascii=False)}
+
+    result = await engine.commit("proj_test")
+    assert result["committed_concept"]["one_line"] == "一句话"
+    assert result["committed_concept"]["tone"] == "暗黑"
+    assert result["committed_concept"]["edited_by_user"] is False
+    reloaded = load_state("proj_test")
+    assert reloaded.committed_concept["one_line"] == "一句话"
+
+
+@pytest.mark.asyncio
+async def test_commit_rejects_when_too_few_candidates(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    # 20 units,只有 2 个有候选 (< MIN_UNITS_WITH_CANDIDATES_FOR_COMMIT = 3)
+    units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(20)]
+    candidates = [
+        UnitCandidate(id=f"cand_{i}", unit_id=f"unit_{i}", unit_name=f"u{i}", description=f"cd{i}",
+                      chain_reaction=f"cr{i}", main_operator="distort", selection_rank=0)
+        for i in range(2)
+    ]
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="x", genre_primary="y"),
+        dimensions=[DimensionDecomposition(dimension=DimLabel.ONTOLOGY, insight="i", units=units, candidates=candidates)],
+    )
+    atomic_write_state("proj_test", state)
+    with pytest.raises(ValueError, match="候选不足"):
+        await engine.commit("proj_test")
+
+
+@pytest.mark.asyncio
+async def test_commit_includes_failed_units_in_prompt(tmp_path, monkeypatch, mock_router, fake_novelty_evaluator):
+    """Failed units (no candidates) should be marked in prompt as [unit X 未参与]."""
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
+    units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(5)]
+    candidates = [
+        UnitCandidate(id=f"cand_{i}", unit_id=f"unit_{i}", unit_name=f"u{i}", description=f"cd{i}",
+                      chain_reaction=f"cr{i}", main_operator="distort", selection_rank=0)
+        for i in range(3)  # 只有 3 个有候选
+    ]
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="x", genre_primary="y"),
+        dimensions=[DimensionDecomposition(dimension=DimLabel.ONTOLOGY, insight="i", units=units, candidates=candidates)],
+    )
+    atomic_write_state("proj_test", state)
+
+    captured_messages = []
+    async def fake_execute(*args, **kwargs):
+        captured_messages.append(kwargs.get("messages"))
+        return {"content": json.dumps({"one_line": "x", "expanded": "x", "core_tension": "x", "tone": "x", "logline": "x"})}
+    mock_router.execute.side_effect = fake_execute
+
+    await engine.commit("proj_test")
+    user_msg = captured_messages[0][1]["content"]
+    assert "未参与" in user_msg  # unit_3 和 unit_4 标记为未参与

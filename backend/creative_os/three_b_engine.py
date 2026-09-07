@@ -231,8 +231,9 @@ def migrate_state_on_load(project_id: str) -> Optional[ThreeBState]:
 class ThreeBEngine:
     """4 阶段创意发散引擎。Tasks 3-9 will populate engine methods."""
 
-    def __init__(self, model_router=None) -> None:
+    def __init__(self, model_router=None, novelty_evaluator=None) -> None:
         self._router = model_router
+        self._novelty_evaluator = novelty_evaluator
 
     async def decompose(
         self, project_id: str, raw_intent: RawIntent
@@ -534,3 +535,122 @@ class ThreeBEngine:
             atomic_write_state(project_id, state)
             return d
         raise ValueError(f"unit {unit_id} 无候选")
+
+    def _build_novelty_evaluator(self, project_id: str):
+        """Construct a NoveltyEvaluator mirroring `v2_canvas._build_novelty_evaluator`.
+
+        Allows caller to inject a pre-built evaluator via `__init__(novelty_evaluator=...)`
+        for tests; falls back to the standard TropePool + ContradictionEngine wiring.
+        `model_router` and `embedder` are None — only `fill_trope_tags_async` needs
+        them, and that's not invoked from the commit path.
+        """
+        if self._novelty_evaluator is not None:
+            return self._novelty_evaluator
+        from backend.creative_os.novelty_evaluator import NoveltyEvaluator
+        from backend.creative_os.trope_pool import TropePool
+        from backend.creative_os.contradiction_engine import ContradictionEngine
+
+        project_dir = settings.projects_dir / project_id
+        catalog_path = settings.projects_dir.parent / "config" / "trope_catalog.yaml"
+        trope_pool = TropePool(project_dir=project_dir, catalog_path=catalog_path)
+        return NoveltyEvaluator(
+            trope_pool=trope_pool,
+            contradiction_engine=ContradictionEngine(),
+            model_router=None,
+            embedder=None,
+        )
+
+    async def commit(self, project_id: str) -> dict:
+        """LLM 合成 5 字段 concept + novelty。≥3 units 有候选才允许。"""
+        state = load_state(project_id)
+        if state is None or state.raw_intent is None:
+            raise ValueError(f"项目 {project_id} 未发散")
+
+        units_with_cands = sum(
+            1
+            for d in state.dimensions
+            for u in d.units
+            if any(c.unit_id == u.id for c in d.candidates)
+        )
+        if units_with_cands < MIN_UNITS_WITH_CANDIDATES_FOR_COMMIT:
+            raise ValueError(
+                f"候选不足:{units_with_cands} units 有候选 "
+                f"(< {MIN_UNITS_WITH_CANDIDATES_FOR_COMMIT}),无法合成"
+            )
+
+        # Pre-load prompt + format system via the shared helper; build the
+        # user message with state-derived data via the dedicated helper.
+        # We can't reuse _invoke_llm_json because the user template needs
+        # selected_units (a list of bullets built from candidates), not a
+        # flat format-string substitution.
+        prompt_data = load_prompt_effective(COMMIT_PROMPT)
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = self._build_commit_user_prompt(prompt_data["user_prompt_template"], state)
+
+        state.commit_started_at = _now_iso()
+        response = await self._router.execute(
+            agent_name="three_b",
+            task_name="commit",
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.7),
+            max_tokens=prompt_data.get("max_tokens", 4096),
+        )
+        raw = _parse_json_or_raise(response.get("content", ""), "commit")
+        state.committed_concept = {
+            "one_line": raw.get("one_line", "") or "",
+            "expanded": raw.get("expanded", "") or "",
+            "core_tension": raw.get("core_tension", "") or "",
+            "tone": raw.get("tone", "") or "",
+            "logline": raw.get("logline", "") or "",
+            "edited_by_user": False,
+        }
+        # Novelty scoring (sync; commit is async only because of the LLM call).
+        evaluator = self._build_novelty_evaluator(project_id)
+        novelty = evaluator.evaluate(state.committed_concept)
+        state.novelty_scores = {
+            "total": novelty.total,
+            "market_saturation_score": novelty.market_saturation_score,
+            "trope_similarity_score": novelty.trope_similarity_score,
+            "contradiction_depth_score": novelty.contradiction_depth_score,
+            "discussion_potential_score": novelty.discussion_potential_score,
+            "grade": novelty.grade,
+        }
+        state.commit_completed_at = _now_iso()
+        atomic_write_state(project_id, state)
+        return {"committed_concept": state.committed_concept, "novelty_scores": state.novelty_scores}
+
+    def _build_commit_user_prompt(
+        self, user_prompt_template: str, state: ThreeBState
+    ) -> str:
+        """Format the user prompt for `commit`. Bullets each unit; marks un-diverged
+        units as `[unit <id> 未参与]` so the LLM can ignore them when synthesizing
+        the 5-field concept (per three_b_commit.yaml §合成原则)."""
+        assert state.raw_intent is not None  # guarded in commit()
+        selected_units: list[str] = []
+        for d in state.dimensions:
+            for u in d.units:
+                cand = next(
+                    (
+                        c
+                        for c in d.candidates
+                        if c.unit_id == u.id and c.selection_rank == 0
+                    ),
+                    None,
+                )
+                if cand:
+                    selected_units.append(
+                        f"- [{d.dimension.value}] {u.unit_name}: {cand.description}\n"
+                        f"  连锁推演: {cand.chain_reaction}"
+                    )
+                else:
+                    selected_units.append(
+                        f"- [{d.dimension.value}] {u.unit_name}: [unit {u.id} 未参与]"
+                    )
+        return user_prompt_template.format(
+            prompt=state.raw_intent.prompt,
+            genre_primary=state.raw_intent.genre_primary,
+            causal_map=state.causal_map,
+            top_level_summary=state.top_level_summary,
+            selected_units="\n".join(selected_units),
+        )

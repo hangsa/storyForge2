@@ -664,3 +664,39 @@ async def test_commit_includes_failed_units_in_prompt(tmp_path, monkeypatch, moc
     await engine.commit("proj_test")
     user_msg = captured_messages[0][1]["content"]
     assert "未参与" in user_msg  # unit_3 和 unit_4 标记为未参与
+
+
+@pytest.mark.asyncio
+async def test_edit_committed_concept_overrides_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine()
+    state = ThreeBState(
+        project_id="proj_test",
+        committed_concept={"one_line": "原", "expanded": "原", "core_tension": "原", "tone": "原", "logline": "原", "edited_by_user": False},
+    )
+    atomic_write_state("proj_test", state)
+    result = await engine.edit_committed_concept("proj_test", {"one_line": "新", "tone": "新调"})
+    assert result["committed_concept"]["one_line"] == "新"
+    assert result["committed_concept"]["tone"] == "新调"
+    assert result["committed_concept"]["expanded"] == "原"  # 未编辑字段保留
+    assert result["committed_concept"]["edited_by_user"] is True
+
+
+@pytest.mark.asyncio
+async def test_edit_committed_concept_rejects_unknown_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine()
+    state = ThreeBState(project_id="proj_test", committed_concept={"one_line": "x"})
+    atomic_write_state("proj_test", state)
+    with pytest.raises(ValueError, match="未知字段"):
+        await engine.edit_committed_concept("proj_test", {"unknown_field": "y"})
+
+
+@pytest.mark.asyncio
+async def test_edit_committed_concept_rejects_when_no_concept(tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine()
+    state = ThreeBState(project_id="proj_test")
+    atomic_write_state("proj_test", state)
+    with pytest.raises(ValueError, match="未提交"):
+        await engine.edit_committed_concept("proj_test", {"one_line": "x"})

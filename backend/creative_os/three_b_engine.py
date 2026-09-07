@@ -54,6 +54,8 @@ DimensionStatus = Literal["pending", "decomposed", "diverged", "divergence_faile
 MIN_UNITS_WITH_CANDIDATES_FOR_COMMIT = 3  # < 3 units have candidates → /commit 拒绝
 DIVERGE_CONCURRENCY = 5
 
+ALLOWED_EDIT_FIELDS = {"one_line", "expanded", "core_tension", "tone", "logline"}
+
 # TODO(divergence): removed in Task 13 (routes rewrite). Kept as a shim to avoid
 # breaking backend/api/three_b_routes.py imports between Task 2 and Task 13.
 MAX_DEEPENED_IDS = 3
@@ -619,6 +621,22 @@ class ThreeBEngine:
         state.commit_completed_at = _now_iso()
         atomic_write_state(project_id, state)
         return {"committed_concept": state.committed_concept, "novelty_scores": state.novelty_scores}
+
+    async def edit_committed_concept(
+        self, project_id: str, edited_fields: dict
+    ) -> dict:
+        """用户编辑层:接受部分字段编辑,保留未编辑字段,设置 edited_by_user=True。"""
+        state = load_state(project_id)
+        if state is None or state.committed_concept is None:
+            raise ValueError("committed_concept 未提交,无法编辑")
+        unknown = set(edited_fields.keys()) - ALLOWED_EDIT_FIELDS
+        if unknown:
+            raise ValueError(f"未知字段: {unknown}")
+        for k, v in edited_fields.items():
+            state.committed_concept[k] = v
+        state.committed_concept["edited_by_user"] = True
+        atomic_write_state(project_id, state)
+        return {"committed_concept": state.committed_concept}
 
     def _build_commit_user_prompt(
         self, user_prompt_template: str, state: ThreeBState

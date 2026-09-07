@@ -1,0 +1,376 @@
+<!DOCTYPE html><html class="dark" lang="zh-CN" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>StoryForge - 创意画布</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary": "#38bdf8",
+                      "surface-container-highest": "#273647",
+                      "tertiary": "#c5cce6",
+                      "on-primary-fixed-variant": "#004c69",
+                      "secondary": "#bcc7de",
+                      "surface-bright": "#2c3a4c",
+                      "tertiary-fixed": "#dae2fd",
+                      "secondary-fixed-dim": "#bcc7de",
+                      "surface-container-low": "#0d1c2d",
+                      "surface-container-high": "#1c2b3c",
+                      "inverse-on-surface": "#233143",
+                      "surface-tint": "#7bd0ff",
+                      "surface": "#051424",
+                      "tertiary-container": "#a9b1ca",
+                      "primary-container": "#38bdf8",
+                      "tertiary-fixed-dim": "#bec6e0",
+                      "error": "#ffb4ab",
+                      "primary-fixed-dim": "#7bd0ff",
+                      "surface-container": "#122131",
+                      "on-primary-fixed": "#001e2c",
+                      "surface-variant": "#273647",
+                      "outline": "#87929a",
+                      "on-background": "#d4e4fa",
+                      "on-secondary-fixed": "#111c2d",
+                      "on-secondary": "#263143",
+                      "secondary-container": "#3e495d",
+                      "on-error": "#690005",
+                      "surface-container-lowest": "#010f1f",
+                      "secondary-fixed": "#d8e3fb",
+                      "primary-fixed": "#c4e7ff",
+                      "on-tertiary": "#283044",
+                      "on-secondary-container": "#aeb9d0",
+                      "on-tertiary-fixed-variant": "#3f465c",
+                      "on-error-container": "#ffdad6",
+                      "surface-dim": "#051424",
+                      "on-tertiary-container": "#3c4459",
+                      "on-surface": "#d4e4fa",
+                      "background": "#051424",
+                      "inverse-surface": "#d4e4fa",
+                      "error-container": "#93000a",
+                      "outline-variant": "#3e484f",
+                      "on-primary": "#00354a",
+                      "on-tertiary-fixed": "#131b2e",
+                      "on-secondary-fixed-variant": "#3c475a",
+                      "inverse-primary": "#00668a",
+                      "on-surface-variant": "#bdc8d1",
+                      "on-primary-container": "#004965"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "lg": "40px",
+                      "md": "24px",
+                      "xl": "64px",
+                      "xs": "8px",
+                      "gutter": "20px",
+                      "base": "4px",
+                      "sm": "16px",
+                      "margin-desktop": "32px",
+                      "margin-mobile": "16px"
+              },
+              "fontFamily": {
+                      "body-lg": ["Hanken Grotesk"],
+                      "body-md": ["Hanken Grotesk"],
+                      "headline-lg-mobile": ["Hanken Grotesk"],
+                      "headline-lg": ["Hanken Grotesk"],
+                      "display-lg": ["Hanken Grotesk"],
+                      "stats-number": ["JetBrains Mono"],
+                      "label-sm": ["JetBrains Mono"],
+                      "title-md": ["Hanken Grotesk"],
+                      "sans": ["Hanken Grotesk", "sans-serif"]
+              },
+              "fontSize": {
+                      "body-lg": ["18px", { "lineHeight": "30px", "fontWeight": "400" }],
+                      "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                      "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                      "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "600" }],
+                      "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                      "stats-number": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                      "label-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                      "title-md": ["20px", { "lineHeight": "28px", "fontWeight": "500" }]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid #1E293B;
+        }
+        .glow-active {
+            box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+            border-color: theme('colors.primary');
+        }
+        
+        /* Tree Path Styles */
+        .tree-line {
+            position: absolute;
+            z-index: 0;
+            background: theme('colors.outline-variant');
+        }
+        .tree-line-active {
+            background: theme('colors.primary');
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+        }
+        .tree-line-dashed {
+            background: transparent;
+            border-top: 2px dashed theme('colors.outline-variant');
+            opacity: 0.5;
+        }
+
+        /* Gradient Background for atmosphere */
+        .bg-nebula {
+            background: theme('colors.background');
+        }
+    </style>
+</head>
+<body class="font-sans bg-background text-on-surface min-h-screen flex flex-col w-full h-full overflow-hidden">
+<!-- TopAppBar (Full Width) -->
+<header class="h-16 flex justify-between items-center px-margin-desktop bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant z-50 flex-shrink-0 w-full fixed top-0 left-0">
+<div class="flex items-center gap-4">
+<span class="text-title-md font-title-md font-bold text-primary dark:text-primary">翻天</span>
+<div class="h-6 w-px bg-outline-variant mx-2"></div>
+<nav class="flex items-center gap-6 font-body-md text-body-md">
+<a class="text-on-surface-variant hover:text-on-surface transition-colors" href="#">项目设定</a>
+
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:bg-surface-variant/50 transition-colors rounded-lg p-2 flex items-center justify-center">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 0;">history</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-variant/50 transition-colors rounded-lg p-2 flex items-center justify-center">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 0;">settings</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-variant/50 transition-colors rounded-lg p-2 flex items-center justify-center">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 0;">person</span>
+</button>
+</div>
+</div>
+</header>
+<div class="flex flex-1 mt-16 h-[calc(100vh-4rem)] relative w-full">
+<!-- SideNavBar (Below Header) -->
+<nav class="w-[240px] bg-surface-container dark:bg-surface-container border-r border-outline-variant dark:border-outline-variant flex flex-col py-md px-sm z-20 h-full fixed left-0 top-16">
+<!-- CTA -->
+
+<!-- Navigation Links -->
+<div class="flex-1 space-y-xs overflow-y-auto pr-xs custom-scrollbar">
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-body-md text-body-md">创意发散</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs bg-secondary-container text-on-secondary-container rounded-lg font-bold scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">draw</span>
+<span class="font-body-md text-body-md">创意画布</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">biotech</span>
+<span class="font-body-md text-body-md">概念 DNA</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">public</span>
+<span class="font-body-md text-body-md">世界观</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-body-md text-body-md">角色设计</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">map</span>
+<span class="font-body-md text-body-md">地图系统</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">format_list_numbered</span>
+<span class="font-body-md text-body-md">全文大纲</span>
+</a>
+<a class="flex items-center gap-sm px-md py-xs text-on-surface-variant hover:bg-surface-variant rounded-lg dark:hover:bg-surface-variant transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">auto_stories</span>
+<span class="font-body-md text-body-md">章节大纲</span>
+</a>
+</div>
+<!-- Footer Links -->
+
+</nav>
+<!-- Main Content Area -->
+<main class="ml-[240px] flex-1 overflow-x-auto overflow-y-auto p-xl relative w-full h-full">
+<div class="min-w-[1200px] flex flex-col relative z-10 h-full">
+<!-- Top Area: Creative Depth Indicator -->
+<div class="flex justify-between items-end mb-lg sticky left-0 right-0 w-full max-w-[1200px]">
+<div>
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface mb-xs">Creative Canvas</h2>
+<p class="text-on-surface-variant font-body-md">Explore and evolve your core concept.</p>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-sm text-label-sm text-primary mb-xs uppercase tracking-wider">Step 3 / 5 : 融合 (Fuse)</span>
+<div class="flex gap-2">
+<div class="w-8 h-2 rounded-full bg-primary/20"></div>
+<div class="w-8 h-2 rounded-full bg-primary/20"></div>
+<div class="w-8 h-2 rounded-full bg-primary glow-active"></div>
+<div class="w-8 h-2 rounded-full bg-surface-variant"></div>
+<div class="w-8 h-2 rounded-full bg-surface-variant"></div>
+</div>
+</div>
+</div>
+<!-- Horizontal Tree Structure -->
+<div class="relative flex-1 mt-md min-h-[600px]">
+<!-- SVG for exact connecting lines to avoid tricky CSS borders -->
+<svg class="absolute top-0 left-0 w-full h-full pointer-events-none z-0" style="min-width: 1200px;">
+<!-- Base horizontal line -->
+<line stroke="#3e484f" stroke-width="2" x1="60" x2="1000" y1="200" y2="200"></line>
+<!-- Active Path -->
+<line class="glow-active" stroke="#38bdf8" stroke-width="2" style="filter: drop-shadow(0 0 4px #38bdf8);" x1="60" x2="300" y1="200" y2="200"></line>
+<!-- Branch down to Step 1 Option B -->
+<path d="M 300 200 C 350 200, 350 350, 400 350" fill="none" stroke="#38bdf8" stroke-width="2" style="filter: drop-shadow(0 0 4px #38bdf8);"></path>
+<!-- Path from Step 1 Option B to Step 2 Option C -->
+<path d="M 400 350 C 500 350, 500 500, 600 500" fill="none" stroke="#38bdf8" stroke-width="2" style="filter: drop-shadow(0 0 4px #38bdf8);"></path>
+<!-- Path from Step 2 Option C to Step 3 (Current) -->
+<path d="M 600 500 C 750 500, 750 200, 900 200" fill="none" stroke="#38bdf8" stroke-width="2" style="filter: drop-shadow(0 0 4px #38bdf8);"></path>
+<!-- Inactive Branches (Dashed) -->
+<!-- Step 1 Branches -->
+<path d="M 300 200 C 350 200, 350 50, 400 50" fill="none" stroke="#3e484f" stroke-dasharray="4 4" stroke-width="2"></path>
+<!-- Step 2 Branches (From Step 1 B) -->
+<path d="M 400 350 C 450 350, 450 200, 600 200" fill="none" stroke="#3e484f" stroke-dasharray="4 4" stroke-width="2"></path>
+<path d="M 400 350 C 450 350, 450 50, 600 50" fill="none" stroke="#3e484f" stroke-dasharray="4 4" stroke-width="2"></path>
+</svg>
+<div class="relative z-10 w-full h-full flex">
+<!-- Column: Root Idea -->
+<div class="w-[200px] flex flex-col items-center justify-center relative h-[400px]">
+<div class="relative z-10 flex flex-col items-center bg-surface p-2 rounded-lg">
+<div class="w-12 h-12 rounded-full bg-surface-container border-2 border-primary flex items-center justify-center mb-sm">
+<span class="material-symbols-outlined text-primary text-sm">flag</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface text-center">原始想法</span>
+<span class="text-xs text-on-surface-variant text-center max-w-[100px] truncate" title="修仙界对抗外星舰队">修仙对抗外星</span>
+</div>
+</div>
+<!-- Column: Step 1 -->
+<div class="w-[200px] flex flex-col justify-between py-[25px] h-[400px]">
+<!-- Option A (Unselected) -->
+<div class="flex flex-col items-center opacity-50 hover:opacity-100 transition-opacity cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center mb-1">
+<span class="text-xs">A</span>
+</div>
+<span class="text-xs text-on-surface-variant">保留灵气</span>
+</div>
+<!-- Option B (Selected) -->
+<div class="flex flex-col items-center relative top-[-10px]">
+<div class="w-12 h-12 rounded-full bg-primary/20 border border-primary/50 text-primary flex items-center justify-center mb-sm shadow-[0_0_10px_rgba(56,189,248,0.2)]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface">Step 1: 拆解</span>
+<span class="text-xs text-primary max-w-[100px] truncate" title="剥离灵气设定">剥离灵气设定</span>
+</div>
+<!-- Option C (Unselected) -->
+<div class="flex flex-col items-center opacity-30">
+<div class="w-10 h-10 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center mb-1">
+<span class="text-xs">C</span>
+</div>
+<span class="text-xs text-on-surface-variant">未知拆解</span>
+</div>
+</div>
+<!-- Column: Step 2 -->
+<div class="w-[200px] flex flex-col justify-between py-[25px] h-[550px]">
+<!-- Option A (Unselected) -->
+<div class="flex flex-col items-center opacity-50 hover:opacity-100 transition-opacity cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center mb-1">
+<span class="text-xs">A</span>
+</div>
+<span class="text-xs text-on-surface-variant">修仙是进化</span>
+</div>
+<!-- Option B (Unselected) -->
+<div class="flex flex-col items-center opacity-50 hover:opacity-100 transition-opacity cursor-pointer">
+<div class="w-10 h-10 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center mb-1">
+<span class="text-xs">B</span>
+</div>
+<span class="text-xs text-on-surface-variant">修仙是骗局</span>
+</div>
+<!-- Option C (Selected) -->
+<div class="flex flex-col items-center relative top-[10px]">
+<div class="w-12 h-12 rounded-full bg-primary/20 border border-primary/50 text-primary flex items-center justify-center mb-sm shadow-[0_0_10px_rgba(56,189,248,0.2)]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface">Step 2: 逆转</span>
+<span class="text-xs text-primary max-w-[100px] truncate" title="修仙是退化">修仙是退化</span>
+</div>
+</div>
+<!-- Column: Step 3 (Current Active) -->
+<div class="w-[400px] flex flex-col items-center relative h-[400px] ml-[100px]">
+<div class="relative z-10 flex flex-col items-center bg-surface p-2 rounded-lg absolute top-[150px]">
+<div class="w-14 h-14 rounded-full bg-surface border-2 border-primary glow-active flex items-center justify-center mb-sm relative">
+<div class="w-6 h-6 rounded-full bg-primary animate-pulse"></div>
+<div class="absolute -top-2 -right-2 w-2 h-2 bg-primary rounded-full animate-ping"></div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">Step 3: 融合</span>
+<span class="text-xs text-on-surface-variant">Select Option Below</span>
+</div>
+<!-- The detailed selection cards positioned below the current node -->
+<div class="absolute top-[280px] left-[-250px] w-[900px]">
+<div class="grid grid-cols-3 gap-lg">
+<!-- Option A -->
+<div class="glass-panel rounded-xl p-md flex flex-col hover:border-primary/50 transition-colors cursor-pointer group h-full">
+<div class="flex justify-between items-start mb-md">
+<h4 class="font-title-md text-title-md text-on-surface group-hover:text-primary transition-colors">融合 A: 克苏鲁神话</h4>
+<div class="flex flex-col gap-1 items-end">
+<span class="font-label-sm text-label-sm text-surface-tint">Novelty: 7/10</span>
+<span class="font-label-sm text-label-sm text-error">Conflict: 8/10</span>
+</div>
+</div>
+<p class="text-on-surface-variant text-sm flex-1 mb-md">
+                                        "飞升"并非进入仙界，而是被不可名状的宇宙存在吞噬。修仙者在突破境界时听到的"大道之音"，实则是古神的低语。外星舰队是来阻止人类"觉醒"的守护者。
+                                    </p>
+<button class="w-full py-xs rounded border border-outline-variant text-on-surface-variant group-hover:border-primary/50 group-hover:text-primary transition-colors">Select Option A</button>
+</div>
+<!-- Option B (Recommended) -->
+<div class="glass-panel rounded-xl p-md flex flex-col border-primary glow-active relative h-full bg-surface-container-highest">
+<div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-primary text-on-primary font-label-sm text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-widest shadow-[0_0_10px_rgba(56,189,248,0.3)]">
+                                        AI Recommended
+                                    </div>
+<div class="flex justify-between items-start mb-md mt-2">
+<h4 class="font-title-md text-title-md text-on-surface text-primary">融合 B: 赛博朋克 / 资本论</h4>
+<div class="flex flex-col gap-1 items-end">
+<span class="font-label-sm text-label-sm text-surface-tint">Novelty: 9/10</span>
+<span class="font-label-sm text-label-sm text-error">Conflict: 9/10</span>
+</div>
+</div>
+<p class="text-on-surface text-sm flex-1 mb-md">
+                                        灵气是一种被高度垄断的能源（如同算力或资本）。宗门本质上是跨星系超级财阀。修仙者是"灵气矿工"，而外星舰队其实是由被剥削的底层凡人组成的星际反抗军。
+                                    </p>
+<button class="w-full py-xs rounded bg-primary text-on-primary font-bold hover:bg-primary-container transition-colors shadow-[0_0_15px_rgba(56,189,248,0.2)]">Continue with Option B</button>
+</div>
+<!-- Option C -->
+<div class="glass-panel rounded-xl p-md flex flex-col hover:border-primary/50 transition-colors cursor-pointer group h-full">
+<div class="flex justify-between items-start mb-md">
+<h4 class="font-title-md text-title-md text-on-surface group-hover:text-primary transition-colors">融合 C: 时间循环</h4>
+<div class="flex flex-col gap-1 items-end">
+<span class="font-label-sm text-label-sm text-surface-tint">Novelty: 6/10</span>
+<span class="font-label-sm text-label-sm text-error">Conflict: 7/10</span>
+</div>
+</div>
+<p class="text-on-surface-variant text-sm flex-1 mb-md">
+                                        整个修仙界处在一个巨大的时间闭环中，每次外星舰队毁灭修仙界后，顶级大能都会献祭自身重启时间。主角需要在这一轮循环中打破"修仙退化"的死局。
+                                    </p>
+<button class="w-full py-xs rounded border border-outline-variant text-on-surface-variant group-hover:border-primary/50 group-hover:text-primary transition-colors">Select Option C</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+
+</body></html>

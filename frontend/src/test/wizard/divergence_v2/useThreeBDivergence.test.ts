@@ -25,7 +25,7 @@ const { mockApi } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/api/client", () => mockApi);
+vi.mock("@/api/client", () => ({ __esModule: true, default: mockApi, api: mockApi, ...mockApi }));
 
 // Factory for a fully-formed ThreeBState payload — minimises per-test boilerplate
 // while keeping shape explicit so type-mismatch regressions surface clearly.

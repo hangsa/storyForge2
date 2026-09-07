@@ -117,7 +117,7 @@ function Inner({ projectId }: Props) {
             {wizard.currentStep === 1 && (
               <CreativeDivergenceStep
                 projectId={projectId}
-                onCommitSuccess={() => wizard.markStepGenerated(1, {})}
+                onAdvanceSuccess={() => wizard.markStepGenerated(1, {})}
               />
             )}
             {wizard.currentStep === 2 && <ConceptStep projectId={projectId} />}

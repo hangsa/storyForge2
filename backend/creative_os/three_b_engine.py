@@ -56,12 +56,6 @@ DIVERGE_CONCURRENCY = 5
 
 ALLOWED_EDIT_FIELDS = {"one_line", "expanded", "core_tension", "tone", "logline"}
 
-# TODO(divergence): removed in Task 13 (routes rewrite). Kept as a shim to avoid
-# breaking backend/api/three_b_routes.py imports between Task 2 and Task 13.
-MAX_DEEPENED_IDS = 3
-MIN_DEEPENED_IDS = 1
-
-
 @dataclass
 class RawIntent:
     prompt: str

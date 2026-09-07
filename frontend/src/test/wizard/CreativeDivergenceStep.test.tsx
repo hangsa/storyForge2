@@ -23,6 +23,7 @@ const { mockApi } = vi.hoisted(() => ({
 // export and the named properties so vitest resolves either access pattern.
 vi.mock("@/api/client", () => ({
   __esModule: true,
+  api: mockApi,
   default: mockApi,
   ...mockApi,
 }));

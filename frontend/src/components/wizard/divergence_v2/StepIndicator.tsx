@@ -1,11 +1,11 @@
 import React from "react";
 import type { SubStage } from "./types";
 
-const STAGES: { key: SubStage; label: string }[] = [
-  { key: "1", label: "1. 输入灵感" },
-  { key: "2", label: "2. 第一性拆解" },
-  { key: "3", label: "3. 自适应发散" },
-  { key: "4", label: "4. 提交" },
+const STAGES: Array<{ key: SubStage; label: string; icon: string }> = [
+  { key: "1", label: "输入灵感", icon: "edit_note" },
+  { key: "2", label: "第一性拆解", icon: "account_tree" },
+  { key: "3", label: "自适应发散", icon: "call_split" },
+  { key: "4", label: "提交", icon: "task_alt" },
 ];
 
 interface Props {
@@ -16,7 +16,7 @@ interface Props {
 
 export function StepIndicator({ current, completed, onStageClick }: Props) {
   return (
-    <div className="flex items-center gap-2 mb-6">
+    <div className="flex items-center gap-2 mb-6 px-margin-desktop pt-4" data-testid="step-indicator">
       {STAGES.map((s, idx) => {
         const isCurrent = current === s.key;
         const isCompleted = completed.includes(s.key);
@@ -28,18 +28,21 @@ export function StepIndicator({ current, completed, onStageClick }: Props) {
               disabled={!canJump}
               onClick={() => onStageClick(s.key)}
               className={[
-                "px-3 py-1.5 rounded text-sm transition-colors",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors",
                 isCurrent
-                  ? "bg-blue-600 text-white"
+                  ? "bg-primary text-on-primary font-semibold shadow-sm"
                   : isCompleted
-                    ? "bg-blue-100 text-blue-800 hover:bg-blue-200"
-                    : "bg-gray-100 text-gray-400 cursor-not-allowed",
+                    ? "bg-primary-container/20 text-primary-container hover:bg-primary-container/30"
+                    : "bg-surface-container text-on-surface-variant opacity-60 cursor-not-allowed",
               ].join(" ")}
               data-testid={`step-indicator-${s.key}`}
             >
-              {s.label}
+              <span className="material-symbols-outlined text-base leading-none">{s.icon}</span>
+              <span className="font-mono text-[11px] tracking-wider">{s.label}</span>
             </button>
-            {idx < STAGES.length - 1 && <span className="text-gray-300">›</span>}
+            {idx < STAGES.length - 1 && (
+              <span className="material-symbols-outlined text-on-surface-variant opacity-40 text-base leading-none">chevron_right</span>
+            )}
           </React.Fragment>
         );
       })}

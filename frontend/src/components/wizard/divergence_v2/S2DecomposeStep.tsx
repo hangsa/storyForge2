@@ -13,24 +13,38 @@ interface Props {
   onNext: () => void;
 }
 
-const DIMENSION_LABELS: Record<string, string> = {
-  ontology: "世界构成 (Ontology)",
-  energetics: "能量体系 (Energetics)",
-  power_structure: "社会控制 (Power Structure)",
-  protagonist_engine: "主角机制 (Protagonist Engine)",
-  narrative_physics: "叙事动力 (Narrative Physics)",
+const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
+  ontology: { label: "世界构成 (Ontology)", icon: "public" },
+  energetics: { label: "能量体系 (Energetics)", icon: "bolt" },
+  power_structure: { label: "社会控制 (Power Structure)", icon: "gavel" },
+  protagonist_engine: { label: "主角机制 (Protagonist Engine)", icon: "person" },
+  narrative_physics: { label: "叙事动力 (Narrative Physics)", icon: "auto_stories" },
 };
+
+const DIMENSION_ORDER = ["ontology", "energetics", "power_structure", "protagonist_engine", "narrative_physics"] as const;
 
 export default function S2DecomposeStep({
   dimensions, causalMap, topLevelSummary, loading, followUpLoadingUnitId,
   onFollowUp, onPrev, onNext,
 }: Props) {
+  // Defense-in-depth: callers upstream (reducer / HYDRATE) already coerce
+  // undefined to [], but a stray malformed payload must not crash the
+  // render with `dimensions.length`.
+  const safeDimensions = Array.isArray(dimensions) ? dimensions : [];
+  const totalUnits = safeDimensions.reduce((acc, d) => acc + d.units.length, 0);
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto">
-        <header className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
-          Stage 2 · 第一性拆解 · 5 维度
-        </header>
+      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary-container text-lg leading-none">account_tree</span>
+            <h2 className="font-display text-base font-semibold text-primary">Stage 2 · 第一性拆解</h2>
+          </div>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
+            {safeDimensions.length} 维度 · {totalUnits} 单元
+          </span>
+        </div>
 
         {causalMap && (
           <pre className="bg-surface-container border border-outline-variant rounded-lg p-3 text-xs text-primary whitespace-pre-wrap" data-testid="causal-map">
@@ -38,18 +52,33 @@ export default function S2DecomposeStep({
           </pre>
         )}
 
-        {dimensions.map((dim) => (
-          <DimensionBlock
-            key={dim.dimension}
-            dimension={dim}
-            followUpLoadingUnitId={followUpLoadingUnitId}
-            onFollowUp={onFollowUp}
-          />
-        ))}
+        {DIMENSION_ORDER.map((key) => {
+          const dim = safeDimensions.find((d) => d.dimension === key);
+          if (!dim) return null;
+          return (
+            <DimensionBlock
+              key={dim.dimension}
+              dimension={dim}
+              followUpLoadingUnitId={followUpLoadingUnitId}
+              onFollowUp={onFollowUp}
+            />
+          );
+        })}
+
+        {safeDimensions
+          .filter((d) => !DIMENSION_ORDER.includes(d.dimension as typeof DIMENSION_ORDER[number]))
+          .map((dim) => (
+            <DimensionBlock
+              key={dim.dimension}
+              dimension={dim}
+              followUpLoadingUnitId={followUpLoadingUnitId}
+              onFollowUp={onFollowUp}
+            />
+          ))}
 
         {topLevelSummary && (
           <div className="border-t border-outline-variant pt-3" data-testid="top-level-summary">
-            <h3 className="font-mono text-primary-container text-[10px] uppercase tracking-wider mb-1">
+            <h3 className="font-display text-sm font-semibold text-primary-container mb-1">
               总览
             </h3>
             <p className="text-sm text-primary">{topLevelSummary}</p>
@@ -58,7 +87,7 @@ export default function S2DecomposeStep({
       </div>
 
       <footer className="flex items-center justify-between px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
-        <SecondaryButton label="上一步:输入" onClick={onPrev} />
+        <SecondaryButton label="上一步:输入" icon="arrow_back" onClick={onPrev} />
         <PrimaryButton
           label={loading ? "拆解中…" : "下一步:发散 →"}
           loading={loading}
@@ -79,6 +108,8 @@ function DimensionBlock({
   const [collapsed, setCollapsed] = useState(false);
   const [followUpUnitId, setFollowUpUnitId] = useState<string | null>(null);
 
+  const meta = DIMENSION_LABELS[dimension.dimension] ?? { label: dimension.dimension, icon: "auto_awesome" };
+
   return (
     <section className="bg-surface-container-low border border-outline-variant rounded-lg p-3" data-testid={`dimension-${dimension.dimension}`}>
       <button
@@ -86,18 +117,26 @@ function DimensionBlock({
         onClick={() => setCollapsed(!collapsed)}
         className="flex items-center gap-2 w-full text-left"
       >
-        <span aria-hidden="true">{collapsed ? "▸" : "▾"}</span>
-        <h3 className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
-          {DIMENSION_LABELS[dimension.dimension] ?? dimension.dimension}
+        <span aria-hidden="true" className="material-symbols-outlined text-base leading-none text-on-surface-variant">
+          {collapsed ? "chevron_right" : "expand_more"}
+        </span>
+        <span aria-hidden="true" className="material-symbols-outlined text-primary-container text-base leading-none">
+          {meta.icon}
+        </span>
+        <h3 className="font-display text-sm font-semibold text-primary">
+          {meta.label}
         </h3>
+        <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
+          {dimension.units.length} 单元
+        </span>
       </button>
       {dimension.insight && (
-        <p className="text-xs text-on-surface-variant mt-1 ml-5">
+        <p className="text-xs text-on-surface-variant mt-1 ml-10">
           核心洞察:{dimension.insight}
         </p>
       )}
       {!collapsed && (
-        <div className="space-y-2 mt-2">
+        <div className="space-y-2 mt-3">
           {dimension.units.map((u) => (
             <UnitCard
               key={u.id}
@@ -133,6 +172,11 @@ function UnitCard({
 }) {
   const [followUpText, setFollowUpText] = useState("");
   const showDialog = followUpUnitId === unit.id;
+  const followUpLabel = unit.is_irreducible
+    ? "已不可再分"
+    : unit.follow_up_count > 0
+      ? `已追问 ${unit.follow_up_count} 次`
+      : "追问";
   return (
     <div
       className={
@@ -141,29 +185,24 @@ function UnitCard({
       }
       data-testid={`unit-${unit.id}`}
     >
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
-            {unit.unit_name} [Unit #{unit.id}]
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
+              Unit #{unit.id}
+            </span>
+            <span className="font-display text-sm font-semibold text-primary">{unit.unit_name}</span>
           </div>
           <div className="text-primary mt-1">{unit.description}</div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <button
-            type="button"
-            disabled={unit.is_irreducible}
-            onClick={() => setFollowUpUnitId(unit.id)}
-            className={
-              "px-3 py-1.5 rounded text-sm " +
-              (unit.is_irreducible
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-primary-container/15 text-primary-container hover:bg-primary-container/25")
-            }
-            data-testid={`follow-up-${unit.id}`}
-          >
-            {unit.is_irreducible ? "已不可再分" : (unit.follow_up_count > 0 ? `已追问 ${unit.follow_up_count} 次` : "追问")}
-          </button>
-        </div>
+        <SecondaryButton
+          label={followUpLabel}
+          icon="forum"
+          size="sm"
+          testId={`follow-up-${unit.id}`}
+          disabled={unit.is_irreducible}
+          onClick={() => setFollowUpUnitId(unit.id)}
+        />
       </div>
 
       {showDialog && (
@@ -177,20 +216,12 @@ function UnitCard({
             data-testid={`follow-up-input-${unit.id}`}
           />
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-3 py-1 rounded bg-gray-100 text-sm"
-            >
-              取消
-            </button>
-            <button
-              type="button"
+            <SecondaryButton label="取消" size="sm" onClick={onCancel} />
+            <PrimaryButton
+              label="确认追问"
+              size="sm"
               onClick={() => onSubmit(followUpText)}
-              className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
-            >
-              确认追问
-            </button>
+            />
           </div>
         </div>
       )}

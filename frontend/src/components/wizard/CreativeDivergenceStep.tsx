@@ -23,15 +23,6 @@ export default function CreativeDivergenceStep({
   } = useThreeBDivergence(projectId);
 
   const [confirmNext, setConfirmNext] = useState<{ target: SubStage; affected: SubStage[] } | null>(null);
-  const [showUpgradeToast, setShowUpgradeToast] = useState(false);
-
-  // v1 升级后空态 toast(组件级,首次进入时检查)
-  useEffect(() => {
-    if (state.rawIntent === null && state.dimensions.length === 0 && state.completedSubStages.length === 0) {
-      setShowUpgradeToast(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // 进入 S2 时若 dimensions 为空自动跑 decompose
   useEffect(() => {
@@ -77,12 +68,6 @@ export default function CreativeDivergenceStep({
   return (
     <div data-testid="creative-divergence-step" className="flex flex-col flex-1 min-h-0">
       <StepIndicator current={state.currentSubStage} completed={state.completedSubStages} onStageClick={jumpToStage} />
-
-      {showUpgradeToast && (
-        <div className="bg-warning-container/20 border border-warning rounded-lg px-3 py-2 text-sm text-warning" data-testid="upgrade-toast">
-          创意发散已升级到 4 阶段流程,旧版本已清除
-        </div>
-      )}
 
       <div className="flex-1 flex flex-col px-6 py-4 gap-4 min-h-0">
         {state.error && (

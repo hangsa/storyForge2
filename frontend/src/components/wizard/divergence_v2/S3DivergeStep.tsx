@@ -18,6 +18,13 @@ const OPERATOR_LABELS: Record<Operator, string> = {
   chain: "组合链",
 };
 
+const OPERATOR_ICONS: Record<Operator, string> = {
+  distort: "transform",
+  break: "construction",
+  blend: "merge_type",
+  chain: "link",
+};
+
 export default function S3DivergeStep({
   dimensions, loading, onRegenerateUnit, onSelectCandidate, onRegenerateAll, onPrev, onNext,
 }: Props) {
@@ -25,15 +32,32 @@ export default function S3DivergeStep({
     d.units.length > 0 && d.units.every((u) => !d.candidates.some((c) => c.unit_id === u.id))
   );
 
+  const totalCandidates = dimensions.reduce(
+    (acc, d) => acc + d.candidates.length,
+    0,
+  );
+  const totalUnits = dimensions.reduce((acc, d) => acc + d.units.length, 0);
+  const failedUnits = dimensions.reduce(
+    (acc, d) => acc + d.units.filter((u) => !d.candidates.some((c) => c.unit_id === u.id)).length,
+    0,
+  );
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto">
+      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-4">
         <div className="flex items-center justify-between">
-          <header className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
-            Stage 3 · 自适应发散
-          </header>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary-container text-lg leading-none">call_split</span>
+            <h2 className="font-display text-base font-semibold text-primary">Stage 3 · 自适应发散</h2>
+          </div>
           <SecondaryButton label="全部重新生成" icon="refresh" size="sm" onClick={onRegenerateAll} />
         </div>
+
+        {totalUnits > 0 && (
+          <p className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
+            已生成 {totalCandidates} 个候选 · {failedUnits} 个失败
+          </p>
+        )}
 
         {allFailed && (
           <div className="p-3 bg-error-container/20 border border-error rounded-lg text-error text-sm" data-testid="all-failed-banner">
@@ -43,7 +67,7 @@ export default function S3DivergeStep({
 
         {dimensions.map((dim) => (
           <section key={dim.dimension} className="bg-surface-container-low border border-outline-variant rounded-lg p-3 space-y-2" data-testid={`diverge-dim-${dim.dimension}`}>
-            <h3 className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
+            <h3 className="font-display text-sm font-semibold text-primary-container">
               {dim.dimension}
             </h3>
             {dim.units.map((u) => {
@@ -52,30 +76,50 @@ export default function S3DivergeStep({
                 .sort((a, b) => a.selection_rank - b.selection_rank);
               const unitFailed = unitCandidates.length === 0;
               const selectedIdx = unitCandidates.findIndex((c) => c.selection_rank === 0);
+              const mainOp = unitCandidates[selectedIdx]?.main_operator ?? "distort";
+              const auxOp = unitCandidates[selectedIdx]?.aux_operator ?? null;
 
               return (
                 <div key={u.id} className="bg-surface-container border border-outline-variant rounded-lg p-3 text-sm space-y-2" data-testid={`diverge-unit-${u.id}`}>
-                  <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
-                    {u.unit_name} [Unit #{u.id}]
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
+                          Unit #{u.id}
+                        </span>
+                        <span className="font-display text-sm font-semibold text-primary truncate">
+                          {u.unit_name}
+                        </span>
+                      </div>
+                    </div>
+                    <SecondaryButton
+                      label="重新生成该单元"
+                      icon="refresh"
+                      size="sm"
+                      onClick={() => onRegenerateUnit(u.id)}
+                    />
                   </div>
                   {unitFailed ? (
-                    <div className="space-y-2">
-                      <div className="text-warning bg-warning-container/20 border border-warning/30 rounded p-2 text-sm">
-                        该单元暂不可用 (发散失败)
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => onRegenerateUnit(u.id)}
-                        className="px-3 py-1.5 rounded text-sm bg-primary-container/15 text-primary-container hover:bg-primary-container/25"
-                      >
-                        重新生成该单元
-                      </button>
+                    <div className="text-warning bg-warning-container/20 border border-warning/30 rounded p-2 text-sm">
+                      该单元暂不可用 (发散失败)
                     </div>
                   ) : (
                     <>
-                      <div className="text-xs text-on-surface-variant">
-                        算子: {OPERATOR_LABELS[unitCandidates[selectedIdx]?.main_operator ?? "distort"]}
-                        {unitCandidates[selectedIdx]?.aux_operator && ` · ${OPERATOR_LABELS[unitCandidates[selectedIdx]?.aux_operator ?? "distort"]}`}
+                      <div className="flex items-center gap-3 text-xs text-on-surface-variant">
+                        <span className="inline-flex items-center gap-1">
+                          <span aria-hidden="true" className="material-symbols-outlined text-sm leading-none">
+                            {OPERATOR_ICONS[mainOp]}
+                          </span>
+                          主算子:{OPERATOR_LABELS[mainOp]}
+                        </span>
+                        {auxOp && (
+                          <span className="inline-flex items-center gap-1">
+                            <span aria-hidden="true" className="material-symbols-outlined text-sm leading-none">
+                              {OPERATOR_ICONS[auxOp]}
+                            </span>
+                            副算子:{OPERATOR_LABELS[auxOp]}
+                          </span>
+                        )}
                       </div>
                       <div className="space-y-1">
                         {unitCandidates.map((c) => (
@@ -87,13 +131,6 @@ export default function S3DivergeStep({
                           />
                         ))}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => onRegenerateUnit(u.id)}
-                        className="px-3 py-1.5 rounded text-sm bg-primary-container/15 text-primary-container hover:bg-primary-container/25"
-                      >
-                        重新生成该单元
-                      </button>
                     </>
                   )}
                 </div>

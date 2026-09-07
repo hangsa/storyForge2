@@ -250,9 +250,9 @@ describe("useThreeBDivergence reducer (via hook)", () => {
     expect(result.current.state.noveltyScores).toEqual(noveltyScores);
   });
 
-  it("HYDRATE with state=null sets showUpgradeToast=true and resets to initial state", async () => {
+  it("HYDRATE with state=null resets to initial state", async () => {
     const { result } = renderHook(() => useThreeBDivergence("p1"));
-    await waitFor(() => expect(result.current.state.showUpgradeToast).toBe(true));
+    await waitFor(() => expect(result.current.state.currentSubStage).toBe("1"));
     expect(result.current.state.dimensions).toEqual([]);
     expect(result.current.state.committedConcept).toBeNull();
     expect(result.current.state.currentSubStage).toBe("1");
@@ -264,8 +264,7 @@ describe("useThreeBDivergence reducer (via hook)", () => {
     // treat that as null state, not crash the reducer.
     mockApi.getThreeBState.mockRejectedValueOnce(new Error("404"));
     const { result } = renderHook(() => useThreeBDivergence("p1"));
-    await waitFor(() => expect(result.current.state.showUpgradeToast).toBe(true));
-    expect(result.current.state.dimensions).toEqual([]);
+    await waitFor(() => expect(result.current.state.dimensions).toEqual([]));
     expect(result.current.state.committedConcept).toBeNull();
   });
 
@@ -316,6 +315,30 @@ describe("useThreeBDivergence reducer (via hook)", () => {
     expect(result.current.state.completedSubStages).toEqual(["1", "2", "3", "4"]);
     // Committed => currentSubStage = "4".
     expect(result.current.state.currentSubStage).toBe("4");
+  });
+
+  it("DECOMPOSE_SUCCESS coerces action.dimensions to [] when undefined (defense-in-depth)", async () => {
+    // Regression: backend /decompose occasionally returns a payload missing
+    // `dimensions` (e.g. an LLM that emits a partial response, or the request
+    // helper leaking a wrapped envelope). Reducer must coerce so S2's
+    // `dimensions.length` doesn't crash on "Cannot read properties of
+    // undefined (reading 'length')".
+    mockApi.postThreeBDecompose.mockResolvedValueOnce({
+      causal_map: "cm",
+      top_level_summary: "ts",
+      // no `dimensions` field
+    } as any);
+
+    const { result } = renderHook(() => useThreeBDivergence("p1"));
+    await waitFor(() => expect(result.current.state.currentSubStage).toBe("1"));
+
+    await act(async () => {
+      await result.current.decompose(rawIntent);
+    });
+
+    expect(result.current.state.dimensions).toEqual([]);
+    expect(result.current.state.loading).toBe(false);
+    expect(result.current.state.currentSubStage).toBe("2");
   });
 });
 

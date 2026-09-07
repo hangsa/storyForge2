@@ -22,7 +22,6 @@ interface State {
   followUpLoadingUnitId: string | null;
   currentSubStage: SubStage;
   completedSubStages: SubStage[];
-  showUpgradeToast: boolean;
 }
 
 type Action =
@@ -64,14 +63,13 @@ const initial: State = {
   followUpLoadingUnitId: null,
   currentSubStage: "1",
   completedSubStages: [],
-  showUpgradeToast: false,
 };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "HYDRATE": {
       if (action.state === null) {
-        return { ...initial, showUpgradeToast: true };
+        return initial;
       }
       const s = action.state;
       // Defend against partial/malformed payloads — `dimensions` may be
@@ -109,7 +107,11 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         loading: false,
-        dimensions: action.dimensions,
+        // Coerce non-array to []: backend /decompose occasionally returns a
+        // payload missing `dimensions` (partial LLM output, request-helper
+        // envelope leak), and S2's `dimensions.length` would otherwise crash
+        // with "Cannot read properties of undefined (reading 'length')".
+        dimensions: Array.isArray(action.dimensions) ? action.dimensions : [],
         causalMap: action.causalMap,
         topLevelSummary: action.topLevelSummary,
         completedSubStages: Array.from(new Set([...state.completedSubStages, "2"])),

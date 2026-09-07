@@ -37,7 +37,7 @@ describe("S1InputStep", () => {
     fireEvent.change(screen.getByLabelText(/灵感点子/i), {
       target: { value: "短" },
     });
-    const btn = screen.getByRole("button", { name: /开始 3B 发散/i });
+    const btn = screen.getByRole("button", { name: /进入拆解/i });
     expect(btn).toBeDisabled();
   });
 
@@ -56,7 +56,7 @@ describe("S1InputStep", () => {
     fireEvent.change(screen.getByLabelText(/主类型/i), {
       target: { value: "玄幻" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /开始 3B 发散/i }));
+    fireEvent.click(screen.getByRole("button", { name: /进入拆解/i }));
     await waitFor(() => {
       expect(onSubmitted).toHaveBeenCalledWith({
         prompt: "足够长的原始灵感点子",

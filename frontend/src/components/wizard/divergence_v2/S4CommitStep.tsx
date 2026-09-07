@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PrimaryButton, SecondaryButton } from "@/components/ds";
+import { PrimaryButton, SecondaryButton, StatCard } from "@/components/ds";
 import type { CommittedConcept, NoveltyScores } from "./types";
 
 interface Props {
@@ -18,6 +18,13 @@ const FIELDS = [
   { key: "core_tension" as const, label: "核心张力", multiline: true },
   { key: "tone" as const, label: "基调", multiline: false },
   { key: "logline" as const, label: "Logline", multiline: true },
+];
+
+const NOVELTY_METRICS: Array<{ key: keyof Omit<NoveltyScores, "composite" | "grade">; label: string }> = [
+  { key: "market_saturation", label: "市场饱和" },
+  { key: "trope_similarity", label: "套路相似度" },
+  { key: "contradiction_depth", label: "矛盾深度" },
+  { key: "discussion_potential", label: "讨论潜力" },
 ];
 
 export default function S4CommitStep({
@@ -56,27 +63,62 @@ export default function S4CommitStep({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto">
-        <header className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
-          Stage 4 · 提交
-        </header>
+      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-4">
+        <div className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary-container text-lg leading-none">task_alt</span>
+          <h2 className="font-display text-base font-semibold text-primary">Stage 4 · 提交</h2>
+        </div>
 
         {!editing ? (
           <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4 space-y-3">
             {FIELDS.map((f) => (
               <div key={f.key}>
-                <div className="text-xs text-on-surface-variant">{f.label}</div>
-                <div className="text-primary mt-1 whitespace-pre-wrap" data-testid={`committed-${f.key}`}>
-                  {(committedConcept as any)[f.key]}
-                </div>
+                <div className="font-mono text-xs uppercase tracking-wider text-on-surface-variant">{f.label}</div>
+                {f.key === "one_line" ? (
+                  <div
+                    className="font-display text-lg text-primary mt-1 whitespace-pre-wrap"
+                    data-testid={`committed-${f.key}`}
+                  >
+                    {(committedConcept as any)[f.key]}
+                  </div>
+                ) : (
+                  <div
+                    className="text-primary mt-1 whitespace-pre-wrap"
+                    data-testid={`committed-${f.key}`}
+                  >
+                    {(committedConcept as any)[f.key]}
+                  </div>
+                )}
               </div>
             ))}
             {committedConcept.edited_by_user && (
               <div className="text-xs text-warning">用户已编辑</div>
             )}
             {noveltyScores && (
-              <div className="border-t border-outline-variant pt-2 mt-2 text-xs text-on-surface-variant" data-testid="novelty-scores">
-                新颖度评分 composite: {noveltyScores.composite} {noveltyScores.grade}
+              <div className="border-t border-outline-variant pt-3 mt-3 space-y-2" data-testid="novelty-scores">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs uppercase tracking-wider text-on-surface-variant">
+                    新颖度评分
+                  </span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="font-mono text-sm text-primary">
+                      composite: {noveltyScores.composite} {noveltyScores.grade}
+                    </span>
+                    <span className="inline-block bg-primary-container/20 text-primary-container px-2 py-0.5 rounded-full text-xs font-mono">
+                      {noveltyScores.grade}
+                    </span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {NOVELTY_METRICS.map((m) => (
+                    <StatCard
+                      key={m.key}
+                      label={m.label}
+                      value={noveltyScores[m.key]}
+                      size="sm"
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -126,25 +168,16 @@ export default function S4CommitStep({
       {confirmRegen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-testid="regen-confirm-dialog">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-lg font-semibold mb-3">重新生成 concept?</h2>
+            <h2 className="font-display text-lg font-semibold mb-3">重新生成 concept?</h2>
             <p className="text-sm text-gray-600 mb-4">
               当前 concept 包含用户编辑或之前生成结果,重新生成将覆盖。是否继续?
             </p>
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="px-4 py-2 rounded bg-gray-100"
-                onClick={() => setConfirmRegen(false)}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 rounded bg-blue-600 text-white"
+              <SecondaryButton label="取消" onClick={() => setConfirmRegen(false)} />
+              <PrimaryButton
+                label="确认重新生成"
                 onClick={() => { setConfirmRegen(false); onRegenerateCommit(); }}
-              >
-                确认重新生成
-              </button>
+              />
             </div>
           </div>
         </div>

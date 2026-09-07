@@ -67,4 +67,13 @@ describe("S2DecomposeStep", () => {
     fireEvent.click(screen.getByTestId("follow-up-u3"));
     expect(screen.getByTestId("follow-up-input-u3")).toHaveValue("");
   });
+
+  it("survives undefined dimensions without crashing (defense-in-depth)", () => {
+    // Regression for proj_3ca6fad7-style flow: if any caller passes
+    // `dimensions={undefined}`, S2 used to crash at `dimensions.length`
+    // and `dimensions.reduce`. Component now coerces to [].
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    render(<S2DecomposeStep dimensions={undefined as any} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    expect(screen.getByText(/0 维度 · 0 单元/)).toBeInTheDocument();
+  });
 });

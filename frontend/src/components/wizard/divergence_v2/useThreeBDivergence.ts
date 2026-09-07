@@ -1,321 +1,341 @@
-import { useCallback, useEffect, useReducer } from "react";
-import api from "@/api/client";
+import { useReducer, useEffect, useCallback } from "react";
+import * as api from "@/api/client";
 import type {
-  Candidate,
-  DeepenedCandidate,
-  Operator,
-  RawIntent,
+  ThreeBState,
+  DimensionDecomposition,
+  Unit,
+  CommittedConcept,
+  NoveltyScores,
   SubStage,
 } from "./types";
 
 interface State {
+  loading: boolean;
+  error: string | null;
+  rawIntent: RawIntent | null;
+  dimensions: DimensionDecomposition[];
+  causalMap: string;
+  topLevelSummary: string;
+  committedConcept: CommittedConcept | null;
+  noveltyScores: NoveltyScores | null;
+  followUpLoadingUnitId: string | null;
   currentSubStage: SubStage;
   completedSubStages: SubStage[];
-  rawIntent: RawIntent | null;
-  stage1Submitting: boolean;
-  stage2Loading: boolean;
-  candidates: Candidate[];
-  byOperator: Record<Operator, Candidate[]>;
-  stage2Error: string | null;
-  stage3SelectedIds: string[];
-  stage3AppliedOperators: Record<string, Operator>;
-  stage3Deepened: DeepenedCandidate[];
-  stage3DeepenLoading: boolean;
-  committing: boolean;
-  committed: boolean;
+  showUpgradeToast: boolean;
 }
 
 type Action =
-  | { type: "HYDRATE"; state: Partial<State> }
-  | { type: "STAGE1_SUBMIT" }
+  | { type: "HYDRATE"; state: ThreeBState | null }
   | { type: "STAGE1_SUCCESS"; intent: RawIntent }
-  | { type: "STAGE2_LOADING" }
-  | {
-      type: "STAGE2_SUCCESS";
-      candidates: Candidate[];
-      byOperator: Record<Operator, Candidate[]>;
-    }
-  | { type: "STAGE2_ERROR"; message: string }
-  | { type: "TOGGLE_SELECT"; candidateId: string }
-  | { type: "SET_APPLIED_OPERATOR"; candidateId: string; op: Operator }
-  | { type: "DEEPEN_LOADING" }
-  | { type: "DEEPEN_SUCCESS"; deepened: DeepenedCandidate }
+  | { type: "DECOMPOSE_START" }
+  | { type: "DECOMPOSE_SUCCESS"; dimensions: DimensionDecomposition[]; causalMap: string; topLevelSummary: string }
+  | { type: "DECOMPOSE_ERROR"; message: string }
+  | { type: "FOLLOW_UP_START"; unitId: string }
+  | { type: "FOLLOW_UP_SUCCESS"; unit: Unit }
+  | { type: "FOLLOW_UP_ERROR"; message: string }
+  | { type: "DIVERGE_START" }
+  | { type: "DIVERGE_SUCCESS"; dimensions: DimensionDecomposition[] }
+  | { type: "DIVERGE_ERROR"; message: string }
+  | { type: "REGENERATE_UNIT_SUCCESS"; dimension: DimensionDecomposition }
+  | { type: "SELECT_UNIT_CANDIDATE"; unitId: string; candidateIndex: number; dimension: DimensionDecomposition }
   | { type: "COMMIT_START" }
-  | { type: "COMMIT_SUCCESS" }
+  | { type: "COMMIT_SUCCESS"; committedConcept: CommittedConcept; noveltyScores: NoveltyScores }
+  | { type: "COMMIT_ERROR"; message: string }
+  | { type: "EDIT_CONCEPT_START" }
+  | { type: "EDIT_CONCEPT_SUCCESS"; committedConcept: CommittedConcept }
+  | { type: "ADVANCE_START" }
+  | { type: "ADVANCE_SUCCESS"; committedAt: string }
+  | { type: "ADVANCE_ERROR"; message: string }
+  | { type: "JUMP_TO_STAGE"; stage: SubStage }
   | { type: "RESET" };
 
 const initial: State = {
+  loading: false,
+  error: null,
+  rawIntent: null,
+  dimensions: [],
+  causalMap: "",
+  topLevelSummary: "",
+  committedConcept: null,
+  noveltyScores: null,
+  followUpLoadingUnitId: null,
   currentSubStage: "1",
   completedSubStages: [],
-  rawIntent: null,
-  stage1Submitting: false,
-  stage2Loading: false,
-  candidates: [],
-  byOperator: { breaking: [], bending: [], blending: [] },
-  stage2Error: null,
-  stage3SelectedIds: [],
-  stage3AppliedOperators: {},
-  stage3Deepened: [],
-  stage3DeepenLoading: false,
-  committing: false,
-  committed: false,
+  showUpgradeToast: false,
 };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case "HYDRATE":
-      return { ...state, ...action.state };
-    case "STAGE1_SUBMIT":
-      return { ...state, stage1Submitting: true };
-    case "STAGE1_SUCCESS":
+    case "HYDRATE": {
+      if (action.state === null) {
+        return { ...initial, showUpgradeToast: true };
+      }
+      const s = action.state;
+      const completed: SubStage[] = ["1"];
+      if (s.dimensions.length > 0) completed.push("2");
+      if (s.dimensions.some((d) => d.candidates.length > 0)) completed.push("3");
+      if (s.committed_concept !== null) completed.push("4");
+      const currentSubStage: SubStage = s.committed_concept
+        ? "4"
+        : s.dimensions.some((d) => d.candidates.length > 0)
+          ? "3"
+        : s.dimensions.length > 0
+          ? "2"
+          : "1";
       return {
         ...state,
-        stage1Submitting: false,
-        rawIntent: action.intent,
-        completedSubStages: [...new Set<SubStage>([...state.completedSubStages, "1"])],
-        currentSubStage: "2",
-        stage2Loading: true,
+        rawIntent: s.raw_intent,
+        dimensions: s.dimensions,
+        causalMap: s.causal_map,
+        topLevelSummary: s.top_level_summary,
+        committedConcept: s.committed_concept,
+        noveltyScores: s.novelty_scores,
+        currentSubStage,
+        completedSubStages: completed,
       };
-    case "STAGE2_LOADING":
-      return { ...state, stage2Loading: true, stage2Error: null };
-    case "STAGE2_SUCCESS":
-      return {
-        ...state,
-        stage2Loading: false,
-        candidates: action.candidates,
-        byOperator: action.byOperator,
-        completedSubStages: [...new Set<SubStage>([...state.completedSubStages, "2"])],
-      };
-    case "STAGE2_ERROR":
-      return { ...state, stage2Loading: false, stage2Error: action.message };
-    case "TOGGLE_SELECT": {
-      const has = state.stage3SelectedIds.includes(action.candidateId);
-      const next = has
-        ? state.stage3SelectedIds.filter((id) => id !== action.candidateId)
-        : [...state.stage3SelectedIds, action.candidateId].slice(0, 3);
-      return { ...state, stage3SelectedIds: next };
     }
-    case "SET_APPLIED_OPERATOR":
+    case "JUMP_TO_STAGE":
+      return { ...state, currentSubStage: action.stage, error: null };
+    case "DECOMPOSE_START":
+      return { ...state, loading: true, error: null };
+    case "DECOMPOSE_SUCCESS":
       return {
         ...state,
-        stage3AppliedOperators: {
-          ...state.stage3AppliedOperators,
-          [action.candidateId]: action.op,
-        },
-        stage3DeepenLoading: true,
+        loading: false,
+        dimensions: action.dimensions,
+        causalMap: action.causalMap,
+        topLevelSummary: action.topLevelSummary,
+        completedSubStages: Array.from(new Set([...state.completedSubStages, "2"])),
+        currentSubStage: "2",
       };
-    case "DEEPEN_LOADING":
-      return { ...state, stage3DeepenLoading: true };
-    case "DEEPEN_SUCCESS":
+    case "DECOMPOSE_ERROR":
+      return { ...state, loading: false, error: action.message };
+    case "FOLLOW_UP_START":
+      return { ...state, followUpLoadingUnitId: action.unitId };
+    case "FOLLOW_UP_SUCCESS":
       return {
         ...state,
-        stage3DeepenLoading: false,
-        stage3Deepened: [...state.stage3Deepened, action.deepened],
+        followUpLoadingUnitId: null,
+        dimensions: state.dimensions.map((d) => ({
+          ...d,
+          units: d.units.map((u) => (u.id === action.unit.id ? action.unit : u)),
+        })),
       };
-    case "COMMIT_START":
-      return { ...state, committing: true };
+    case "DIVERGE_START":
+      return { ...state, loading: true, error: null };
+    case "DIVERGE_SUCCESS":
+      return {
+        ...state,
+        loading: false,
+        dimensions: action.dimensions,
+        committedConcept: null,
+        noveltyScores: null,
+        completedSubStages: Array.from(new Set([...state.completedSubStages, "3"])),
+        currentSubStage: "3",
+      };
+    case "REGENERATE_UNIT_SUCCESS":
+      return {
+        ...state,
+        dimensions: state.dimensions.map((d) =>
+          d.dimension === action.dimension.dimension ? action.dimension : d,
+        ),
+      };
+    case "SELECT_UNIT_CANDIDATE":
+      return {
+        ...state,
+        dimensions: state.dimensions.map((d) =>
+          d.dimension === action.dimension.dimension ? action.dimension : d,
+        ),
+      };
     case "COMMIT_SUCCESS":
       return {
         ...state,
-        committing: false,
-        committed: true,
-        completedSubStages: [...new Set<SubStage>([...state.completedSubStages, "3"])],
+        loading: false,
+        committedConcept: action.committedConcept,
+        noveltyScores: action.noveltyScores,
+        completedSubStages: Array.from(new Set([...state.completedSubStages, "4"])),
+        currentSubStage: "4",
+      };
+    case "EDIT_CONCEPT_SUCCESS":
+      return { ...state, committedConcept: action.committedConcept };
+    case "ADVANCE_SUCCESS":
+      return { ...state, loading: false };
+    case "ADVANCE_START":
+      return { ...state, loading: true };
+    case "ADVANCE_ERROR":
+      return { ...state, loading: false, error: action.message };
+    case "STAGE1_SUCCESS":
+      return {
+        ...state,
+        rawIntent: action.intent,
+        completedSubStages: Array.from(new Set([...state.completedSubStages, "1"])),
       };
     case "RESET":
-      return initial;
+      return { ...initial };
+    default:
+      return state;
   }
+}
+
+export function hasDownstreamData(state: State, targetSubStage: SubStage): boolean {
+  if (targetSubStage === "2") {
+    return state.dimensions.length > 0 || state.committedConcept !== null;
+  }
+  if (targetSubStage === "3") {
+    return state.dimensions.some((d) => d.candidates.length > 0) || state.committedConcept !== null;
+  }
+  if (targetSubStage === "4") {
+    return state.committedConcept !== null;
+  }
+  return false;
 }
 
 export function useThreeBDivergence(projectId: string) {
   const [state, dispatch] = useReducer(reducer, initial);
 
-  // Hydrate from server on mount. A 404 / empty-state response is expected for
-  // projects that have never run 3B, so we swallow the error — but we log it so
-  // a genuine backend failure is at least visible during development.
   useEffect(() => {
     let cancelled = false;
-    api
-      .getThreeBState(projectId)
-      .then((s) => {
-        if (cancelled) return;
-        const completed: SubStage[] = ["1"];
-        // S2 is reachable once any candidate exists. S3 is also reachable
-        // (the in-page 下一步：深化 button goes 2→3 in one click), so its
-        // chip should not be grey on hydrate either — otherwise a user who
-        // reloads between diverge and commit can't get back to S3 via the
-        // chip indicator.
-        if ((s.stage2_candidates ?? []).length > 0) completed.push("2", "3");
-        if (s.committed) completed.push("3"); // already pushed above
-        dispatch({
-          type: "HYDRATE",
-          state: {
-            rawIntent: s.raw_intent,
-            candidates: (s.stage2_candidates ?? []) as Candidate[],
-            stage3Deepened: (s.stage3_deepened ?? []) as DeepenedCandidate[],
-            completedSubStages: completed,
-            currentSubStage: s.committed
-              ? "3"
-              : (s.stage2_candidates ?? []).length > 0
-                ? "2"
-                : "1",
-            committed: s.committed,
-          },
-        });
-      })
-      .catch((err) => {
-        // Empty state is normal (no 3B run yet); anything else is worth seeing.
-        console.warn("[3B] hydrate failed:", err);
-      });
+    api.getThreeBState(projectId).then((s) => {
+      if (!cancelled) dispatch({ type: "HYDRATE", state: s });
+    });
     return () => {
       cancelled = true;
     };
   }, [projectId]);
 
-  // Transition-only. The actual `POST .../three-b/diverge` LLM call is issued by
-  // S1InputStep itself (it owns the form + its own submitting state and calls
-  // `api.postThreeBDiverge` before invoking its `onSubmitted` prop). The Task 19
-  // orchestrator wires it up as:
-  //
-  //   <S1InputStep onSubmitted={(intent, resp) => {
-  //      submitStage1(intent);        // -> STAGE1_SUCCESS, moves to sub-stage 2
-  //      onDivergeSuccess(resp);      // -> STAGE2_SUCCESS with the candidates
-  //   }} />
-  //
-  // so this hook never duplicates the network call.
-  const submitStage1 = useCallback(async (intent: RawIntent) => {
-    dispatch({ type: "STAGE1_SUCCESS", intent });
-  }, []);
-
-  const onDivergeSuccess = useCallback(
-    (resp: {
-      candidates: Candidate[];
-      by_operator: Record<Operator, Candidate[]>;
-    }) => {
-      dispatch({
-        type: "STAGE2_SUCCESS",
-        candidates: resp.candidates,
-        byOperator: resp.by_operator,
-      });
-    },
-    [],
-  );
-
-  const onDivergeError = useCallback((msg: string) => {
-    dispatch({ type: "STAGE2_ERROR", message: msg });
-  }, []);
-
-  // The regenerate endpoint already returns the replacement candidate, so we
-  // splice it into the existing array instead of re-fetching the whole state.
-  // Avoids a round-trip and prevents the card from flickering / losing any
-  // selection state attached to that candidate id.
-  const regenerateOne = useCallback(
-    async (candidateId: string) => {
-      const resp = await api.postThreeBRegenerateCandidate(projectId, {
-        candidate_id: candidateId,
-      });
-      const fresh = (resp as { candidate: Candidate }).candidate;
-      dispatch({
-        type: "HYDRATE",
-        state: {
-          candidates: state.candidates.map((c) =>
-            c.id === candidateId ? fresh : c,
-          ),
-        },
-      });
-    },
-    [projectId, state.candidates],
-  );
-
-  const regenerateAll = useCallback(async () => {
-    if (!state.rawIntent) return;
-    dispatch({ type: "STAGE2_LOADING" });
+  const decompose = useCallback(async (intent: RawIntent) => {
+    dispatch({ type: "DECOMPOSE_START" });
     try {
-      const resp = await api.postThreeBDiverge(projectId, state.rawIntent);
-      onDivergeSuccess(
-        resp as {
-          candidates: Candidate[];
-          by_operator: Record<Operator, Candidate[]>;
-        },
-      );
-    } catch (err) {
-      onDivergeError((err as Error).message ?? "重新生成失败");
+      const r = await api.postThreeBDecompose(projectId, intent);
+      dispatch({
+        type: "DECOMPOSE_SUCCESS",
+        dimensions: r.dimensions,
+        causalMap: r.causal_map,
+        topLevelSummary: r.top_level_summary,
+      });
+    } catch (e: any) {
+      dispatch({ type: "DECOMPOSE_ERROR", message: e.message });
     }
-  }, [projectId, state.rawIntent, onDivergeSuccess, onDivergeError]);
+  }, [projectId]);
 
-  const deepenOne = useCallback(
-    async (candidateId: string, op: Operator) => {
-      dispatch({ type: "SET_APPLIED_OPERATOR", candidateId, op });
+  const followUp = useCallback(
+    async (unitId: string, userQuestion: string | null) => {
+      dispatch({ type: "FOLLOW_UP_START", unitId });
       try {
-        const resp = await api.postThreeBDeepen(projectId, {
-          candidate_id: candidateId,
-          applied_operator: op,
-        });
-        dispatch({
-          type: "DEEPEN_SUCCESS",
-          deepened: (resp as { deepened: DeepenedCandidate }).deepened,
-        });
-      } catch {
-        // Revert: drop the key entirely rather than writing `undefined` into the
-        // map — downstream code compares `appliedOperators[id] === op`, and an
-        // explicit undefined value would keep the id enumerable in
-        // Object.keys()/entries() and read as "operator applied".
-        const { [candidateId]: _removed, ...rest } = state.stage3AppliedOperators;
-        void _removed;
-        dispatch({
-          type: "HYDRATE",
-          state: { stage3AppliedOperators: rest, stage3DeepenLoading: false },
-        });
+        const r = await api.postThreeBFollowUp(projectId, { unit_id: unitId, user_question: userQuestion });
+        dispatch({ type: "FOLLOW_UP_SUCCESS", unit: r.unit });
+      } catch (e: any) {
+        dispatch({ type: "FOLLOW_UP_ERROR", message: e.message });
       }
     },
-    [projectId, state.stage3AppliedOperators],
+    [projectId],
+  );
+
+  const diverge = useCallback(async () => {
+    dispatch({ type: "DIVERGE_START" });
+    try {
+      const r = await api.postThreeBDiverge(projectId);
+      dispatch({ type: "DIVERGE_SUCCESS", dimensions: r.dimensions });
+    } catch (e: any) {
+      dispatch({ type: "DIVERGE_ERROR", message: e.message });
+    }
+  }, [projectId]);
+
+  const regenerateUnit = useCallback(
+    async (unitId: string) => {
+      try {
+        const r = await api.postThreeBRegenerateUnit(projectId, { unit_id: unitId });
+        const dim = state.dimensions.find((d) => d.units.some((u) => u.id === unitId));
+        if (dim) {
+          const updatedDim = {
+            ...dim,
+            candidates: [
+              ...dim.candidates.filter((c) => c.unit_id !== unitId),
+              ...r.candidates,
+            ],
+          };
+          dispatch({ type: "REGENERATE_UNIT_SUCCESS", dimension: updatedDim });
+        }
+      } catch (e: any) {
+        dispatch({ type: "DIVERGE_ERROR", message: e.message });
+      }
+    },
+    [projectId, state.dimensions],
+  );
+
+  const selectCandidate = useCallback(
+    async (unitId: string, candidateIndex: number) => {
+      try {
+        const r = await api.postThreeBSelectUnit(projectId, { unit_id: unitId, candidate_index: candidateIndex });
+        dispatch({
+          type: "SELECT_UNIT_CANDIDATE",
+          unitId,
+          candidateIndex,
+          dimension: r.dimension,
+        });
+      } catch (e: any) {
+        dispatch({ type: "DIVERGE_ERROR", message: e.message });
+      }
+    },
+    [projectId],
   );
 
   const commit = useCallback(async () => {
     dispatch({ type: "COMMIT_START" });
     try {
-      const deepenedIds = state.stage3Deepened.map((d) => d.id);
-      await api.postThreeBCommit(projectId, { deepened_ids: deepenedIds });
-      dispatch({ type: "COMMIT_SUCCESS" });
-    } catch {
-      dispatch({ type: "HYDRATE", state: { committing: false } });
+      const r = await api.postThreeBCommit(projectId);
+      dispatch({
+        type: "COMMIT_SUCCESS",
+        committedConcept: r.committed_concept,
+        noveltyScores: r.novelty_scores,
+      });
+    } catch (e: any) {
+      dispatch({ type: "COMMIT_ERROR", message: e.message });
     }
-  }, [projectId, state.stage3Deepened]);
-
-  const jumpTo = useCallback((stage: SubStage) => {
-    // Mark the target sub-stage as completed so the StepIndicator chip stays
-    // clickable when the user later navigates back. Set semantics dedup
-    // repeat visits. Without this, navigating S3 → S2 leaves the "3. 深化提交"
-    // chip grey (it's only marked completed on COMMIT_SUCCESS), so the user
-    // can never return to S3 via the chip — only via the in-page button.
-    dispatch({
-      type: "HYDRATE",
-      state: {
-        currentSubStage: stage,
-        completedSubStages: [...new Set<SubStage>([...state.completedSubStages, stage])],
-      },
-    });
-  }, [state.completedSubStages]);
-
-  const reset = useCallback(async () => {
-    await api.deleteThreeBState(projectId);
-    dispatch({ type: "RESET" });
   }, [projectId]);
 
-  const toggleSelect = useCallback((candidateId: string) => {
-    dispatch({ type: "TOGGLE_SELECT", candidateId });
+  const editConcept = useCallback(
+    async (fields: Partial<CommittedConcept>) => {
+      dispatch({ type: "EDIT_CONCEPT_START" });
+      try {
+        const r = await api.postThreeBEditConcept(projectId, fields);
+        dispatch({ type: "EDIT_CONCEPT_SUCCESS", committedConcept: r.committed_concept });
+      } catch (e: any) {
+        dispatch({ type: "COMMIT_ERROR", message: e.message });
+      }
+    },
+    [projectId],
+  );
+
+  const advance = useCallback(async () => {
+    dispatch({ type: "ADVANCE_START" });
+    try {
+      const r = await api.postThreeBAdvance(projectId);
+      dispatch({ type: "ADVANCE_SUCCESS", committedAt: r.committed_at });
+    } catch (e: any) {
+      dispatch({ type: "ADVANCE_ERROR", message: e.message });
+    }
+  }, [projectId]);
+
+  const jumpToStage = useCallback((stage: SubStage) => {
+    dispatch({ type: "JUMP_TO_STAGE", stage });
+  }, []);
+
+  const reset = useCallback(() => {
+    dispatch({ type: "RESET" });
   }, []);
 
   return {
     state,
-    submitStage1,
-    onDivergeSuccess,
-    onDivergeError,
-    regenerateOne,
-    regenerateAll,
-    deepenOne,
+    decompose,
+    followUp,
+    diverge,
+    regenerateUnit,
+    selectCandidate,
     commit,
-    jumpTo,
+    editConcept,
+    advance,
+    jumpToStage,
     reset,
-    toggleSelect,
   };
 }

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -96,6 +95,17 @@ def test_migrate_deletes_v1_file(tmp_path, monkeypatch):
 def test_migrate_returns_none_when_no_file(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
     assert migrate_state_on_load("proj_test") is None
+
+
+def test_migrate_deletes_file_without_schema_version(tmp_path, monkeypatch):
+    """A file with no schema_version key is treated as v1 and deleted."""
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    state_path = tmp_path / "proj_test" / "creative_os" / "three_b_state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({"raw_intent": {"prompt": "x", "genre_primary": "y"}}), encoding="utf-8")
+    result = migrate_state_on_load("proj_test")
+    assert result is None
+    assert not state_path.exists()
 
 
 def test_migrate_passes_v2_state_through(tmp_path, monkeypatch):

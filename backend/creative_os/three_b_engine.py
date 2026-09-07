@@ -24,7 +24,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from backend.config import settings
 from backend.services.dimension_labels import Dimension  # noqa: F401  (re-exported)
@@ -50,8 +50,15 @@ DECOMPOSE_PROMPT = "three_b_decompose"
 COMMIT_PROMPT = "three_b_commit"
 FOLLOW_UP_PROMPT = "three_b_follow_up"
 
+DimensionStatus = Literal["pending", "decomposed", "diverged", "divergence_failed"]
+
 MIN_UNITS_WITH_CANDIDATES_FOR_COMMIT = 3  # < 3 units have candidates → /commit 拒绝
 DIVERGE_CONCURRENCY = 5
+
+# TODO(divergence): removed in Task 13 (routes rewrite). Kept as a shim to avoid
+# breaking backend/api/three_b_routes.py imports between Task 2 and Task 13.
+MAX_DEEPENED_IDS = 3
+MIN_DEEPENED_IDS = 1
 
 
 @dataclass
@@ -92,7 +99,7 @@ class DimensionDecomposition:
     insight: str                      # 核心洞察
     units: list[Unit]
     candidates: list[UnitCandidate] = field(default_factory=list)
-    dimension_status: str = "pending"  # pending | decomposed | diverged | divergence_failed
+    dimension_status: DimensionStatus = "pending"
 
 
 @dataclass

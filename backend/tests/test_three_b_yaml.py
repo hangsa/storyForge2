@@ -308,6 +308,54 @@ def test_plaza_three_b_get_effective_round_trip(reset_plaza_store):
         )
 
 
+def test_load_prompt_effective_resolves_subdir_three_b_by_bare_stem(reset_plaza_store):
+    """Regression for 2026-09-06 Plaza bug: per-project Plaza's `get_prompt`
+    called `load_prompt_effective("three_b_breaking")` which routed through
+    `_load_yaml_prompt` with direct-path-only matching. That raised
+    FileNotFoundError because `three_b_breaking.yaml` only exists under
+    `creative/`, returning a 404 ("Prompt template not found") to the UI.
+
+    After the fix `_load_yaml_prompt` falls back to a recursive walk when the
+    direct path is absent, so bare-stem lookups resolve subdir files. The
+    engine itself was also switched to bare stems (`three_b_breaking` instead
+    of `creative/three_b_breaking`) so the override JSON key Plaza saves under
+    matches what the engine reads back — otherwise user edits silently had no
+    effect at runtime.
+    """
+    from backend.services.prompt_override_store import load_prompt_effective
+
+    for name in EXPECTED_NAMES:
+        eff = load_prompt_effective(name)
+        assert isinstance(eff, dict), f"load_prompt_effective({name!r}) must return a dict"
+        assert eff.get("name") == name, (
+            f"load_prompt_effective({name!r}) returned name={eff.get('name')!r}; "
+            "expected the engine-canonical stem so Plaza override keys align"
+        )
+        assert eff.get("system_prompt"), (
+            f"load_prompt_effective({name!r}) returned empty system_prompt"
+        )
+
+
+def test_load_prompt_effective_prefers_root_for_duplicate_basenames(reset_plaza_store):
+    """`trope_extraction.yaml` exists at both root and `creative/`. The
+    engine calls bare-stem `load_prompt_effective("trope_extraction")` and
+    expects the root copy (claude-haiku-4-5 + 2000 tokens). The direct-path
+    fast path in `_load_yaml_prompt` keeps that contract; the recursive
+    fallback (which sorts alphabetically and would pick `creative/` first)
+    must NOT override it for files that DO exist at root."""
+    from backend.services.prompt_override_store import load_prompt_effective
+
+    eff = load_prompt_effective("trope_extraction")
+    assert eff.get("model") == "claude-haiku-4-5-20251001", (
+        "Bare-stem `trope_extraction` must resolve to root copy "
+        f"(got model={eff.get('model')!r})"
+    )
+    assert eff.get("max_tokens") == 2000, (
+        "Bare-stem `trope_extraction` must resolve to root copy "
+        f"(got max_tokens={eff.get('max_tokens')!r})"
+    )
+
+
 # --- Negative: other prompts must not be confused with 3B ----------------------
 
 
@@ -318,3 +366,24 @@ def test_other_creative_prompts_are_not_in_three_b_set(name: str):
     assert name not in EXPECTED_NAMES, (
         f"{name} is a creative prompt but must not collide with the 3B set"
     )
+
+
+# --- three_b_decompose (Stage 1→2 prompt, added in rewrite Task 10) -----------
+
+
+def test_three_b_decompose_yaml_exists():
+    from pathlib import Path
+    p = Path("backend/prompts/creative/three_b_decompose.yaml")
+    assert p.exists(), f"{p} 不存在"
+
+
+def test_three_b_decompose_yaml_schema():
+    import yaml
+    from pathlib import Path
+    p = Path("backend/prompts/creative/three_b_decompose.yaml")
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert data["name"] == "three_b_decompose"
+    assert "5 维度" in data["system_prompt"] or "ontology" in data["system_prompt"].lower()
+    assert "{prompt}" in data["user_prompt_template"]
+    assert "causal_map" in data["system_prompt"] or "causal_map" in data["user_prompt_template"]
+    assert "top_level_summary" in data["system_prompt"] or "top_level_summary" in data["user_prompt_template"]

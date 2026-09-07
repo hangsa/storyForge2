@@ -258,6 +258,30 @@ describe("useThreeBDivergence reducer (via hook)", () => {
     expect(result.current.state.currentSubStage).toBe("1");
   });
 
+  it("HYDRATE tolerates getThreeBState rejection (404 → no-state path)", async () => {
+    // Regression for proj_3ca6fad7 (2026-09-07): backend returns 404
+    // "state 不存在" when no three-b state file exists. The hook must
+    // treat that as null state, not crash the reducer.
+    mockApi.getThreeBState.mockRejectedValueOnce(new Error("404"));
+    const { result } = renderHook(() => useThreeBDivergence("p1"));
+    await waitFor(() => expect(result.current.state.showUpgradeToast).toBe(true));
+    expect(result.current.state.dimensions).toEqual([]);
+    expect(result.current.state.committedConcept).toBeNull();
+  });
+
+  it("HYDRATE tolerates malformed payload (missing dimensions field)", async () => {
+    // Regression for proj_3ca6fad7 (2026-09-07): if the request helper
+    // leaks a FastAPI {"detail": "..."} envelope (no error field), the
+    // hook used to dispatch HYDRATE with that string-wrapped object and
+    // crash the reducer at `s.dimensions.length`. Reducer now defends
+    // against partial shapes.
+    mockApi.getThreeBState.mockResolvedValueOnce({} as any);
+    const { result } = renderHook(() => useThreeBDivergence("p1"));
+    await waitFor(() => expect(result.current.state.dimensions).toEqual([]));
+    expect(result.current.state.committedConcept).toBeNull();
+    expect(result.current.state.currentSubStage).toBe("1");
+  });
+
   it("HYDRATE with non-null state computes completedSubStages + currentSubStage from state shape", async () => {
     mockApi.getThreeBState.mockResolvedValueOnce(
       makeState({

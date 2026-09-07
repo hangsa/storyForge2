@@ -74,25 +74,29 @@ function reducer(state: State, action: Action): State {
         return { ...initial, showUpgradeToast: true };
       }
       const s = action.state;
+      // Defend against partial/malformed payloads — `dimensions` may be
+      // missing if the response isn't a real ThreeBState (e.g. the request
+      // helper mistakenly returns a FastAPI {"detail": "..."} envelope).
+      const dimensions = Array.isArray(s.dimensions) ? s.dimensions : [];
       const completed: SubStage[] = ["1"];
-      if (s.dimensions.length > 0) completed.push("2");
-      if (s.dimensions.some((d) => d.candidates.length > 0)) completed.push("3");
+      if (dimensions.length > 0) completed.push("2");
+      if (dimensions.some((d) => d.candidates.length > 0)) completed.push("3");
       if (s.committed_concept !== null) completed.push("4");
       const currentSubStage: SubStage = s.committed_concept
         ? "4"
-        : s.dimensions.some((d) => d.candidates.length > 0)
+        : dimensions.some((d) => d.candidates.length > 0)
           ? "3"
-        : s.dimensions.length > 0
+        : dimensions.length > 0
           ? "2"
           : "1";
       return {
         ...state,
-        rawIntent: s.raw_intent,
-        dimensions: s.dimensions,
-        causalMap: s.causal_map,
-        topLevelSummary: s.top_level_summary,
-        committedConcept: s.committed_concept,
-        noveltyScores: s.novelty_scores,
+        rawIntent: s.raw_intent ?? null,
+        dimensions,
+        causalMap: s.causal_map ?? "",
+        topLevelSummary: s.top_level_summary ?? "",
+        committedConcept: s.committed_concept ?? null,
+        noveltyScores: s.novelty_scores ?? null,
         currentSubStage,
         completedSubStages: completed,
       };
@@ -211,9 +215,16 @@ export function useThreeBDivergence(projectId: string) {
 
   useEffect(() => {
     let cancelled = false;
-    api.getThreeBState(projectId).then((s) => {
-      if (!cancelled) dispatch({ type: "HYDRATE", state: s });
-    });
+    api
+      .getThreeBState(projectId)
+      .then((s) => {
+        if (!cancelled) dispatch({ type: "HYDRATE", state: s });
+      })
+      .catch(() => {
+        // 404 / network: treat as no-state. The reducer's HYDRATE-null
+        // branch restores initial state and shows the upgrade toast.
+        if (!cancelled) dispatch({ type: "HYDRATE", state: null });
+      });
     return () => {
       cancelled = true;
     };

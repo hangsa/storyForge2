@@ -454,3 +454,75 @@ async def test_diverge_rerun_replaces_candidates_not_appends(tmp_path, monkeypat
     dims = await engine.diverge("proj_test")
     assert len(dims[0].candidates) == 2  # not 4
     assert len(load_state("proj_test").dimensions[0].candidates) == 2
+
+
+# ---- regenerate_unit ----
+
+@pytest.mark.asyncio
+async def test_regenerate_unit_replaces_candidates_for_that_unit_only(tmp_path, monkeypatch, mock_router):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine(model_router=mock_router)
+    state = ThreeBState(
+        project_id="proj_test",
+        raw_intent=RawIntent(prompt="x", genre_primary="y"),
+        dimensions=[DimensionDecomposition(
+            dimension=DimLabel.ONTOLOGY, insight="i",
+            units=[
+                Unit(id="unit_a", dimension=DimLabel.ONTOLOGY, unit_name="a", description="da"),
+                Unit(id="unit_b", dimension=DimLabel.ONTOLOGY, unit_name="b", description="db"),
+            ],
+            candidates=[
+                UnitCandidate(id="cand_old_a1", unit_id="unit_a", unit_name="a", description="old_a1", chain_reaction="r", main_operator="distort"),
+                UnitCandidate(id="cand_old_a2", unit_id="unit_a", unit_name="a", description="old_a2", chain_reaction="r", main_operator="distort"),
+                UnitCandidate(id="cand_old_b", unit_id="unit_b", unit_name="b", description="old_b", chain_reaction="r", main_operator="distort"),
+            ],
+        )],
+    )
+    atomic_write_state("proj_test", state)
+
+    mock_router.execute.return_value = {"content": json.dumps({"candidates": [
+        {"description": "new_a1", "chain_reaction": "r", "main_operator": "break", "selection_rank": 0},
+        {"description": "new_a2", "chain_reaction": "r", "main_operator": "break", "selection_rank": 1},
+    ]})}
+
+    new_cands = await engine.regenerate_unit("proj_test", "unit_a")
+    assert len(new_cands) == 2
+    assert all(c.unit_id == "unit_a" for c in new_cands)
+    reloaded = load_state("proj_test")
+    reloaded_a_cands = [c for c in reloaded.dimensions[0].candidates if c.unit_id == "unit_a"]
+    reloaded_b_cands = [c for c in reloaded.dimensions[0].candidates if c.unit_id == "unit_b"]
+    assert len(reloaded_a_cands) == 2  # unit_a 重生
+    assert all(c.description.startswith("new_a") for c in reloaded_a_cands)
+    assert len(reloaded_b_cands) == 1  # unit_b 保留
+    assert reloaded_b_cands[0].description == "old_b"
+
+
+def test_select_unit_candidate_swaps_rank(tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine()
+    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+        dimension=DimLabel.ONTOLOGY, insight="i",
+        units=[Unit(id="unit_a", dimension=DimLabel.ONTOLOGY, unit_name="a", description="d")],
+        candidates=[
+            UnitCandidate(id="c1", unit_id="unit_a", unit_name="a", description="first", chain_reaction="r", main_operator="distort", selection_rank=0),
+            UnitCandidate(id="c2", unit_id="unit_a", unit_name="a", description="second", chain_reaction="r", main_operator="distort", selection_rank=1),
+        ],
+    )])
+    atomic_write_state("proj_test", state)
+    dim = engine.select_unit_candidate("proj_test", "unit_a", candidate_index=1)
+    cands = dim.candidates
+    assert cands[1].selection_rank == 0  # 候选 1 提升到 rank 0
+    assert cands[0].selection_rank == 1
+
+
+def test_select_unit_candidate_rejects_out_of_range(tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
+    engine = ThreeBEngine()
+    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+        dimension=DimLabel.ONTOLOGY, insight="i",
+        units=[Unit(id="u", dimension=DimLabel.ONTOLOGY, unit_name="u", description="d")],
+        candidates=[UnitCandidate(id="c", unit_id="u", unit_name="u", description="d", chain_reaction="r", main_operator="distort")],
+    )])
+    atomic_write_state("proj_test", state)
+    with pytest.raises(ValueError, match="超出范围"):
+        engine.select_unit_candidate("proj_test", "u", candidate_index=5)

@@ -473,3 +473,55 @@ class ThreeBEngine:
                 if u.id == unit_id:
                     return u
         return None
+
+    async def regenerate_unit(self, project_id: str, unit_id: str) -> list[UnitCandidate]:
+        """重跑该 unit 的发散,只替换该 unit 的 candidates。"""
+        state = load_state(project_id)
+        if state is None or state.raw_intent is None:
+            raise ValueError(f"项目 {project_id} 未发散")
+        target_dim = None
+        target_unit = None
+        for d in state.dimensions:
+            for u in d.units:
+                if u.id == unit_id:
+                    target_dim, target_unit = d, u
+                    break
+            if target_unit:
+                break
+        if target_unit is None:
+            raise ValueError(f"unit {unit_id} 不存在")
+
+        new_cands = await self._diverge_single_unit(state.raw_intent, target_dim, target_unit)
+        if not new_cands:
+            raise ValueError("regenerate_unit: LLM 未返回候选")
+
+        # 替换 target_dim.candidates 中属于该 unit 的部分
+        target_dim.candidates = [c for c in target_dim.candidates if c.unit_id != unit_id] + new_cands
+        atomic_write_state(project_id, state)
+        return new_cands
+
+    def select_unit_candidate(
+        self, project_id: str, unit_id: str, candidate_index: int
+    ) -> DimensionDecomposition:
+        """切换 selection_rank 指向 candidate_index(纯本地操作)。"""
+        state = load_state(project_id)
+        if state is None:
+            raise ValueError(f"项目 {project_id} 无 state")
+        for d in state.dimensions:
+            cands = [c for c in d.candidates if c.unit_id == unit_id]
+            if not cands:
+                continue
+            if candidate_index >= len(cands):
+                raise ValueError(f"candidate_index {candidate_index} 超出范围 (该 unit 有 {len(cands)} 候选)")
+            # 把 target rank swap 到 0,原 rank=0 移到 target
+            target = cands[candidate_index]
+            current_zero = next((c for c in cands if c.selection_rank == 0), None)
+            if current_zero is not None and current_zero.id != target.id:
+                current_zero.selection_rank, target.selection_rank = target.selection_rank, 0
+            elif current_zero is None:
+                target.selection_rank = 0
+            # 写回 d.candidates(替换该 unit 的候选列表)
+            d.candidates = [c for c in d.candidates if c.unit_id != unit_id] + cands
+            atomic_write_state(project_id, state)
+            return d
+        raise ValueError(f"unit {unit_id} 无候选")

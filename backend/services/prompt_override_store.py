@@ -227,19 +227,39 @@ _override_store_instance: Optional["PromptOverrideStore"] = None
 def _load_yaml_prompt(name: str, prompts_dir: Path) -> dict[str, Any]:
     """Load a YAML prompt file by base name (with or without .yaml).
 
-    Names may be either a bare stem (`scene_writing`) or a subdir-qualified
-    stem (`character_designer/growth_discuss`). The latter resolves to
-    `<prompts_dir>/character_designer/growth_discuss.yaml` — same behavior as
-    the pre-existing `BaseAgent._load_prompt_dict_from_yaml` so that agents
-    using subdirs (character_designer, creative, style_engine) keep working.
+    Accepts both bare stems (`scene_writing`, `three_b_follow_up`) and
+    subdir-qualified stems (`character_designer/growth_discuss`,
+    `creative/three_b_follow_up`).
+
+    Lookup order:
+    1. Direct path `<prompts_dir>/<name>.yaml` — fast path for root files
+       like `trope_extraction.yaml` whose bare stem is also the canonical
+       location. Preserves the original BaseAgent behavior for plain stems.
+    2. Recursive search via `_iter_yaml_files`-style walk — picks the first
+       yaml whose filename matches `<stem>.yaml`. Lets the per-project
+       Prompt Plaza API serve subdir prompts under their bare stem name
+       (matching what `list_available()` returns and what `PromptOverrideStore`
+       already does). For duplicate basenames (currently `trope_extraction`
+       exists at both root and `creative/`), the direct path in step 1 wins,
+       so callers that want a specific copy must pass the subdir-qualified
+       name (`creative/trope_extraction`).
     """
     candidate = name if name.endswith(".yaml") else f"{name}.yaml"
-    path = prompts_dir / candidate
-    if not path.exists():
-        raise FileNotFoundError(f"Prompt template not found: {name}")
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    return data
+    direct = prompts_dir / candidate
+    if direct.exists():
+        with open(direct, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    # Fallback: walk the tree, matching by filename (handles bare stems that
+    # only exist in a subdir, like `three_b_follow_up` -> `creative/three_b_follow_up.yaml`).
+    stem = Path(candidate).stem
+    for path in sorted(prompts_dir.rglob("*.yaml")):
+        rel = path.relative_to(prompts_dir)
+        if len(rel.parts) > 2:
+            continue
+        if path.name == candidate and path.stem == stem:
+            with open(path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+    raise FileNotFoundError(f"Prompt template not found: {name}")
 
 
 def load_prompt_effective(

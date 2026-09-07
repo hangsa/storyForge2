@@ -60,7 +60,7 @@ class CharacterDesigner(BaseAgent):
         self, *, character: dict, outline: dict, question: str
     ) -> WorkshopDiscussResponse:
         try:
-            prompt = self.load_prompt("character_designer/growth_discuss")
+            prompt = self.load_prompt("growth_discuss")
             user_prompt = prompt.format_user(
                 character_name=character.get("name", ""),
                 stages_text=self._stages_text(character),

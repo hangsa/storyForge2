@@ -1,18 +1,13 @@
-export type Operator = "breaking" | "bending" | "blending";
+// 创意发散 v2 类型定义(snake_case 转换在 api/client.ts 完成)
 
-export const OPERATORS: Operator[] = ["breaking", "bending", "blending"];
+export type Dimension =
+  | "ontology"
+  | "energetics"
+  | "power_structure"
+  | "protagonist_engine"
+  | "narrative_physics";
 
-export const OPERATOR_LABELS: Record<Operator, string> = {
-  breaking: "打破",
-  bending: "扭曲",
-  blending: "融合",
-};
-
-export const OPERATOR_ICONS: Record<Operator, string> = {
-  breaking: "🔨",
-  bending: "〰️",
-  blending: "🌀",
-};
+export type Operator = "distort" | "break" | "blend" | "chain";
 
 export interface RawIntent {
   prompt: string;
@@ -20,40 +15,41 @@ export interface RawIntent {
   genre_secondary: string | null;
 }
 
-export interface Candidate {
+export interface Unit {
   id: string;
-  operator: Operator;
-  sub_dimension: string;
-  sub_dimension_index: number;
-  premise_one_line: string;
-  rationale: string;
-  novelty_hook: string;
-  recognition_score: number;
-  strangeness_score: number;
-  regenerated_count: number;
+  dimension: Dimension;
+  unit_name: string;
+  description: string;
+  follow_up_count: number;
+  is_irreducible: boolean;
 }
 
-export interface DeepenedCandidate {
+export interface UnitCandidate {
   id: string;
-  source_candidate_id: string;
-  source_operator: Operator;
-  applied_operator: Operator;
-  applied_sub_dimension: string;
-  applied_sub_dimension_index: number;
-  premise_one_line: string;
-  rationale: string;
-  novelty_hook: string;
-  recognition_score: number;
-  strangeness_score: number;
-  deepen_count: number;
+  unit_id: string;
+  unit_name: string;
+  description: string;
+  chain_reaction: string;
+  main_operator: Operator;
+  aux_operator: Operator | null;
+  selection_rank: number;
 }
 
-export interface ConceptAndDna {
+export interface DimensionDecomposition {
+  dimension: Dimension;
+  insight: string;
+  units: Unit[];
+  candidates: UnitCandidate[];
+  dimension_status: "pending" | "decomposed" | "diverged" | "divergence_failed";
+}
+
+export interface CommittedConcept {
   one_line: string;
   expanded: string;
   core_tension: string;
   tone: string;
   logline: string;
+  edited_by_user: boolean;
 }
 
 export interface NoveltyScores {
@@ -65,29 +61,22 @@ export interface NoveltyScores {
   grade: string;
 }
 
-// NOTE: backend `ThreeBEngine.diverge()` (see backend/creative_os/three_b_engine.py
-// line ~207) returns `{candidates, by_operator}` only — there is no `elapsed_ms`
-// field. The plan's earlier draft included one; we deliberately drop it so the
-// type matches the wire contract.
-export interface DivergeResponse {
-  candidates: Candidate[];
-  by_operator: Record<Operator, Candidate[]>;
+export interface ThreeBState {
+  schema_version: 2;
+  project_id: string;
+  raw_intent: RawIntent | null;
+  decompose_started_at: string | null;
+  decompose_completed_at: string | null;
+  causal_map: string;
+  top_level_summary: string;
+  dimensions: DimensionDecomposition[];
+  diverge_started_at: string | null;
+  diverge_completed_at: string | null;
+  commit_started_at: string | null;
+  commit_completed_at: string | null;
+  committed_concept: CommittedConcept | null;
+  novelty_scores: NoveltyScores | null;
 }
 
-export interface DeepenResponse {
-  deepened: DeepenedCandidate;
-}
-
-export interface CommitResponse {
-  concept_and_dna: ConceptAndDna;
-  novelty_scores: NoveltyScores;
-  message: string;
-}
-
-export type SubStage = "1" | "2" | "3";
-
-export const SUB_STAGES: Array<{ key: SubStage; label: string }> = [
-  { key: "1", label: "输入灵感" },
-  { key: "2", label: "3B 发散" },
-  { key: "3", label: "深化提交" },
-];
+// UI 辅助类型
+export type SubStage = "1" | "2" | "3" | "4";

@@ -1,35 +1,35 @@
-"""3B 创造力法则 API routes (Wizard 「创意发散」3 阶段流程).
+"""4 阶段创意发散 API 路由。
 
 Mounted at /api/v1/projects/{project_id}/creative/diverge/three-b/*.
 
-Endpoints:
-- GET    /state              — Read three_b_state.json (or skeleton)
-- DELETE /state              — Delete three_b_state.json
-- POST   /diverge            — Stage 1→2 parallel 3-operator divergence
-- POST   /deepen             — Stage 2→3 single-candidate secondary operator
-- POST   /commit             — Stage 3 commit (synthesize concept + novelty)
-- POST   /regenerate-candidate — Re-run one operator LLM call, replace in place
+端点(共 10):
+- GET    /state              — 读 state(走 migrate)
+- DELETE /state              — 删 state
+- POST   /decompose          — Stage 2 拆解
+- POST   /follow-up          — Stage 2 追问单 unit
+- POST   /diverge            — Stage 3 per-unit 自适应发散
+- POST   /regenerate-unit    — Stage 3 单 unit 重生
+- POST   /select-unit        — Stage 3 切换候选
+- POST   /commit             — Stage 4 LLM 合成 5 字段
+- POST   /edit-concept       — Stage 4 用户编辑
+- POST   /advance            — Stage 4 写盘(commit-and-advance)
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from backend.config import settings
 from backend.creative_os.three_b_engine import (
-    OPERATORS,
-    MAX_DEEPENED_IDS,
-    MIN_DEEPENED_IDS,
     RawIntent,
     ThreeBEngine,
-    ThreeBState,
-    atomic_write_state,
-    load_state,
+    migrate_state_on_load,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,32 +39,33 @@ router = APIRouter(
     tags=["three_b"],
 )
 
-# Module-level engine instance (LLM router wired lazily on first call)
-_engine: Optional[ThreeBEngine] = None
 
-
-def _get_engine() -> ThreeBEngine:
-    """Lazily instantiate the 3B engine with a real ModelRouter."""
-    global _engine
-    if _engine is None:
+def _get_engine(request: Request) -> ThreeBEngine:
+    """Get ThreeBEngine singleton (created in app lifespan or on-demand)."""
+    engine = getattr(request.app.state, "three_b_engine", None)
+    if engine is None:
         from backend.llm.model_router import ModelRouter
-        _engine = ThreeBEngine(model_router=ModelRouter())
-    return _engine
+        engine = ThreeBEngine(model_router=ModelRouter())
+        request.app.state.three_b_engine = engine
+    return engine
 
 
-def _ensure_project(project_id: str) -> None:
-    """Raise 404 with PROJECT_NOT_FOUND if project dir is missing."""
-    proj_dir = Path(settings.projects_dir) / project_id
-    if not proj_dir.exists():
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": True,
-                "code": "PROJECT_NOT_FOUND",
-                "message": f"项目 {project_id} 不存在",
-                "detail": {},
-            },
-        )
+def _state_path(project_id: str) -> Path:
+    return (
+        Path(settings.projects_dir)
+        / project_id
+        / "creative_os"
+        / "three_b_state.json"
+    )
+
+
+def _serialize_state(state) -> dict:
+    """Convert ThreeBState dataclass to JSON-friendly dict."""
+    return asdict(state)
+
+
+def _serialize_dimensions(dims) -> list[dict]:
+    return [asdict(d) for d in dims]
 
 
 # ---------------------------------------------------------------------------
@@ -72,33 +73,32 @@ def _ensure_project(project_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-class DivergeRequest(BaseModel):
-    prompt: str = Field(min_length=10, description="原始创意点子 ≥10 字")
+class DecomposeRequest(BaseModel):
+    prompt: str = Field(..., min_length=10)
     genre_primary: str
     genre_secondary: Optional[str] = None
 
 
-class DeepenRequest(BaseModel):
-    candidate_id: str
-    applied_operator: str
-
-    @field_validator("applied_operator")
-    @classmethod
-    def _check_op(cls, v: str) -> str:
-        if v not in OPERATORS:
-            raise ValueError(f"applied_operator 必须是 {OPERATORS} 之一")
-        return v
+class FollowUpRequest(BaseModel):
+    unit_id: str
+    user_question: Optional[str] = None
 
 
-class CommitRequest(BaseModel):
-    deepened_ids: list[str] = Field(
-        min_length=MIN_DEEPENED_IDS,
-        max_length=MAX_DEEPENED_IDS,
-    )
+class RegenerateUnitRequest(BaseModel):
+    unit_id: str
 
 
-class RegenerateCandidateRequest(BaseModel):
-    candidate_id: str
+class SelectUnitRequest(BaseModel):
+    unit_id: str
+    candidate_index: int = Field(..., ge=0)
+
+
+class EditConceptRequest(BaseModel):
+    one_line: Optional[str] = None
+    expanded: Optional[str] = None
+    core_tension: Optional[str] = None
+    tone: Optional[str] = None
+    logline: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -108,132 +108,150 @@ class RegenerateCandidateRequest(BaseModel):
 
 @router.get("/state")
 async def get_state(project_id: str) -> dict:
-    _ensure_project(project_id)
-    state = load_state(project_id)
+    state = migrate_state_on_load(project_id)
     if state is None:
-        return {
-            "schema_version": 1,
-            "project_id": project_id,
-            "raw_intent": None,
-            "stage1_completed_at": None,
-            "stage2_started_at": None,
-            "stage2_completed_at": None,
-            "stage2_candidates": [],
-            "stage3_deepened": [],
-            "committed": False,
-            "committed_at": None,
-        }
-    from dataclasses import asdict
-    return asdict(state)
+        raise HTTPException(
+            status_code=404,
+            detail="state 不存在(项目未启动创意发散或已迁移)",
+        )
+    return _serialize_state(state)
 
 
 @router.delete("/state")
 async def delete_state(project_id: str) -> dict:
-    _ensure_project(project_id)
-    path = (
-        Path(settings.projects_dir)
-        / project_id
-        / "creative_os"
-        / "three_b_state.json"
-    )
-    if path.exists():
-        path.unlink()
-    return {"deleted": True, "project_id": project_id}
+    p = _state_path(project_id)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="state 不存在")
+    p.unlink()
+    return {"deleted": True}
+
+
+@router.post("/decompose")
+async def decompose(project_id: str, body: DecomposeRequest, request: Request) -> dict:
+    engine = _get_engine(request)
+    try:
+        dimensions, causal_map, summary = await engine.decompose(
+            project_id,
+            RawIntent(
+                prompt=body.prompt,
+                genre_primary=body.genre_primary,
+                genre_secondary=body.genre_secondary,
+            ),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("decompose failed")
+        raise HTTPException(status_code=503, detail=f"DECOMPOSE_FAILED: {e}")
+    return {
+        "dimensions": _serialize_dimensions(dimensions),
+        "causal_map": causal_map,
+        "top_level_summary": summary,
+    }
+
+
+@router.post("/follow-up")
+async def follow_up(project_id: str, body: FollowUpRequest, request: Request) -> dict:
+    engine = _get_engine(request)
+    try:
+        unit = await engine.follow_up_unit(project_id, body.unit_id, body.user_question)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("follow_up failed")
+        raise HTTPException(status_code=503, detail=f"FOLLOW_UP_FAILED: {e}")
+    return {"unit": asdict(unit)}
 
 
 @router.post("/diverge")
-async def post_diverge(project_id: str, body: DivergeRequest) -> dict:
-    _ensure_project(project_id)
-    raw_intent = RawIntent(
-        prompt=body.prompt,
-        genre_primary=body.genre_primary,
-        genre_secondary=body.genre_secondary,
-    )
+async def diverge(project_id: str, request: Request) -> dict:
+    engine = _get_engine(request)
     try:
-        return await _get_engine().diverge(project_id, raw_intent)
-    except Exception as exc:
-        logger.exception("three-b diverge failed")
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": True,
-                "code": "DIVERGE_FAILED",
-                "message": f"3B 并行发散失败: {exc}",
-                "detail": {},
-            },
-        ) from exc
+        dims = await engine.diverge(project_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("diverge failed")
+        raise HTTPException(status_code=503, detail=f"DIVERGE_FAILED: {e}")
+    return {"dimensions": _serialize_dimensions(dims)}
 
 
-@router.post("/deepen")
-async def post_deepen(project_id: str, body: DeepenRequest) -> dict:
-    _ensure_project(project_id)
+@router.post("/regenerate-unit")
+async def regenerate_unit(project_id: str, body: RegenerateUnitRequest, request: Request) -> dict:
+    engine = _get_engine(request)
     try:
-        result = await _get_engine().deepen(
-            project_id, body.candidate_id, body.applied_operator,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": True,
-                "code": "DEEPEN_VALIDATION",
-                "message": str(exc),
-                "detail": {},
-            },
-        ) from exc
-    from dataclasses import asdict
-    return {"deepened": asdict(result)}
+        cands = await engine.regenerate_unit(project_id, body.unit_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("regenerate_unit failed")
+        raise HTTPException(status_code=503, detail=f"REGENERATE_FAILED: {e}")
+    return {"candidates": [asdict(c) for c in cands]}
+
+
+@router.post("/select-unit")
+async def select_unit(project_id: str, body: SelectUnitRequest, request: Request) -> dict:
+    engine = _get_engine(request)
+    try:
+        dim = engine.select_unit_candidate(project_id, body.unit_id, body.candidate_index)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"dimension": asdict(dim)}
 
 
 @router.post("/commit")
-async def post_commit(project_id: str, body: CommitRequest) -> dict:
-    _ensure_project(project_id)
+async def commit(project_id: str, request: Request) -> dict:
+    engine = _get_engine(request)
     try:
-        return await _get_engine().commit(project_id, body.deepened_ids)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": True,
-                "code": "COMMIT_VALIDATION",
-                "message": str(exc),
-                "detail": {},
-            },
-        ) from exc
-    except Exception as exc:
-        logger.exception("three-b commit failed")
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": True,
-                "code": "COMMIT_FAILED",
-                "message": f"3B 概念合成失败: {exc}",
-                "detail": {},
-            },
-        ) from exc
+        result = await engine.commit(project_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("commit failed")
+        raise HTTPException(status_code=503, detail=f"COMMIT_FAILED: {e}")
+    return result
 
 
-@router.post("/regenerate-candidate")
-async def post_regenerate(
-    project_id: str, body: RegenerateCandidateRequest,
-) -> dict:
-    """Re-run a single operator LLM call for one candidate (regenerated_count++)."""
-    _ensure_project(project_id)
+@router.post("/edit-concept")
+async def edit_concept(project_id: str, body: EditConceptRequest, request: Request) -> dict:
+    engine = _get_engine(request)
+    edited = {
+        k: v
+        for k, v in body.model_dump(exclude_none=True).items()
+        if v is not None
+    }
     try:
-        fresh = await _get_engine().regenerate_candidate(
-            project_id, body.candidate_id,
-        )
-    except ValueError as exc:
-        # Missing state OR missing source candidate both surface as 404
-        # with CANDIDATE_NOT_FOUND — the existing route contract (preserved).
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": True,
-                "code": "CANDIDATE_NOT_FOUND",
-                "message": str(exc),
-                "detail": {},
-            },
-        ) from exc
-    from dataclasses import asdict
-    return {"candidate": asdict(fresh)}
+        result = await engine.edit_committed_concept(project_id, edited)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("edit_concept failed")
+        raise HTTPException(status_code=503, detail=f"EDIT_CONCEPT_FAILED: {e}")
+    return result
+
+
+@router.post("/advance")
+async def advance(project_id: str, request: Request) -> dict:
+    engine = _get_engine(request)
+    try:
+        result = await engine.advance(project_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("advance failed")
+        raise HTTPException(status_code=503, detail=f"ADVANCE_FAILED: {e}")
+    return result
+
+
+@router.post("/reset-and-restart")
+async def reset_and_restart(project_id: str) -> dict:
+    """Convenience endpoint: delete state file (idempotent — 404 vs success).
+
+    Unlike DELETE /state, this returns {"deleted": True} regardless of whether
+    a file existed, so the frontend can call it unconditionally when starting
+    a fresh 4-stage flow.
+    """
+    p = _state_path(project_id)
+    if p.exists():
+        p.unlink()
+    return {"deleted": True}

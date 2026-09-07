@@ -238,21 +238,12 @@ class ThreeBEngine:
         self, project_id: str, raw_intent: RawIntent
     ) -> tuple[list[DimensionDecomposition], str, str]:
         """1 LLM call → (dimensions, causal_map, top_level_summary)."""
-        prompt_data = load_prompt_effective(DECOMPOSE_PROMPT)
-        system = prompt_data["system_prompt"].format(negative_constraints="")
-        user = prompt_data["user_prompt_template"].format(
+        started_at = _now_iso()
+        response = await self._invoke_llm_json(
+            DECOMPOSE_PROMPT, "decompose",
             prompt=raw_intent.prompt,
             genre_primary=raw_intent.genre_primary,
             genre_secondary=raw_intent.genre_secondary or "(无)",
-        )
-        started_at = _now_iso()
-        response = await self._router.execute(
-            agent_name="three_b",
-            task_name="decompose",
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            json_mode=True,
-            temperature=prompt_data.get("temperature", 0.7),
-            max_tokens=prompt_data.get("max_tokens", 8192),
         )
         raw_text = response.get("content", "")
         dims, causal_map, summary = self._parse_decompose_output(raw_text)
@@ -310,6 +301,34 @@ class ThreeBEngine:
         top_level_summary = data.get("top_level_summary", "") or ""
         return dims, causal_map, top_level_summary
 
+    def _build_prompt_messages(self, prompt_name: str, **fmt) -> tuple[str, str]:
+        """Load + format a v2 prompt. Returns (system, user) messages.
+
+        Negative constraints are always substituted with empty string.
+        All other format kwargs are passed through to user_prompt_template.
+        """
+        prompt_data = load_prompt_effective(prompt_name)
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = prompt_data["user_prompt_template"].format(**fmt)
+        return system, user
+
+    async def _invoke_llm_json(self, prompt_name: str, task_name: str, **fmt) -> dict:
+        """Call the LLM with standard 3B envelope (json_mode, three_b agent).
+
+        Returns the raw response dict from router.execute (caller is responsible
+        for extracting/parsing content).
+        """
+        system, user = self._build_prompt_messages(prompt_name, **fmt)
+        prompt_data = load_prompt_effective(prompt_name)
+        return await self._router.execute(
+            agent_name="three_b",
+            task_name=task_name,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.7),
+            max_tokens=prompt_data.get("max_tokens", 4096),
+        )
+
     async def follow_up_unit(
         self, project_id: str, unit_id: str, user_question: Optional[str]
     ) -> Unit:
@@ -323,20 +342,11 @@ class ThreeBEngine:
         if target.is_irreducible:
             raise ValueError(f"unit {unit_id} 已不可约化")
 
-        prompt_data = load_prompt_effective(FOLLOW_UP_PROMPT)
-        system = prompt_data["system_prompt"].format(negative_constraints="")
-        user = prompt_data["user_prompt_template"].format(
+        response = await self._invoke_llm_json(
+            FOLLOW_UP_PROMPT, "follow_up",
             unit_name=target.unit_name,
             description=target.description,
             user_question=user_question or "(无明确问题,请基于该单元当前描述做一次深化)",
-        )
-        response = await self._router.execute(
-            agent_name="three_b",
-            task_name="follow_up",
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            json_mode=True,
-            temperature=prompt_data.get("temperature", 0.7),
-            max_tokens=prompt_data.get("max_tokens", 2048),
         )
         raw = _parse_json_or_raise(response.get("content", ""), "follow_up_unit")
         target.description = raw.get("description", target.description) or target.description
@@ -401,23 +411,14 @@ class ThreeBEngine:
     ) -> list[UnitCandidate]:
         if raw_intent is None:
             return []
-        prompt_data = load_prompt_effective(ADAPTIVE_DIVERGE_PROMPT)
-        system = prompt_data["system_prompt"].format(negative_constraints="")
-        user = prompt_data["user_prompt_template"].format(
+        response = await self._invoke_llm_json(
+            ADAPTIVE_DIVERGE_PROMPT, "diverge_unit",
             prompt=raw_intent.prompt,
             genre_primary=raw_intent.genre_primary,
             genre_secondary=raw_intent.genre_secondary or "(无)",
             dimension=dim.dimension.value,
             unit_name=unit.unit_name,
             unit_description=unit.description,
-        )
-        response = await self._router.execute(
-            agent_name="three_b",
-            task_name="diverge_unit",
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-            json_mode=True,
-            temperature=prompt_data.get("temperature", 0.9),
-            max_tokens=prompt_data.get("max_tokens", 4096),
         )
         return self._parse_adaptive_diverge_output(response.get("content", ""), unit)
 

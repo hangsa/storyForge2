@@ -27,21 +27,21 @@ const MOCK: DimensionDecomposition[] = [
 
 describe("S3DivergeStep", () => {
   it("renders chain_reaction text for each candidate", () => {
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />);
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
     expect(screen.getByText(/连锁 A/)).toBeInTheDocument();
     expect(screen.getByText(/连锁 B/)).toBeInTheDocument();
   });
 
   it("selecting a different candidate calls onSelectCandidate with the candidate's rank", () => {
     const onSelect = vi.fn();
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={onSelect} onRegenerateAll={vi.fn()} />);
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={onSelect} />);
     fireEvent.click(screen.getByTestId("candidate-c2"));
     expect(onSelect).toHaveBeenCalledWith("u1", 1);
   });
 
   it("failed unit shows '该单元暂不可用' + regen button", () => {
     const onRegen = vi.fn();
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={onRegen} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />);
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={onRegen} onSelectCandidate={vi.fn()} />);
     expect(screen.getByText(/该单元暂不可用/)).toBeInTheDocument();
     const buttons = screen.getAllByText("重新生成该单元");
     fireEvent.click(buttons[buttons.length - 1]);
@@ -50,26 +50,20 @@ describe("S3DivergeStep", () => {
 
   it("renders 'all failed' banner when every unit failed", () => {
     const allFailed: DimensionDecomposition[] = MOCK.map((d) => ({ ...d, candidates: [] }));
-    render(<S3DivergeStep dimensions={allFailed} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />);
+    render(<S3DivergeStep dimensions={allFailed} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
     expect(screen.getByTestId("all-failed-banner")).toBeInTheDocument();
   });
 
-  it("does not render the Stage-3 title or stats line (both removed 2026-09-08)", () => {
+  it("does not render the Stage-3 title, stats line, or in-stage '全部重新生成' button (moved to footer 2026-09-08)", () => {
     // Regression guard: the "Stage 3 · 自适应发散" title was redundant with
-    // the StepIndicator above, and the "{n} 个候选 · {m} 个失败" stats line
-    // was just an echo of data already shown per-section. Both were removed
-    // to free vertical space. The "全部重新生成" utility button moved to
-    // its own toolbar row at the top.
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />);
+    // the StepIndicator above, the "{n} 个候选 · {m} 个失败" stats line was
+    // just an echo of data already shown per-section, and the in-stage
+    // "全部重新生成" button moved to the page-level wizard footer as a
+    // sibling of "下一步:提交 →". All three removals are 2026-09-08.
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
     expect(screen.queryByText(/Stage 3 · 自适应发散/)).toBeNull();
     expect(screen.queryByText(/个候选 · .*个失败/)).toBeNull();
-  });
-
-  it("'全部重新生成' calls onRegenerateAll", () => {
-    const onAll = vi.fn();
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={onAll} />);
-    fireEvent.click(screen.getByText("全部重新生成"));
-    expect(onAll).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /全部重新生成/ })).toBeNull();
   });
 
   it("renders safely when no candidate has selection_rank 0 (no crash)", () => {
@@ -86,7 +80,7 @@ describe("S3DivergeStep", () => {
       },
     ];
     expect(() =>
-      render(<S3DivergeStep dimensions={noSelection} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />),
+      render(<S3DivergeStep dimensions={noSelection} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />),
     ).not.toThrow();
   });
 });

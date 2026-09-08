@@ -79,14 +79,16 @@ export default function CreativeDivergenceStep({
     }
 
     // ── Regenerate handler ──────────────────────────────────────────
-    // Only S2 exposes a "重新生成" button in the wizard footer; the action
-    // re-runs /decompose with the current raw intent. Other sub-stages
-    // have their own regen affordances (S3 has in-stage "全部重新生成" +
-    // per-unit, S4 has in-stage "重新生成" / "全部重新生成") so the footer
-    // slot stays clear there to avoid two "重新生成" buttons on one screen.
+    // S2 re-runs /decompose with the current raw intent. S3 re-runs
+    // /diverge (the bulk "全部重新生成" button moved to the footer on
+    // 2026-09-08 as a sibling of "下一步:提交 →"). S4 keeps its in-stage
+    // 「重新生成」 + 「全部重新生成」 buttons, so the footer slot stays
+    // clear there to avoid two "重新生成" buttons on one screen.
     if (setRegen) {
       if (sub === "2" && state.rawIntent) {
         setRegen(() => { decompose(state.rawIntent!); }, state.loading);
+      } else if (sub === "3") {
+        setRegen(() => { diverge(); }, state.loading);
       } else {
         setRegen(null, false);
       }
@@ -220,7 +222,6 @@ export default function CreativeDivergenceStep({
             loading={state.loading}
             onRegenerateUnit={regenerateUnit}
             onSelectCandidate={selectCandidate}
-            onRegenerateAll={diverge}
           />
         )}
 

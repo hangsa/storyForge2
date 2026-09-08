@@ -6,10 +6,11 @@ interface Props {
   loading: boolean;
   onRegenerateUnit: (unitId: string) => void;
   onSelectCandidate: (unitId: string, candidateIndex: number) => void;
-  onRegenerateAll: () => void;
-  // Footer navigation (上一步 / 下一步) moved to the page-level wizard
-  // footer. See CreativeDivergenceStep, which registers handlers via
-  // setNextHandler / setPrevHandler based on the current sub-stage.
+  // The bulk 「全部重新生成」 button was moved to the page-level wizard
+  // footer on 2026-09-08 — it now lives as a sibling of the
+  // 「下一步:提交 →」 button, registered by CreativeDivergenceStep via
+  // setRegenerateHandler. Per-unit 「重新生成该单元」 stays inline since
+  // it targets a single unit, not the full diverge pass.
 }
 
 const OPERATOR_LABELS: Record<Operator, string> = {
@@ -27,7 +28,7 @@ const OPERATOR_ICONS: Record<Operator, string> = {
 };
 
 export default function S3DivergeStep({
-  dimensions, loading, onRegenerateUnit, onSelectCandidate, onRegenerateAll,
+  dimensions, loading, onRegenerateUnit, onSelectCandidate,
 }: Props) {
   const allFailed = dimensions.length > 0 && dimensions.every((d) =>
     d.units.length > 0 && d.units.every((u) => !d.candidates.some((c) => c.unit_id === u.id))
@@ -36,13 +37,9 @@ export default function S3DivergeStep({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-2">
-        <div className="flex justify-start">
-          <SecondaryButton label="全部重新生成" icon="refresh" size="sm" onClick={onRegenerateAll} />
-        </div>
-
         {allFailed && (
           <div className="p-3 bg-error-container/20 border border-error rounded-lg text-error text-sm" data-testid="all-failed-banner">
-            所有 unit 发散失败,请点击「全部重新生成」重试。
+            所有 unit 发散失败,请点击 footer 「重新生成」重试。
           </div>
         )}
 

@@ -135,8 +135,21 @@ function Inner({ projectId }: Props) {
         <footer className="flex items-center justify-between px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <button data-testid="wizard-prev" type="button"
-                    onClick={() => wizard.jumpToStep(Math.max(1, wizard.currentStep - 1))}
-                    disabled={wizard.currentStep === 1}
+                    onClick={() => {
+                      // Sub-stage back-nav (S2/S3/S4 inside wizard step 1) takes
+                      // precedence over step-level back-nav. The divergence
+                      // wizard registers `prevHandler` for each non-first
+                      // sub-stage; on S1 / when no handler is registered we
+                      // fall back to the wizard-step level jump. S1 itself
+                      // never registers a prevHandler, so this falls through
+                      // and the button disables (currentStep === 1).
+                      if (wizard.prevHandler) {
+                        wizard.prevHandler();
+                        return;
+                      }
+                      wizard.jumpToStep(Math.max(1, wizard.currentStep - 1));
+                    }}
+                    disabled={wizard.currentStep === 1 && wizard.prevHandler === null}
                     className="px-4 py-2 text-sm bg-surface-container text-on-surface-variant rounded-lg hover:bg-surface-container-low disabled:opacity-40">
               上一步
             </button>
@@ -162,8 +175,17 @@ function Inner({ projectId }: Props) {
             {wizard.nextHandler && (
               <button data-testid="wizard-next" type="button" onClick={wizard.nextHandler}
                       disabled={wizard.nextDisabled}
-                      className="px-5 py-2 bg-tertiary-container text-surface-container-low text-sm rounded-lg hover:opacity-90 disabled:opacity-40">
-                确认修改并继续
+                      className="px-5 py-2 bg-tertiary-container text-surface-container-low text-sm rounded-lg hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-2">
+                {wizard.nextDisabled && wizard.nextLoadingLabel
+                  ? wizard.nextLoadingLabel
+                  : wizard.nextLabel
+                    ? wizard.nextLabel
+                    : wizard.currentStep === 1
+                      ? "下一步:拆解 →"
+                      : "确认修改并继续"}
+                {wizard.nextDisabled && wizard.nextLoadingLabel && (
+                  <span className="material-symbols-outlined text-base leading-none animate-spin">progress_activity</span>
+                )}
               </button>
             )}
           </div>

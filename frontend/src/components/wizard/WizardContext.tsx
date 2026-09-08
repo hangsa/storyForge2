@@ -125,6 +125,23 @@ interface WizardState {
   nextHandler: (() => void) | null;
   nextDisabled: boolean;
   /**
+   * Optional label/loadingLabel for the modal footer's "next" button. Set
+   * per-sub-stage so the divergence wizard can show "下一步:发散 →" / "拆解中…"
+   * etc. on wizard step 1's sub-stages instead of the generic
+   * "下一步:拆解 →" / "确认修改并继续". Falls back to those defaults when
+   * null. Lives in state so the footer can read it like any other field.
+   */
+  nextLabel: string | null;
+  nextLoadingLabel: string | null;
+  /**
+   * The current step's "previous" action — handled by the modal footer. When
+   * registered, the footer's 上一步 button calls this handler instead of the
+   * default `jumpToStep(currentStep - 1)`. Used by the divergence wizard's
+   * sub-stages (S2/S3/S4) so the user can step back to a previous sub-stage
+   * without leaving wizard step 1. null when no sub-stage back-nav applies.
+   */
+  prevHandler: (() => void) | null;
+  /**
    * The current step's "regenerate" action — same lifecycle as nextHandler.
    * null when the step doesn't have a regenerate affordance.
    */
@@ -180,6 +197,12 @@ type WizardAction =
       type: "SET_NEXT_HANDLER";
       handler: (() => void) | null;
       disabled: boolean;
+      label?: string | null;
+      loadingLabel?: string | null;
+    }
+  | {
+      type: "SET_PREV_HANDLER";
+      handler: (() => void) | null;
     }
   | {
       type: "SET_REGENERATE_HANDLER";
@@ -204,6 +227,9 @@ const initialState: WizardState = {
   prefillComplete: false,
   nextHandler: null,
   nextDisabled: false,
+  nextLabel: null,
+  nextLoadingLabel: null,
+  prevHandler: null,
   regenerateHandler: null,
   regenerateDisabled: false,
   saveHandler: null,
@@ -330,7 +356,20 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
     case "PREFLILL_COMPLETE":
       return { ...state, prefillComplete: true };
     case "SET_NEXT_HANDLER":
-      return { ...state, nextHandler: action.handler, nextDisabled: action.disabled };
+      return {
+        ...state,
+        nextHandler: action.handler,
+        nextDisabled: action.disabled,
+        // Only update label/loadingLabel when explicitly provided — passing
+        // undefined would clobber a previously set label on re-registration.
+        // Steps that don't customize labels (e.g. S1) leave them at null and
+        // the footer falls back to the generic "下一步:拆解 →" / "确认修改并继续".
+        nextLabel: action.label !== undefined ? action.label : state.nextLabel,
+        nextLoadingLabel:
+          action.loadingLabel !== undefined ? action.loadingLabel : state.nextLoadingLabel,
+      };
+    case "SET_PREV_HANDLER":
+      return { ...state, prevHandler: action.handler };
     case "SET_REGENERATE_HANDLER":
       return { ...state, regenerateHandler: action.handler, regenerateDisabled: action.disabled };
     case "SET_SAVE_HANDLER":
@@ -366,6 +405,9 @@ function loadPersisted(projectId: string): WizardState | null {
         prefillComplete: false,
         nextHandler: null,
         nextDisabled: false,
+        nextLabel: null,
+        nextLoadingLabel: null,
+        prevHandler: null,
         regenerateHandler: null,
         regenerateDisabled: false,
         saveHandler: null,
@@ -420,8 +462,27 @@ interface WizardContextValue extends WizardState {
   /**
    * Each step registers its "next" and "regenerate" handlers here so the
    * modal footer can render them. Pass null on unmount to clear.
+   *
+   * `label` / `loadingLabel` are optional; when provided, the modal footer's
+   * next button uses them instead of the generic "下一步:拆解 →" / "确认修改并继续"
+   * defaults. Used by the divergence wizard's sub-stages (S1/S2/S3/S4) to
+   * show stage-specific copy (e.g. "下一步:发散 →" / "拆解中…").
    */
-  setNextHandler: (handler: (() => void) | null, disabled?: boolean) => void;
+  setNextHandler: (
+    handler: (() => void) | null,
+    disabled?: boolean,
+    label?: string | null,
+    loadingLabel?: string | null,
+  ) => void;
+  /**
+   * Register the current step's "previous" action. When set, the modal
+   * footer's 上一步 button calls this handler instead of the default
+   * `jumpToStep(currentStep - 1)`. Used by divergence sub-stages (S2/S3/S4)
+   * to step back to a previous sub-stage without leaving wizard step 1.
+   * Pass null on unmount / when the step is the first sub-stage (S1 has no
+   * previous sub-stage to return to).
+   */
+  setPrevHandler: (handler: (() => void) | null) => void;
   setRegenerateHandler: (handler: (() => void) | null, disabled?: boolean) => void;
   /**
    * Register the current step's "save without advancing" action. Like
@@ -448,6 +509,9 @@ interface WizardContextValue extends WizardState {
 }
 
 const WizardContext = createContext<WizardContextValue | null>(null);
+// Exported for tests that need to mount a stub provider around isolated
+// renders of WizardProvider children (e.g. CreativeDivergenceStep unit tests).
+export { WizardContext };
 
 interface WizardProviderProps {
   projectId: string;
@@ -515,8 +579,10 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
       dispatch({ type: "HYDRATE_FROM_FILES_AND_ADVANCE", completedSteps, data, nextStep }),
     updateData: (patch) => dispatch({ type: "UPDATE_DATA", patch }),
     markPrefillComplete: () => dispatch({ type: "PREFLILL_COMPLETE" }),
-    setNextHandler: (handler, disabled = false) =>
-      dispatch({ type: "SET_NEXT_HANDLER", handler, disabled }),
+    setNextHandler: (handler, disabled = false, label, loadingLabel) =>
+      dispatch({ type: "SET_NEXT_HANDLER", handler, disabled, label, loadingLabel }),
+    setPrevHandler: (handler) =>
+      dispatch({ type: "SET_PREV_HANDLER", handler }),
     setRegenerateHandler: (handler, disabled = false) =>
       dispatch({ type: "SET_REGENERATE_HANDLER", handler, disabled }),
     setSaveHandler: (handler, disabled = false) =>
@@ -549,4 +615,14 @@ export function useWizard(): WizardContextValue {
   const ctx = useContext(WizardContext);
   if (!ctx) throw new Error("useWizard must be used within WizardProvider");
   return ctx;
+}
+
+/**
+ * Like useWizard but returns null when no provider is present.
+ * Use for components that *optionally* integrate with the wizard footer
+ * (e.g. CreativeDivergenceStep registers its "进入拆解" button when it
+ * detects a wizard context, and silently no-ops in tests / isolated renders).
+ */
+export function useOptionalWizard(): WizardContextValue | null {
+  return useContext(WizardContext);
 }

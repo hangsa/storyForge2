@@ -27,21 +27,21 @@ const MOCK: DimensionDecomposition[] = [
 
 describe("S3DivergeStep", () => {
   it("renders chain_reaction text for each candidate", () => {
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />);
     expect(screen.getByText(/连锁 A/)).toBeInTheDocument();
     expect(screen.getByText(/连锁 B/)).toBeInTheDocument();
   });
 
   it("selecting a different candidate calls onSelectCandidate with the candidate's rank", () => {
     const onSelect = vi.fn();
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={onSelect} onRegenerateAll={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={onSelect} onRegenerateAll={vi.fn()} />);
     fireEvent.click(screen.getByTestId("candidate-c2"));
     expect(onSelect).toHaveBeenCalledWith("u1", 1);
   });
 
   it("failed unit shows '该单元暂不可用' + regen button", () => {
     const onRegen = vi.fn();
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={onRegen} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={onRegen} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />);
     expect(screen.getByText(/该单元暂不可用/)).toBeInTheDocument();
     const buttons = screen.getAllByText("重新生成该单元");
     fireEvent.click(buttons[buttons.length - 1]);
@@ -50,13 +50,13 @@ describe("S3DivergeStep", () => {
 
   it("renders 'all failed' banner when every unit failed", () => {
     const allFailed: DimensionDecomposition[] = MOCK.map((d) => ({ ...d, candidates: [] }));
-    render(<S3DivergeStep dimensions={allFailed} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S3DivergeStep dimensions={allFailed} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />);
     expect(screen.getByTestId("all-failed-banner")).toBeInTheDocument();
   });
 
   it("'全部重新生成' calls onRegenerateAll", () => {
     const onAll = vi.fn();
-    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={onAll} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={onAll} />);
     fireEvent.click(screen.getByText("全部重新生成"));
     expect(onAll).toHaveBeenCalled();
   });
@@ -75,7 +75,7 @@ describe("S3DivergeStep", () => {
       },
     ];
     expect(() =>
-      render(<S3DivergeStep dimensions={noSelection} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />),
+      render(<S3DivergeStep dimensions={noSelection} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />),
     ).not.toThrow();
   });
 });

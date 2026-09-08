@@ -2,13 +2,19 @@ import { useState } from "react";
 import { PrimaryButton, SecondaryButton, StatCard } from "@/components/ds";
 import type { CommittedConcept, NoveltyScores } from "./types";
 
+// Footer "下一步" navigation is registered through the page-level wizard
+// footer (see CreativeDivergenceStep + setNextHandler). The left-side
+// action group (编辑 / 重新生成 / 全部重新生成) stays inline because it
+// operates on committed concept data, not on sub-stage navigation.
+
 interface Props {
   committedConcept: CommittedConcept | null;
   noveltyScores: NoveltyScores | null;
-  loading: boolean;
   onEditConcept: (fields: Partial<CommittedConcept>) => void;
   onRegenerateCommit: () => void;
   onRegenerateAllDivergence: () => void;
+  // onAdvance is registered by CreativeDivergenceStep as the wizard footer's
+  // nextHandler; this component no longer renders the advance button itself.
   onAdvance: () => void;
 }
 
@@ -28,7 +34,7 @@ const NOVELTY_METRICS: Array<{ key: keyof Omit<NoveltyScores, "composite" | "gra
 ];
 
 export default function S4CommitStep({
-  committedConcept, noveltyScores, loading, onEditConcept, onRegenerateCommit, onRegenerateAllDivergence, onAdvance,
+  committedConcept, noveltyScores, onEditConcept, onRegenerateCommit, onRegenerateAllDivergence,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Partial<CommittedConcept>>({});
@@ -40,13 +46,6 @@ export default function S4CommitStep({
         <div className="flex-1 flex items-center justify-center text-on-surface-variant text-sm">
           尚未合成 concept,点「下一步」将开始 LLM 合成
         </div>
-        <footer className="flex items-center justify-end px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
-          <PrimaryButton
-            label={loading ? "合成中…" : "下一步:进入概念DNA →"}
-            loading={loading}
-            onClick={onAdvance}
-          />
-        </footer>
       </div>
     );
   }
@@ -64,9 +63,26 @@ export default function S4CommitStep({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="material-symbols-outlined text-primary-container text-lg leading-none">task_alt</span>
           <h2 className="font-display text-base font-semibold text-primary">Stage 4 · 提交</h2>
+          {!editing && (
+            <div className="flex gap-2 ml-auto">
+              <SecondaryButton label="编辑" icon="edit" size="sm" onClick={startEdit} />
+              <SecondaryButton
+                label="重新生成"
+                icon="refresh"
+                size="sm"
+                onClick={() => setConfirmRegen(true)}
+              />
+              <SecondaryButton
+                label="全部重新生成"
+                icon="restart_alt"
+                size="sm"
+                onClick={onRegenerateAllDivergence}
+              />
+            </div>
+          )}
         </div>
 
         {!editing ? (
@@ -143,27 +159,6 @@ export default function S4CommitStep({
           </div>
         )}
       </div>
-
-      <footer className="flex items-center justify-between px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
-        <div className="flex gap-2">
-          {!editing && <SecondaryButton label="编辑" icon="edit" onClick={startEdit} />}
-          <SecondaryButton
-            label="重新生成"
-            icon="refresh"
-            onClick={() => setConfirmRegen(true)}
-          />
-          <SecondaryButton
-            label="全部重新生成"
-            icon="restart_alt"
-            onClick={onRegenerateAllDivergence}
-          />
-        </div>
-        <PrimaryButton
-          label={loading ? "提交中…" : "下一步:进入概念DNA →"}
-          loading={loading}
-          onClick={onAdvance}
-        />
-      </footer>
 
       {confirmRegen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-testid="regen-confirm-dialog">

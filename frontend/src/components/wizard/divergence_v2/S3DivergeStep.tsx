@@ -1,4 +1,4 @@
-import { PrimaryButton, SecondaryButton } from "@/components/ds";
+import { SecondaryButton } from "@/components/ds";
 import type { DimensionDecomposition, Operator, UnitCandidate } from "./types";
 
 interface Props {
@@ -7,8 +7,9 @@ interface Props {
   onRegenerateUnit: (unitId: string) => void;
   onSelectCandidate: (unitId: string, candidateIndex: number) => void;
   onRegenerateAll: () => void;
-  onPrev: () => void;
-  onNext: () => void;
+  // Footer navigation (上一步 / 下一步) moved to the page-level wizard
+  // footer. See CreativeDivergenceStep, which registers handlers via
+  // setNextHandler / setPrevHandler based on the current sub-stage.
 }
 
 const OPERATOR_LABELS: Record<Operator, string> = {
@@ -26,7 +27,7 @@ const OPERATOR_ICONS: Record<Operator, string> = {
 };
 
 export default function S3DivergeStep({
-  dimensions, loading, onRegenerateUnit, onSelectCandidate, onRegenerateAll, onPrev, onNext,
+  dimensions, loading, onRegenerateUnit, onSelectCandidate, onRegenerateAll,
 }: Props) {
   const allFailed = dimensions.length > 0 && dimensions.every((d) =>
     d.units.length > 0 && d.units.every((u) => !d.candidates.some((c) => c.unit_id === u.id))
@@ -139,15 +140,6 @@ export default function S3DivergeStep({
           </section>
         ))}
       </div>
-
-      <footer className="flex items-center justify-between px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
-        <SecondaryButton label="上一步:拆解" icon="arrow_back" onClick={onPrev} />
-        <PrimaryButton
-          label={loading ? "发散中…" : "下一步:提交 →"}
-          loading={loading}
-          onClick={onNext}
-        />
-      </footer>
     </div>
   );
 }

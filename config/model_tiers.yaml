@@ -155,6 +155,19 @@ agent_mapping:
     commit:
       tier: tier_1
       model: default
+    # ThreeBEngine._invoke_llm_json hard-codes these 4 task names (the 4-stage
+    # v2 divergence flow). If any is missing, the corresponding endpoint
+    # /decompose /follow-up-unit /diverge /regenerate-unit 503s in production
+    # with KeyError. Engine tests use mock_router and can't catch this.
+    decompose:
+      tier: tier_1
+      model: default
+    follow_up:
+      tier: tier_1
+      model: default
+    diverge_unit:
+      tier: tier_1
+      model: default
   novelty:
     trope_extraction:
       tier: tier_3

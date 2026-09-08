@@ -25,26 +25,26 @@ const MOCK_DIMENSIONS: DimensionDecomposition[] = [
 
 describe("S2DecomposeStep", () => {
   it("renders all dimension blocks by id", () => {
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     expect(screen.getByTestId("dimension-ontology")).toBeInTheDocument();
     expect(screen.getByTestId("dimension-energetics")).toBeInTheDocument();
   });
 
   it("renders causal_map and top_level_summary", () => {
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="因果图 A→B" topLevelSummary="总览文本" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="因果图 A→B" topLevelSummary="总览文本" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     expect(screen.getByTestId("causal-map")).toHaveTextContent("因果图 A→B");
     expect(screen.getByTestId("top-level-summary")).toHaveTextContent("总览文本");
   });
 
   it("irreducible unit follow-up button is disabled", () => {
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     expect(screen.getByTestId("follow-up-u1")).not.toBeDisabled();
     expect(screen.getByTestId("follow-up-u2")).toBeDisabled();
   });
 
   it("clicking follow-up shows dialog; submitting with text calls onFollowUp", () => {
     const onFollowUp = vi.fn();
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={onFollowUp} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={onFollowUp} />);
     fireEvent.click(screen.getByTestId("follow-up-u1"));
     const input = screen.getByTestId("follow-up-input-u1");
     fireEvent.change(input, { target: { value: "再深入" } });
@@ -54,14 +54,14 @@ describe("S2DecomposeStep", () => {
 
   it("submitting empty follow-up calls onFollowUp with null", () => {
     const onFollowUp = vi.fn();
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={onFollowUp} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={onFollowUp} />);
     fireEvent.click(screen.getByTestId("follow-up-u1"));
     fireEvent.click(screen.getByText("确认追问"));
     expect(onFollowUp).toHaveBeenCalledWith("u1", null);
   });
 
   it("switching follow-up units clears prior text (regression test for state leak)", () => {
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     fireEvent.click(screen.getByTestId("follow-up-u1"));
     fireEvent.change(screen.getByTestId("follow-up-input-u1"), { target: { value: "STALE" } });
     fireEvent.click(screen.getByTestId("follow-up-u3"));
@@ -73,7 +73,7 @@ describe("S2DecomposeStep", () => {
     // `dimensions={undefined}`, S2 used to crash at `dimensions.length`
     // and `dimensions.reduce`. Component now coerces to [].
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<S2DecomposeStep dimensions={undefined as any} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} onPrev={vi.fn()} onNext={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={undefined as any} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     expect(screen.getByText(/0 维度 · 0 单元/)).toBeInTheDocument();
   });
 });

@@ -9,8 +9,10 @@ interface Props {
   loading: boolean;
   followUpLoadingUnitId: string | null;
   onFollowUp: (unitId: string, userQuestion: string | null) => void;
-  onPrev: () => void;
-  onNext: () => void;
+  // Footer navigation (上一步 / 下一步) moved to the page-level wizard
+  // footer in WorkspaceWizardPanel. See CreativeDivergenceStep, which
+  // registers the handlers via setNextHandler / setPrevHandler based on
+  // the current sub-stage.
 }
 
 const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
@@ -25,7 +27,7 @@ const DIMENSION_ORDER = ["ontology", "energetics", "power_structure", "protagoni
 
 export default function S2DecomposeStep({
   dimensions, causalMap, topLevelSummary, loading, followUpLoadingUnitId,
-  onFollowUp, onPrev, onNext,
+  onFollowUp,
 }: Props) {
   // Defense-in-depth: callers upstream (reducer / HYDRATE) already coerce
   // undefined to [], but a stray malformed payload must not crash the
@@ -85,15 +87,6 @@ export default function S2DecomposeStep({
           </div>
         )}
       </div>
-
-      <footer className="flex items-center justify-between px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
-        <SecondaryButton label="上一步:输入" icon="arrow_back" onClick={onPrev} />
-        <PrimaryButton
-          label={loading ? "拆解中…" : "下一步:发散 →"}
-          loading={loading}
-          onClick={onNext}
-        />
-      </footer>
     </div>
   );
 }

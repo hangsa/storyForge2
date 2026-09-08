@@ -1,25 +1,34 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGenres } from "@/hooks/useGenres";
-import { DropdownSelect, PrimaryButton } from "@/components/ds";
+import { DropdownSelect } from "@/components/ds";
 import type { RawIntent } from "./types";
 
 interface Props {
   projectId: string;
   initial: RawIntent | null;
   onSubmitted: (intent: RawIntent) => void;
+  /**
+   * Bubble the latest submit handler + form validity up so the parent can
+   * wire it into the page-level wizard footer (the "下一步:拆解 →" button
+   * in WorkspaceWizardPanel). When validity flips false, the parent gets
+   * `null` and disables the footer button. Handler is stable across renders
+   * because it reads form state via ref.
+   */
+  onSubmitReady?: (handler: (() => void) | null, valid: boolean) => void;
 }
 
 const NO_SECONDARY = "__none__";
 const MAX_PROMPT = 1000;
 
-export default function S1InputStep({ projectId, initial, onSubmitted }: Props) {
+export default function S1InputStep({
+  projectId, initial, onSubmitted, onSubmitReady,
+}: Props) {
   const genres = useGenres(true);
   const [prompt, setPrompt] = useState(initial?.prompt ?? "");
   const [genrePrimary, setGenrePrimary] = useState(initial?.genre_primary ?? "");
   const [genreSecondary, setGenreSecondary] = useState<string>(
     initial?.genre_secondary ?? NO_SECONDARY,
   );
-  const [submitting, setSubmitting] = useState(false);
 
   const genreOptions = useMemo(
     () => genres.map((g) => ({ value: g.id, label: g.label_zh })),
@@ -32,30 +41,32 @@ export default function S1InputStep({ projectId, initial, onSubmitted }: Props) 
 
   const valid = prompt.length >= 10 && genrePrimary.length > 0;
 
-  async function handleSubmit() {
-    if (!valid || submitting) return;
-    setSubmitting(true);
-    try {
-      const intent: RawIntent = {
-        prompt,
-        genre_primary: genrePrimary,
-        genre_secondary: genreSecondary === NO_SECONDARY ? null : genreSecondary,
-      };
-      // 父级 orchestrator 负责触发 /decompose + /diverge
-      onSubmitted(intent);
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  // Latest-values bridge: the handler we expose to the parent stays stable
+  // (so it can be registered as a wizard-footer click target without
+  // re-binding on every keystroke) but always reads fresh form state.
+  const stateRef = useRef({ prompt, genrePrimary, genreSecondary });
+  stateRef.current = { prompt, genrePrimary, genreSecondary };
+
+  const handleSubmit = useCallback(() => {
+    const { prompt, genrePrimary, genreSecondary } = stateRef.current;
+    if (prompt.length < 10 || !genrePrimary) return;
+    const intent: RawIntent = {
+      prompt,
+      genre_primary: genrePrimary,
+      genre_secondary: genreSecondary === NO_SECONDARY ? null : genreSecondary,
+    };
+    // 父级 orchestrator 负责触发 /decompose + /diverge
+    onSubmitted(intent);
+  }, [onSubmitted]);
+
+  useEffect(() => {
+    onSubmitReady?.(valid ? handleSubmit : null, valid);
+    return () => onSubmitReady?.(null, false);
+  }, [valid, handleSubmit, onSubmitReady]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex-1 min-h-0 overflow-y-auto px-margin-desktop py-4 space-y-4">
-        <header className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary-container text-lg leading-none">edit_note</span>
-          <h2 className="font-display text-base font-semibold text-primary">Stage 1 · 灵感输入</h2>
-        </header>
-
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-3 pb-4">
         <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4 space-y-3">
           <div>
             <label
@@ -67,7 +78,7 @@ export default function S1InputStep({ projectId, initial, onSubmitted }: Props) 
             <textarea
               id="prompt"
               className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-y"
-              rows={5}
+              rows={8}
               maxLength={MAX_PROMPT}
               placeholder="一句话描述你想写的故事核心 — 比如:赛博朋克 + 修仙 + 双男主"
               value={prompt}
@@ -132,15 +143,6 @@ export default function S1InputStep({ projectId, initial, onSubmitted }: Props) 
           </div>
         </div>
       </div>
-
-      <footer className="flex items-center justify-end px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
-        <PrimaryButton
-          label={submitting ? "进入拆解中…" : "进入拆解"}
-          loading={submitting}
-          disabled={!valid}
-          onClick={handleSubmit}
-        />
-      </footer>
     </div>
   );
 }

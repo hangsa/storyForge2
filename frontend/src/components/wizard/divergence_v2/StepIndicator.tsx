@@ -16,7 +16,7 @@ interface Props {
 
 export function StepIndicator({ current, completed, onStageClick }: Props) {
   return (
-    <div className="flex items-center gap-2 mb-6 px-margin-desktop pt-4" data-testid="step-indicator">
+    <div className="flex items-center gap-2 mb-6 px-6 pt-4" data-testid="step-indicator">
       {STAGES.map((s, idx) => {
         const isCurrent = current === s.key;
         const isCompleted = completed.includes(s.key);
@@ -28,7 +28,7 @@ export function StepIndicator({ current, completed, onStageClick }: Props) {
               disabled={!canJump}
               onClick={() => onStageClick(s.key)}
               className={[
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors",
+                "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors min-w-[7.5rem]",
                 isCurrent
                   ? "bg-primary text-on-primary font-semibold shadow-sm"
                   : isCompleted
@@ -38,7 +38,7 @@ export function StepIndicator({ current, completed, onStageClick }: Props) {
               data-testid={`step-indicator-${s.key}`}
             >
               <span className="material-symbols-outlined text-base leading-none">{s.icon}</span>
-              <span className="font-mono text-[11px] tracking-wider">{s.label}</span>
+              <span className="font-mono text-sm tracking-wider">{s.label}</span>
             </button>
             {idx < STAGES.length - 1 && (
               <span className="material-symbols-outlined text-on-surface-variant opacity-40 text-base leading-none">chevron_right</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import S1InputStep from "./divergence_v2/S1InputStep";
 import S2DecomposeStep from "./divergence_v2/S2DecomposeStep";
 import S3DivergeStep from "./divergence_v2/S3DivergeStep";
@@ -6,6 +6,7 @@ import S4CommitStep from "./divergence_v2/S4CommitStep";
 import { StepIndicator } from "./divergence_v2/StepIndicator";
 import { ConfirmNextDialog } from "./divergence_v2/ConfirmNextDialog";
 import { GhostButton } from "@/components/ds";
+import { useOptionalWizard } from "./WizardContext";
 import { hasDownstreamData, useThreeBDivergence } from "./divergence_v2/useThreeBDivergence";
 import type { RawIntent, SubStage } from "./divergence_v2/types";
 
@@ -22,7 +23,110 @@ export default function CreativeDivergenceStep({
     commit, editConcept, advance, jumpToStage, reset,
   } = useThreeBDivergence(projectId);
 
+  const wizard = useOptionalWizard();
+
   const [confirmNext, setConfirmNext] = useState<{ target: SubStage; affected: SubStage[] } | null>(null);
+
+  // S1 (灵感输入) submits via the page-level wizard footer, not an in-stage
+  // button — see S1InputStep's onSubmitReady. We track the latest handler
+  // + validity here so we can re-register with the wizard context as form
+  // state changes.
+  const [s1Ready, setS1Ready] = useState<{ handler: (() => void) | null; valid: boolean }>({
+    handler: null,
+    valid: false,
+  });
+  const handleS1Ready = useCallback((handler: (() => void) | null, valid: boolean) => {
+    setS1Ready({ handler, valid });
+  }, []);
+
+  // Register the current sub-stage's "next" / "prev" handlers with the wizard
+  // footer. All four sub-stages now drive navigation through the page-level
+  // footer (no internal footers in S2/S3/S4). The wizard is optional — when
+  // no provider is present (tests, isolated renders) we silently no-op.
+  //
+  // NOTE: WizardContext's `value` object is reconstructed on every render
+  // (no useMemo), so we cannot put `wizard` itself in the dep array — that
+  // would fire the effect every render and re-dispatch setNextHandler,
+  // causing an infinite loop. Instead we hold refs to the latest setters
+  // and depend on the *values* we actually care about (currentSubStage,
+  // valid, loading, committedConcept).
+  const setNextHandlerRef = useRef(wizard?.setNextHandler);
+  setNextHandlerRef.current = wizard?.setNextHandler;
+  const setPrevHandlerRef = useRef(wizard?.setPrevHandler);
+  setPrevHandlerRef.current = wizard?.setPrevHandler;
+
+  useEffect(() => {
+    const setNext = setNextHandlerRef.current;
+    const setPrev = setPrevHandlerRef.current;
+    if (!setNext || !setPrev) return;
+
+    const sub = state.currentSubStage;
+
+    // ── Prev handler ────────────────────────────────────────────────
+    // S1 has no previous sub-stage; the wizard footer's 上一步 button
+    // disables (currentStep === 1 && prevHandler === null).
+    // S2/S3/S4 step back to the previous sub-stage via jumpToStage.
+    if (sub === "1") {
+      setPrev(null);
+    } else if (sub === "2") {
+      setPrev(() => jumpToStage("1"));
+    } else if (sub === "3") {
+      setPrev(() => jumpToStage("2"));
+    } else if (sub === "4") {
+      setPrev(() => jumpToStage("3"));
+    }
+
+    // ── Next handler + label/loading label ──────────────────────────
+    if (sub === "1") {
+      const disabled = !s1Ready.valid || state.loading;
+      // Always register a function (no-op fallback when form is invalid)
+      // so the wizard footer button stays visible — just disabled. S1 has
+      // no internal save button, so this footer button is the user's only
+      // forward path; passing null here would hide it entirely on an empty
+      // form and strand the user.
+      setNext(
+        s1Ready.handler ?? (() => {}),
+        disabled,
+        "下一步:拆解 →",
+        null,
+      );
+    } else if (sub === "2") {
+      const disabled = state.loading;
+      setNext(
+        () => requestNext("3"),
+        disabled,
+        "下一步:发散 →",
+        "拆解中…",
+      );
+    } else if (sub === "3") {
+      const disabled = state.loading;
+      setNext(
+        () => requestNext("4"),
+        disabled,
+        "下一步:提交 →",
+        "发散中…",
+      );
+    } else if (sub === "4") {
+      // S4: empty-state (committedConcept === null) and committed-state both
+      // call onAdvance. The footer button is the user's only path forward.
+      const disabled = state.loading;
+      setNext(
+        () => { void advance(); },
+        disabled,
+        "下一步:进入概念DNA →",
+        "提交中…",
+      );
+    }
+
+    return () => {
+      setNext(null, false);
+      setPrev(null);
+    };
+    // requestNext / jumpToStage / advance are stable from useThreeBDivergence
+    // (useCallback), so we don't need to list them. The shape of the
+    // registration changes per sub-stage; we re-run the effect whenever the
+    // relevant inputs change.
+  }, [state.currentSubStage, state.loading, state.committedConcept, s1Ready.handler, s1Ready.valid]);
 
   // 进入 S2 时若 dimensions 为空自动跑 decompose
   useEffect(() => {
@@ -60,10 +164,10 @@ export default function CreativeDivergenceStep({
     }
   }
 
-  function handleS1Submit(intent: RawIntent) {
+  const handleS1Submit = useCallback((intent: RawIntent) => {
     jumpToStage("2");
     decompose(intent);
-  }
+  }, [jumpToStage, decompose]);
 
   return (
     <div data-testid="creative-divergence-step" className="flex flex-col flex-1 min-h-0">
@@ -78,7 +182,12 @@ export default function CreativeDivergenceStep({
         )}
 
         {state.currentSubStage === "1" && (
-          <S1InputStep projectId={projectId} initial={state.rawIntent} onSubmitted={handleS1Submit} />
+          <S1InputStep
+            projectId={projectId}
+            initial={state.rawIntent}
+            onSubmitted={handleS1Submit}
+            onSubmitReady={handleS1Ready}
+          />
         )}
 
         {state.currentSubStage === "2" && (
@@ -89,8 +198,6 @@ export default function CreativeDivergenceStep({
             loading={state.loading}
             followUpLoadingUnitId={state.followUpLoadingUnitId}
             onFollowUp={followUp}
-            onPrev={() => jumpToStage("1")}
-            onNext={() => requestNext("3")}
           />
         )}
 
@@ -101,8 +208,6 @@ export default function CreativeDivergenceStep({
             onRegenerateUnit={regenerateUnit}
             onSelectCandidate={selectCandidate}
             onRegenerateAll={diverge}
-            onPrev={() => jumpToStage("2")}
-            onNext={() => requestNext("4")}
           />
         )}
 
@@ -110,7 +215,6 @@ export default function CreativeDivergenceStep({
           <S4CommitStep
             committedConcept={state.committedConcept}
             noveltyScores={state.noveltyScores}
-            loading={state.loading}
             onEditConcept={editConcept}
             onRegenerateCommit={commit}
             onRegenerateAllDivergence={() => { jumpToStage("3"); diverge(); }}

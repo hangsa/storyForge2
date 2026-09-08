@@ -132,7 +132,7 @@ function Inner({ projectId }: Props) {
           </div>
         </main>
 
-        <footer className="flex items-center justify-between px-margin-desktop py-3 border-t border-outline-variant gap-3 shrink-0">
+        <footer className="flex items-center justify-between px-6 py-3 border-t border-outline-variant gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <button data-testid="wizard-prev" type="button"
                     onClick={() => {

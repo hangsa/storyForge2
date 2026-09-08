@@ -36,7 +36,7 @@ export default function S3DivergeStep({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-2">
+      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6 pt-2">
         {allFailed && (
           <div className="p-3 bg-error-container/20 border border-error rounded-lg text-error text-sm" data-testid="all-failed-banner">
             所有 unit 发散失败,请点击 footer 「重新生成」重试。

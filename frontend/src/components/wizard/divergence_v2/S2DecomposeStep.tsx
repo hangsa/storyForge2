@@ -32,7 +32,7 @@ export default function S2DecomposeStep({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-2">
+      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6 pt-2">
         {DIMENSION_ORDER.map((key) => {
           const dim = safeDimensions.find((d) => d.dimension === key);
           if (!dim) return null;

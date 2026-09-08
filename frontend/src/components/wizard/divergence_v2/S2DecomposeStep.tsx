@@ -1,24 +1,15 @@
 import { useState } from "react";
-import { PrimaryButton, SecondaryButton } from "@/components/ds";
 import type { DimensionDecomposition, Unit } from "./types";
 
 interface Props {
   dimensions: DimensionDecomposition[];
   topLevelSummary: string;
-  loading: boolean;
-  followUpLoadingUnitId: string | null;
-  onFollowUp: (unitId: string, userQuestion: string | null) => void;
-  // Footer navigation (上一步 / 下一步) moved to the page-level wizard
-  // footer in WorkspaceWizardPanel. See CreativeDivergenceStep, which
-  // registers the handlers via setNextHandler / setPrevHandler based on
-  // the current sub-stage.
-  //
-  // The Stage-2 header (title + dimension/unit counts) and the causal_map
-  // <pre> block were removed on 2026-09-08 — the title is redundant with
-  // the StepIndicator above, and the causal map was just the dimension
-  // order string ("ontology → energetics → ...") echoing what's already
-  // obvious from the section headers below. causalMap is still persisted
-  // in divergence state for future use; we just don't render it here.
+  // Footer navigation (上一步 / 下一步 / 重新生成) is registered through the
+  // page-level wizard footer by CreativeDivergenceStep. The Stage-2 header
+  // and the causal_map <pre> block were removed on 2026-09-08 (see git
+  // history); the per-unit "追问" affordance was removed on the same day
+  // (decision 2026-09-08: "暂时忽略"). The follow-up props were dropped
+  // along with it.
 }
 
 const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
@@ -32,8 +23,7 @@ const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
 const DIMENSION_ORDER = ["ontology", "energetics", "power_structure", "protagonist_engine", "narrative_physics"] as const;
 
 export default function S2DecomposeStep({
-  dimensions, topLevelSummary, loading, followUpLoadingUnitId,
-  onFollowUp,
+  dimensions, topLevelSummary,
 }: Props) {
   // Defense-in-depth: callers upstream (reducer / HYDRATE) already coerce
   // undefined to [], but a stray malformed payload must not crash the
@@ -47,24 +37,14 @@ export default function S2DecomposeStep({
           const dim = safeDimensions.find((d) => d.dimension === key);
           if (!dim) return null;
           return (
-            <DimensionBlock
-              key={dim.dimension}
-              dimension={dim}
-              followUpLoadingUnitId={followUpLoadingUnitId}
-              onFollowUp={onFollowUp}
-            />
+            <DimensionBlock key={dim.dimension} dimension={dim} />
           );
         })}
 
         {safeDimensions
           .filter((d) => !DIMENSION_ORDER.includes(d.dimension as typeof DIMENSION_ORDER[number]))
           .map((dim) => (
-            <DimensionBlock
-              key={dim.dimension}
-              dimension={dim}
-              followUpLoadingUnitId={followUpLoadingUnitId}
-              onFollowUp={onFollowUp}
-            />
+            <DimensionBlock key={dim.dimension} dimension={dim} />
           ))}
 
         {topLevelSummary && (
@@ -81,14 +61,11 @@ export default function S2DecomposeStep({
 }
 
 function DimensionBlock({
-  dimension, followUpLoadingUnitId, onFollowUp,
+  dimension,
 }: {
   dimension: DimensionDecomposition;
-  followUpLoadingUnitId: string | null;
-  onFollowUp: (unitId: string, userQuestion: string | null) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [followUpUnitId, setFollowUpUnitId] = useState<string | null>(null);
 
   const meta = DIMENSION_LABELS[dimension.dimension] ?? { label: dimension.dimension, icon: "auto_awesome" };
 
@@ -120,20 +97,7 @@ function DimensionBlock({
       {!collapsed && (
         <div className="space-y-2 mt-3">
           {dimension.units.map((u) => (
-            <UnitCard
-              key={u.id}
-              unit={u}
-              loading={followUpLoadingUnitId === u.id}
-              followUpUnitId={followUpUnitId}
-              setFollowUpUnitId={setFollowUpUnitId}
-              onSubmit={(text) => {
-                onFollowUp(u.id, text.trim() || null);
-                setFollowUpUnitId(null);
-              }}
-              onCancel={() => {
-                setFollowUpUnitId(null);
-              }}
-            />
+            <UnitCard key={u.id} unit={u} />
           ))}
         </div>
       )}
@@ -142,71 +106,22 @@ function DimensionBlock({
 }
 
 function UnitCard({
-  unit, loading, followUpUnitId,
-  setFollowUpUnitId, onSubmit, onCancel,
+  unit,
 }: {
   unit: Unit;
-  loading: boolean;
-  followUpUnitId: string | null;
-  setFollowUpUnitId: (id: string | null) => void;
-  onSubmit: (text: string) => void;
-  onCancel: () => void;
 }) {
-  const [followUpText, setFollowUpText] = useState("");
-  const showDialog = followUpUnitId === unit.id;
-  const followUpLabel = unit.is_irreducible
-    ? "已不可再分"
-    : unit.follow_up_count > 0
-      ? `已追问 ${unit.follow_up_count} 次`
-      : "追问";
   return (
     <div
-      className={
-        "bg-surface-container border border-outline-variant rounded-lg p-3 text-sm " +
-        (loading ? "opacity-50" : "")
-      }
+      className="bg-surface-container border border-outline-variant rounded-lg p-3 text-sm"
       data-testid={`unit-${unit.id}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
-              Unit #{unit.id}
-            </span>
-            <span className="font-display text-sm font-semibold text-primary">{unit.unit_name}</span>
-          </div>
-          <div className="text-primary mt-1">{unit.description}</div>
-        </div>
-        <SecondaryButton
-          label={followUpLabel}
-          icon="forum"
-          size="sm"
-          testId={`follow-up-${unit.id}`}
-          disabled={unit.is_irreducible}
-          onClick={() => setFollowUpUnitId(unit.id)}
-        />
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
+          Unit #{unit.id}
+        </span>
+        <span className="font-display text-sm font-semibold text-primary">{unit.unit_name}</span>
       </div>
-
-      {showDialog && (
-        <div className="mt-3 p-3 border border-primary-container/30 rounded-lg bg-primary-container/5 space-y-2">
-          <textarea
-            placeholder="(留空使用默认追问)"
-            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-sm"
-            value={followUpText}
-            onChange={(e) => setFollowUpText(e.target.value)}
-            rows={2}
-            data-testid={`follow-up-input-${unit.id}`}
-          />
-          <div className="flex justify-end gap-2">
-            <SecondaryButton label="取消" size="sm" onClick={onCancel} />
-            <PrimaryButton
-              label="确认追问"
-              size="sm"
-              onClick={() => onSubmit(followUpText)}
-            />
-          </div>
-        </div>
-      )}
+      <div className="text-primary mt-1">{unit.description}</div>
     </div>
   );
 }

@@ -5,7 +5,6 @@ import S3DivergeStep from "./divergence_v2/S3DivergeStep";
 import S4CommitStep from "./divergence_v2/S4CommitStep";
 import { StepIndicator } from "./divergence_v2/StepIndicator";
 import { ConfirmNextDialog } from "./divergence_v2/ConfirmNextDialog";
-import { GhostButton } from "@/components/ds";
 import { useOptionalWizard } from "./WizardContext";
 import { hasDownstreamData, useThreeBDivergence } from "./divergence_v2/useThreeBDivergence";
 import type { RawIntent, SubStage } from "./divergence_v2/types";
@@ -19,8 +18,8 @@ export default function CreativeDivergenceStep({
   projectId, onAdvanceSuccess,
 }: Props) {
   const {
-    state, decompose, followUp, diverge, regenerateUnit, selectCandidate,
-    commit, editConcept, advance, jumpToStage, reset,
+    state, decompose, diverge, regenerateUnit, selectCandidate,
+    commit, editConcept, advance, jumpToStage,
   } = useThreeBDivergence(projectId);
 
   const wizard = useOptionalWizard();
@@ -54,10 +53,13 @@ export default function CreativeDivergenceStep({
   setNextHandlerRef.current = wizard?.setNextHandler;
   const setPrevHandlerRef = useRef(wizard?.setPrevHandler);
   setPrevHandlerRef.current = wizard?.setPrevHandler;
+  const setRegenerateHandlerRef = useRef(wizard?.setRegenerateHandler);
+  setRegenerateHandlerRef.current = wizard?.setRegenerateHandler;
 
   useEffect(() => {
     const setNext = setNextHandlerRef.current;
     const setPrev = setPrevHandlerRef.current;
+    const setRegen = setRegenerateHandlerRef.current;
     if (!setNext || !setPrev) return;
 
     const sub = state.currentSubStage;
@@ -74,6 +76,20 @@ export default function CreativeDivergenceStep({
       setPrev(() => jumpToStage("2"));
     } else if (sub === "4") {
       setPrev(() => jumpToStage("3"));
+    }
+
+    // ── Regenerate handler ──────────────────────────────────────────
+    // Only S2 exposes a "重新生成" button in the wizard footer; the action
+    // re-runs /decompose with the current raw intent. Other sub-stages
+    // have their own regen affordances (S3 has in-stage "全部重新生成" +
+    // per-unit, S4 has in-stage "重新生成" / "全部重新生成") so the footer
+    // slot stays clear there to avoid two "重新生成" buttons on one screen.
+    if (setRegen) {
+      if (sub === "2" && state.rawIntent) {
+        setRegen(() => { decompose(state.rawIntent!); }, state.loading);
+      } else {
+        setRegen(null, false);
+      }
     }
 
     // ── Next handler + label/loading label ──────────────────────────
@@ -121,12 +137,13 @@ export default function CreativeDivergenceStep({
     return () => {
       setNext(null, false);
       setPrev(null);
+      setRegen?.(null, false);
     };
     // requestNext / jumpToStage / advance are stable from useThreeBDivergence
     // (useCallback), so we don't need to list them. The shape of the
     // registration changes per sub-stage; we re-run the effect whenever the
     // relevant inputs change.
-  }, [state.currentSubStage, state.loading, state.committedConcept, s1Ready.handler, s1Ready.valid]);
+  }, [state.currentSubStage, state.loading, state.committedConcept, state.rawIntent, s1Ready.handler, s1Ready.valid]);
 
   // 进入 S2 时若 dimensions 为空自动跑 decompose
   useEffect(() => {
@@ -194,9 +211,6 @@ export default function CreativeDivergenceStep({
           <S2DecomposeStep
             dimensions={state.dimensions}
             topLevelSummary={state.topLevelSummary}
-            loading={state.loading}
-            followUpLoadingUnitId={state.followUpLoadingUnitId}
-            onFollowUp={followUp}
           />
         )}
 
@@ -224,11 +238,6 @@ export default function CreativeDivergenceStep({
           />
         )}
 
-        {(state.currentSubStage === "2" || state.currentSubStage === "3") && (
-          <div className="flex justify-start">
-            <GhostButton label="重新输入" size="sm" onClick={async () => { await reset(); jumpToStage("1"); }} />
-          </div>
-        )}
       </div>
 
       <ConfirmNextDialog

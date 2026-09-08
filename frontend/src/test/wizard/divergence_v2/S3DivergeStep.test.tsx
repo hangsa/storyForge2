@@ -54,6 +54,17 @@ describe("S3DivergeStep", () => {
     expect(screen.getByTestId("all-failed-banner")).toBeInTheDocument();
   });
 
+  it("does not render the Stage-3 title or stats line (both removed 2026-09-08)", () => {
+    // Regression guard: the "Stage 3 · 自适应发散" title was redundant with
+    // the StepIndicator above, and the "{n} 个候选 · {m} 个失败" stats line
+    // was just an echo of data already shown per-section. Both were removed
+    // to free vertical space. The "全部重新生成" utility button moved to
+    // its own toolbar row at the top.
+    render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={vi.fn()} />);
+    expect(screen.queryByText(/Stage 3 · 自适应发散/)).toBeNull();
+    expect(screen.queryByText(/个候选 · .*个失败/)).toBeNull();
+  });
+
   it("'全部重新生成' calls onRegenerateAll", () => {
     const onAll = vi.fn();
     render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} onRegenerateAll={onAll} />);

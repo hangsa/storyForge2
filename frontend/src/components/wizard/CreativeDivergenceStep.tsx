@@ -193,7 +193,6 @@ export default function CreativeDivergenceStep({
         {state.currentSubStage === "2" && (
           <S2DecomposeStep
             dimensions={state.dimensions}
-            causalMap={state.causalMap}
             topLevelSummary={state.topLevelSummary}
             loading={state.loading}
             followUpLoadingUnitId={state.followUpLoadingUnitId}

@@ -33,32 +33,12 @@ export default function S3DivergeStep({
     d.units.length > 0 && d.units.every((u) => !d.candidates.some((c) => c.unit_id === u.id))
   );
 
-  const totalCandidates = dimensions.reduce(
-    (acc, d) => acc + d.candidates.length,
-    0,
-  );
-  const totalUnits = dimensions.reduce((acc, d) => acc + d.units.length, 0);
-  const failedUnits = dimensions.reduce(
-    (acc, d) => acc + d.units.filter((u) => !d.candidates.some((c) => c.unit_id === u.id)).length,
-    0,
-  );
-
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary-container text-lg leading-none">call_split</span>
-            <h2 className="font-display text-base font-semibold text-primary">Stage 3 · 自适应发散</h2>
-          </div>
+      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-2">
+        <div className="flex justify-start">
           <SecondaryButton label="全部重新生成" icon="refresh" size="sm" onClick={onRegenerateAll} />
         </div>
-
-        {totalUnits > 0 && (
-          <p className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
-            已生成 {totalCandidates} 个候选 · {failedUnits} 个失败
-          </p>
-        )}
 
         {allFailed && (
           <div className="p-3 bg-error-container/20 border border-error rounded-lg text-error text-sm" data-testid="all-failed-banner">

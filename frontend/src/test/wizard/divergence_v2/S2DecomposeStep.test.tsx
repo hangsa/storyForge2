@@ -25,26 +25,35 @@ const MOCK_DIMENSIONS: DimensionDecomposition[] = [
 
 describe("S2DecomposeStep", () => {
   it("renders all dimension blocks by id", () => {
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     expect(screen.getByTestId("dimension-ontology")).toBeInTheDocument();
     expect(screen.getByTestId("dimension-energetics")).toBeInTheDocument();
   });
 
-  it("renders causal_map and top_level_summary", () => {
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="因果图 A→B" topLevelSummary="总览文本" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
-    expect(screen.getByTestId("causal-map")).toHaveTextContent("因果图 A→B");
+  it("renders top_level_summary", () => {
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} topLevelSummary="总览文本" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     expect(screen.getByTestId("top-level-summary")).toHaveTextContent("总览文本");
   });
 
+  it("does not render the Stage-2 header or causal_map (both removed 2026-09-08)", () => {
+    // The "Stage 2 · 第一性拆解" title was redundant with the StepIndicator
+    // above, and the causal_map <pre> was just the dimension-order string
+    // ("ontology → energetics → ...") — both were removed to free vertical
+    // space. Test as a regression guard so a re-introduction is caught.
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
+    expect(screen.queryByText(/Stage 2 · 第一性拆解/)).toBeNull();
+    expect(screen.queryByTestId("causal-map")).toBeNull();
+  });
+
   it("irreducible unit follow-up button is disabled", () => {
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     expect(screen.getByTestId("follow-up-u1")).not.toBeDisabled();
     expect(screen.getByTestId("follow-up-u2")).toBeDisabled();
   });
 
   it("clicking follow-up shows dialog; submitting with text calls onFollowUp", () => {
     const onFollowUp = vi.fn();
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={onFollowUp} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={onFollowUp} />);
     fireEvent.click(screen.getByTestId("follow-up-u1"));
     const input = screen.getByTestId("follow-up-input-u1");
     fireEvent.change(input, { target: { value: "再深入" } });
@@ -54,14 +63,14 @@ describe("S2DecomposeStep", () => {
 
   it("submitting empty follow-up calls onFollowUp with null", () => {
     const onFollowUp = vi.fn();
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={onFollowUp} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={onFollowUp} />);
     fireEvent.click(screen.getByTestId("follow-up-u1"));
     fireEvent.click(screen.getByText("确认追问"));
     expect(onFollowUp).toHaveBeenCalledWith("u1", null);
   });
 
   it("switching follow-up units clears prior text (regression test for state leak)", () => {
-    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
+    render(<S2DecomposeStep dimensions={MOCK_DIMENSIONS} topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
     fireEvent.click(screen.getByTestId("follow-up-u1"));
     fireEvent.change(screen.getByTestId("follow-up-input-u1"), { target: { value: "STALE" } });
     fireEvent.click(screen.getByTestId("follow-up-u3"));
@@ -73,7 +82,9 @@ describe("S2DecomposeStep", () => {
     // `dimensions={undefined}`, S2 used to crash at `dimensions.length`
     // and `dimensions.reduce`. Component now coerces to [].
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<S2DecomposeStep dimensions={undefined as any} causalMap="" topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
-    expect(screen.getByText(/0 维度 · 0 单元/)).toBeInTheDocument();
+    render(<S2DecomposeStep dimensions={undefined as any} topLevelSummary="" loading={false} followUpLoadingUnitId={null} onFollowUp={vi.fn()} />);
+    // Dimension count text is gone with the header — the regression check
+    // is just that the component doesn't throw on undefined dimensions.
+    expect(screen.queryAllByTestId(/^dimension-/)).toHaveLength(0);
   });
 });

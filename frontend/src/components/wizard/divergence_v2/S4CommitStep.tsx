@@ -62,7 +62,7 @@ export default function S4CommitStep({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-4">
+      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="material-symbols-outlined text-primary-container text-lg leading-none">task_alt</span>
           <h2 className="font-display text-base font-semibold text-primary">Stage 4 · 提交</h2>

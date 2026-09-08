@@ -66,7 +66,7 @@ export default function S1InputStep({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-3 pb-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-2 pb-4">
         <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4 space-y-3">
           <div>
             <label

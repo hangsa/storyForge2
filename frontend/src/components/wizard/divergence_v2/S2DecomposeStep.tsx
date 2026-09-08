@@ -4,7 +4,6 @@ import type { DimensionDecomposition, Unit } from "./types";
 
 interface Props {
   dimensions: DimensionDecomposition[];
-  causalMap: string;
   topLevelSummary: string;
   loading: boolean;
   followUpLoadingUnitId: string | null;
@@ -13,6 +12,13 @@ interface Props {
   // footer in WorkspaceWizardPanel. See CreativeDivergenceStep, which
   // registers the handlers via setNextHandler / setPrevHandler based on
   // the current sub-stage.
+  //
+  // The Stage-2 header (title + dimension/unit counts) and the causal_map
+  // <pre> block were removed on 2026-09-08 — the title is redundant with
+  // the StepIndicator above, and the causal map was just the dimension
+  // order string ("ontology → energetics → ...") echoing what's already
+  // obvious from the section headers below. causalMap is still persisted
+  // in divergence state for future use; we just don't render it here.
 }
 
 const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
@@ -26,34 +32,17 @@ const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
 const DIMENSION_ORDER = ["ontology", "energetics", "power_structure", "protagonist_engine", "narrative_physics"] as const;
 
 export default function S2DecomposeStep({
-  dimensions, causalMap, topLevelSummary, loading, followUpLoadingUnitId,
+  dimensions, topLevelSummary, loading, followUpLoadingUnitId,
   onFollowUp,
 }: Props) {
   // Defense-in-depth: callers upstream (reducer / HYDRATE) already coerce
   // undefined to [], but a stray malformed payload must not crash the
   // render with `dimensions.length`.
   const safeDimensions = Array.isArray(dimensions) ? dimensions : [];
-  const totalUnits = safeDimensions.reduce((acc, d) => acc + d.units.length, 0);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary-container text-lg leading-none">account_tree</span>
-            <h2 className="font-display text-base font-semibold text-primary">Stage 2 · 第一性拆解</h2>
-          </div>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
-            {safeDimensions.length} 维度 · {totalUnits} 单元
-          </span>
-        </div>
-
-        {causalMap && (
-          <pre className="bg-surface-container border border-outline-variant rounded-lg p-3 text-xs text-primary whitespace-pre-wrap" data-testid="causal-map">
-            {causalMap}
-          </pre>
-        )}
-
+      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-margin-desktop pt-2">
         {DIMENSION_ORDER.map((key) => {
           const dim = safeDimensions.find((d) => d.dimension === key);
           if (!dim) return null;

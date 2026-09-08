@@ -67,8 +67,8 @@ export default function S1InputStep({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-2 pb-4">
-        <div className="h-full bg-surface-container-low border border-outline-variant rounded-lg p-4 space-y-3">
-          <div className="flex flex-col flex-1 min-h-0">
+        <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4 space-y-3">
+          <div>
             <label
               htmlFor="prompt"
               className="block font-display text-sm font-medium text-primary mb-1"
@@ -77,7 +77,8 @@ export default function S1InputStep({
             </label>
             <textarea
               id="prompt"
-              className="w-full flex-1 min-h-[8rem] bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-y"
+              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-y"
+              rows={12}
               maxLength={MAX_PROMPT}
               placeholder="一句话描述你想写的故事核心 — 比如:赛博朋克 + 修仙 + 双男主"
               value={prompt}
@@ -104,7 +105,6 @@ export default function S1InputStep({
                   options={genreOptions}
                   value={genrePrimary}
                   onChange={setGenrePrimary}
-                  direction="up"
                 />
               ) : (
                 <input
@@ -128,7 +128,6 @@ export default function S1InputStep({
                   options={genreOptionsWithNone}
                   value={genreSecondary}
                   onChange={setGenreSecondary}
-                  direction="up"
                 />
               ) : (
                 <input

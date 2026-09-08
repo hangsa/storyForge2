@@ -104,6 +104,7 @@ export default function S1InputStep({
                   options={genreOptions}
                   value={genrePrimary}
                   onChange={setGenrePrimary}
+                  direction="up"
                 />
               ) : (
                 <input
@@ -127,6 +128,7 @@ export default function S1InputStep({
                   options={genreOptionsWithNone}
                   value={genreSecondary}
                   onChange={setGenreSecondary}
+                  direction="up"
                 />
               ) : (
                 <input

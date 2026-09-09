@@ -100,14 +100,19 @@ export default function S3DivergeStep({
                         )}
                       </div>
                       <div className="space-y-1">
-                        {unitCandidates.map((c) => (
-                          <CandidateRow
-                            key={c.id}
-                            candidate={c}
-                            selected={c.selection_rank === 0}
-                            onSelect={() => onSelectCandidate(u.id, c.selection_rank)}
-                          />
-                        ))}
+                        {unitCandidates.map((c) => {
+                          const dataIdx = dim.candidates
+                            .filter((x) => x.unit_id === u.id)
+                            .indexOf(c);
+                          return (
+                            <CandidateRow
+                              key={c.id}
+                              candidate={c}
+                              selected={c.selection_rank === 0}
+                              onSelect={() => onSelectCandidate(u.id, dataIdx)}
+                            />
+                          );
+                        })}
                       </div>
                     </>
                   )}

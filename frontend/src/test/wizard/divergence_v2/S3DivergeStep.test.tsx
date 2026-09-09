@@ -84,6 +84,50 @@ describe("S3DivergeStep", () => {
       render(<S3DivergeStep dimensions={noSelection} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />),
     ).not.toThrow();
   });
+
+  it("renders the __original virtual candidate as the first row with [原始拆解] prefix", () => {
+    // Task 7: virtual candidate (id ends with __original, selection_rank=0)
+    // should appear as the first row, prepended with the muted [原始拆解] label.
+    const withOriginal: DimensionDecomposition[] = [
+      {
+        dimension: "ontology",
+        insight: "",
+        units: [{ id: "u1", dimension: "ontology", unit_name: "灵窍", description: "d", follow_up_count: 0, is_irreducible: false }],
+        candidates: [
+          { id: "c1", unit_id: "u1", unit_name: "灵窍", description: "LLM 候选 A", chain_reaction: "连锁 A", main_operator: "distort", aux_operator: null, selection_rank: 0 },
+          { id: "c2", unit_id: "u1", unit_name: "灵窍", description: "LLM 候选 B", chain_reaction: "连锁 B", main_operator: "break", aux_operator: "blend", selection_rank: 1 },
+          { id: "u1__original", unit_id: "u1", unit_name: "灵窍", description: "原始拆解文本", chain_reaction: "原始连锁", main_operator: "distort", aux_operator: null, selection_rank: 0 },
+        ],
+        dimension_status: "diverged",
+      },
+    ];
+    render(<S3DivergeStep dimensions={withOriginal} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
+    // Virtual candidate renders the [原始拆解] prefix
+    expect(screen.getByText("[原始拆解]")).toBeInTheDocument();
+    // Virtual candidate is the first row inside the unit section
+    const unitDiv = screen.getByTestId("diverge-unit-u1");
+    const candidateRows = unitDiv.querySelectorAll("[data-testid^='candidate-']");
+    expect(candidateRows[0].getAttribute("data-testid")).toBe("candidate-u1__original");
+  });
+
+  it("does not render '连锁推演:' line when chain_reaction is empty", () => {
+    // Task 7: virtual candidate (and any candidate with empty chain_reaction)
+    // should not show the empty "连锁推演:" suffix.
+    const emptyChain: DimensionDecomposition[] = [
+      {
+        dimension: "ontology",
+        insight: "",
+        units: [{ id: "u1", dimension: "ontology", unit_name: "灵窍", description: "d", follow_up_count: 0, is_irreducible: false }],
+        candidates: [
+          { id: "u1__original", unit_id: "u1", unit_name: "灵窍", description: "原始拆解文本", chain_reaction: "", main_operator: "distort", aux_operator: null, selection_rank: 0 },
+        ],
+        dimension_status: "diverged",
+      },
+    ];
+    render(<S3DivergeStep dimensions={emptyChain} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
+    const originalRow = screen.getByTestId("candidate-u1__original");
+    expect(originalRow.textContent).not.toMatch(/连锁推演/);
+  });
 });
 
 const makeCand = (id: string, rank: number): UnitCandidate => ({

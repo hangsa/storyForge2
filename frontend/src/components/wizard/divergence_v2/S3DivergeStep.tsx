@@ -61,9 +61,11 @@ export default function S3DivergeStep({
               {dim.dimension}
             </h3>
             {dim.units.map((u) => {
-              const unitCandidates = dim.candidates
-                .filter((c) => c.unit_id === u.id)
-                .sort((a, b) => a.selection_rank - b.selection_rank);
+              const unitCandidatesAll = dim.candidates.filter((c) => c.unit_id === u.id);
+              const { original, others } = partitionOriginalCandidate(unitCandidatesAll);
+              const unitCandidates = original
+                ? [original, ...others]
+                : [...others].sort((a, b) => a.selection_rank - b.selection_rank);
               const unitFailed = unitCandidates.length === 0;
               const selectedIdx = unitCandidates.findIndex((c) => c.selection_rank === 0);
               const mainOp = unitCandidates[selectedIdx]?.main_operator ?? "distort";
@@ -121,6 +123,7 @@ export default function S3DivergeStep({
                               key={c.id}
                               candidate={c}
                               selected={c.selection_rank === 0}
+                              isOriginal={original !== null && c.id === original.id}
                               onSelect={() => onSelectCandidate(u.id, dataIdx)}
                             />
                           );
@@ -139,20 +142,26 @@ export default function S3DivergeStep({
 }
 
 function CandidateRow({
-  candidate, selected, onSelect,
+  candidate, selected, isOriginal = false, onSelect,
 }: {
   candidate: UnitCandidate;
   selected: boolean;
+  isOriginal?: boolean;
   onSelect: () => void;
 }) {
   return (
     <label className="flex items-start gap-2 cursor-pointer" data-testid={`candidate-${candidate.id}`}>
       <input type="radio" checked={selected} onChange={onSelect} className="mt-1 accent-primary-container" />
       <div className="flex-1">
-        <div className="text-primary text-sm">{candidate.description}</div>
-        <div className="text-xs text-on-surface-variant mt-1">
-          连锁推演:{candidate.chain_reaction}
+        <div className="text-primary text-sm">
+          {isOriginal && <span className="text-on-surface-variant mr-1">[原始拆解]</span>}
+          {candidate.description}
         </div>
+        {candidate.chain_reaction && (
+          <div className="text-xs text-on-surface-variant mt-1">
+            连锁推演:{candidate.chain_reaction}
+          </div>
+        )}
       </div>
     </label>
   );

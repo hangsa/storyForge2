@@ -363,17 +363,30 @@ async def test_diverge_runs_one_llm_per_unit_in_parallel(tmp_path, monkeypatch, 
     assert len(dims) == 1
     assert mock_router.execute.call_count == 3  # per-unit LLM 调用
     assert dims[0].dimension_status == "diverged"
-    # 每个 unit 2 候选
+    # 每个 unit 3 候选 (2 LLM + 1 虚拟 original)
     for unit in units:
         cands = [c for c in dims[0].candidates if c.unit_id == unit.id]
-        assert len(cands) == 2
+        assert len(cands) == 3
         assert cands[0].unit_name == unit.unit_name
 
     reloaded = load_state("proj_test")
-    assert len(reloaded.dimensions[0].candidates) == 6
+    assert len(reloaded.dimensions[0].candidates) == 9
     assert reloaded.diverge_started_at is not None
     assert reloaded.diverge_completed_at is not None
     assert reloaded.diverge_started_at <= reloaded.diverge_completed_at
+
+    # S3 default-original-unit: 每个 unit 都追加虚拟 candidate
+    for unit in units:
+        cands = [c for c in reloaded.dimensions[0].candidates if c.unit_id == unit.id]
+        assert len(cands) == 3, f"期望每个 unit 3 个候选 (2 LLM + 1 虚拟),实际 {len(cands)}"
+        virtual = next(c for c in cands if c.id == f"{unit.id}__original")
+        assert virtual is not None
+        assert virtual.description == unit.description
+        assert virtual.chain_reaction == ""
+        assert virtual.selection_rank == 0
+        # LLM 候选 rank 顺移到 1, 2
+        llm_cands = [c for c in cands if c.id != virtual.id]
+        assert sorted(c.selection_rank for c in llm_cands) == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -476,8 +489,8 @@ async def test_diverge_rerun_replaces_candidates_not_appends(tmp_path, monkeypat
     ]})}
     await engine.diverge("proj_test")
     dims = await engine.diverge("proj_test")
-    assert len(dims[0].candidates) == 2  # not 4
-    assert len(load_state("proj_test").dimensions[0].candidates) == 2
+    assert len(dims[0].candidates) == 3  # not 6 (2 LLM + 1 虚拟 per unit; 整轮替换非累积)
+    assert len(load_state("proj_test").dimensions[0].candidates) == 3
 
 
 # ---- regenerate_unit ----

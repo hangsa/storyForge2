@@ -413,7 +413,7 @@ class ThreeBEngine:
             if isinstance(res, BaseException):
                 logger.warning("diverge unit %s failed: %s", unit.id, res)
                 continue
-            dim.candidates.extend(res)
+            dim.candidates.extend(_append_original_candidate(unit, res))
 
         # dimension_status 推算:该维度所有 unit 的 candidates 汇总
         for dim in state.dimensions:

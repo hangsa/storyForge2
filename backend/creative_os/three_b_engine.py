@@ -224,6 +224,32 @@ def migrate_state_on_load(project_id: str) -> Optional[ThreeBState]:
     return None
 
 
+def _append_original_candidate(
+    unit: Unit, llm_candidates: list[UnitCandidate]
+) -> list[UnitCandidate]:
+    """Append a synthetic candidate representing the original (S2-decomposed) unit.
+
+    Used by `diverge()` to give users a zero-cost "use original" fallback in S3.
+    Virtual candidate sits at the end of the list with `selection_rank = 0`,
+    shifting LLM candidates to ranks 1, 2, 3.
+    """
+    if any(c.id == f"{unit.id}__original" for c in llm_candidates):
+        return llm_candidates
+    virtual = UnitCandidate(
+        id=f"{unit.id}__original",
+        unit_id=unit.id,
+        unit_name=unit.unit_name,
+        description=unit.description,
+        chain_reaction="",
+        main_operator=None,
+        aux_operator=None,
+        selection_rank=0,
+    )
+    for i, c in enumerate(llm_candidates, start=1):
+        c.selection_rank = i
+    return llm_candidates + [virtual]
+
+
 class ThreeBEngine:
     """4 阶段创意发散引擎。Tasks 3-9 will populate engine methods."""
 

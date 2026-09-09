@@ -719,9 +719,14 @@ class ThreeBEngine:
                     None,
                 )
                 if cand:
+                    chain_line = (
+                        f"  连锁推演: {cand.chain_reaction}"
+                        if cand.chain_reaction
+                        else ""
+                    )
                     selected_units.append(
                         f"- [{d.dimension.value}] {u.unit_name}: {cand.description}\n"
-                        f"  连锁推演: {cand.chain_reaction}"
+                        f"{chain_line}"
                     )
                 else:
                     selected_units.append(

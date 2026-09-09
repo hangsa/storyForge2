@@ -774,3 +774,60 @@ async def test_advance_is_idempotent(tmp_path, monkeypatch, mock_router):
     await engine.advance("proj_test")  # 第二次
     # mock_router.execute 应只调用 0 次(committed_concept 已存在)
     assert mock_router.execute.call_count == 0
+
+
+# ---- _append_original_candidate (S3 default-original-unit) ----
+
+def test_append_original_candidate_appends_virtual_with_rank_zero():
+    """虚拟 candidate 追加到末尾,rank=0;LLM 候选 rank 顺移到 1,2,3。"""
+    from backend.creative_os.three_b_engine import _append_original_candidate
+
+    unit = Unit(id="u1", dimension=DimLabel.ONTOLOGY, unit_name="灵窍", description="修炼者根本穴位")
+    llm = [
+        UnitCandidate(id="c1", unit_id="u1", unit_name="灵窍", description="扭曲", chain_reaction="cr1", main_operator="distort", selection_rank=0),
+        UnitCandidate(id="c2", unit_id="u1", unit_name="灵窍", description="切断", chain_reaction="cr2", main_operator="break", selection_rank=1),
+        UnitCandidate(id="c3", unit_id="u1", unit_name="灵窍", description="融合", chain_reaction="cr3", main_operator="blend", selection_rank=2),
+    ]
+    result = _append_original_candidate(unit, llm)
+
+    assert len(result) == 4
+    assert result[3].id == "u1__original"
+    assert result[3].unit_id == "u1"
+    assert result[3].unit_name == "灵窍"
+    assert result[3].description == "修炼者根本穴位"
+    assert result[3].chain_reaction == ""
+    assert result[3].main_operator is None
+    assert result[3].aux_operator is None
+    assert result[3].selection_rank == 0
+    # LLM 候选 rank 顺移到 1,2,3(原 rank=0 升到 1)
+    assert result[0].selection_rank == 1
+    assert result[1].selection_rank == 2
+    assert result[2].selection_rank == 3
+
+
+def test_append_original_candidate_handles_empty_llm_list():
+    """LLM 完全失败(candidates=[]) 时,只追加虚拟(用户回退到原始)。"""
+    from backend.creative_os.three_b_engine import _append_original_candidate
+
+    unit = Unit(id="u1", dimension=DimLabel.ONTOLOGY, unit_name="灵窍", description="d")
+    result = _append_original_candidate(unit, [])
+
+    assert len(result) == 1
+    assert result[0].id == "u1__original"
+    assert result[0].description == "d"
+    assert result[0].selection_rank == 0
+
+
+def test_append_original_candidate_is_idempotent():
+    """重复调用不会产生重复虚拟 candidate。"""
+    from backend.creative_os.three_b_engine import _append_original_candidate
+
+    unit = Unit(id="u1", dimension=DimLabel.ONTOLOGY, unit_name="灵窍", description="d")
+    llm = [
+        UnitCandidate(id="c1", unit_id="u1", unit_name="灵窍", description="x", chain_reaction="r", main_operator="distort", selection_rank=0),
+    ]
+    once = _append_original_candidate(unit, llm)
+    twice = _append_original_candidate(unit, once)
+
+    assert len(twice) == 2  # 不应再次追加
+    assert sum(1 for c in twice if c.id == "u1__original") == 1

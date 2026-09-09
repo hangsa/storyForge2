@@ -1,7 +1,8 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import S3DivergeStep from "@/components/wizard/divergence_v2/S3DivergeStep";
-import type { DimensionDecomposition } from "@/components/wizard/divergence_v2/types";
+import { partitionOriginalCandidate } from "@/components/wizard/divergence_v2/S3DivergeStep";
+import type { DimensionDecomposition, UnitCandidate } from "@/components/wizard/divergence_v2/types";
 
 const MOCK: DimensionDecomposition[] = [
   {
@@ -82,5 +83,33 @@ describe("S3DivergeStep", () => {
     expect(() =>
       render(<S3DivergeStep dimensions={noSelection} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />),
     ).not.toThrow();
+  });
+});
+
+const makeCand = (id: string, rank: number): UnitCandidate => ({
+  id, unit_id: "u", unit_name: "u", description: id,
+  chain_reaction: "", main_operator: "distort", aux_operator: null,
+  selection_rank: rank,
+});
+
+describe("partitionOriginalCandidate", () => {
+  it("extracts the __original candidate and preserves order of the rest", () => {
+    const cands = [makeCand("c1", 1), makeCand("c2", 2), makeCand("u__original", 0), makeCand("c3", 3)];
+    const { original, others } = partitionOriginalCandidate(cands);
+    expect(original?.id).toBe("u__original");
+    expect(others.map((c) => c.id)).toEqual(["c1", "c2", "c3"]);
+  });
+
+  it("returns null original when no virtual candidate present", () => {
+    const cands = [makeCand("c1", 0), makeCand("c2", 1)];
+    const { original, others } = partitionOriginalCandidate(cands);
+    expect(original).toBeNull();
+    expect(others).toEqual(cands);
+  });
+
+  it("handles empty array", () => {
+    const { original, others } = partitionOriginalCandidate([]);
+    expect(original).toBeNull();
+    expect(others).toEqual([]);
   });
 });

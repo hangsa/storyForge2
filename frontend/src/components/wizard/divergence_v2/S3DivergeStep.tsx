@@ -27,6 +27,18 @@ const OPERATOR_ICONS: Record<Operator, string> = {
   chain: "link",
 };
 
+export function partitionOriginalCandidate(
+  candidates: UnitCandidate[],
+): { original: UnitCandidate | null; others: UnitCandidate[] } {
+  const idx = candidates.findIndex((c) => c.id.endsWith("__original"));
+  if (idx === -1) {
+    return { original: null, others: candidates };
+  }
+  const original = candidates[idx];
+  const others = [...candidates.slice(0, idx), ...candidates.slice(idx + 1)];
+  return { original, others };
+}
+
 export default function S3DivergeStep({
   dimensions, loading, onRegenerateUnit, onSelectCandidate,
 }: Props) {

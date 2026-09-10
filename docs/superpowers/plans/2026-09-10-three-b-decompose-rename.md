@@ -130,7 +130,7 @@ def test_firstness_decompose_yaml_schema():
     assert data["name"] == "firstness_decompose"
 ```
 
-- [ ] **Step 6: Edit the `test_all_v2_yamls_in_creative_dir` expected set (L394)**
+- [ ] **Step 6: Edit the `test_all_v2_yamls_in_creative_dir` expected set + widen glob (L394, L395)**
 
 In `backend/tests/test_three_b_yaml.py`, change L394 from:
 
@@ -143,6 +143,20 @@ to:
 ```python
     expected = {"firstness_decompose", "three_b_follow_up", "three_b_adaptive_diverge", "three_b_commit"}
 ```
+
+**Also** change L395 from:
+
+```python
+    found = {p.stem for p in Path("backend/prompts/creative/").glob("three_b_*.yaml")}
+```
+
+to:
+
+```python
+    found = {p.stem for p in Path("backend/prompts/creative/").glob("*.yaml")}
+```
+
+**Why widen the glob:** the original `three_b_*.yaml` pattern matches files whose stem starts with `three_b_`. After Task 2 renames `three_b_decompose.yaml` → `firstness_decompose.yaml`, the renamed file does NOT match the pattern, `expected.issubset(found)` becomes False, and this test will continue to FAIL even after Task 2 is complete. Widening to `*.yaml` captures all YAMLs in the directory (the test uses `issubset`, so unrelated files in the directory don't weaken the assertion).
 
 - [ ] **Step 7: Run the test file and confirm RED**
 

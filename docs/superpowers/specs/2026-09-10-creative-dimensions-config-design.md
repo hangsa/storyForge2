@@ -178,17 +178,20 @@ class CreativeDimensionsStore:
 ```python
 router = APIRouter(prefix="/api/v1/creative-dimensions", tags=["creative_dimensions"])
 
+# ⚠️ 顺序敏感：`/active` 和 `/` 必须在 `/{kind}` 之前注册，否则会被
+# 通配捕获（FastAPI 路由匹配按声明顺序）。下面代码块严格保持顺序。
+
 @router.get("/active")
 async def list_active(request: Request) -> dict:
     """S1 一次拿齐：{ subject: [...], tone: [...], style: [...] }，全部过滤 status==active。"""
 
 @router.get("")
 async def list_all(request: Request) -> dict:
-    """管理页用：返回全量（含 status=='inactive'）。"""
+    """管理页用：返回全量（包含 status=='inactive'），shape 同 /active。"""
 
 @router.get("/{kind}")
 async def list_by_kind(kind: str, request: Request) -> list[dict]:
-    """单维度列表，admin 用。"""
+    """单维度列表（全量，含 inactive），admin 用。"""
 
 @router.post("/{kind}")
 async def add_entry(kind: str, payload: DimensionEntryPayload, request: Request) -> dict:
@@ -256,8 +259,8 @@ const toneOptions    = useMemo(() => tone.map(...), [tone]);
 const styleOptions   = useMemo(() => style.map(...), [style]);
 
 // 默认值：
-//   subject = subject[0]?.id ?? DEFAULT_GENRE_FALLBACK  (当 subject 列表为空)
-//   tone    = tone[0]?.value ?? "" (空则该下拉禁用)
+//   subject = subject[0]?.id ?? DEFAULT_GENRE_FALLBACK  (DEFAULT_GENRE_FALLBACK = "cool_novel"，仅在 subject 列表完全为空时兜底；此时整个 S1 仍可点提交但 prompt 不含题材描述)
+//   tone    = tone[0]?.value ?? "" (空字符串在该维度禁用时也存在，仅本地展示用)
 //   style   = style[0]?.value ?? "" (同上)
 
 const subjectDisabled = subjectOptions.length === 0;
@@ -273,20 +276,28 @@ const styleDisabled   = styleOptions.length === 0;
 
 **新增的 RawIntent 提交**：不变（仍是 id 字符串），后端负责补描述。
 
+**stale 值处理**：用户曾在 S1 选了 `tone="热血"`，后续该条目被 admin 失效或删除。S1 重 mount 时若 `initial.tone` 引用已不在 active 列表 → 静默回退到 `tone[0]?.value ?? ""`（即列表首项或空串），不报错。`initial.genre_primary` 同理。
+
 ### 3.7 前端 hook
 
 `frontend/src/hooks/useCreativeDimensions.ts`：
 
 ```ts
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../api/client";
 import type { DimensionEntry } from "../api/types";
 
-let cache: { subject: DimensionEntry[]; tone: DimensionEntry[]; style: DimensionEntry[] } | null = null;
-let inflight: Promise<...> | null = null;
+type ActiveDimensions = {
+  subject: DimensionEntry[];
+  tone: DimensionEntry[];
+  style: DimensionEntry[];
+};
+
+let cache: ActiveDimensions | null = null;
+let inflight: Promise<ActiveDimensions> | null = null;
 
 export function useCreativeDimensions(activeOnly = true) {
-  const [data, setData] = useState(cache ?? { subject: [], tone: [], style: [] });
+  const [data, setData] = useState<ActiveDimensions>(cache ?? { subject: [], tone: [], style: [] });
   const [loading, setLoading] = useState(!cache);
   const [error, setError] = useState<string | null>(null);
 
@@ -301,7 +312,21 @@ export function useCreativeDimensions(activeOnly = true) {
     });
   }, []);
 
-  const refresh = async () => { cache = null; setLoading(true); /* re-fetch */ };
+  const refresh = useCallback(async () => {
+    cache = null;
+    inflight = api.listActiveCreativeDimensions().then((d) => { cache = d; return d; });
+    setLoading(true);
+    try {
+      const fresh = await inflight;
+      setData(fresh);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "unknown");
+    } finally {
+      setLoading(false);
+      inflight = null;
+    }
+  }, []);
+
   return { ...data, loading, error, refresh };
 }
 ```
@@ -358,13 +383,13 @@ def _build_dimension_block(raw_intent: Optional[RawIntent]) -> str:
     return "\n".join(lines)
 ```
 
-调用点：
+调用点（统一策略：三个 prompt 都通过 `_maybe_inject_block` 在已有 `format()` 之后做字符串前置拼接；YAML 模板本身不需任何占位符）：
 
 | 方法 | 现有调用 | 改造 |
 |---|---|---|
-| `decompose()` | `_invoke_llm_json(DECOMPOSE_PROMPT, ..., user_modifications=...)` | user 模板 format 前先拼 `_build_dimension_block(raw_intent)`，作为 `{dimension_block}` 占位符值 |
+| `decompose()` | `_invoke_llm_json(DECOMPOSE_PROMPT, ..., user_modifications=...)` | 把 `format(...)` 输出传给 `_maybe_inject_block` 再发 LLM |
 | `_diverge_single_unit()` | `_invoke_llm_json(ADAPTIVE_DIVERGE_PROMPT, ...)` | 同上 |
-| `commit()` | `_build_commit_user_prompt(...)` | 该 helper 内追加 `{dimension_block}` 占位符填充 |
+| `commit()` | `_build_commit_user_prompt(...)` | 把 `_build_commit_user_prompt(...)` 输出传给 `_maybe_inject_block` 再发 LLM |
 
 **Prompt YAML 改造**（3 个文件）：
 
@@ -454,8 +479,8 @@ export default function CreativeDimensionsPage() {
 | PUT 时 entry_id 不存在 | 404 `{"code": "NOT_FOUND"}` |
 | DELETE 时 entry_id 不存在 | 404 |
 | `{kind}` 非枚举 | 400 `{"code": "INVALID_KIND"}` |
-| S1 选中 id 在 active 列表里找不到 | fallback 到 subject/tone/style 列表首项；若无列表 → 该维度禁用 |
-| three_b_state.json 中引用已被失效 / 删除的 id | `_build_dimension_block` 取不到该 entry → 该行不出现，prompt 注入降级 |
+| S1 选中 id 在 active 列表里找不到 | S1 mount 时静默 fallback 到对应维度列表首项；three_b_engine `_build_dimension_block` 取不到 entry → 该行不出现，prompt 注入降级 |
+| three_b_state.json 中引用已被失效 / 删除的 id | 同上，decompose 时该行不出现 |
 | 描述过长（> 2000 字） | POST/PUT 校验 400 |
 | 描述含 SF_LOG 注入尝试 | 后端 description 不参与 LLM 拼接以外的任何路径解析；前端展示做 `escape()`，无 XSS 面 |
 | 前端缓存与后端不同步 | `useCreativeDimensions` 在新页面 mount 时强制 `refresh()`；S1 mount 时若 cache 存在则沿用（不阻塞首屏） |
@@ -498,8 +523,8 @@ export default function CreativeDimensionsPage() {
 
 - [ ] 删除 `config/creative_dimensions.json`，重启 backend → 文件自动恢复含原 Genre catalog 内容
 - [ ] 在「创作维度」页把某题材状态改为失效 → S1 该题材下拉不含该项
-- [ ] 把某题材描述清空 → 重启 backend → 走 S1 → mock LLM prompt 不含该维度的「设定背景」行
-- [ ] 删除某条目 → 三天前建立的项目的 three_b_state.json 不报错（decompose 时该行不出现）
+- [ ] 把某题材描述清空 → 走 S1 → mock LLM prompt 不含该维度的「设定背景」行
+- [ ] 删除某条目 → 已存在的 `three_b_state.json` 不报错（decompose 时该行不出现）
 - [ ] 现有 `GET /api/v1/genres` 仍返回有效题材列表（项目创建流程不受影响）
 
 ---
@@ -516,9 +541,9 @@ export default function CreativeDimensionsPage() {
 | `backend/genres/catalog.py` | 修改 | 加 `load_seed()` 函数（不改现有 list 行为） |
 | `backend/api/genres.py` | 修改 | `list_genres` 改读新 store |
 | `backend/creative_os/three_b_engine.py` | 修改 | 新增 `_build_dimension_block` + `_maybe_inject_block`；3 处调用点改造 |
-| `backend/prompts/creative/three_b_decompose.yaml` | 修改 | user_prompt_template 开头空一行留给后端注入 |
-| `backend/prompts/creative/three_b_adaptive_diverge.yaml` | 修改 | 同上 |
-| `backend/prompts/creative/three_b_commit.yaml` | 修改 | 同上 |
+| `backend/prompts/creative/three_b_decompose.yaml` | 不改 | YAML 模板不变；注入由后端 `_maybe_inject_block` 在 format 之后字符串前置拼接 |
+| `backend/prompts/creative/three_b_adaptive_diverge.yaml` | 不改 | 同上 |
+| `backend/prompts/creative/three_b_commit.yaml` | 不改 | 同上 |
 | `frontend/src/api/client.ts` | 修改 | 加 5 个新方法 + 1 个类型 import |
 | `frontend/src/api/types.ts` | 新建 | `DimensionEntry` 类型（或扩 `client.ts`） |
 | `frontend/src/hooks/useCreativeDimensions.ts` | 新建 | hook |

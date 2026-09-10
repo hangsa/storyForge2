@@ -13,11 +13,9 @@ Routes (mounted at /api/v1/creative-dimensions):
 """
 from __future__ import annotations
 
-from typing import Optional
+from fastapi import APIRouter, Request
 
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import ValidationError
-
+from backend.api._errors import http_error
 from backend.creative_os.creative_dimensions import (
     DimensionEntryPayload,
     VALID_KINDS,
@@ -30,17 +28,8 @@ router = APIRouter(prefix="/api/v1/creative-dimensions", tags=["creative_dimensi
 def _store(request: Request):
     store = getattr(request.app.state, "creative_dimensions_store", None)
     if store is None:
-        raise HTTPException(status_code=503, detail={
-            "error": True, "code": "STORE_UNAVAILABLE",
-            "message": "creative_dimensions_store 未初始化",
-        })
+        raise http_error(503, "STORE_UNAVAILABLE", "creative_dimensions_store 未初始化")
     return store
-
-
-def _err(status: int, code: str, message: str) -> HTTPException:
-    return HTTPException(status_code=status, detail={
-        "error": True, "code": code, "message": message,
-    })
 
 
 @router.get("/active")
@@ -66,7 +55,7 @@ async def list_all(request: Request) -> dict:
 @router.get("/{kind}")
 async def list_by_kind(kind: str, request: Request) -> list[dict]:
     if kind not in VALID_KINDS:
-        raise _err(400, "INVALID_KIND", f"unknown kind: {kind!r}")
+        raise http_error(400, "INVALID_KIND", f"unknown kind: {kind!r}", kind=kind)
     store = _store(request)
     return [vars(e) for e in store.list(kind, active_only=False)]
 
@@ -74,40 +63,41 @@ async def list_by_kind(kind: str, request: Request) -> list[dict]:
 @router.post("/{kind}")
 async def add_entry(kind: str, payload: DimensionEntryPayload, request: Request) -> dict:
     if kind not in VALID_KINDS:
-        raise _err(400, "INVALID_KIND", f"unknown kind: {kind!r}")
+        raise http_error(400, "INVALID_KIND", f"unknown kind: {kind!r}", kind=kind)
     store = _store(request)
     try:
         entry = store.add(kind, payload)
     except ValueError as e:
         msg = str(e)
         if "duplicate name" in msg:
-            raise _err(400, "DUPLICATE_NAME", msg) from e
-        raise _err(400, "BAD_REQUEST", msg) from e
+            raise http_error(400, "DUPLICATE_NAME", msg, kind=kind) from e
+        raise http_error(400, "BAD_REQUEST", msg, kind=kind) from e
     return vars(entry)
 
 
 @router.put("/{kind}/{entry_id}")
 async def update_entry(kind: str, entry_id: str, payload: DimensionEntryPayload, request: Request) -> dict:
     if kind not in VALID_KINDS:
-        raise _err(400, "INVALID_KIND", f"unknown kind: {kind!r}")
+        raise http_error(400, "INVALID_KIND", f"unknown kind: {kind!r}", kind=kind)
     store = _store(request)
     try:
         entry = store.update(kind, entry_id, payload)
     except ValueError as e:
         msg = str(e)
         if "not found" in msg:
-            raise _err(404, "NOT_FOUND", msg) from e
+            raise http_error(404, "NOT_FOUND", msg, kind=kind, entry_id=entry_id) from e
         if "duplicate name" in msg:
-            raise _err(400, "DUPLICATE_NAME", msg) from e
-        raise _err(400, "BAD_REQUEST", msg) from e
+            raise http_error(400, "DUPLICATE_NAME", msg, kind=kind, entry_id=entry_id) from e
+        raise http_error(400, "BAD_REQUEST", msg, kind=kind, entry_id=entry_id) from e
     return vars(entry)
 
 
 @router.delete("/{kind}/{entry_id}")
 async def delete_entry(kind: str, entry_id: str, request: Request) -> dict:
     if kind not in VALID_KINDS:
-        raise _err(400, "INVALID_KIND", f"unknown kind: {kind!r}")
+        raise http_error(400, "INVALID_KIND", f"unknown kind: {kind!r}", kind=kind)
     store = _store(request)
     if not store.delete(kind, entry_id):
-        raise _err(404, "NOT_FOUND", f"entry not found: {entry_id!r} in {kind}")
+        raise http_error(404, "NOT_FOUND", f"entry not found: {entry_id!r} in {kind}",
+                         kind=kind, entry_id=entry_id)
     return {"deleted": True, "id": entry_id}

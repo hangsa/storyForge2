@@ -237,20 +237,12 @@ def migrate_state_on_load(project_id: str) -> Optional[ThreeBState]:
 
 
 def _get_dimensions_store():
-    """获取 CreativeDimensionsStore 单例。
+    """返回 lifespan / 测试 setup 注册的 CreativeDimensionsStore 单例。
 
-    单例在 backend/main.py lifespan 中创建并挂到 app.state。
-    引擎实例通常通过 app.state.three_b_engine 间接访问，
-    但 _build_dimension_block 是模块级函数，需要一个独立获取路径。
-
-    约定：从已存在的 engine instance 反查 app.state：
-      ThreeBEngine._app_state_ref -> request.app.state
-    由于本引擎没有 request 上下文，这里采用「最后一次创建该引擎的
-    app.state 引用」机制：在 engine 构造时记录 request.app.state。
-
-    fallback：若未记录（如测试环境），返回 None → block 为空字符串。
+    实现：模块级 lambda slot (`_dimensions_store_ref`)。
+    注册：调用 `_register_dimensions_store(store)` 一次（在 lifespan 或
+    测试 fixture 里）。未注册则返回 None → block 为空字符串（graceful fallback）。
     """
-    # 维护一个模块级弱引用集合，engine 构造时把 app.state 注册进去
     ref = globals().get("_dimensions_store_ref")
     return ref() if ref else None
 

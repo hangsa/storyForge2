@@ -274,3 +274,48 @@ def get_catalog() -> GenreCatalog:
                 _catalog = GenreCatalog()
                 _catalog._load()
     return _catalog
+
+
+def load_seed() -> "DimensionsCatalog":
+    """为 CreativeDimensionsStore 提供首次启动 seed。
+
+    从现有 Genre catalog 读取 subject 维度（保留 family/label_en），
+    tone/style 用硬编码初始 7/6 项。description 全部置空（YAML
+    无描述字段，不凭空生成）。
+    """
+    from backend.creative_os.creative_dimensions import (
+        DimensionEntry,
+        DimensionsCatalog,
+    )
+
+    now = "1970-01-01T00:00:00Z"  # seed 条目没有真实创建时间，统一占位
+    subject = [
+        DimensionEntry(
+            id=g["id"],
+            name=g["label_zh"],
+            description="",
+            status="active" if g.get("ui_visible", True) else "inactive",
+            family=g.get("family"),
+            label_en=g.get("label_en"),
+            order=0,
+            created_at=now,
+            updated_at=now,
+        )
+        for g in get_catalog().list(ui_visible_only=False)
+    ]
+
+    tone_seed = ["热血", "黑暗", "轻松", "史诗", "虐心", "治愈", "悬疑", "成长"]
+    style_seed = ["爽文", "慢热", "群像", "单线", "多线", "倒叙", "正叙"]
+
+    tone = [
+        DimensionEntry(id=name, name=name, description="", status="active",
+                       order=i, created_at=now, updated_at=now)
+        for i, name in enumerate(tone_seed)
+    ]
+    style = [
+        DimensionEntry(id=name, name=name, description="", status="active",
+                       order=i, created_at=now, updated_at=now)
+        for i, name in enumerate(style_seed)
+    ]
+
+    return DimensionsCatalog(subject=subject, tone=tone, style=style)

@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     prompts_dir: Path = Path("backend/prompts")
     genres_dir: Path = Path(__file__).parent.parent / "config" / "genres"
     global_prompt_overrides_path: Path = Path("config/global_prompt_overrides.json")
+    # 全局创作维度 store 文件路径。空字符串 = 默认回退到 <projects_dir>/../config/creative_dimensions.json
+    creative_dimensions_path: str = ""
 
     enable_canvas_v2: bool = False
 

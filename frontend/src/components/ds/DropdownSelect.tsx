@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface DropdownSelectProps {
-  label: string;
+  /** Optional — the outer <label> in callers provides the field label. */
+  label?: string;
   options: Array<{ value: string; label: string }>;
   value: string;
   onChange: (v: string) => void;

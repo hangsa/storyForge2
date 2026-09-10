@@ -4,6 +4,7 @@ import type { ActiveDimensions, DimensionEntry, DimensionEntryPayload, Dimension
 import DimensionTabs from "./DimensionTabs";
 import EntryEditPanel from "./EntryEditPanel";
 import { PrimaryButton, SearchInput } from "@/components/ds";
+import { invalidateActiveDimensionsCache } from "@/hooks/useCreativeDimensions";
 
 interface Props {
   onClose: () => void;
@@ -65,6 +66,7 @@ export default function CreativeDimensionsView({ onClose }: Props) {
     } else {
       await api.addCreativeDimension(editing.kind, payload);
     }
+    invalidateActiveDimensionsCache();
     setEditing(null);
     await refresh();
   };
@@ -72,6 +74,7 @@ export default function CreativeDimensionsView({ onClose }: Props) {
   const handleDelete = async () => {
     if (!editing?.entry) return;
     await api.deleteCreativeDimension(editing.kind, editing.entry.id);
+    invalidateActiveDimensionsCache();
     setEditing(null);
     await refresh();
   };

@@ -59,3 +59,13 @@ export function __resetCacheForTests() {
   cache = null;
   inflight = null;
 }
+
+/**
+ * Invalidate the module-level cache so the next useCreativeDimensions()
+ * call refetches from the API. Call after admin CRUD operations so S1
+ * sees updated entries without requiring a hard browser reload.
+ */
+export function invalidateActiveDimensionsCache(): void {
+  cache = null;
+  inflight = null;
+}

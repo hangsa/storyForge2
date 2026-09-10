@@ -3,7 +3,7 @@
 The v2 rewrite replaces the four v1 operator prompts (breaking / bending /
 blending / commit) with four prompts that follow the new 4-stage pipeline:
 
-  - three_b_decompose           (Stage 1 → 2: 5-dimension decomposition)
+  - firstness_decompose         (Stage 1 → 2: 5-dimension decomposition)
   - three_b_follow_up          (Stage 2: per-unit follow-up deepening)
   - three_b_adaptive_diverge   (Stage 2 → 3: adaptive divergence with chain reaction)
   - three_b_commit             (Stage 3 → 4: synthesis using causal_map + summary)
@@ -37,7 +37,7 @@ from backend.services.global_prompt_override_store import (
 # --- Constants -----------------------------------------------------------------
 
 EXPECTED_NAMES = (
-    "three_b_decompose",
+    "firstness_decompose",
     "three_b_follow_up",
     "three_b_adaptive_diverge",
     "three_b_commit",
@@ -310,21 +310,21 @@ def test_other_creative_prompts_are_not_in_three_b_set(name: str):
     )
 
 
-# --- three_b_decompose (Stage 1→2 prompt, added in rewrite Task 10) -----------
+# --- firstness_decompose (Stage 1→2 prompt, added in rewrite Task 10) ---------
 
 
-def test_three_b_decompose_yaml_exists():
+def test_firstness_decompose_yaml_exists():
     from pathlib import Path
-    p = Path("backend/prompts/creative/three_b_decompose.yaml")
+    p = Path("backend/prompts/creative/firstness_decompose.yaml")
     assert p.exists(), f"{p} 不存在"
 
 
-def test_three_b_decompose_yaml_schema():
+def test_firstness_decompose_yaml_schema():
     import yaml
     from pathlib import Path
-    p = Path("backend/prompts/creative/three_b_decompose.yaml")
+    p = Path("backend/prompts/creative/firstness_decompose.yaml")
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
-    assert data["name"] == "three_b_decompose"
+    assert data["name"] == "firstness_decompose"
     assert "5 维度" in data["system_prompt"] or "ontology" in data["system_prompt"].lower()
     assert "{prompt}" in data["user_prompt_template"]
     assert "causal_map" in data["system_prompt"] or "causal_map" in data["user_prompt_template"]
@@ -391,6 +391,6 @@ def test_three_b_commit_yaml_uses_causal_map_and_summary():
 
 def test_all_v2_yamls_in_creative_dir():
     from pathlib import Path
-    expected = {"three_b_decompose", "three_b_follow_up", "three_b_adaptive_diverge", "three_b_commit"}
-    found = {p.stem for p in Path("backend/prompts/creative/").glob("three_b_*.yaml")}
+    expected = {"firstness_decompose", "three_b_follow_up", "three_b_adaptive_diverge", "three_b_commit"}
+    found = {p.stem for p in Path("backend/prompts/creative/").glob("*.yaml")}
     assert expected.issubset(found)

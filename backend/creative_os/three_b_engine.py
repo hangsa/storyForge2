@@ -47,7 +47,7 @@ STATE_DIR = "creative_os"
 
 OPERATORS = ("distort", "break", "blend", "chain")
 ADAPTIVE_DIVERGE_PROMPT = "three_b_adaptive_diverge"
-DECOMPOSE_PROMPT = "three_b_decompose"
+DECOMPOSE_PROMPT = "firstness_decompose"
 COMMIT_PROMPT = "three_b_commit"
 FOLLOW_UP_PROMPT = "three_b_follow_up"
 

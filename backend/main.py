@@ -18,7 +18,7 @@ from backend.api import (
     stage5_diagnosis, stage6_export, style_extractor, conductor, storyos,
     settings_api, creative_diverge, growth_workshop, style_sandbox, autopilot,
     stage4_fact_guard, prompt_plaza, prompt_defaults,
-    llm_config_api, creative_divergence, three_b_routes,
+    llm_config_api, creative_divergence, three_b_routes, creative_dimensions,
 )
 from backend.api import genres as genres_api
 from backend.api.autopilot import broadcaster as autopilot_broadcaster
@@ -112,6 +112,7 @@ app.include_router(llm_config_api.router)
 app.include_router(genres_api.router)
 app.include_router(creative_divergence.router)
 app.include_router(three_b_routes.router)
+app.include_router(creative_dimensions.router)
 
 if settings.enable_canvas_v2:
     from backend.api.v2_canvas import router as v2_canvas_router

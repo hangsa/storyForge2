@@ -10,6 +10,10 @@ export interface DropdownSelectProps {
    *  footer inside a rounded card) so the menu isn't clipped. Default
    *  "down" preserves the prior behavior for every other call site. */
   direction?: "down" | "up";
+  /** When true, the trigger is rendered disabled (visually muted, click
+   *  suppressed). Used by S1InputStep when a creative dimension has no
+   *  active entries so the user can't lock themselves into an empty state. */
+  disabled?: boolean;
 }
 
 export default function DropdownSelect({
@@ -18,6 +22,7 @@ export default function DropdownSelect({
   value,
   onChange,
   direction = "down",
+  disabled = false,
 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -38,13 +43,13 @@ export default function DropdownSelect({
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 bg-surface-container border border-outline-variant rounded px-3 py-1.5 text-sm text-primary hover:bg-surface-container-high"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        className={`flex items-center gap-1 bg-surface-container border border-outline-variant rounded px-3 py-1.5 text-sm text-primary hover:bg-surface-container-high ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
       >
-        <span className="font-mono text-on-surface-variant">
-          <span>{label}</span>
-          <span aria-hidden="true">：</span>
-        </span>
+        {label && (
+          <span className="font-mono text-on-surface-variant">{label}</span>
+        )}
         <span>{currentLabel}</span>
         <span
           className={`material-symbols-outlined text-base transition-transform ${open ? "rotate-180" : ""}`}

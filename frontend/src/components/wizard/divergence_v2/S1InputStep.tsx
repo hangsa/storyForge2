@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useGenres } from "@/hooks/useGenres";
 import { DropdownSelect } from "@/components/ds";
+import { useCreativeDimensions } from "@/hooks/useCreativeDimensions";
 import type { RawIntent } from "./types";
 
 interface Props {
@@ -17,47 +17,86 @@ interface Props {
   onSubmitReady?: (handler: (() => void) | null, valid: boolean) => void;
 }
 
-const NO_SECONDARY = "__none__";
+const DEFAULT_GENRE_FALLBACK = "cool_novel";
 const MAX_PROMPT = 1000;
+
+const KIND_LABEL = { subject: "题材", tone: "基调", style: "风格" } as const;
+type DropdownKind = keyof typeof KIND_LABEL;
+
+function resolveInitialValue(
+  initialValue: string | undefined,
+  activeIds: Set<string>,
+  fallbackId: string | undefined,
+): string {
+  if (initialValue && activeIds.has(initialValue)) return initialValue;
+  if (fallbackId) return fallbackId;
+  return "";
+}
 
 export default function S1InputStep({
   projectId, initial, onSubmitted, onSubmitReady,
 }: Props) {
-  const genres = useGenres(true);
+  const { subject, tone, style, loading, error } = useCreativeDimensions();
+
+  const subjectOptions = useMemo(() => subject.map((e) => ({ value: e.id, label: e.name })), [subject]);
+  const toneOptions    = useMemo(() => tone.map((e) => ({ value: e.id, label: e.name })), [tone]);
+  const styleOptions   = useMemo(() => style.map((e) => ({ value: e.id, label: e.name })), [style]);
+
+  const subjectActiveIds = useMemo(() => new Set(subject.map((e) => e.id)), [subject]);
+  const toneActiveIds    = useMemo(() => new Set(tone.map((e) => e.id)), [tone]);
+  const styleActiveIds   = useMemo(() => new Set(style.map((e) => e.id)), [style]);
+
   const [prompt, setPrompt] = useState(initial?.prompt ?? "");
-  const [genrePrimary, setGenrePrimary] = useState(initial?.genre_primary ?? "");
-  const [genreSecondary, setGenreSecondary] = useState<string>(
-    initial?.genre_secondary ?? NO_SECONDARY,
+  const [genrePrimary, setGenrePrimary] = useState(() =>
+    resolveInitialValue(initial?.genre_primary, subjectActiveIds, subject[0]?.id) || DEFAULT_GENRE_FALLBACK
   );
+  const [toneVal, setTone] = useState(() => resolveInitialValue(initial?.tone, toneActiveIds, tone[0]?.id));
+  const [styleVal, setStyle] = useState(() => resolveInitialValue(initial?.style, styleActiveIds, style[0]?.id));
 
-  const genreOptions = useMemo(
-    () => genres.map((g) => ({ value: g.id, label: g.label_zh })),
-    [genres],
-  );
-  const genreOptionsWithNone = useMemo(
-    () => [{ value: NO_SECONDARY, label: "无" }, ...genreOptions],
-    [genreOptions],
-  );
+  const subjectDisabled = subjectOptions.length === 0;
+  const toneDisabled    = toneOptions.length === 0;
+  const styleDisabled   = styleOptions.length === 0;
 
-  const valid = prompt.length >= 10 && genrePrimary.length > 0;
+  const anyDisabled = subjectDisabled || toneDisabled || styleDisabled;
+  const valid = prompt.length >= 10 && !subjectDisabled;
 
-  // Latest-values bridge: the handler we expose to the parent stays stable
-  // (so it can be registered as a wizard-footer click target without
-  // re-binding on every keystroke) but always reads fresh form state.
-  const stateRef = useRef({ prompt, genrePrimary, genreSecondary });
-  stateRef.current = { prompt, genrePrimary, genreSecondary };
+  // Sync the dropdown state when the creative-dimensions catalog loads
+  // (or when the active set changes underneath us). The lazy initializer
+  // above ran with the empty first-render data; once the catalog
+  // resolves, the previous state may no longer match any active option
+  // (e.g. `toneVal === ""` because resolveInitialValue returned "" with
+  // no active ids). Snap to the first active option so the trigger
+  // button always renders a meaningful label.
+  useEffect(() => {
+    if (subject.length > 0 && !subjectActiveIds.has(genrePrimary)) {
+      setGenrePrimary(subject[0].id);
+    }
+  }, [subject, subjectActiveIds, genrePrimary]);
+  useEffect(() => {
+    if (tone.length > 0 && !toneActiveIds.has(toneVal)) {
+      setTone(tone[0].id);
+    }
+  }, [tone, toneActiveIds, toneVal]);
+  useEffect(() => {
+    if (style.length > 0 && !styleActiveIds.has(styleVal)) {
+      setStyle(style[0].id);
+    }
+  }, [style, styleActiveIds, styleVal]);
+
+  const stateRef = useRef({ prompt, genrePrimary, tone: toneVal, style: styleVal });
+  stateRef.current = { prompt, genrePrimary, tone: toneVal, style: styleVal };
 
   const handleSubmit = useCallback(() => {
-    const { prompt, genrePrimary, genreSecondary } = stateRef.current;
-    if (prompt.length < 10 || !genrePrimary) return;
+    const s = stateRef.current;
+    if (s.prompt.length < 10 || subjectDisabled) return;
     const intent: RawIntent = {
-      prompt,
-      genre_primary: genrePrimary,
-      genre_secondary: genreSecondary === NO_SECONDARY ? null : genreSecondary,
+      prompt: s.prompt,
+      genre_primary: s.genrePrimary,
+      tone: s.tone,
+      style: s.style,
     };
-    // 父级 orchestrator 负责触发 /decompose + /diverge
     onSubmitted(intent);
-  }, [onSubmitted]);
+  }, [onSubmitted, subjectDisabled]);
 
   useEffect(() => {
     onSubmitReady?.(valid ? handleSubmit : null, valid);
@@ -67,79 +106,81 @@ export default function S1InputStep({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pt-2 pb-4">
-        <div className="bg-surface-container-low border border-outline-variant rounded-lg p-4 space-y-3">
-          <div>
-            <label
-              htmlFor="prompt"
-              className="block font-display text-sm font-medium text-primary mb-1"
-            >
-              灵感点子 <span className="text-on-surface-variant text-xs">(≥10 字)</span>
-            </label>
-            <textarea
-              id="prompt"
-              className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-y"
-              rows={12}
-              maxLength={MAX_PROMPT}
-              placeholder="一句话描述你想写的故事核心 — 比如:赛博朋克 + 修仙 + 双男主"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-            />
-            <div className="flex justify-end mt-1">
-              <span className={`font-mono text-[10px] ${prompt.length < 10 ? "text-on-surface-variant" : "text-primary-container"}`}>
-                {prompt.length} / {MAX_PROMPT} 字
-              </span>
-            </div>
+        <div className="h-full bg-surface-container-low border border-outline-variant rounded-lg p-4 flex flex-col">
+          <label
+            htmlFor="prompt"
+            className="block font-display text-sm font-medium text-primary mb-1 shrink-0"
+          >
+            灵感点子 <span className="text-on-surface-variant text-xs">(≥10 字)</span>
+          </label>
+          <textarea
+            id="prompt"
+            className="w-full flex-1 min-h-[16rem] bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-y"
+            maxLength={MAX_PROMPT}
+            placeholder="一句话描述你想写的故事核心 — 比如:赛博朋克 + 修仙 + 双男主"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+          />
+          <div className="flex justify-end mt-1 shrink-0">
+            <span className={`font-mono text-[10px] ${prompt.length < 10 ? "text-on-surface-variant" : "text-primary-container"}`}>
+              {prompt.length} / {MAX_PROMPT} 字
+            </span>
           </div>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label
-                htmlFor="genre_primary"
-                className="block font-display text-sm font-medium text-primary mb-1"
-              >
-                主类型
-              </label>
-              {genreOptions.length > 0 ? (
-                <DropdownSelect
-                  label="类型"
-                  options={genreOptions}
-                  value={genrePrimary}
-                  onChange={setGenrePrimary}
-                />
-              ) : (
-                <input
-                  id="genre_primary"
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary"
-                  value={genrePrimary}
-                  onChange={(e) => setGenrePrimary(e.target.value)}
-                />
-              )}
-            </div>
-            <div>
-              <label
-                htmlFor="genre_secondary"
-                className="block font-display text-sm font-medium text-primary mb-1"
-              >
-                副类型 <span className="text-on-surface-variant text-xs">(可选)</span>
-              </label>
-              {genreOptionsWithNone.length > 0 ? (
-                <DropdownSelect
-                  label="类型"
-                  options={genreOptionsWithNone}
-                  value={genreSecondary}
-                  onChange={setGenreSecondary}
-                />
-              ) : (
-                <input
-                  id="genre_secondary"
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary"
-                  value={genreSecondary === NO_SECONDARY ? "" : genreSecondary}
-                  onChange={(e) =>
-                    setGenreSecondary(e.target.value || NO_SECONDARY)
-                  }
-                />
-              )}
-            </div>
+      {anyDisabled && (
+        <div className="px-6 pt-2 text-error text-xs" data-testid="dimensions-disabled-hint">
+          {subjectDisabled && <span>题材暂无生效选项，</span>}
+          {toneDisabled && <span>基调暂无生效选项，</span>}
+          {styleDisabled && <span>风格暂无生效选项，</span>}
+          <a
+            href="/creative-dimensions"
+            className="underline"
+            data-testid="goto-dimensions-link"
+          >
+            前往配置
+          </a>
+        </div>
+      )}
+
+      <div className="px-6 pt-3 pb-4 border-t border-outline-variant shrink-0">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <label className="font-display text-sm font-medium text-primary whitespace-nowrap shrink-0">
+              {KIND_LABEL.subject}
+            </label>
+            <DropdownSelect
+              options={subjectOptions}
+              value={genrePrimary}
+              onChange={setGenrePrimary}
+              direction="up"
+              disabled={subjectDisabled}
+            />
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <label className="font-display text-sm font-medium text-primary whitespace-nowrap shrink-0">
+              {KIND_LABEL.tone}
+            </label>
+            <DropdownSelect
+              options={toneOptions}
+              value={toneVal}
+              onChange={setTone}
+              direction="up"
+              disabled={toneDisabled}
+            />
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <label className="font-display text-sm font-medium text-primary whitespace-nowrap shrink-0">
+              {KIND_LABEL.style}
+            </label>
+            <DropdownSelect
+              options={styleOptions}
+              value={styleVal}
+              onChange={setStyle}
+              direction="up"
+              disabled={styleDisabled}
+            />
           </div>
         </div>
       </div>

@@ -61,6 +61,10 @@ vi.mock("../../api/client", () => ({
     deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
     // Theme migration (2026-09-05): S1InputStep calls useGenres → api.listGenres
     listGenres: vi.fn().mockResolvedValue([]),
+    // Task 12 (2026-09-10): S1InputStep now reads creative dimensions via
+    // useCreativeDimensions → api.listActiveCreativeDimensions. Empty
+    // arrays are safe here because these tests don't exercise the S1 form.
+    listActiveCreativeDimensions: vi.fn().mockResolvedValue({ subject: [], tone: [], style: [] }),
   },
 }));
 

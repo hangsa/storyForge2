@@ -77,6 +77,10 @@ vi.mock("../../api/client", () => ({
     deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
     // Theme migration (2026-09-05): S1InputStep calls useGenres → api.listGenres
     listGenres: vi.fn().mockResolvedValue([]),
+    // Task 12 (2026-09-10): S1InputStep now reads creative dimensions via
+    // useCreativeDimensions → api.listActiveCreativeDimensions. Empty
+    // arrays keep these crash tests focused on the prefill paths.
+    listActiveCreativeDimensions: vi.fn().mockResolvedValue({ subject: [], tone: [], style: [] }),
   },
 }));
 
@@ -135,6 +139,8 @@ describe("WorkspaceWizardPanel crash repro", () => {
         deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
         // Theme migration (2026-09-05): mirror first-block mock
         listGenres: vi.fn().mockResolvedValue([]),
+        // Task 12 (2026-09-10): mirror first-block mock.
+        listActiveCreativeDimensions: vi.fn().mockResolvedValue({ subject: [], tone: [], style: [] }),
       },
     }));
 

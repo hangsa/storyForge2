@@ -26,6 +26,8 @@ from backend.config import settings
 from backend.conductor.autopilot_loop import AutopilotLoopService
 from backend.conductor.stage4_async_executor import AsyncStage4Executor
 from backend.conductor.autopilot_session import AutopilotSessionManager
+from backend.genres.catalog import load_seed
+from backend.services.creative_dimensions_store import CreativeDimensionsStore
 
 
 @asynccontextmanager
@@ -50,6 +52,19 @@ async def lifespan(app: FastAPI):
     await app.state.loop_service.recover_running_sessions(
         settings.projects_dir, broadcaster=autopilot_broadcaster,
     )
+    # 全局创作维度 store (subject/tone/style)。JSON 文件路径：优先
+    # settings.creative_dimensions_path，回退到 <projects_dir>/../config/creative_dimensions.json
+    from pathlib import Path as _Path
+    _dim_path_str = settings.creative_dimensions_path
+    if _dim_path_str:
+        _dim_path = _Path(_dim_path_str)
+    else:
+        _dim_path = _Path(settings.projects_dir).parent / "config" / "creative_dimensions.json"
+    app.state.creative_dimensions_store = CreativeDimensionsStore(
+        store_path=_dim_path,
+        seed_loader=load_seed,
+    )
+    app.state.creative_dimensions_store.load()
     try:
         yield
     finally:

@@ -65,6 +65,8 @@ async def lifespan(app: FastAPI):
         seed_loader=load_seed,
     )
     app.state.creative_dimensions_store.load()
+    from backend.creative_os.three_b_engine import _register_dimensions_store
+    _register_dimensions_store(app.state.creative_dimensions_store)
     try:
         yield
     finally:

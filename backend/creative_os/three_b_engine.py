@@ -28,8 +28,10 @@ from typing import Literal, Optional
 
 from backend.config import settings
 from backend.services.dimension_labels import Dimension  # noqa: F401  (re-exported)
+from backend.creative_os.creative_dimensions import DimensionEntry  # noqa: F401  (re-exported)
 from backend.utils.file_manager import FileManager
 from backend.services.prompt_override_store import load_prompt_effective
+from backend.agents._injection_helpers import _build_user_modifications_block
 
 
 def _file_manager() -> FileManager:
@@ -60,7 +62,8 @@ ALLOWED_EDIT_FIELDS = {"one_line", "expanded", "core_tension", "tone", "logline"
 class RawIntent:
     prompt: str
     genre_primary: str
-    genre_secondary: Optional[str] = None
+    tone: str = ""
+    style: str = ""
 
 
 @dataclass
@@ -172,13 +175,22 @@ def load_state(project_id: str) -> Optional[ThreeBState]:
     """Load ThreeBState; returns None if state file missing.
 
     Round-trip dataclasses for Unit / UnitCandidate / DimensionDecomposition / RawIntent.
+
+    Schema tolerance: raw_intent may have been written by an older version
+    that included `genre_secondary` and lacked `tone`/`style`. Strip the
+    legacy field and apply defaults so an old disk file still loads
+    instead of crashing HYDRATE with TypeError.
     """
     path = _state_path(project_id)
     if not path.exists():
         return None
     raw = json.loads(path.read_text(encoding="utf-8"))
     if raw.get("raw_intent"):
-        raw["raw_intent"] = RawIntent(**raw["raw_intent"])
+        ri = dict(raw["raw_intent"])
+        ri.pop("genre_secondary", None)
+        ri.setdefault("tone", "")
+        ri.setdefault("style", "")
+        raw["raw_intent"] = RawIntent(**ri)
     raw["dimensions"] = [
         _rebuild_dimension(d) for d in raw.get("dimensions", [])
     ]
@@ -224,6 +236,60 @@ def migrate_state_on_load(project_id: str) -> Optional[ThreeBState]:
     return None
 
 
+def _get_dimensions_store():
+    """获取 CreativeDimensionsStore 单例。
+
+    单例在 backend/main.py lifespan 中创建并挂到 app.state。
+    引擎实例通常通过 app.state.three_b_engine 间接访问，
+    但 _build_dimension_block 是模块级函数，需要一个独立获取路径。
+
+    约定：从已存在的 engine instance 反查 app.state：
+      ThreeBEngine._app_state_ref -> request.app.state
+    由于本引擎没有 request 上下文，这里采用「最后一次创建该引擎的
+    app.state 引用」机制：在 engine 构造时记录 request.app.state。
+
+    fallback：若未记录（如测试环境），返回 None → block 为空字符串。
+    """
+    # 维护一个模块级弱引用集合，engine 构造时把 app.state 注册进去
+    ref = globals().get("_dimensions_store_ref")
+    return ref() if ref else None
+
+
+def _register_dimensions_store(store) -> None:
+    """lifespan / 测试 setup 时调用一次。"""
+    globals()["_dimensions_store_ref"] = lambda: store
+
+
+def _build_dimension_block(raw_intent: Optional[RawIntent]) -> str:
+    """根据 raw_intent 选中的 id，从 store 查 description，拼出「设定背景」块内容。
+
+    没有 description 的维度行不出现；找不到 id 的条目也不出现。
+    """
+    store = _get_dimensions_store()
+    if raw_intent is None or store is None:
+        return ""
+    lines: list[str] = []
+    for kind, label, value in [
+        ("subject", "题材", raw_intent.genre_primary),
+        ("tone",    "基调", raw_intent.tone),
+        ("style",   "风格", raw_intent.style),
+    ]:
+        if not value:
+            continue
+        entry = store.get(kind, value)
+        if entry and entry.description and entry.description.strip():
+            lines.append(f"{label}（{entry.name}）：{entry.description.strip()}")
+    return "\n".join(lines)
+
+
+def _maybe_inject_block(rendered_user_prompt: str, raw_intent: Optional[RawIntent]) -> str:
+    """在已有 format 后的 user prompt 开头拼接「设定背景」块（block 为空则不变）。"""
+    block = _build_dimension_block(raw_intent)
+    if not block:
+        return rendered_user_prompt
+    return "【设定背景】\n" + block + "\n\n" + rendered_user_prompt
+
+
 def _append_original_candidate(
     unit: Unit, llm_candidates: list[UnitCandidate]
 ) -> list[UnitCandidate]:
@@ -258,15 +324,25 @@ class ThreeBEngine:
         self._novelty_evaluator = novelty_evaluator
 
     async def decompose(
-        self, project_id: str, raw_intent: RawIntent
+        self, project_id: str, raw_intent: RawIntent, user_modifications: str = ""
     ) -> tuple[list[DimensionDecomposition], str, str]:
-        """1 LLM call → (dimensions, causal_map, top_level_summary)."""
+        """1 LLM call → (dimensions, causal_map, top_level_summary).
+
+        `user_modifications` is the optional text the user enters in the S2
+        regen dialog (round-tripped from the frontend RegenerateModal). When
+        empty, the LLM receives an empty-string hint and ignores it. When
+        non-empty, it's injected into the decompose prompt as a "user
+        additional feedback" block — same pattern as concept_generation.yaml.
+        """
         started_at = _now_iso()
-        response = await self._invoke_llm_json(
+        response = await self._invoke_llm_json_with_block(
             DECOMPOSE_PROMPT, "decompose",
+            raw_intent=raw_intent,
             prompt=raw_intent.prompt,
             genre_primary=raw_intent.genre_primary,
-            genre_secondary=raw_intent.genre_secondary or "(无)",
+            tone=raw_intent.tone or "(无)",
+            style=raw_intent.style or "(无)",
+            user_modifications=_build_user_modifications_block(user_modifications),
         )
         raw_text = response.get("content", "")
         dims, causal_map, summary = self._parse_decompose_output(raw_text)
@@ -343,6 +419,23 @@ class ThreeBEngine:
         """
         system, user = self._build_prompt_messages(prompt_name, **fmt)
         prompt_data = load_prompt_effective(prompt_name)
+        return await self._router.execute(
+            agent_name="three_b",
+            task_name=task_name,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            json_mode=True,
+            temperature=prompt_data.get("temperature", 0.7),
+            max_tokens=prompt_data.get("max_tokens", 4096),
+        )
+
+    async def _invoke_llm_json_with_block(
+        self, prompt_name: str, task_name: str, *, raw_intent: Optional[RawIntent] = None, **fmt
+    ) -> dict:
+        """与 _invoke_llm_json 相同，但额外在 user 消息前注入「设定背景」块。"""
+        prompt_data = load_prompt_effective(prompt_name)
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = prompt_data["user_prompt_template"].format(**fmt)
+        user = _maybe_inject_block(user, raw_intent)
         return await self._router.execute(
             agent_name="three_b",
             task_name=task_name,
@@ -434,11 +527,13 @@ class ThreeBEngine:
     ) -> list[UnitCandidate]:
         if raw_intent is None:
             return []
-        response = await self._invoke_llm_json(
+        response = await self._invoke_llm_json_with_block(
             ADAPTIVE_DIVERGE_PROMPT, "diverge_unit",
+            raw_intent=raw_intent,
             prompt=raw_intent.prompt,
             genre_primary=raw_intent.genre_primary,
-            genre_secondary=raw_intent.genre_secondary or "(无)",
+            tone=raw_intent.tone or "(无)",
+            style=raw_intent.style or "(无)",
             dimension=dim.dimension.value,
             unit_name=unit.unit_name,
             unit_description=unit.description,
@@ -608,6 +703,7 @@ class ThreeBEngine:
         prompt_data = load_prompt_effective(COMMIT_PROMPT)
         system = prompt_data["system_prompt"].format(negative_constraints="")
         user = self._build_commit_user_prompt(prompt_data["user_prompt_template"], state)
+        user = _maybe_inject_block(user, state.raw_intent)
 
         state.commit_started_at = _now_iso()
         response = await self._router.execute(

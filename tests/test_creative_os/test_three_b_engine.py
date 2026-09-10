@@ -844,3 +844,91 @@ def test_append_original_candidate_is_idempotent():
 
     assert len(twice) == 2  # 不应再次追加
     assert sum(1 for c in twice if c.id == "u1__original") == 1
+
+
+# ---- _build_dimension_block / _maybe_inject_block ----
+
+"""追加 test_three_b_engine.py 中的 _build_dimension_block 用例。"""
+from backend.creative_os.three_b_engine import (
+    _build_dimension_block,
+)
+
+
+class _StubEntry:
+    def __init__(self, id_, name, description, status="active"):
+        self.id = id_
+        self.name = name
+        self.description = description
+        self.status = status
+
+
+class _StubStore:
+    def __init__(self, mapping):
+        # mapping: {(kind, id): entry}
+        self._m = mapping
+
+    def get(self, kind, id_):
+        return self._m.get((kind, id_))
+
+
+@pytest.fixture
+def stub_store(monkeypatch):
+    s = _StubStore({
+        ("subject", "xuanhuan"): _StubEntry("xuanhuan", "玄幻", "东方仙侠世界"),
+        ("tone", "rexue"): _StubEntry("rexue", "热血", "激烈昂扬"),
+        ("style", "shuangwen"): _StubEntry("shuangwen", "爽文", "节奏紧凑"),
+        # empty description → 不应出现在 block 中
+        ("subject", "empty"): _StubEntry("empty", "空题材", ""),
+    })
+    from backend.creative_os import three_b_engine as engine_mod
+    monkeypatch.setattr(engine_mod, "_get_dimensions_store", lambda: s)
+    return s
+
+
+def test_block_with_all_three_dimensions(stub_store):
+    intent = RawIntent(prompt="p", genre_primary="xuanhuan",
+                        tone="rexue", style="shuangwen")
+    block = _build_dimension_block(intent)
+    assert "题材（玄幻）：东方仙侠世界" in block
+    assert "基调（热血）：激烈昂扬" in block
+    assert "风格（爽文）：节奏紧凑" in block
+    # 三行
+    assert len(block.splitlines()) == 3
+
+
+def test_block_skips_empty_description(stub_store):
+    intent = RawIntent(prompt="p", genre_primary="empty", tone="", style="")
+    block = _build_dimension_block(intent)
+    # 没 description → 不输出
+    assert block == ""
+
+
+def test_block_skips_missing_id(stub_store):
+    intent = RawIntent(prompt="p", genre_primary="missing", tone="rexue", style="")
+    block = _build_dimension_block(intent)
+    # missing id 取不到 → 不出现；tone 行出现
+    assert "题材" not in block
+    assert "基调（热血）" in block
+
+
+def test_block_returns_empty_when_no_intent(stub_store):
+    assert _build_dimension_block(None) == ""
+
+
+def test_maybe_inject_block_no_block_no_change(stub_store):
+    from backend.creative_os.three_b_engine import _maybe_inject_block
+    user = "原始 prompt"
+    # 全空描述 → block 为空 → 返回原 prompt
+    intent = RawIntent(prompt="p", genre_primary="empty", tone="", style="")
+    assert _maybe_inject_block(user, intent) == user
+
+
+def test_maybe_inject_block_prepends_with_header(stub_store):
+    from backend.creative_os.three_b_engine import _maybe_inject_block
+    user = "原始 prompt"
+    intent = RawIntent(prompt="p", genre_primary="xuanhuan",
+                        tone="rexue", style="shuangwen")
+    out = _maybe_inject_block(user, intent)
+    assert out.startswith("【设定背景】\n")
+    assert "题材（玄幻）" in out
+    assert out.endswith("原始 prompt")

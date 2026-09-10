@@ -8,6 +8,7 @@ import type {
   Unit,
   UnitCandidate,
 } from "../components/wizard/divergence_v2/types";
+import type { ActiveDimensions, DimensionEntry, DimensionEntryPayload, DimensionKind } from "./types";
 
 export type { Genre };
 
@@ -1867,7 +1868,10 @@ export const api = {
   // See backend/api/three_b_routes.py. 4 stages: decompose (S2) → follow_up /
   // diverge (S3) → commit (S4) → advance.
 
-  postThreeBDecompose: (projectId: string, body: ThreeBRawIntent) =>
+  postThreeBDecompose: (
+    projectId: string,
+    body: ThreeBRawIntent & { user_modifications?: string },
+  ) =>
     request<DecomposeResponse>(
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/decompose`,
@@ -1946,6 +1950,25 @@ export const api = {
       "DELETE",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/state`,
     ),
+
+  // --- 创作维度 (subject/tone/style) ---
+  listActiveCreativeDimensions: (): Promise<ActiveDimensions> =>
+    request("GET", "/v1/creative-dimensions/active"),
+
+  listAllCreativeDimensions: (): Promise<ActiveDimensions> =>
+    request("GET", "/v1/creative-dimensions/"),
+
+  listCreativeDimensions: (kind: DimensionKind): Promise<DimensionEntry[]> =>
+    request("GET", `/v1/creative-dimensions/${kind}`),
+
+  addCreativeDimension: (kind: DimensionKind, payload: DimensionEntryPayload): Promise<DimensionEntry> =>
+    request("POST", `/v1/creative-dimensions/${kind}`, payload),
+
+  updateCreativeDimension: (kind: DimensionKind, id: string, payload: DimensionEntryPayload): Promise<DimensionEntry> =>
+    request("PUT", `/v1/creative-dimensions/${kind}/${id}`, payload),
+
+  deleteCreativeDimension: (kind: DimensionKind, id: string): Promise<{ deleted: boolean; id: string }> =>
+    request("DELETE", `/v1/creative-dimensions/${kind}/${id}`),
 };
 
 // --- 3B Response payload types ---

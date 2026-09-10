@@ -5,6 +5,7 @@ import HomeLayout from "./components/layout/HomeLayout";
 import HomePage from "./pages/HomePage";
 import AIConsolePage from "./pages/AIConsolePage";
 import PromptPlazaPage from "./pages/PromptPlazaPage";
+import CreativeDimensionsPage from "./pages/CreativeDimensionsPage";
 import StageErrorBoundary from "./components/shared/StageErrorBoundary";
 import { ToastProvider } from "./hooks/useToast";
 import ToastContainer from "./components/shared/ToastContainer";
@@ -59,6 +60,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/ai-console" element={<AIConsolePage />} />
         <Route path="/prompt-plaza" element={<PromptPlazaPage />} />
+        <Route path="/creative-dimensions" element={<CreativeDimensionsPage />} />
       </Route>
       <Route
         path="/project/:projectId/wizard"

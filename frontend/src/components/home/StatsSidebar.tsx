@@ -19,6 +19,7 @@ export default function StatsSidebar({
   const isBookshelfActive = location.pathname === "/";
   const isConsoleActive = location.pathname === "/ai-console";
   const isPlazaActive = location.pathname === "/prompt-plaza";
+  const isDimensionsActive = location.pathname === "/creative-dimensions";
 
   // Collapse the 8 backend stages into the 4 business-facing groups shown
   // in the sidebar. Sum counts across every stage that maps to each group,
@@ -74,6 +75,14 @@ export default function StatsSidebar({
               onClick={() => navigate("/prompt-plaza")}
               collapsed={collapsed}
               testId="nav-prompt-plaza"
+            />
+            <SidebarNavItem
+              icon="palette"
+              label="创作维度"
+              active={isDimensionsActive}
+              onClick={() => navigate("/creative-dimensions")}
+              collapsed={collapsed}
+              testId="nav-creative-dimensions"
             />
             <SidebarNavItem
               icon="monitoring"

@@ -65,6 +65,11 @@ vi.mock("../../api/client", () => ({
     // useCreativeDimensions → api.listActiveCreativeDimensions. Empty
     // arrays are safe here because these tests don't exercise the S1 form.
     listActiveCreativeDimensions: vi.fn().mockResolvedValue({ subject: [], tone: [], style: [] }),
+    // Genre-inheritance fix (2026-09-11): useThreeBDivergence fires
+    // getProjectStatus on mount to pre-fill S1's subject dropdown.
+    // Returned genre is only used when rawIntent is missing; empty string
+    // is safe here because the S1 form is not exercised.
+    getProjectStatus: vi.fn().mockResolvedValue({ title: "T", genre: "" }),
   },
 }));
 

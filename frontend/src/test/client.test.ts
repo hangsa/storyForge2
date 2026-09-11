@@ -306,3 +306,177 @@ describe("postDivergeInit", () => {
     expect(body.premise).toBeUndefined();
   });
 });
+
+// --- 4xx/5xx contract (proj 2026-09-11, S1→S2 decompose regression) -----------
+//
+// Backend two HTTPException styles coexist today:
+//   - Style A (nested envelope, ~project.py):  {"detail": {error: true, code, message, detail}}
+//   - Style B (bare string, ~three_b_routes.py + most error paths): {"detail": "<字符串>"}
+//
+// Pre-fix, `request()` only threw on Style A (and top-level `error`). Style B
+// 4xx/5xx responses slipped through as data — the S1→S2 decompose call returned
+// `"DECOMPOSE_FAILED: 'genre_secondary'"` (string) as if it were a successful
+// decomposition, the reducer coerced undefined `dimensions` to `[]`, no error
+// banner showed, and the user perceived "nothing happened".
+//
+// These tests lock the post-fix contract: any 4xx/5xx with a parseable JSON
+// body must throw ApiError. The ONLY exception is the probe-result case
+// (2xx + `detail.error` is a STRING, not boolean true) which is a success
+// payload from /llm-config/probe.
+describe("4xx/5xx must throw ApiError (proj 2026-09-11 regression guard)", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it("throws ApiError on style-B 503 with bare string detail", async () => {
+    // This is the EXACT shape three_b_routes.py /decompose returned when
+    // firstness_decompose.yaml referenced {genre_secondary} and the
+    // .format(**fmt) call raised KeyError. Before the fix, request()
+    // returned the string as data and the reducer silently swallowed it.
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse({ detail: "DECOMPOSE_FAILED: 'genre_secondary'" }, { status: 503 }),
+    );
+
+    await expect(request("POST", "/decompose", { prompt: "x".repeat(20) })).rejects.toBeInstanceOf(ApiError);
+    await expect(request("POST", "/decompose", { prompt: "x".repeat(20) })).rejects.toMatchObject({
+      code: "HTTP_503",
+      message: "DECOMPOSE_FAILED: 'genre_secondary'",
+    });
+  });
+
+  it("throws ApiError on style-A 400 with nested envelope", async () => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse(
+        {
+          detail: {
+            error: true,
+            code: "VALIDATION_ERROR",
+            message: "项目名称必填",
+            detail: {},
+          },
+        },
+        { status: 400 },
+      ),
+    );
+
+    let caught: unknown;
+    try {
+      await request("POST", "/project/create", {});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    expect((caught as ApiError).code).toBe("VALIDATION_ERROR");
+    expect((caught as ApiError).message).toBe("项目名称必填");
+  });
+
+  it("throws ApiError on 422 with bare string detail (FastAPI default ValidationError)", async () => {
+    // FastAPI's request-validation 422 returns `{"detail": [{loc, msg, type}, ...]}`
+    // (array, not string). That's neither top-level error nor nested envelope,
+    // so it slipped through pre-fix. The new fallback catches it.
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse(
+        {
+          detail: [{ loc: ["body", "prompt"], msg: "field required", type: "value_error.missing" }],
+        },
+        { status: 422 },
+      ),
+    );
+
+    await expect(request("POST", "/x", {})).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("throws ApiError on 422 with FORBIDDEN_TERM_DETECTED envelope (style A path still works)", async () => {
+    // The existing outlineGuardRetry.ts path. Backend wraps detail={code,
+    // detail:{violations:[...]}} under HTTPException(detail=envelope). Style
+    // A's nested-error check fires first, then callers can read err.detail.violations.
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse(
+        {
+          detail: {
+            error: true,
+            code: "FORBIDDEN_TERM_DETECTED",
+            message: "违反了白名单",
+            detail: { violations: [{ path: "ch1", term: "元婴", snippet: "..." }] },
+          },
+        },
+        { status: 422 },
+      ),
+    );
+
+    let caught: unknown;
+    try {
+      await request("POST", "/x", {});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    expect((caught as ApiError).code).toBe("FORBIDDEN_TERM_DETECTED");
+    expect((caught as ApiError).detail).toMatchObject({
+      violations: [{ path: "ch1", term: "元婴", snippet: "..." }],
+    });
+  });
+
+  it("does NOT throw on probe-result success (200 + detail.error is a string)", async () => {
+    // The carve-out that justified the existing nested-error-only check:
+    // /llm-config/probe returns 200 with body shaped like:
+    //   {detail: {success: false, error: "Invalid API key", error_code: "auth_error"}}
+    // Here detail.error is the STRING "Invalid API key", not boolean true —
+    // we must NOT mis-parse it as an error envelope. The probe caller reads
+    // result.detail.error / .error_code to surface the auth error in the UI.
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse({
+        detail: {
+          success: false,
+          error: "Invalid API key",
+          error_code: "auth_error",
+        },
+      }, { status: 200 }),
+    );
+
+    const result = await request<{ success: boolean; error: string; error_code: string }>(
+      "POST",
+      "/llm-config/probe",
+      {},
+    );
+    expect(result).toEqual({
+      success: false,
+      error: "Invalid API key",
+      error_code: "auth_error",
+    });
+  });
+
+  it("throws ApiError when status is 4xx but body is empty", async () => {
+    // 404 with empty body — the request helper's existing empty-body branch
+    // would have returned null silently pre-fix, breaking any reducer that
+    // assumed the call reached the backend.
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse(undefined, { status: 404 }),
+    );
+
+    await expect(request("GET", "/missing")).rejects.toBeInstanceOf(ApiError);
+    await expect(request("GET", "/missing")).rejects.toMatchObject({ code: "HTTP_404" });
+  });
+
+  it("ApiError thrown from style-B path carries status + parsed body in detail", async () => {
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      makeJsonResponse({ detail: "rate limited" }, { status: 429 }),
+    );
+
+    let caught: unknown;
+    try {
+      await request("POST", "/x", {});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    const err = caught as ApiError;
+    expect(err.detail).toMatchObject({
+      path: "/x",
+      status: 429,
+      body: { detail: "rate limited" },
+    });
+  });
+});

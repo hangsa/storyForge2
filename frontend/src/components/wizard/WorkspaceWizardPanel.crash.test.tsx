@@ -81,6 +81,10 @@ vi.mock("../../api/client", () => ({
     // useCreativeDimensions → api.listActiveCreativeDimensions. Empty
     // arrays keep these crash tests focused on the prefill paths.
     listActiveCreativeDimensions: vi.fn().mockResolvedValue({ subject: [], tone: [], style: [] }),
+    // Genre-inheritance fix (2026-09-11): useThreeBDivergence fires
+    // getProjectStatus on mount. Empty genre is safe because the S1 form
+    // is not exercised in these crash tests.
+    getProjectStatus: vi.fn().mockResolvedValue({ title: "T", genre: "" }),
   },
 }));
 
@@ -141,6 +145,8 @@ describe("WorkspaceWizardPanel crash repro", () => {
         listGenres: vi.fn().mockResolvedValue([]),
         // Task 12 (2026-09-10): mirror first-block mock.
         listActiveCreativeDimensions: vi.fn().mockResolvedValue({ subject: [], tone: [], style: [] }),
+        // Genre-inheritance fix (2026-09-11): mirror first-block mock.
+        getProjectStatus: vi.fn().mockResolvedValue({ title: "T", genre: "" }),
       },
     }));
 

@@ -116,6 +116,34 @@ export async function request<T>(
     );
   }
 
+  // Status-code fallback (2026-09-11): FastAPI's bare-detail shape
+  // `{"detail": "<string>"}` (returned by `raise HTTPException(detail=str(e))`
+  // in three_b_routes.py, v2_canvas.py, etc.) hits neither topError nor
+  // nestedError, so the previous branch silently returned the string as data.
+  // Reducers downstream would then treat e.g.
+  //   `"DECOMPOSE_FAILED: 'genre_secondary'"` as a successful decomposition,
+  //   coerce undefined fields to defaults, and show no error banner —
+  //   reproducing as "S1→S2 next button doesn't trigger anything".
+  //
+  // Contract: any 4xx/5xx with a parseable JSON body throws ApiError,
+  // regardless of body shape. The probe-result carve-out above is safe
+  // because /llm-config/probe returns 200 (this branch never runs for 2xx).
+  if (res.status >= 400) {
+    const detailMsg =
+      typeof json?.detail === "string"
+        ? (json.detail as string)
+        : typeof (json?.detail as { message?: unknown } | undefined)?.message === "string"
+          ? ((json!.detail as { message: string }).message)
+          : typeof json?.message === "string"
+            ? (json.message as string)
+            : `请求失败 (${res.status}) ${method} ${path}`;
+    throw new ApiError(
+      `HTTP_${res.status}`,
+      detailMsg,
+      { path, status: res.status, body: json ?? undefined },
+    );
+  }
+
   if (json === null) return null as T;
   return (json.detail as T) ?? (json as T);
 }

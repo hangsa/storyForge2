@@ -1,15 +1,17 @@
 import { useState } from "react";
+import { SecondaryButton } from "@/components/ds";
+import { RegenerateModal } from "@/components/shared/RegenerateModal";
 import type { DimensionDecomposition, Unit } from "./types";
 
 interface Props {
   dimensions: DimensionDecomposition[];
   topLevelSummary: string;
+  followUpLoadingUnitId: string | null;
+  onFollowUp: (unitId: string, userQuestion: string | null) => void;
   // Footer navigation (上一步 / 下一步 / 重新生成) is registered through the
   // page-level wizard footer by CreativeDivergenceStep. The Stage-2 header
   // and the causal_map <pre> block were removed on 2026-09-08 (see git
-  // history); the per-unit "追问" affordance was removed on the same day
-  // (decision 2026-09-08: "暂时忽略"). The follow-up props were dropped
-  // along with it.
+  // history).
 }
 
 const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
@@ -22,48 +24,101 @@ const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
 
 const DIMENSION_ORDER = ["ontology", "energetics", "power_structure", "protagonist_engine", "narrative_physics"] as const;
 
+// Round 5 of the v2 wizard 6-item optimization: narrative_physics 维度的
+// `insight` 字段本身就是"核心矛盾",把它以虚拟 unit 的形式展示在该维度
+// 顶部,unit_name="核心矛盾",is_irreducible=true (无追问按钮)。
+const CORE_CONTRADICTION_ID = "__core_contradiction__";
+
+function withCoreContradictionUnit(dim: DimensionDecomposition): DimensionDecomposition {
+  if (dim.dimension !== "narrative_physics" || !dim.insight?.trim()) {
+    return dim;
+  }
+  const virtual: Unit = {
+    id: CORE_CONTRADICTION_ID,
+    dimension: "narrative_physics",
+    unit_name: "核心矛盾",
+    description: dim.insight,
+    follow_up_count: 0,
+    is_irreducible: true,
+  };
+  return { ...dim, units: [virtual, ...dim.units] };
+}
+
 export default function S2DecomposeStep({
-  dimensions, topLevelSummary,
+  dimensions, topLevelSummary, followUpLoadingUnitId, onFollowUp,
 }: Props) {
   // Defense-in-depth: callers upstream (reducer / HYDRATE) already coerce
   // undefined to [], but a stray malformed payload must not crash the
   // render with `dimensions.length`.
   const safeDimensions = Array.isArray(dimensions) ? dimensions : [];
 
+  // Round 3: 追问弹窗提到顶层,共享一个 RegenerateModal,避免每个 unit
+  // 都维护自己的 inline dialog 状态(text 泄漏 / 弹窗叠加 / 焦点跳跃)。
+  const [followUpTarget, setFollowUpTarget] = useState<{ unitId: string; unitName: string } | null>(null);
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6 pt-2">
-        {DIMENSION_ORDER.map((key) => {
-          const dim = safeDimensions.find((d) => d.dimension === key);
-          if (!dim) return null;
-          return (
-            <DimensionBlock key={dim.dimension} dimension={dim} />
-          );
-        })}
-
-        {safeDimensions
-          .filter((d) => !DIMENSION_ORDER.includes(d.dimension as typeof DIMENSION_ORDER[number]))
-          .map((dim) => (
-            <DimensionBlock key={dim.dimension} dimension={dim} />
-          ))}
-
+      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6">
         {topLevelSummary && (
-          <div className="border-t border-outline-variant pt-3" data-testid="top-level-summary">
+          // Round 4: 总览提到最前,带显眼样式,用户进入 S2 第一眼就
+          // 看到 5 维度的浓缩结论,再展开看具体单元细节。
+          <div
+            className="bg-primary-container/5 rounded-lg p-4"
+            data-testid="top-level-summary"
+          >
             <h3 className="font-display text-sm font-semibold text-primary-container mb-1">
               总览
             </h3>
             <p className="text-sm text-primary">{topLevelSummary}</p>
           </div>
         )}
+
+        {DIMENSION_ORDER.map((key) => {
+          const dim = safeDimensions.find((d) => d.dimension === key);
+          if (!dim) return null;
+          return (
+            <DimensionBlock
+              key={dim.dimension}
+              dimension={withCoreContradictionUnit(dim)}
+              followUpLoadingUnitId={followUpLoadingUnitId}
+              onFollowUpClick={(unitId, unitName) => setFollowUpTarget({ unitId, unitName })}
+            />
+          );
+        })}
+
+        {safeDimensions
+          .filter((d) => !DIMENSION_ORDER.includes(d.dimension as typeof DIMENSION_ORDER[number]))
+          .map((dim) => (
+            <DimensionBlock
+              key={dim.dimension}
+              dimension={withCoreContradictionUnit(dim)}
+              followUpLoadingUnitId={followUpLoadingUnitId}
+              onFollowUpClick={(unitId, unitName) => setFollowUpTarget({ unitId, unitName })}
+            />
+          ))}
       </div>
+
+      <RegenerateModal
+        open={followUpTarget !== null}
+        target={followUpTarget ? `追问 - ${followUpTarget.unitName}` : ""}
+        busy={followUpLoadingUnitId !== null}
+        onConfirm={(text) => {
+          if (!followUpTarget) return;
+          onFollowUp(followUpTarget.unitId, text.trim() || null);
+          setFollowUpTarget(null);
+        }}
+        onCancel={() => setFollowUpTarget(null)}
+      />
     </div>
   );
 }
 
 function DimensionBlock({
-  dimension,
+  dimension, followUpLoadingUnitId, onFollowUpClick,
 }: {
   dimension: DimensionDecomposition;
+  followUpLoadingUnitId: string | null;
+  onFollowUpClick: (unitId: string, unitName: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -97,7 +152,12 @@ function DimensionBlock({
       {!collapsed && (
         <div className="space-y-2 mt-3">
           {dimension.units.map((u) => (
-            <UnitCard key={u.id} unit={u} />
+            <UnitCard
+              key={u.id}
+              unit={u}
+              loading={followUpLoadingUnitId === u.id}
+              onFollowUpClick={() => onFollowUpClick(u.id, u.unit_name)}
+            />
           ))}
         </div>
       )}
@@ -106,22 +166,57 @@ function DimensionBlock({
 }
 
 function UnitCard({
-  unit,
+  unit, loading, onFollowUpClick,
 }: {
   unit: Unit;
+  loading: boolean;
+  onFollowUpClick: () => void;
 }) {
+  const isVirtualCore = unit.id === CORE_CONTRADICTION_ID;
+  const followUpLabel = isVirtualCore
+    ? "核心矛盾"
+    : unit.is_irreducible
+      ? "已不可再分"
+      : unit.follow_up_count > 0
+        ? `已追问 ${unit.follow_up_count} 次`
+        : "追问";
   return (
     <div
-      className="bg-surface-container border border-outline-variant rounded-lg p-3 text-sm"
+      className={
+        "bg-surface-container border border-outline-variant rounded-lg p-3 text-sm " +
+        (loading ? "opacity-50" : "")
+      }
       data-testid={`unit-${unit.id}`}
     >
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
-          Unit #{unit.id}
-        </span>
-        <span className="font-display text-sm font-semibold text-primary">{unit.unit_name}</span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
+              Unit #{unit.id}
+            </span>
+            <span className="font-display text-sm font-semibold text-primary">{unit.unit_name}</span>
+            {isVirtualCore && (
+              <span
+                className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container"
+                data-testid={`core-contradiction-badge-${unit.id}`}
+              >
+                📌 核心矛盾
+              </span>
+            )}
+          </div>
+          <div className="text-primary mt-1">{unit.description}</div>
+        </div>
+        {!isVirtualCore && (
+          <SecondaryButton
+            label={followUpLabel}
+            icon="forum"
+            size="sm"
+            testId={`follow-up-${unit.id}`}
+            disabled={unit.is_irreducible}
+            onClick={onFollowUpClick}
+          />
+        )}
       </div>
-      <div className="text-primary mt-1">{unit.description}</div>
     </div>
   );
 }

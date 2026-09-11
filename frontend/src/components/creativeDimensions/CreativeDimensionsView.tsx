@@ -6,13 +6,9 @@ import EntryEditPanel from "./EntryEditPanel";
 import { PrimaryButton, SearchInput } from "@/components/ds";
 import { invalidateActiveDimensionsCache } from "@/hooks/useCreativeDimensions";
 
-interface Props {
-  onClose: () => void;
-}
-
 const LABELS: Record<DimensionKind, string> = { subject: "题材", tone: "基调", style: "风格" };
 
-export default function CreativeDimensionsView({ onClose }: Props) {
+export default function CreativeDimensionsView() {
   const [data, setData] = useState<ActiveDimensions | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -80,18 +76,9 @@ export default function CreativeDimensionsView({ onClose }: Props) {
   };
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest">
-      <header className="flex items-center justify-between border-b border-outline-variant px-6 py-4">
+    <div className="relative flex h-full flex-col overflow-hidden rounded-b-lg border-x border-b border-outline-variant bg-surface-container-lowest">
+      <header className="flex items-center border-b border-outline-variant px-6 py-4">
         <h2 className="font-display text-xl text-primary">创作维度</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="关闭"
-          data-testid="dimensions-close"
-          className="text-on-surface-variant hover:text-primary"
-        >
-          <span className="material-symbols-outlined">close</span>
-        </button>
       </header>
 
       {err && (
@@ -158,7 +145,6 @@ export default function CreativeDimensionsView({ onClose }: Props) {
 
       {editing && (
         <EntryEditPanel
-          kind={editing.kind}
           entry={editing.entry}
           onSave={handleSave}
           onDelete={editing.entry ? handleDelete : undefined}

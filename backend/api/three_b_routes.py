@@ -76,7 +76,9 @@ def _serialize_dimensions(dims) -> list[dict]:
 class DecomposeRequest(BaseModel):
     prompt: str = Field(..., min_length=10)
     genre_primary: str
-    genre_secondary: Optional[str] = None
+    tone: str = ""
+    style: str = ""
+    user_modifications: Optional[str] = Field(default=None, max_length=1700)
 
 
 class FollowUpRequest(BaseModel):
@@ -135,8 +137,10 @@ async def decompose(project_id: str, body: DecomposeRequest, request: Request) -
             RawIntent(
                 prompt=body.prompt,
                 genre_primary=body.genre_primary,
-                genre_secondary=body.genre_secondary,
+                tone=body.tone,
+                style=body.style,
             ),
+            user_modifications=body.user_modifications or "",
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

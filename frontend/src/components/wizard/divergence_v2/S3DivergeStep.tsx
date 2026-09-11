@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { SecondaryButton } from "@/components/ds";
 import type { DimensionDecomposition, Operator, UnitCandidate } from "./types";
 
@@ -6,6 +7,15 @@ interface Props {
   loading: boolean;
   onRegenerateUnit: (unitId: string) => void;
   onSelectCandidate: (unitId: string, candidateIndex: number) => void;
+  // Task 8: legacy-state auto-/diverge. When S3 mounts and any unit's
+  // candidates lack the virtual `__original` row (state.json produced
+  // before Tasks 2/3 wired `_append_original_candidate` into the backend),
+  // the parent runs `/diverge` once via this callback so the regenerated
+  // candidate set includes the virtual "原始拆解" row. The ref guard in
+  // the effect prevents duplicate calls across StrictMode double-mount
+  // and re-renders, and `loading` is checked so we don't pile onto an
+  // in-flight regenerate.
+  onRegenerateAll?: () => void;
   // The bulk 「全部重新生成」 button was moved to the page-level wizard
   // footer on 2026-09-08 — it now lives as a sibling of the
   // 「下一步:提交 →」 button, registered by CreativeDivergenceStep via
@@ -40,11 +50,37 @@ export function partitionOriginalCandidate(
 }
 
 export default function S3DivergeStep({
-  dimensions, loading, onRegenerateUnit, onSelectCandidate,
+  dimensions, loading, onRegenerateUnit, onSelectCandidate, onRegenerateAll,
 }: Props) {
   const allFailed = dimensions.length > 0 && dimensions.every((d) =>
     d.units.length > 0 && d.units.every((u) => !d.candidates.some((c) => c.unit_id === u.id))
   );
+
+  // Task 8: legacy-state detection. If any unit has candidates but none of
+  // them ends with `__original`, the state.json predates the backend
+  // `_append_original_candidate` wiring (Tasks 2/3) and lacks the virtual
+  // 原始拆解 row. Fire the parent's /diverge flow exactly once so the
+  // backend regenerates the candidate set with the virtual row included.
+  // The ref guard absorbs StrictMode double-mount and re-renders so we
+  // never POST /diverge twice for the same legacy state.
+  const needsLegacyRegenerate = dimensions.some((d) =>
+    d.units.some((u) => {
+      const unitCandidates = d.candidates.filter((c) => c.unit_id === u.id);
+      return (
+        unitCandidates.length > 0 &&
+        !unitCandidates.some((c) => c.id.endsWith("__original"))
+      );
+    }),
+  );
+  const legacyTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (legacyTriggeredRef.current) return;
+    if (!needsLegacyRegenerate) return;
+    if (loading) return;
+    if (!onRegenerateAll) return;
+    legacyTriggeredRef.current = true;
+    onRegenerateAll();
+  }, [needsLegacyRegenerate, loading, onRegenerateAll]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

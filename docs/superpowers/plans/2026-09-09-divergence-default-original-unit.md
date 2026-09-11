@@ -10,7 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-09-divergence-default-original-unit-design.md` (commit `43fa484`).
 
-**Discovered during planning (added to scope):** The current `S3DivergeStep.tsx:117` passes `c.selection_rank` (a rank value) to `onSelectCandidate(u.id, ...)`, but the backend `select_unit_candidate()` expects `candidate_index` (a data-array index). This happens to work today only because initial state has ranks 0/1/2 == data-array indices 0/1/2. Adding virtual candidates breaks the assumption (virtual has rank 0 but sits at the end of the array). Task 4 fixes the index parameter before introducing virtual candidates.
+**Pre-existing frontend bug discovered during planning (added to scope):**
+
+`S3DivergeStep.tsx` historically passed `c.selection_rank` (a rank value) as the second argument to `onSelectCandidate(u.id, ...)`, but the backend `select_unit_candidate()` interprets that argument as `candidate_index` — the data-array index within the unit's filtered candidates. The two values have always been conceptually distinct, but they coincide by accident in the no-virtual state: initial LLM candidates are appended in `selection_rank` order, so data-array index == rank (0/1/2 == 0/1/2).
+
+Adding the virtual candidate exposes the latent bug: the virtual has `selection_rank = 0` (so it stays default-selected) but sits at the **end** of the persisted `dim.candidates` array. The post-partition frontend display order (`[原始, ...others]` ≠ data-array order) means the index into `dim.candidates.filter(c => c.unit_id === u.id)` must be recomputed at click time — never read from `selection_rank`. **Display order diverges from persisted array order; the click handler must use the data-array index.**
+
+Task 5 fixes this independently of, and before, the virtual-candidate work in Tasks 6–7. The fix is observable in production today (clicking between two LLM candidates after the legacy index parameter was the only behaviour that masked the bug).
 
 ---
 
@@ -150,8 +156,7 @@ def _append_original_candidate(
         selection_rank=0,
     )
     for i, c in enumerate(llm_candidates, start=1):
-        if c.selection_rank == 0:
-            c.selection_rank = i
+        c.selection_rank = i
     return llm_candidates + [virtual]
 ```
 
@@ -383,14 +388,15 @@ git commit -m "fix(divergence): pass data-array index not rank to onSelectCandid
 ## Task 6: Frontend — add `partitionOriginalCandidate` helper
 
 **Files:**
-- Create: `frontend/src/components/wizard/divergence_v2/S3DivergeStep.tsx` (helper at top of file)
+- Modify: `frontend/src/components/wizard/divergence_v2/S3DivergeStep.tsx` (helper at top of file, **export** it for testability)
+- Modify: `frontend/src/test/wizard/divergence_v2/S3DivergeStep.test.tsx` (append partition tests — there is already an existing test file here, do NOT create `__tests__/`)
 
 - [ ] **Step 6.1: Add helper function at the top of the file**
 
-Insert just below the imports (after `OPERATOR_ICONS` constant block):
+Insert just below the imports (after `OPERATOR_ICONS` constant block). **Prefix with `export`** so the existing test file at `frontend/src/test/wizard/divergence_v2/S3DivergeStep.test.tsx` can import it.
 
 ```tsx
-function partitionOriginalCandidate(
+export function partitionOriginalCandidate(
   candidates: UnitCandidate[],
 ): { original: UnitCandidate | null; others: UnitCandidate[] } {
   const idx = candidates.findIndex((c) => c.id.endsWith("__original"));
@@ -403,23 +409,13 @@ function partitionOriginalCandidate(
 }
 ```
 
-- [ ] **Step 6.2: Add unit test for partition helper**
+- [ ] **Step 6.2: Add unit tests for partition helper to existing test file**
 
-Create `frontend/src/components/wizard/divergence_v2/__tests__/S3DivergeStep.test.tsx`:
+Append to `frontend/src/test/wizard/divergence_v2/S3DivergeStep.test.tsx` (do NOT create a new `__tests__/` directory — one already exists at `frontend/src/test/wizard/divergence_v2/`):
 
 ```tsx
-import { describe, expect, it } from "vitest";
-import type { UnitCandidate } from "../types";
-
-function partitionOriginalCandidate(
-  candidates: UnitCandidate[],
-): { original: UnitCandidate | null; others: UnitCandidate[] } {
-  const idx = candidates.findIndex((c) => c.id.endsWith("__original"));
-  if (idx === -1) return { original: null, others: candidates };
-  const original = candidates[idx];
-  const others = [...candidates.slice(0, idx), ...candidates.slice(idx + 1)];
-  return { original, others };
-}
+import { partitionOriginalCandidate } from "@/components/wizard/divergence_v2/S3DivergeStep";
+import type { UnitCandidate } from "@/components/wizard/divergence_v2/types";
 
 const makeCand = (id: string, rank: number): UnitCandidate => ({
   id, unit_id: "u", unit_name: "u", description: id,
@@ -428,7 +424,7 @@ const makeCand = (id: string, rank: number): UnitCandidate => ({
 });
 
 describe("partitionOriginalCandidate", () => {
-  it("places the __original candidate first and preserves order of the rest", () => {
+  it("extracts the __original candidate and preserves order of the rest", () => {
     const cands = [makeCand("c1", 1), makeCand("c2", 2), makeCand("u__original", 0), makeCand("c3", 3)];
     const { original, others } = partitionOriginalCandidate(cands);
     expect(original?.id).toBe("u__original");
@@ -450,16 +446,18 @@ describe("partitionOriginalCandidate", () => {
 });
 ```
 
-- [ ] **Step 6.3: Run frontend test to confirm it passes**
+- [ ] **Step 6.3: Run frontend tests to confirm they pass**
 
 Run: `cd /Users/longsa/Codes/nebula/frontend && npm test -- S3DivergeStep`
-Expected: 3 passed.
+Expected: 6 existing + 3 new = 9 passed.
 
-- [ ] **Step 6.4: Commit helper + test**
+- [ ] **Step 6.4: Commit helper + tests**
 
 ```bash
-git add frontend/src/components/wizard/divergence_v2/S3DivergeStep.tsx frontend/src/components/wizard/divergence_v2/__tests__/S3DivergeStep.test.tsx
-git commit -m "feat(divergence): add partitionOriginalCandidate helper + test"
+git add frontend/src/components/wizard/divergence_v2/S3DivergeStep.tsx frontend/src/test/wizard/divergence_v2/S3DivergeStep.test.tsx
+git commit -m "feat(divergence): add partitionOriginalCandidate helper + test
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 ```
 
 ---

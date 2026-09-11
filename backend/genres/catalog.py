@@ -1,6 +1,6 @@
 """Single source of truth for genre config.
 
-Loads config/genres/{index.yaml, <id>.yaml × N, families.yaml, compatibility.yaml}
+Loads config/genres/{index.yaml, <id>.yaml × N, compatibility.yaml}
 with full validation. All downstream systems (Style Engine, ReaderOS, Fusion
 Engine, prompts, frontend API) read from this singleton.
 """
@@ -39,14 +39,12 @@ class GenreCatalog:
         self._entries: dict[str, dict] | None = None
         self._index: list[dict] | None = None
         self._compatibility: dict | None = None
-        self._families: dict | None = None
 
     def _load(self) -> None:
         try:
             self._load_index()
             self._load_entries()
             self._load_compatibility()
-            self._load_families()
             self._validate_distances()
         except FileNotFoundError as e:
             raise CatalogLoadError(f"Required file missing: {e.filename}") from e
@@ -179,13 +177,6 @@ class GenreCatalog:
                     )
         self._compatibility = matrix
 
-    def _load_families(self) -> None:
-        path = self._dir / "families.yaml"
-        if not path.exists():
-            raise CatalogLoadError("families.yaml not found")
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        self._families = data.get("families") or {}
-
     def _validate_distances(self) -> None:
         ids = sorted(self._entries.keys())  # type: ignore[union-attr]
         for gid, entry in self._entries.items():  # type: ignore[union-attr]
@@ -256,9 +247,6 @@ class GenreCatalog:
         if self._compatibility is None:
             self._load()
         return self._compatibility.get(a, {}).get(b, 1.0)  # type: ignore[union-attr]
-
-    def get_family(self, genre_id: str) -> str:
-        return self.get(genre_id)["family"]
 
 
 _catalog: GenreCatalog | None = None

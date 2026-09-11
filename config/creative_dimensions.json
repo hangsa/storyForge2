@@ -1,0 +1,261 @@
+{
+  "subject": [
+    {
+      "id": "cool_novel",
+      "name": "历史",
+      "description": "以真实或仿真的历史时空为舞台，强调时代逻辑与历史质感",
+      "status": "active",
+      "family": "power_fantasy",
+      "label_en": "Power Fantasy",
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:35:54.829239+00:00"
+    },
+    {
+      "id": "xianxia",
+      "name": "仙侠",
+      "description": "存在\"仙\"的层级目标，强调长生、问道、天人关系",
+      "status": "active",
+      "family": "cultivation",
+      "label_en": "Xianxia",
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:31:17.209713+00:00"
+    },
+    {
+      "id": "xuanhuan",
+      "name": "玄幻",
+      "description": "以东方文化为基底，存在超自然力量体系，常伴随\"修炼\"\"境界\"概念",
+      "status": "active",
+      "family": "cultivation",
+      "label_en": "Xuanhuan",
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:30:57.141725+00:00"
+    },
+    {
+      "id": "dushi",
+      "name": "都市",
+      "description": "以现代城市社会为背景，贴近现实规则或在此基础上叠加金手指",
+      "status": "active",
+      "family": "contemporary",
+      "label_en": "Contemporary",
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:35:20.902773+00:00"
+    },
+    {
+      "id": "kehuan",
+      "name": "科幻",
+      "description": "以科学/技术假定为逻辑起点，推演社会或文明变迁",
+      "status": "active",
+      "family": "sci_fi",
+      "label_en": "Sci-Fi",
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:34:44.274118+00:00"
+    },
+    {
+      "id": "xuanyi",
+      "name": "灵异",
+      "description": "核心驱动力为\"未知恐惧\"与\"生存威胁\"",
+      "status": "active",
+      "family": "mystery",
+      "label_en": "Mystery",
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:46:20.391826+00:00"
+    },
+    {
+      "id": "yanqing",
+      "name": "言情",
+      "description": "以情感关系为核心主线，强情绪输出",
+      "status": "active",
+      "family": "romance",
+      "label_en": "Romance",
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:55:50.831478+00:00"
+    },
+    {
+      "id": "9edeacbe",
+      "name": "奇幻",
+      "description": "西方文化基底，常含魔法、龙、精灵、骑士等要素",
+      "status": "active",
+      "family": "cultivation",
+      "label_en": "qihuan",
+      "order": 0,
+      "created_at": "2026-09-10T06:31:49.270073+00:00",
+      "updated_at": "2026-09-10T06:34:28.070673+00:00"
+    }
+  ],
+  "tone": [
+    {
+      "id": "热血",
+      "name": "爽文",
+      "description": "碾压、畅快、长驱直入，主角受挫必须快速反弹，反派必须被清算，忌长时间压抑",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:50:25.494475+00:00"
+    },
+    {
+      "id": "黑暗",
+      "name": "热血",
+      "description": "牺牲、友情、集体荣耀、明知不可为而为之，允许悲壮结局，但过程必须闪耀，忌全员自私冷漠",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 1,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:50:58.781487+00:00"
+    },
+    {
+      "id": "轻松",
+      "name": "轻松",
+      "description": "搞笑、玩梗、不正经、乐子人，危机必须被解构，人物可犯蠢但不可真惨，忌沉重伦理困境",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 2,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:49:33.958066+00:00"
+    },
+    {
+      "id": "虐心",
+      "name": "虐心",
+      "description": "意难平、BE美学、爱而不得、命运碾压，允许主角失败/死亡，但必须\"死得其所\"或\"美得令人心碎\"，忌无意义的惨",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 4,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:52:43.389525+00:00"
+    },
+    {
+      "id": "悬疑",
+      "name": "甜宠",
+      "description": "高糖、温馨、治愈、安全感，误会必须快速解开，核心CP不可出现原则性背叛，忌长时间虐心",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 6,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:51:31.886473+00:00"
+    },
+    {
+      "id": "成长",
+      "name": "黑暗",
+      "description": "残酷、弱肉强食、道德灰色、全员恶人，世界观必须支撑此逻辑，主角可以黑化，忌突然伟光正",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 7,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "2026-09-10T06:52:15.447053+00:00"
+    },
+    {
+      "id": "7c1753ed",
+      "name": "悬疑",
+      "description": "烧脑、步步惊心、信息迷雾，必须有可靠谜底，伏笔必须回收，忌机械降神",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 0,
+      "created_at": "2026-09-10T06:53:32.663085+00:00",
+      "updated_at": "2026-09-10T06:53:32.663085+00:00"
+    },
+    {
+      "id": "bd23310f",
+      "name": "荒诞",
+      "description": "黑色幽默、解构、系统吃人、无意义感，逻辑必须自洽地走向虚无，忌突然热血逆袭破坏荒诞感",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 0,
+      "created_at": "2026-09-10T06:54:05.113216+00:00",
+      "updated_at": "2026-09-10T06:54:05.113216+00:00"
+    }
+  ],
+  "style": [
+    {
+      "id": "爽文",
+      "name": "爽文",
+      "description": "",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 0,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "id": "慢热",
+      "name": "慢热",
+      "description": "",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 1,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "id": "群像",
+      "name": "群像",
+      "description": "",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 2,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "id": "单线",
+      "name": "单线",
+      "description": "",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 3,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "id": "多线",
+      "name": "多线",
+      "description": "",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 4,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "id": "倒叙",
+      "name": "倒叙",
+      "description": "",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 5,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "id": "正叙",
+      "name": "正叙",
+      "description": "",
+      "status": "active",
+      "family": null,
+      "label_en": null,
+      "order": 6,
+      "created_at": "1970-01-01T00:00:00Z",
+      "updated_at": "1970-01-01T00:00:00Z"
+    }
+  ]
+}

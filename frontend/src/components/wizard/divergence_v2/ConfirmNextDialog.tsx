@@ -10,7 +10,7 @@ interface Props {
 }
 
 const STAGE_LABELS: Record<SubStage, string> = {
-  "1": "输入灵感",
+  "1": "灵感输入",
   "2": "第一性拆解",
   "3": "自适应发散",
   "4": "提交",

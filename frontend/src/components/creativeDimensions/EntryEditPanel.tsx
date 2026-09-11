@@ -1,21 +1,18 @@
 import { useState, useEffect } from "react";
-import type { DimensionEntry, DimensionEntryPayload, DimensionKind } from "@/api/types";
+import type { DimensionEntry, DimensionEntryPayload } from "@/api/types";
 import { PrimaryButton, GhostButton } from "@/components/ds";
 
 interface Props {
-  kind: DimensionKind;
   entry: DimensionEntry | null;   // null = 新增
   onSave: (payload: DimensionEntryPayload) => Promise<void>;
   onDelete?: () => Promise<void>;
   onClose: () => void;
 }
 
-export default function EntryEditPanel({ kind, entry, onSave, onDelete, onClose }: Props) {
+export default function EntryEditPanel({ entry, onSave, onDelete, onClose }: Props) {
   const [name, setName] = useState(entry?.name ?? "");
   const [description, setDescription] = useState(entry?.description ?? "");
   const [status, setStatus] = useState<"active" | "inactive">(entry?.status ?? "active");
-  const [family, setFamily] = useState(entry?.family ?? "");
-  const [labelEn, setLabelEn] = useState(entry?.label_en ?? "");
   const [order, setOrder] = useState(entry?.order ?? 0);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -24,8 +21,6 @@ export default function EntryEditPanel({ kind, entry, onSave, onDelete, onClose 
     setName(entry?.name ?? "");
     setDescription(entry?.description ?? "");
     setStatus(entry?.status ?? "active");
-    setFamily(entry?.family ?? "");
-    setLabelEn(entry?.label_en ?? "");
     setOrder(entry?.order ?? 0);
     setErr(null);
   }, [entry]);
@@ -38,8 +33,6 @@ export default function EntryEditPanel({ kind, entry, onSave, onDelete, onClose 
         name: name.trim(),
         description: description,
         status,
-        family: family || undefined,
-        label_en: labelEn || undefined,
         order: Number(order) || 0,
       });
     } catch (e) {
@@ -128,33 +121,6 @@ export default function EntryEditPanel({ kind, entry, onSave, onDelete, onClose 
               data-testid="edit-description"
             />
           </div>
-
-          {kind === "subject" && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-primary mb-1">Family</label>
-                <input
-                  type="text"
-                  value={family}
-                  maxLength={64}
-                  onChange={(e) => setFamily(e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary"
-                  data-testid="edit-family"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-primary mb-1">label_en</label>
-                <input
-                  type="text"
-                  value={labelEn}
-                  maxLength={128}
-                  onChange={(e) => setLabelEn(e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary"
-                  data-testid="edit-label-en"
-                />
-              </div>
-            </div>
-          )}
 
           <div>
             <label className="block text-sm font-medium text-primary mb-1">排序</label>

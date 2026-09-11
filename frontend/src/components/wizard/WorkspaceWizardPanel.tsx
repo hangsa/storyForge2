@@ -113,7 +113,7 @@ function Inner({ projectId }: Props) {
 
       <div className="flex-1 flex flex-col bg-background min-w-0">
         <main className="flex-1 overflow-y-auto">
-          <div className="w-full flex flex-col">
+          <div className="w-full h-full flex flex-col">
             {wizard.currentStep === 1 && (
               <CreativeDivergenceStep
                 projectId={projectId}

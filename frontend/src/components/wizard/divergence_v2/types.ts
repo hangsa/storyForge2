@@ -12,7 +12,8 @@ export type Operator = "distort" | "break" | "blend" | "chain";
 export interface RawIntent {
   prompt: string;
   genre_primary: string;
-  genre_secondary: string | null;
+  tone: string;
+  style: string;
 }
 
 export interface Unit {
@@ -83,7 +84,7 @@ export type SubStage = "1" | "2" | "3" | "4";
 
 // 与 StepIndicator.tsx 的 4 阶段保持一致
 export const SUB_STAGES: Array<{ key: SubStage; label: string }> = [
-  { key: "1", label: "输入灵感" },
+  { key: "1", label: "灵感输入" },
   { key: "2", label: "第一性拆解" },
   { key: "3", label: "自适应发散" },
   { key: "4", label: "提交" },

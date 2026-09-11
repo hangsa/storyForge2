@@ -59,7 +59,8 @@ system_prompt: |
 user_prompt_template: |
   原始创意: {prompt}
   主类型: {genre_primary}
-  副类型(可选): {genre_secondary}
+  基调: {tone}
+  风格: {style}
 
   当前维度: {dimension}
   当前单元: {unit_name}

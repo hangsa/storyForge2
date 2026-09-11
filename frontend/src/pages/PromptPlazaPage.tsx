@@ -7,7 +7,7 @@ export default function PromptPlazaPage() {
   return (
     <div className="flex flex-1 min-h-0 flex-col py-6">
       <div className="flex-1 min-h-0">
-        <PromptPlazaView projectId={null} projectTitle={null} onClose={() => navigate("/")} />
+        <PromptPlazaView projectId={null} projectTitle={null} onClose={() => navigate("/")} asPage />
       </div>
     </div>
   );

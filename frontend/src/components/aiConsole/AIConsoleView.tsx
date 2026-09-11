@@ -8,6 +8,8 @@ import UsagePanel from './UsagePanel';
 
 interface Props {
   onClose: () => void;
+  /** Rendered as a full route page: drop the modal chrome (top edge + close button). */
+  asPage?: boolean;
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -31,7 +33,7 @@ function isBuiltinMissing(cfg: ModelTiersConfig | null): boolean {
   return BUILTIN_PROVIDERS.some((pid) => !ids.includes(pid));
 }
 
-export default function AIConsoleView({ onClose }: Props) {
+export default function AIConsoleView({ onClose, asPage = false }: Props) {
   const [config, setConfig] = useState<ModelTiersConfig | null>(null);
   const [draft, setDraft] = useState<ModelTiersConfig | null>(null);
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
@@ -107,7 +109,11 @@ export default function AIConsoleView({ onClose }: Props) {
   };
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-lg bg-canvas-bg shadow-xl">
+    <div
+      className={`relative flex h-full flex-col overflow-hidden bg-canvas-bg ${
+        asPage ? 'rounded-b-lg border-x border-b border-canvas-text-muted/20' : 'rounded-lg shadow-xl'
+      }`}
+    >
       <header className="flex items-center justify-between border-b border-canvas-text-muted/20 bg-canvas-surface px-6 py-3">
         <h2 className="text-lg font-semibold">AI 控制台</h2>
         <div className="flex items-center gap-2">
@@ -144,14 +150,16 @@ export default function AIConsoleView({ onClose }: Props) {
           >
             ↻ 重新加载
           </button>
-          <button
-            type="button"
-            data-testid="modal-close"
-            onClick={closeOrConfirm}
-            className="rounded border border-canvas-text-muted/40 px-3 py-1 text-sm"
-          >
-            × 关闭
-          </button>
+          {!asPage && (
+            <button
+              type="button"
+              data-testid="modal-close"
+              onClick={closeOrConfirm}
+              className="rounded border border-canvas-text-muted/40 px-3 py-1 text-sm"
+            >
+              × 关闭
+            </button>
+          )}
         </div>
       </header>
 

@@ -194,8 +194,9 @@ class CreativeDimensionsStore:
                     name=payload.name,
                     description=payload.description,
                     status=payload.status,
-                    family=payload.family,
-                    label_en=payload.label_en,
+                    # 管理页表单已不再提供这两个字段；省略时保留原值而非清空
+                    family=payload.family if payload.family is not None else e.family,
+                    label_en=payload.label_en if payload.label_en is not None else e.label_en,
                     order=payload.order,
                     created_at=e.created_at,
                     updated_at=_now_iso(),

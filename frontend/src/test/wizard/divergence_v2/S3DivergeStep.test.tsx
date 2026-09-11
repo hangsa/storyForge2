@@ -128,6 +128,188 @@ describe("S3DivergeStep", () => {
     const originalRow = screen.getByTestId("candidate-u1__original");
     expect(originalRow.textContent).not.toMatch(/连锁推演/);
   });
+
+  // Task 8: legacy-state auto-/diverge. S3 should fire onRegenerateAll exactly
+  // once on mount when a unit has candidates but none of them is the virtual
+  // __original row (state.json predates the backend helper).
+  describe("legacy state auto-/diverge", () => {
+    const LEGACY: DimensionDecomposition[] = [
+      {
+        dimension: "ontology",
+        insight: "",
+        units: [{ id: "u1", dimension: "ontology", unit_name: "灵窍", description: "d", follow_up_count: 0, is_irreducible: false }],
+        // No `__original` candidate: legacy state.json.
+        candidates: [
+          { id: "c1", unit_id: "u1", unit_name: "灵窍", description: "旧候选 A", chain_reaction: "链 A", main_operator: "distort", aux_operator: null, selection_rank: 0 },
+          { id: "c2", unit_id: "u1", unit_name: "灵窍", description: "旧候选 B", chain_reaction: "链 B", main_operator: "break", aux_operator: "blend", selection_rank: 1 },
+        ],
+        dimension_status: "diverged",
+      },
+    ];
+
+    const FRESH: DimensionDecomposition[] = [
+      {
+        dimension: "ontology",
+        insight: "",
+        units: [{ id: "u1", dimension: "ontology", unit_name: "灵窍", description: "d", follow_up_count: 0, is_irreducible: false }],
+        candidates: [
+          { id: "u1__original", unit_id: "u1", unit_name: "灵窍", description: "原始", chain_reaction: "", main_operator: "distort", aux_operator: null, selection_rank: 0 },
+          { id: "c1", unit_id: "u1", unit_name: "灵窍", description: "新候选 A", chain_reaction: "链 A", main_operator: "distort", aux_operator: null, selection_rank: 1 },
+        ],
+        dimension_status: "diverged",
+      },
+    ];
+
+    const EMPTY: DimensionDecomposition[] = [
+      {
+        dimension: "ontology",
+        insight: "",
+        units: [{ id: "u1", dimension: "ontology", unit_name: "灵窍", description: "d", follow_up_count: 0, is_irreducible: false }],
+        candidates: [],
+        dimension_status: "pending",
+      },
+    ];
+
+    it("fires onRegenerateAll once on mount when a unit's candidates lack __original", () => {
+      const onRegenerateAll = vi.fn();
+      render(
+        <S3DivergeStep
+          dimensions={LEGACY}
+          loading={false}
+          onRegenerateUnit={vi.fn()}
+          onSelectCandidate={vi.fn()}
+          onRegenerateAll={onRegenerateAll}
+        />,
+      );
+      expect(onRegenerateAll).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not fire onRegenerateAll when every unit already has a __original candidate", () => {
+      const onRegenerateAll = vi.fn();
+      render(
+        <S3DivergeStep
+          dimensions={FRESH}
+          loading={false}
+          onRegenerateUnit={vi.fn()}
+          onSelectCandidate={vi.fn()}
+          onRegenerateAll={onRegenerateAll}
+        />,
+      );
+      expect(onRegenerateAll).not.toHaveBeenCalled();
+    });
+
+    it("does not fire onRegenerateAll when units have no candidates yet (not legacy, just pending)", () => {
+      const onRegenerateAll = vi.fn();
+      render(
+        <S3DivergeStep
+          dimensions={EMPTY}
+          loading={false}
+          onRegenerateUnit={vi.fn()}
+          onSelectCandidate={vi.fn()}
+          onRegenerateAll={onRegenerateAll}
+        />,
+      );
+      expect(onRegenerateAll).not.toHaveBeenCalled();
+    });
+
+    it("does not fire onRegenerateAll while loading=true (parent already has an in-flight /diverge)", () => {
+      const onRegenerateAll = vi.fn();
+      render(
+        <S3DivergeStep
+          dimensions={LEGACY}
+          loading={true}
+          onRegenerateUnit={vi.fn()}
+          onSelectCandidate={vi.fn()}
+          onRegenerateAll={onRegenerateAll}
+        />,
+      );
+      expect(onRegenerateAll).not.toHaveBeenCalled();
+    });
+
+    it("does not crash when onRegenerateAll is omitted", () => {
+      expect(() =>
+        render(
+          <S3DivergeStep
+            dimensions={LEGACY}
+            loading={false}
+            onRegenerateUnit={vi.fn()}
+            onSelectCandidate={vi.fn()}
+          />,
+        ),
+      ).not.toThrow();
+    });
+
+    it("fires onRegenerateAll exactly once across re-renders with the same legacy shape", () => {
+      const onRegenerateAll = vi.fn();
+      const { rerender } = render(
+        <S3DivergeStep
+          dimensions={LEGACY}
+          loading={false}
+          onRegenerateUnit={vi.fn()}
+          onSelectCandidate={vi.fn()}
+          onRegenerateAll={onRegenerateAll}
+        />,
+      );
+      // Same legacy dimensions, re-render with loading=true (parent started
+      // the diverge call we triggered) — should NOT pile on another call.
+      rerender(
+        <S3DivergeStep
+          dimensions={LEGACY}
+          loading={true}
+          onRegenerateUnit={vi.fn()}
+          onSelectCandidate={vi.fn()}
+          onRegenerateAll={onRegenerateAll}
+        />,
+      );
+      // Re-render after failure / unrelated state change — still just one.
+      rerender(
+        <S3DivergeStep
+          dimensions={LEGACY}
+          loading={false}
+          onRegenerateUnit={vi.fn()}
+          onSelectCandidate={vi.fn()}
+          onRegenerateAll={onRegenerateAll}
+        />,
+      );
+      expect(onRegenerateAll).toHaveBeenCalledTimes(1);
+    });
+
+    it("detects legacy state in any unit even if other units are fresh (mixed shape)", () => {
+      const mixed: DimensionDecomposition[] = [
+        {
+          dimension: "ontology",
+          insight: "",
+          units: [{ id: "u1", dimension: "ontology", unit_name: "灵窍", description: "d", follow_up_count: 0, is_irreducible: false }],
+          // Fresh: has __original.
+          candidates: [
+            { id: "u1__original", unit_id: "u1", unit_name: "灵窍", description: "原始", chain_reaction: "", main_operator: "distort", aux_operator: null, selection_rank: 0 },
+          ],
+          dimension_status: "diverged",
+        },
+        {
+          dimension: "energetics",
+          insight: "",
+          units: [{ id: "u2", dimension: "energetics", unit_name: "修行", description: "d", follow_up_count: 0, is_irreducible: false }],
+          // Legacy: no __original.
+          candidates: [
+            { id: "c1", unit_id: "u2", unit_name: "修行", description: "旧候选", chain_reaction: "", main_operator: "distort", aux_operator: null, selection_rank: 0 },
+          ],
+          dimension_status: "diverged",
+        },
+      ];
+      const onRegenerateAll = vi.fn();
+      render(
+        <S3DivergeStep
+          dimensions={mixed}
+          loading={false}
+          onRegenerateUnit={vi.fn()}
+          onSelectCandidate={vi.fn()}
+          onRegenerateAll={onRegenerateAll}
+        />,
+      );
+      expect(onRegenerateAll).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 const makeCand = (id: string, rank: number): UnitCandidate => ({

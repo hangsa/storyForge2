@@ -39,10 +39,6 @@ class TestSchemaValidation:
             yaml.safe_dump({"matrix": {genre_id: {}}}, allow_unicode=True),
             encoding="utf-8",
         )
-        (tmp_path / "families.yaml").write_text(
-            yaml.safe_dump({"families": {"test": [genre_id]}}, allow_unicode=True),
-            encoding="utf-8",
-        )
         # All required fields EXCEPT beat_patterns — we'll inject beat_patterns separately.
         valid_entry = {
             "id": genre_id, "label_zh": "测试", "label_en": "Test", "family": "test",

@@ -33,10 +33,6 @@ def tmp_catalog(tmp_path):
         ]
     }, allow_unicode=True), encoding="utf-8")
 
-    (cat_dir / "families.yaml").write_text(yaml.safe_dump({
-        "families": {"test": ["alpha", "beta"]}
-    }, allow_unicode=True), encoding="utf-8")
-
     (cat_dir / "compatibility.yaml").write_text(yaml.safe_dump({
         "matrix": {
             "alpha": {"beta": 0.5},
@@ -156,10 +152,6 @@ class TestGenreCatalogGetters:
     def test_get_compatibility(self, tmp_catalog):
         cat = GenreCatalog(genres_dir=tmp_catalog)
         assert cat.get_compatibility("alpha", "beta") == 0.5
-
-    def test_get_family(self, tmp_catalog):
-        cat = GenreCatalog(genres_dir=tmp_catalog)
-        assert cat.get_family("alpha") == "test"
 
     def test_unknown_genre_returns_fallback(self, tmp_catalog):
         cat = GenreCatalog(genres_dir=tmp_catalog)

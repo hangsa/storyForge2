@@ -188,7 +188,8 @@ def _seed_basic_state(project_id: str, base: Path) -> ThreeBState:
         raw_intent=RawIntent(
             prompt="一个少年在废墟里觉醒",
             genre_primary="玄幻",
-            genre_secondary="科幻",
+            tone="热血",
+            style="爽文",
         ),
         causal_map="A → B",
         top_level_summary="一句话",
@@ -254,6 +255,49 @@ def test_state_returns_404_for_v1_state_migrated_to_null(tmp_path):
     assert resp.status_code == 404
     # Migration deleted the v1 file
     assert not (proj_dir / "creative_os" / "three_b_state.json").exists()
+
+
+def test_state_loads_legacy_raw_intent_with_genre_secondary(tmp_path):
+    """Disk state written before Round 1 included ``genre_secondary`` on
+    raw_intent and lacked ``tone`` / ``style``. ``load_state`` must strip
+    the legacy field and apply defaults instead of crashing HYDRATE with
+    TypeError (the "S2 page empty after first decompose" bug).
+
+    Regression for the proj_47007ffa "页面为空" report on 2026-09-10.
+    """
+    proj_id = f"{PROJ_PREFIX}legacy_intent"
+    proj_dir = tmp_path / proj_id
+    proj_dir.mkdir(parents=True)
+    (proj_dir / "creative_os").mkdir()
+    # Mirror the exact legacy shape that crashed proj_47007ffa:
+    #   - raw_intent has "genre_secondary": null (legacy field)
+    #   - raw_intent lacks "tone" and "style" (Round 1 added them)
+    legacy = {
+        "schema_version": 2,
+        "project_id": proj_id,
+        "raw_intent": {
+            "prompt": "一个少年大病一场后获得了阴阳眼",
+            "genre_primary": "xuanyi",
+            "genre_secondary": None,
+        },
+        "causal_map": "ontology → energetics",
+        "top_level_summary": "总览",
+        "dimensions": [],
+    }
+    (proj_dir / "creative_os" / "three_b_state.json").write_text(
+        json.dumps(legacy, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    resp = client.get(_route("/state", proj_id))
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # Legacy field stripped, Round-1 fields defaulted — no crash.
+    assert data["raw_intent"]["prompt"] == "一个少年大病一场后获得了阴阳眼"
+    assert data["raw_intent"]["genre_primary"] == "xuanyi"
+    assert "genre_secondary" not in data["raw_intent"]
+    assert data["raw_intent"]["tone"] == ""
+    assert data["raw_intent"]["style"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -325,8 +369,13 @@ def test_decompose_happy_path(mock_router):
     mock_router.execute = AsyncMock(return_value={"content": "{}"})
     engine = _make_engine(mock_router)
 
-    # Patch decompose to return our pre-built dims deterministically.
-    async def fake_decompose(project_id, raw_intent):
+    captured: dict = {}
+
+    # Patch decompose to return our pre-built dims deterministically and
+    # capture the raw_intent + user_modifications the route forwarded.
+    async def fake_decompose(project_id, raw_intent, user_modifications=""):
+        captured["raw_intent"] = raw_intent
+        captured["user_modifications"] = user_modifications
         return dims, "cmap", "summary"
 
     engine.decompose = fake_decompose  # type: ignore[assignment]
@@ -337,7 +386,8 @@ def test_decompose_happy_path(mock_router):
         json={
             "prompt": "足够长的原始灵感 text",
             "genre_primary": "玄幻",
-            "genre_secondary": "科幻",
+            "tone": "热血",
+            "style": "爽文",
         },
     )
     assert resp.status_code == 200
@@ -346,12 +396,87 @@ def test_decompose_happy_path(mock_router):
     assert data["causal_map"] == "cmap"
     assert data["top_level_summary"] == "summary"
     assert data["dimensions"][0]["dimension"] == "ontology"
+    # Route forwards tone/style to engine and defaults user_modifications="".
+    assert captured["raw_intent"].tone == "热血"
+    assert captured["raw_intent"].style == "爽文"
+    assert captured["raw_intent"].genre_primary == "玄幻"
+    assert captured["user_modifications"] == ""
+
+
+def test_decompose_forwards_user_modifications(mock_router):
+    """Round 1 of the v2 wizard 6-item optimization: S2 「重新生成」 opens a
+    RegenerateModal that calls /decompose again with user-supplied feedback.
+    The route must pass that through to engine.decompose(..., user_modifications=...)
+    so the prompt YAML can render a 「用户修改意见」 block.
+    """
+    mock_router.execute = AsyncMock(return_value={"content": "{}"})
+
+    dims = [_make_dim(DimLabel.ONTOLOGY, [])]
+    engine = _make_engine(mock_router)
+
+    captured: dict = {}
+
+    async def fake_decompose(project_id, raw_intent, user_modifications=""):
+        captured["user_modifications"] = user_modifications
+        return dims, "cm", "sum"
+
+    engine.decompose = fake_decompose  # type: ignore[assignment]
+    _inject_engine(engine)
+
+    resp = client.post(
+        _route("/decompose", f"{PROJ_PREFIX}dec_mods"),
+        json={
+            "prompt": "足够长的原始灵感 text",
+            "genre_primary": "玄幻",
+            "user_modifications": "聚焦东方玄幻,不要科幻",
+        },
+    )
+    assert resp.status_code == 200
+    assert captured["user_modifications"] == "聚焦东方玄幻,不要科幻"
+
+
+def test_decompose_rejects_oversize_user_modifications():
+    """user_modifications has max_length=1700 — Pydantic rejects before engine call."""
+    resp = client.post(
+        _route("/decompose", f"{PROJ_PREFIX}dec_too_long"),
+        json={
+            "prompt": "足够长的原始灵感 text",
+            "genre_primary": "玄幻",
+            "user_modifications": "x" * 2000,
+        },
+    )
+    assert resp.status_code == 422
+
+
+def test_decompose_omitted_tone_style_default_to_empty_string(mock_router):
+    """Old clients that only send prompt + genre_primary still work — tone
+    and style default to '' on the RawIntent dataclass so the prompt YAML
+    renders '(无)' placeholders rather than crashing.
+    """
+    mock_router.execute = AsyncMock(return_value={"content": "{}"})
+    engine = _make_engine(mock_router)
+    captured: dict = {}
+
+    async def fake_decompose(project_id, raw_intent, user_modifications=""):
+        captured["raw_intent"] = raw_intent
+        return [], "cm", "sum"
+
+    engine.decompose = fake_decompose  # type: ignore[assignment]
+    _inject_engine(engine)
+
+    resp = client.post(
+        _route("/decompose", f"{PROJ_PREFIX}dec_min"),
+        json={"prompt": "足够长的原始灵感 text", "genre_primary": "玄幻"},
+    )
+    assert resp.status_code == 200
+    assert captured["raw_intent"].tone == ""
+    assert captured["raw_intent"].style == ""
 
 
 def test_decompose_503_on_runtime_error(mock_router):
     engine = _make_engine(mock_router)
 
-    async def fake_decompose(project_id, raw_intent):
+    async def fake_decompose(project_id, raw_intent, user_modifications=""):
         raise RuntimeError("LLM boom")
 
     engine.decompose = fake_decompose  # type: ignore[assignment]
@@ -368,7 +493,7 @@ def test_decompose_503_on_runtime_error(mock_router):
 def test_decompose_422_on_value_error(mock_router):
     engine = _make_engine(mock_router)
 
-    async def fake_decompose(project_id, raw_intent):
+    async def fake_decompose(project_id, raw_intent, user_modifications=""):
         raise ValueError("bad input")
 
     engine.decompose = fake_decompose  # type: ignore[assignment]
@@ -508,6 +633,148 @@ def test_diverge_422_on_value_error(mock_router):
 
     resp = client.post(_route("/diverge", f"{PROJ_PREFIX}div_422"))
     assert resp.status_code == 422
+
+
+def test_diverge_route_serializes_per_unit_original_candidate(mock_router):
+    """Every unit in the response must have exactly one candidate whose id ends
+    with '__original', whose description equals the unit's description, and
+    whose selection_rank is 0. This pins the route serialization shape (not
+    only the helper) so future refactors can't silently drop the
+    default-original-unit fallback from the API contract.
+
+    Mirrors what the real `engine.diverge()` does: for each unit, runs the
+    helper `_append_original_candidate` to inject the virtual candidate, then
+    the route serializes the dimensions via `asdict()`. We replace
+    `engine.diverge` so we don't touch the LLM.
+    """
+    from backend.creative_os.three_b_engine import _append_original_candidate
+
+    # 3 units across 2 dimensions (real-world case: per-unit + multi-dim)
+    u_a = _make_unit("unit_alpha", DimLabel.ONTOLOGY, name="灵窍", description="能量接口")
+    u_b = _make_unit("unit_beta", DimLabel.ONTOLOGY, name="空间", description="位面层级")
+    u_c = _make_unit("unit_gamma", DimLabel.ENERGETICS, name="灵力", description="灵力流")
+
+    # LLM-side candidates — 2 per unit, mirrors real engine output.
+    # Keyed by unit_id since @dataclass Unit isn't hashable by default.
+    llm_per_unit: dict[str, list[UnitCandidate]] = {
+        u_a.id: [
+            UnitCandidate(
+                id="cand_a1", unit_id=u_a.id, unit_name=u_a.unit_name,
+                description="变异灵窍", chain_reaction="连锁",
+                main_operator="distort", selection_rank=0,
+            ),
+            UnitCandidate(
+                id="cand_a2", unit_id=u_a.id, unit_name=u_a.unit_name,
+                description="多核灵窍", chain_reaction="联",
+                main_operator="blend", selection_rank=1,
+            ),
+        ],
+        u_b.id: [
+            UnitCandidate(
+                id="cand_b1", unit_id=u_b.id, unit_name=u_b.unit_name,
+                description="折叠空间", chain_reaction="cr", main_operator="break",
+                selection_rank=0,
+            ),
+        ],
+        u_c.id: [],  # edge case: LLM returned nothing — should still get __original
+    }
+
+    async def fake_diverge(project_id):
+        # Replicate the real engine's wiring: build DimensionDecomposition
+        # with candidates = llm_candidates + [__original]. Identical to what
+        # `diverge()` returns after `asyncio.gather` + `_append_original_candidate`.
+        dim_alpha = _make_dim(
+            DimLabel.ONTOLOGY, [u_a, u_b],
+            candidates=_append_original_candidate(u_a, list(llm_per_unit[u_a.id]))
+            + _append_original_candidate(u_b, list(llm_per_unit[u_b.id])),
+        )
+        dim_gamma = _make_dim(
+            DimLabel.ENERGETICS, [u_c],
+            candidates=_append_original_candidate(u_c, list(llm_per_unit[u_c.id])),
+        )
+        return [dim_alpha, dim_gamma]
+
+    engine = _make_engine(mock_router)
+    engine.diverge = fake_diverge  # type: ignore[assignment]
+    _inject_engine(engine)
+
+    resp = client.post(_route("/diverge", f"{PROJ_PREFIX}div_orig"))
+    assert resp.status_code == 200
+
+    # ---- Shape assertions on the serialized response ----
+    data = resp.json()
+    assert set(data.keys()) == {"dimensions"}, (
+        "Route response should only have a 'dimensions' key — "
+        "no leakage of other fields from the engine state."
+    )
+    assert isinstance(data["dimensions"], list)
+    assert len(data["dimensions"]) == 2
+
+    # Re-collect the units we put in, by id, to assert per-unit behavior
+    # without depending on dimension ordering.
+    units_by_id: dict[str, Unit] = {u.id: u for u in (u_a, u_b, u_c)}
+    # Parallel map of unit_id -> expected LLM count (for the totals assertion below).
+    llm_count_per_unit = {uid: len(llm_per_unit[uid]) for uid in units_by_id}
+    seen_unit_ids: set[str] = set()
+    # Track which dimensions we observed so we can also assert unit expansion.
+    expected_dimensions = {DimLabel.ONTOLOGY.value, DimLabel.ENERGETICS.value}
+    observed_dimensions: set[str] = set()
+
+    for dim_dict in data["dimensions"]:
+        observed_dimensions.add(dim_dict["dimension"])
+        # Each dimension must have at least 1 unit + its candidates list
+        assert isinstance(dim_dict["units"], list)
+        assert isinstance(dim_dict["candidates"], list)
+        assert len(dim_dict["units"]) >= 1
+
+        for unit_dict in dim_dict["units"]:
+            uid = unit_dict["id"]
+            assert uid in units_by_id, f"Unexpected unit id {uid!r} in response"
+            seen_unit_ids.add(uid)
+            unit = units_by_id[uid]
+
+            # Filter candidates belonging to THIS unit (route flattens all
+            # units' candidates under the dimension, like the real engine).
+            unit_cands = [c for c in dim_dict["candidates"] if c["unit_id"] == uid]
+
+            # ---- The contract under test ----
+            originals = [c for c in unit_cands if c["id"].endswith("__original")]
+            assert len(originals) == 1, (
+                f"Unit {uid!r} should have exactly 1 __original candidate, "
+                f"got {len(originals)} (candidates: {[c['id'] for c in unit_cands]})"
+            )
+            orig = originals[0]
+            assert orig["id"] == f"{uid}__original", (
+                f"Original candidate id should be '{uid}__original', got {orig['id']!r}"
+            )
+            assert orig["unit_id"] == uid
+            assert orig["unit_name"] == unit.unit_name
+            assert orig["description"] == unit.description, (
+                f"Original candidate description must equal the unit's description "
+                f"({unit.description!r}), got {orig['description']!r}"
+            )
+            assert orig["selection_rank"] == 0, (
+                f"Original candidate selection_rank must be 0, "
+                f"got {orig['selection_rank']}"
+            )
+
+    # Every unit we put in must have appeared in some dimension.
+    assert seen_unit_ids == set(units_by_id.keys()), (
+        f"Units missing from response: {set(units_by_id.keys()) - seen_unit_ids}"
+    )
+    # All dimensions observed match what we put in.
+    assert observed_dimensions == expected_dimensions
+
+    # Sanity: total candidates per dim equals sum of (llm + 1 original) per unit.
+    for dim_dict in data["dimensions"]:
+        dim_unit_ids = [u["id"] for u in dim_dict["units"]]
+        expected_total = sum(
+            (llm_count_per_unit[uid] + 1) for uid in dim_unit_ids
+        )
+        assert len(dim_dict["candidates"]) == expected_total, (
+            f"Dimension {dim_dict['dimension']!r} candidates total mismatch: "
+            f"expected {expected_total}, got {len(dim_dict['candidates'])}"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -17,9 +17,11 @@ interface Props {
   projectId: string | null;
   projectTitle: string | null;
   onClose: () => void;
+  /** Rendered as a full route page: drop the modal chrome (top border + close button). */
+  asPage?: boolean;
 }
 
-export default function PromptPlazaView({ projectId, projectTitle, onClose }: Props) {
+export default function PromptPlazaView({ projectId, projectTitle, onClose, asPage = false }: Props) {
   const isDefault = projectId === null;
 
   const {
@@ -119,7 +121,11 @@ export default function PromptPlazaView({ projectId, projectTitle, onClose }: Pr
   const title = isDefault ? "默认提示词" : "提示词广场";
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest">
+    <div
+      className={`relative flex h-full flex-col overflow-hidden border-outline-variant bg-surface-container-lowest ${
+        asPage ? "rounded-b-lg border-x border-b" : "rounded-lg border"
+      }`}
+    >
       <header className="flex items-center justify-between border-b border-outline-variant px-6 py-4">
         <div className="flex items-center gap-3">
           <h2 className="font-display text-xl text-primary">{title}</h2>
@@ -127,15 +133,17 @@ export default function PromptPlazaView({ projectId, projectTitle, onClose }: Pr
             <span className="text-sm text-on-surface-variant">项目：{projectTitle}</span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="关闭"
-          data-testid="plaza-close"
-          className="text-on-surface-variant hover:text-primary"
-        >
-          <span className="material-symbols-outlined">close</span>
-        </button>
+        {!asPage && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            data-testid="plaza-close"
+            className="text-on-surface-variant hover:text-primary"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        )}
       </header>
 
       {saveError && (

@@ -2,7 +2,7 @@ import React from "react";
 import type { SubStage } from "./types";
 
 const STAGES: Array<{ key: SubStage; label: string; icon: string }> = [
-  { key: "1", label: "输入灵感", icon: "edit_note" },
+  { key: "1", label: "灵感输入", icon: "edit_note" },
   { key: "2", label: "第一性拆解", icon: "account_tree" },
   { key: "3", label: "自适应发散", icon: "call_split" },
   { key: "4", label: "提交", icon: "task_alt" },
@@ -16,7 +16,7 @@ interface Props {
 
 export function StepIndicator({ current, completed, onStageClick }: Props) {
   return (
-    <div className="flex items-center gap-2 mb-6 px-6 pt-4" data-testid="step-indicator">
+    <div className="flex items-center gap-2 mb-2 px-6 pt-4" data-testid="step-indicator">
       {STAGES.map((s, idx) => {
         const isCurrent = current === s.key;
         const isCompleted = completed.includes(s.key);

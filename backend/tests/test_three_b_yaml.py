@@ -331,6 +331,91 @@ def test_firstness_decompose_yaml_schema():
     assert "top_level_summary" in data["system_prompt"] or "top_level_summary" in data["user_prompt_template"]
 
 
+# Universality regression guard (2026-09-11, 第一性拆解迭代): the original
+# prompt biased LLM output toward xianxia — example vocabulary like 灵窍/
+# 修行/天道/穿越 was sprinkled through the dimension descriptions. A new
+# user reporting a 都市 / 悬疑 / 科幻 / 历史 / 言情 brainstorm would get
+# fantasy-flavored units back. Lock the fix: the prompt must (a) explicitly
+# name ≥5 distinct genres and (b) call out genre-specific in-world validation
+# criteria for the same genres. If a future rewrite drops the genre
+# adaptation layer, this test fails loudly.
+@pytest.mark.parametrize("genre", ["玄幻", "仙侠", "历史", "都市", "科幻", "灵异", "悬疑", "言情"])
+def test_firstness_decompose_yaml_mentions_genre(genre: str):
+    import yaml
+    from pathlib import Path
+    p = Path("backend/prompts/creative/firstness_decompose.yaml")
+    content = p.read_text(encoding="utf-8")
+    assert genre in content, (
+        f"firstness_decompose.yaml 未提及题材 {genre!r} — "
+        f"提示词可能退化为单一题材(原版仅侧重玄幻/仙侠)。"
+        f"需在题材适配层加入该题材的承重维度与校验判据。"
+    )
+
+
+def test_firstness_decompose_yaml_has_genre_adaptation_layer():
+    """Lock the genre adaptation layer (承重维度 + 世界内校验 tables) so a
+    future rewrite can't silently drop it. The firstness_decompose prompt's
+    universality across 玄幻/都市/科幻/历史/悬疑/言情/灵异 depends on this
+    layer being present and readable."""
+    import yaml
+    from pathlib import Path
+    p = Path("backend/prompts/creative/firstness_decompose.yaml")
+    content = p.read_text(encoding="utf-8")
+    data = yaml.safe_load(content)
+    system = data["system_prompt"]
+    # 题材适配层 的两块:承重维度 + 世界内校验
+    assert "承重维度" in system, (
+        "firstness_decompose.yaml 缺少「承重维度」表 — "
+        "通用层框架若不附题材适配层,所有题材都会按同构方式拆解,"
+        "导致历史/都市/悬疑等题材的诊断失焦。"
+    )
+    assert "世界内校验" in system, (
+        "firstness_decompose.yaml 缺少「世界内校验」表 — "
+        "不同题材的自洽检验判据完全不同(玄幻:能否钻空子; "
+        "科幻:规则极端情况下是否自洽;悬疑:线索是否公平展示)。"
+        "没有这一层,「世界内检验」原则沦为口号。"
+    )
+
+
+def test_firstness_decompose_yaml_avoids_fantasy_only_vocabulary_in_dimensions():
+    """The original prompt baked fantasy terms (灵窍/修行/天道/穿越/外挂/献祭)
+    into the 5 dimension descriptions themselves, biasing every genre's output
+    toward xianxia vocabulary. The 2026-09-11 rewrite moved those examples
+    into the unit_name illustrative field (which the LLM only fills per the
+    current genre) and replaced dimension descriptions with genre-agnostic
+    abstractions (接口/通道/底层规则/资源池/意义解释权). Lock that the 5
+    dimension descriptions themselves don't reintroduce fantasy-flavored terms.
+
+    Note: 灵窍/修行/etc. ARE allowed in the unit_name illustrative field
+    ("如仙侠:灵窍;都市:升迁密码;科幻:黑箱") — that's genre-conditional and
+    serves as cross-genre examples. The test only inspects the 5 dimension
+    sections."""
+    import re
+    import yaml
+    from pathlib import Path
+    p = Path("backend/prompts/creative/firstness_decompose.yaml")
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    system = data["system_prompt"]
+    # Extract each ## 维度X: ... block (dimension definition + 通用方向).
+    dim_blocks = re.findall(
+        r"## 维度[一二三四五][^\n]*\n(.*?)(?=\n## |\n# |\Z)",
+        system,
+        flags=re.DOTALL,
+    )
+    assert len(dim_blocks) == 5, (
+        f"应解析到 5 个维度块,实际 {len(dim_blocks)} 个 — "
+        f"提示词结构可能变了,需要更新本测试。"
+    )
+    forbidden = ["灵窍", "修行", "天道", "外挂", "献祭", "穿越", "系统流"]
+    for i, block in enumerate(dim_blocks, start=1):
+        for term in forbidden:
+            assert term not in block, (
+                f"维度 {['一','二','三','四','五'][i-1]} 描述含题材偏向词 {term!r} — "
+                f"维度描述必须是题材中立的框架定义,不要把单一题材的子域标签"
+                f"塞进通用层。"
+            )
+
+
 # --- three_b_adaptive_diverge (Stage 2→3 prompt, added in rewrite Task 11) -----
 
 

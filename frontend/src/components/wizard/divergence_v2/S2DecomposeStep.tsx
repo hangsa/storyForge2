@@ -5,17 +5,17 @@ import type { DimensionDecomposition, Unit } from "./types";
 
 interface Props {
   dimensions: DimensionDecomposition[];
+  topLevelSummary: string;
   followUpLoadingUnitId: string | null;
   onFollowUp: (unitId: string, userQuestion: string | null) => void;
   // Footer navigation (上一步 / 下一步 / 重新生成) is registered through the
   // page-level wizard footer by CreativeDivergenceStep. The Stage-2 header
   // and the causal_map <pre> block were removed on 2026-09-08 (see git
   // history).
-  // The 「总览」 top-level summary block (added 2026-09-11) was removed on
-  // 2026-09-11 — users prefer to read dimensions directly without a
-  // preliminary narrative paragraph above them. topLevelSummary state is
-  // still persisted to three_b_state.json for round-trip with the backend;
-  // it's just no longer surfaced in the S2 page.
+  //
+  // The 「总览」 h3 title row above the top-level summary was removed on
+  // 2026-09-11 — the heading felt redundant with the body text below it.
+  // The summary paragraph itself is still surfaced (without the heading).
 }
 
 const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
@@ -49,7 +49,7 @@ function withCoreContradictionUnit(dim: DimensionDecomposition): DimensionDecomp
 }
 
 export default function S2DecomposeStep({
-  dimensions, followUpLoadingUnitId, onFollowUp,
+  dimensions, topLevelSummary, followUpLoadingUnitId, onFollowUp,
 }: Props) {
   // Defense-in-depth: callers upstream (reducer / HYDRATE) already coerce
   // undefined to [], but a stray malformed payload must not crash the
@@ -63,6 +63,19 @@ export default function S2DecomposeStep({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6">
+        {topLevelSummary && (
+          // The 「总览」 h3 title row above this paragraph was removed on
+          // 2026-09-11 — it felt redundant. Keep the summary content here
+          // so users still see the LLM's overall conclusion before
+          // expanding the 5 dimensions below.
+          <div
+            className="bg-primary-container/5 rounded-lg p-4"
+            data-testid="top-level-summary"
+          >
+            <p className="text-sm text-primary">{topLevelSummary}</p>
+          </div>
+        )}
+
         {DIMENSION_ORDER.map((key) => {
           const dim = safeDimensions.find((d) => d.dimension === key);
           if (!dim) return null;

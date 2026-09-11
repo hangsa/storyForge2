@@ -363,11 +363,14 @@ describe("CreativeDivergenceStep (4 stages)", () => {
       (enabled![0] as () => void)();
     });
 
-    // S2 must render all 5 dimension blocks (top-level summary was removed
-    // on 2026-09-11 — topLevelSummary state is still persisted, just not
-    // surfaced in the S2 page).
+    // S2 must render all 5 dimension blocks + the top-level summary
+    // paragraph (the 「总览」 h3 heading was removed on 2026-09-11;
+    // the summary text itself is still surfaced).
     await waitFor(() => {
       expect(screen.queryAllByTestId(/^dimension-/)).toHaveLength(5);
+      expect(screen.getByTestId("top-level-summary")).toHaveTextContent(
+        "一句话总结:这是一个关于修仙殖民的故事",
+      );
     });
   });
 

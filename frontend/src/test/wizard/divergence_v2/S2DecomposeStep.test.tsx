@@ -38,6 +38,7 @@ function renderS2(overrides: Partial<Parameters<typeof S2DecomposeStep>[0]> = {}
   const onFollowUp = vi.fn();
   const props = {
     dimensions: MOCK_DIMENSIONS,
+    topLevelSummary: "",
     followUpLoadingUnitId: null,
     onFollowUp,
     ...overrides,
@@ -57,6 +58,24 @@ describe("S2DecomposeStep", () => {
     renderS2();
     expect(screen.queryByText(/Stage 2 · 第一性拆解/)).toBeNull();
     expect(screen.queryByTestId("causal-map")).toBeNull();
+  });
+
+  it("renders top_level_summary paragraph without a 「总览」 heading (Round 4 — h3 removed 2026-09-11)", () => {
+    renderS2({ topLevelSummary: "一句话总结:这是一个关于修仙殖民的故事" });
+    const block = screen.getByTestId("top-level-summary");
+    expect(block).toHaveTextContent("一句话总结:这是一个关于修仙殖民的故事");
+    // The 「总览」 title row was removed on 2026-09-11 — the block is just
+    // a paragraph now, no h3 heading above it.
+    expect(block.querySelector("h3")).toBeNull();
+    expect(screen.queryByText(/^总览$/)).toBeNull();
+  });
+
+  it("top-level summary appears BEFORE dimension blocks (Round 4 — item 5)", () => {
+    renderS2({ topLevelSummary: "一句话总结:这是一个关于修仙殖民的故事" });
+    const summary = screen.getByTestId("top-level-summary");
+    const firstDim = screen.getByTestId("dimension-ontology");
+    // summary.compareDocumentPosition(firstDim) & Node.DOCUMENT_POSITION_FOLLOWING === 4
+    expect(summary.compareDocumentPosition(firstDim) & 4).toBe(4);
   });
 
   it("renders a 追问 button for every non-virtual reducible unit", () => {

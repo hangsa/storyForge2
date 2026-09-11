@@ -5,13 +5,17 @@ import type { DimensionDecomposition, Unit } from "./types";
 
 interface Props {
   dimensions: DimensionDecomposition[];
-  topLevelSummary: string;
   followUpLoadingUnitId: string | null;
   onFollowUp: (unitId: string, userQuestion: string | null) => void;
   // Footer navigation (上一步 / 下一步 / 重新生成) is registered through the
   // page-level wizard footer by CreativeDivergenceStep. The Stage-2 header
   // and the causal_map <pre> block were removed on 2026-09-08 (see git
   // history).
+  // The 「总览」 top-level summary block (added 2026-09-11) was removed on
+  // 2026-09-11 — users prefer to read dimensions directly without a
+  // preliminary narrative paragraph above them. topLevelSummary state is
+  // still persisted to three_b_state.json for round-trip with the backend;
+  // it's just no longer surfaced in the S2 page.
 }
 
 const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
@@ -45,7 +49,7 @@ function withCoreContradictionUnit(dim: DimensionDecomposition): DimensionDecomp
 }
 
 export default function S2DecomposeStep({
-  dimensions, topLevelSummary, followUpLoadingUnitId, onFollowUp,
+  dimensions, followUpLoadingUnitId, onFollowUp,
 }: Props) {
   // Defense-in-depth: callers upstream (reducer / HYDRATE) already coerce
   // undefined to [], but a stray malformed payload must not crash the
@@ -59,20 +63,6 @@ export default function S2DecomposeStep({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6">
-        {topLevelSummary && (
-          // Round 4: 总览提到最前,带显眼样式,用户进入 S2 第一眼就
-          // 看到 5 维度的浓缩结论,再展开看具体单元细节。
-          <div
-            className="bg-primary-container/5 rounded-lg p-4"
-            data-testid="top-level-summary"
-          >
-            <h3 className="font-display text-sm font-semibold text-primary-container mb-1">
-              总览
-            </h3>
-            <p className="text-sm text-primary">{topLevelSummary}</p>
-          </div>
-        )}
-
         {DIMENSION_ORDER.map((key) => {
           const dim = safeDimensions.find((d) => d.dimension === key);
           if (!dim) return null;

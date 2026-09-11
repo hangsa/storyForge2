@@ -213,7 +213,6 @@ export default function CreativeDivergenceStep({
         {state.currentSubStage === "2" && (
           <S2DecomposeStep
             dimensions={state.dimensions}
-            topLevelSummary={state.topLevelSummary}
           />
         )}
 

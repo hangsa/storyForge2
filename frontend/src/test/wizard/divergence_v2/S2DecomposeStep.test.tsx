@@ -38,7 +38,6 @@ function renderS2(overrides: Partial<Parameters<typeof S2DecomposeStep>[0]> = {}
   const onFollowUp = vi.fn();
   const props = {
     dimensions: MOCK_DIMENSIONS,
-    topLevelSummary: "",
     followUpLoadingUnitId: null,
     onFollowUp,
     ...overrides,
@@ -100,28 +99,10 @@ describe("S2DecomposeStep", () => {
     expect(screen.queryAllByTestId(/^dimension-/)).toHaveLength(0);
   });
 
-  // ── Round 4 — top-level summary moves to top ──────────────────────
-
-  it("renders top_level_summary with prominent styling (Round 4)", () => {
-    renderS2({ topLevelSummary: "总览文本" });
-    const summary = screen.getByTestId("top-level-summary");
-    expect(summary).toHaveTextContent("总览文本");
-  });
-
-  it("top-level summary appears BEFORE dimension blocks (Round 4 — item 5)", () => {
-    const { container } = renderS2({ topLevelSummary: "总览文本" });
-    // First non-relative-positioned child of the scroll container should be
-    // the summary block; dimension blocks come after it.
-    const summary = screen.getByTestId("top-level-summary");
-    const ontologyBlock = screen.getByTestId("dimension-ontology");
-    // summary comes before ontology in DOM order.
-    expect(
-      summary.compareDocumentPosition(ontologyBlock) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    // Also sanity-check the scroll container directly.
-    const scroll = container.querySelector(".overflow-y-auto") as HTMLElement;
-    expect(scroll.firstElementChild).toBe(summary);
-  });
+  // 「总览」 top-level summary was removed on 2026-09-11 — the scroll
+  // container now goes straight to dimension blocks. The state field
+  // `state.topLevelSummary` is still persisted (round-trip with backend)
+  // but S2 no longer surfaces it. See S2DecomposeStep.tsx for the rationale.
 
   // ── Round 5 — narrative_physics prepends 核心矛盾 virtual unit ──────
 

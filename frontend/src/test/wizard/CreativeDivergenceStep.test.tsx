@@ -15,6 +15,7 @@ const { mockApi } = vi.hoisted(() => ({
     postThreeBAdvance: vi.fn(),
     getThreeBState: vi.fn().mockResolvedValue(null),
     deleteThreeBState: vi.fn(),
+    getProjectStatus: vi.fn().mockResolvedValue({ title: "T", genre: "" }),
     listGenres: vi.fn().mockResolvedValue([]),
     // Task 12 (2026-09-10): S1InputStep reads creative dimensions via
     // useCreativeDimensions → api.listActiveCreativeDimensions. Populate

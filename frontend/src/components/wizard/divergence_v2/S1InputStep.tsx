@@ -6,6 +6,13 @@ import type { RawIntent } from "./types";
 interface Props {
   projectId: string;
   initial: RawIntent | null;
+  /**
+   * 新建项目时用户在 CreateProjectModal 选的题材模板 ID。
+   * 当 rawIntent 还没落盘(initial === null)时,用它预填题材 dropdown,
+   * 避免回退到硬编码的 DEFAULT_GENRE_FALLBACK。
+   * rawIntent 已存在时,initial.genre_primary 优先级更高。
+   */
+  defaultGenre?: string;
   onSubmitted: (intent: RawIntent) => void;
   /**
    * Bubble the latest submit handler + form validity up so the parent can
@@ -34,7 +41,7 @@ function resolveInitialValue(
 }
 
 export default function S1InputStep({
-  projectId, initial, onSubmitted, onSubmitReady,
+  projectId, initial, defaultGenre, onSubmitted, onSubmitReady,
 }: Props) {
   const { subject, tone, style, loading, error } = useCreativeDimensions();
 
@@ -48,7 +55,7 @@ export default function S1InputStep({
 
   const [prompt, setPrompt] = useState(initial?.prompt ?? "");
   const [genrePrimary, setGenrePrimary] = useState(() =>
-    resolveInitialValue(initial?.genre_primary, subjectActiveIds, subject[0]?.id) || DEFAULT_GENRE_FALLBACK
+    resolveInitialValue(initial?.genre_primary ?? defaultGenre, subjectActiveIds, subject[0]?.id) || DEFAULT_GENRE_FALLBACK
   );
   const [toneVal, setTone] = useState(() => resolveInitialValue(initial?.tone, toneActiveIds, tone[0]?.id));
   const [styleVal, setStyle] = useState(() => resolveInitialValue(initial?.style, styleActiveIds, style[0]?.id));
@@ -67,11 +74,25 @@ export default function S1InputStep({
   // (e.g. `toneVal === ""` because resolveInitialValue returned "" with
   // no active ids). Snap to the first active option so the trigger
   // button always renders a meaningful label.
+  //
+  // 第二个责任:defaultGenre 在 S1InputStep 首次渲染后才异步到达(useThreeBDivergence
+  // 的 getProjectStatus 在 mount effect 里发起,完成时 defaultGenre 从 "" 变 "xuanyi")。
+  // useState 的 lazy initializer 只跑一次,故需此 effect 把迟到的 defaultGenre 写入 state。
+  // 仅在 initial 为空(用户尚未提交过灵感输入)时覆盖,避免覆盖用户已选的值。
   useEffect(() => {
     if (subject.length > 0 && !subjectActiveIds.has(genrePrimary)) {
       setGenrePrimary(subject[0].id);
+      return;
     }
-  }, [subject, subjectActiveIds, genrePrimary]);
+    if (
+      defaultGenre &&
+      !initial?.genre_primary &&
+      subjectActiveIds.has(defaultGenre) &&
+      genrePrimary !== defaultGenre
+    ) {
+      setGenrePrimary(defaultGenre);
+    }
+  }, [subject, subjectActiveIds, genrePrimary, defaultGenre, initial?.genre_primary]);
   useEffect(() => {
     if (tone.length > 0 && !toneActiveIds.has(toneVal)) {
       setTone(tone[0].id);

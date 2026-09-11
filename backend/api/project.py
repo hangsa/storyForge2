@@ -409,5 +409,6 @@ async def get_project_status(project_id: str):
             "current_stage": data.get("current_stage", "INIT"),
             "title": _resolve_display_title(fm, project_id, fallback_title),
             "created_at": data.get("created_at", ""),
+            "genre": data.get("genre", ""),
         },
     }

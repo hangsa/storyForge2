@@ -18,7 +18,7 @@ export default function CreativeDivergenceStep({
   projectId, onAdvanceSuccess,
 }: Props) {
   const {
-    state, decompose, diverge, regenerateUnit, selectCandidate,
+    state, projectGenre, decompose, diverge, regenerateUnit, selectCandidate,
     commit, editConcept, advance, jumpToStage,
   } = useThreeBDivergence(projectId);
 
@@ -204,6 +204,7 @@ export default function CreativeDivergenceStep({
           <S1InputStep
             projectId={projectId}
             initial={state.rawIntent}
+            defaultGenre={projectGenre || undefined}
             onSubmitted={handleS1Submit}
             onSubmitReady={handleS1Ready}
           />

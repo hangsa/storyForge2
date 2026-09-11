@@ -159,3 +159,46 @@ def test_get_project_status_falls_back_when_no_concept(tmp_path):
     resp = client.get(f"/api/project/{PROJ_NO_CONCEPT}/status")
     detail = resp.json()["detail"]
     assert detail["title"] == "原标题"
+
+
+def test_get_project_status_exposes_genre(tmp_path):
+    """灵感输入步骤需要项目创建时选的题材模板 ID。status 端点必须
+    把 project.json 的 genre 字段透传出来,否则前端无法继承。"""
+    proj_dir = tmp_path / "proj_xianxia"
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "project.json").write_text(
+        json.dumps(
+            {
+                "id": "proj_xianxia",
+                "title": "xianxia 测试",
+                "genre": "xianxia",
+                "current_stage": "INIT",
+                "created_at": "2026-09-11T00:00:00",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    resp = client.get("/api/project/proj_xianxia/status")
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    assert detail["genre"] == "xianxia"
+
+
+def test_get_project_status_genre_empty_when_project_json_missing_genre(tmp_path):
+    """向后兼容:旧 project.json 没有 genre 字段 → status 返回空字符串,
+    让前端 resolveInitialValue 的下一级 fallback 接管。"""
+    proj_dir = tmp_path / "proj_legacy"
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "project.json").write_text(
+        json.dumps(
+            {"id": "proj_legacy", "title": "legacy"},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    resp = client.get("/api/project/proj_legacy/status")
+    detail = resp.json()["detail"]
+    assert detail["genre"] == ""

@@ -438,6 +438,7 @@ export interface ProjectStatus {
   current_stage: string;
   title: string;
   created_at: string;
+  genre: string;
 }
 
 export interface ProgressFile {

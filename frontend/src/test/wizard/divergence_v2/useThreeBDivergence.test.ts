@@ -22,6 +22,7 @@ const { mockApi } = vi.hoisted(() => ({
     postThreeBCommit: vi.fn(),
     postThreeBEditConcept: vi.fn(),
     postThreeBAdvance: vi.fn(),
+    getProjectStatus: vi.fn().mockResolvedValue({ genre: "" }),
   },
 }));
 
@@ -65,7 +66,8 @@ function makeDimension(
 const rawIntent = {
   prompt: "a cyberpunk mystery",
   genre_primary: "sci_fi",
-  genre_secondary: null,
+  tone: "黑暗",
+  style: "多线",
 };
 
 const committedConcept: CommittedConcept = {
@@ -187,6 +189,12 @@ describe("useThreeBDivergence reducer (via hook)", () => {
     expect(result.current.state.topLevelSummary).toBe("new ts");
     expect(result.current.state.completedSubStages).toContain("2");
     expect(result.current.state.currentSubStage).toBe("2");
+    // Regression (Bug #1, 2026-09-10): decompose must populate state.rawIntent
+    // in-session so the S2 footer 「重新生成」 button registers on first
+    // entry. Previously STAGE1_SUCCESS was defined but never dispatched,
+    // so state.rawIntent stayed null until the next HYDRATE on remount —
+    // hiding the button until the user exited and re-entered the project.
+    expect(result.current.state.rawIntent).toEqual(rawIntent);
   });
 
   it("DIVERGE_SUCCESS clears committedConcept + noveltyScores and marks stage 3 completed", async () => {

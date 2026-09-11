@@ -22,10 +22,12 @@ interface State {
   followUpLoadingUnitId: string | null;
   currentSubStage: SubStage;
   completedSubStages: SubStage[];
+  projectGenre: string;
 }
 
 type Action =
   | { type: "HYDRATE"; state: ThreeBState | null }
+  | { type: "HYDRATE_PROJECT_GENRE"; genre: string }
   | { type: "STAGE1_SUCCESS"; intent: RawIntent }
   | { type: "DECOMPOSE_START" }
   | { type: "DECOMPOSE_SUCCESS"; dimensions: DimensionDecomposition[]; causalMap: string; topLevelSummary: string }
@@ -63,6 +65,7 @@ const initial: State = {
   followUpLoadingUnitId: null,
   currentSubStage: "1",
   completedSubStages: [],
+  projectGenre: "",
 };
 
 function reducer(state: State, action: Action): State {
@@ -99,6 +102,8 @@ function reducer(state: State, action: Action): State {
         completedSubStages: completed,
       };
     }
+    case "HYDRATE_PROJECT_GENRE":
+      return { ...state, projectGenre: action.genre };
     case "JUMP_TO_STAGE":
       return { ...state, currentSubStage: action.stage, error: null };
     case "DECOMPOSE_START":
@@ -217,6 +222,11 @@ export function useThreeBDivergence(projectId: string) {
 
   useEffect(() => {
     let cancelled = false;
+    // Fire both fetches in parallel. The 3b state file doesn't exist for
+    // fresh projects, so the catch branch is normal, not an error.
+    // `getProjectStatus` is best-effort: project genre is only used to
+    // pre-fill the S1 subject dropdown when no rawIntent is saved yet —
+    // failure here must not block HYDRATE or show an error toast.
     api
       .getThreeBState(projectId)
       .then((s) => {
@@ -227,15 +237,38 @@ export function useThreeBDivergence(projectId: string) {
         // branch restores initial state and shows the upgrade toast.
         if (!cancelled) dispatch({ type: "HYDRATE", state: null });
       });
+    api
+      .getProjectStatus(projectId)
+      .then((status) => {
+        if (cancelled) return;
+        const genre = status && typeof status.genre === "string" ? status.genre : "";
+        dispatch({ type: "HYDRATE_PROJECT_GENRE", genre });
+      })
+      .catch(() => {
+        // leave projectGenre as ""; S1InputStep's fallback chain still
+        // resolves to subject[0]?.id or DEFAULT_GENRE_FALLBACK
+      });
     return () => {
       cancelled = true;
     };
   }, [projectId]);
 
-  const decompose = useCallback(async (intent: RawIntent) => {
+  const decompose = useCallback(async (intent: RawIntent, userModifications = "") => {
+    // Persist rawIntent in-session BEFORE the API call so the footer regen
+    // handler in CreativeDivergenceStep registers on first entry to S2.
+    // Previously STAGE1_SUCCESS was defined in the reducer but never
+    // dispatched, so state.rawIntent stayed null until the next mount's
+    // HYDRATE pulled it from three_b_state.json — meaning the footer's
+    // 「重新生成」 button was hidden until the user exited and re-entered
+    // the project. Backend already persists raw_intent during /decompose;
+    // this dispatch just mirrors that into the reducer.
+    dispatch({ type: "STAGE1_SUCCESS", intent });
     dispatch({ type: "DECOMPOSE_START" });
     try {
-      const r = await api.postThreeBDecompose(projectId, intent);
+      const r = await api.postThreeBDecompose(projectId, {
+        ...intent,
+        user_modifications: userModifications || undefined,
+      });
       dispatch({
         type: "DECOMPOSE_SUCCESS",
         dimensions: r.dimensions,
@@ -356,6 +389,7 @@ export function useThreeBDivergence(projectId: string) {
 
   return {
     state,
+    projectGenre: state.projectGenre,
     decompose,
     followUp,
     diverge,

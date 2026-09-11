@@ -65,11 +65,12 @@ export default function S2DecomposeStep({
       <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6">
         {topLevelSummary && (
           // The 「总览」 h3 title row above this paragraph was removed on
-          // 2026-09-11 — it felt redundant. Keep the summary content here
-          // so users still see the LLM's overall conclusion before
-          // expanding the 5 dimensions below.
+          // 2026-09-11 — it felt redundant. The summary block keeps a
+          // tighter py-2 (vs the original p-4) so the overall conclusion
+          // sits as a compact header strip above the 5 dimensions rather
+          // than dominating the page.
           <div
-            className="bg-primary-container/5 rounded-lg p-4"
+            className="bg-primary-container/5 rounded-lg py-2 px-3"
             data-testid="top-level-summary"
           >
             <p className="text-sm text-primary">{topLevelSummary}</p>

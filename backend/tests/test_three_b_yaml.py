@@ -394,3 +394,83 @@ def test_all_v2_yamls_in_creative_dir():
     expected = {"firstness_decompose", "three_b_follow_up", "three_b_adaptive_diverge", "three_b_commit"}
     found = {p.stem for p in Path("backend/prompts/creative/").glob("*.yaml")}
     assert expected.issubset(found)
+
+
+# --- Format-kwargs drift guard -------------------------------------------------
+
+
+# Regression (2026-09-11, proj_* browser smoke): the WIP commit 501e79f removed
+# `genre_secondary` from RawIntent / DecomposeRequest but the
+# firstness_decompose.yaml user_prompt_template still referenced
+# `{genre_secondary}`. The engine's `_invoke_llm_json_with_block` formats
+# the template with kwargs pulled from RawIntent + a couple of literals, so
+# the missing placeholder surfaced as a 503 with `KeyError: 'genre_secondary'`
+# at /decompose — the S1→S2 transition fired silently (frontend coerced the
+# 503 detail string to a successful empty-decomposition result because
+# client.ts doesn't throw on FastAPI bare-detail 4xx/5xx envelopes; see
+# `project_frontend_request_helper_fastapi_bare_detail.md`). The user saw
+# "未自动触发拆解,未展示「拆解中」进度".
+#
+# This test loads each 3B prompt and formats the user_prompt_template with
+# the exact kwargs the engine passes, asserting no KeyError. It catches both
+# directions of drift: a renamed/removed RawIntent field that the prompt
+# still references, AND a new field the prompt adds that the engine doesn't
+# supply. The literal values are chosen so substitution can't accidentally
+# pass when a placeholder is silently dropped (each kwarg appears at least
+# once in the formatted string and is a non-empty sentinel).
+def test_prompts_format_with_engine_kwargs_without_keyerror():
+    """Format every 3B prompt's user_prompt_template with the kwargs the
+    engine actually passes. A KeyError here means the prompt's placeholder
+    set drifted out of sync with the engine's call site — the exact bug that
+    surfaced on 2026-09-11 (firstness_decompose referencing
+    `{genre_secondary}` after the field was removed from RawIntent).
+    """
+    from backend.services.prompt_override_store import load_prompt_effective
+    from backend.creative_os.three_b_engine import RawIntent
+
+    sample = RawIntent(prompt="一个赛博朋克 + 修仙的脑洞", genre_primary="cool_novel", tone="rexue", style="shuangwen")
+
+    # Each entry: (prompt_name, kwargs dict the engine calls .format(**kwargs) with)
+    cases = [
+        ("firstness_decompose", {
+            "raw_intent": sample,
+            "prompt": sample.prompt,
+            "genre_primary": sample.genre_primary,
+            "tone": sample.tone,
+            "style": sample.style,
+            "user_modifications": "",
+        }),
+        ("three_b_adaptive_diverge", {
+            "raw_intent": sample,
+            "prompt": sample.prompt,
+            "genre_primary": sample.genre_primary,
+            "tone": sample.tone,
+            "style": sample.style,
+            "dimension": "ontology",
+            "unit_name": "灵窍",
+            "unit_description": "灵窍是接口",
+        }),
+    ]
+    for name, kwargs in cases:
+        prompt = load_prompt_effective(name)
+        tpl = prompt["user_prompt_template"]
+        try:
+            rendered = tpl.format(**kwargs)
+        except KeyError as e:
+            pytest.fail(
+                f"{name}.yaml user_prompt_template references {{{e.args[0]}}} "
+                f"but engine.decompose/diverge does not pass that kwarg. "
+                f"Either add the kwarg to the engine call site or drop the "
+                f"placeholder from the prompt — see 2026-09-11 browser "
+                f"decompose regression for context."
+            )
+        # Sanity: the rendered text should contain at least the prompt and
+        # primary genre, otherwise the placeholder was silently dropped
+        # (e.g. doubled-up braces that .format() consumes without inserting).
+        assert sample.prompt in rendered, (
+            f"{name}.yaml: rendered template is missing the literal prompt — "
+            f"placeholder substitution may be silently failing"
+        )
+        assert sample.genre_primary in rendered, (
+            f"{name}.yaml: rendered template is missing the literal genre_primary"
+        )

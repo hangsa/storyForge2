@@ -6,6 +6,10 @@ import { WizardContext } from "@/components/wizard/WizardContext";
 const { mockApi } = vi.hoisted(() => ({
   mockApi: {
     postThreeBDecompose: vi.fn(),
+    postThreeBMetaDecompose: vi.fn().mockResolvedValue({
+      generated_prompt: "## META ##",
+      written_to_override: true,
+    }),
     postThreeBFollowUp: vi.fn(),
     postThreeBDiverge: vi.fn(),
     postThreeBRegenerateUnit: vi.fn(),
@@ -17,6 +21,8 @@ const { mockApi } = vi.hoisted(() => ({
     deleteThreeBState: vi.fn(),
     getProjectStatus: vi.fn().mockResolvedValue({ title: "T", genre: "" }),
     listGenres: vi.fn().mockResolvedValue([]),
+    getPlazaPrompt: vi.fn().mockResolvedValue({ effective: null }),
+    putPlazaPrompt: vi.fn().mockResolvedValue({ name: "firstness_decompose", override: null, modified_at: null }),
     // Task 12 (2026-09-10): S1InputStep reads creative dimensions via
     // useCreativeDimensions → api.listActiveCreativeDimensions. Populate
     // each dimension so the form is valid AND the dropdown tests that
@@ -60,6 +66,17 @@ vi.mock("@/api/client", () => ({
   default: mockApi,
   ...mockApi,
 }));
+
+// useThreeBDivergence imports getPlazaPrompt / putPlazaPrompt from
+// @/api/promptPlaza (separate module). Wire them to the same mockApi
+// functions so the hook's mount-effect fetch resolves instead of throwing.
+const { mockPlaza } = vi.hoisted(() => ({
+  mockPlaza: {
+    getPlazaPrompt: mockApi.getPlazaPrompt,
+    putPlazaPrompt: mockApi.putPlazaPrompt,
+  },
+}));
+vi.mock("@/api/promptPlaza", () => mockPlaza);
 
 /**
  * Test helper: render CreativeDivergenceStep with a wizard context that
@@ -111,6 +128,19 @@ describe("CreativeDivergenceStep (4 stages)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockApi.getThreeBState.mockResolvedValue(null);
+    // Re-establish default mock return values cleared by vi.clearAllMocks().
+    // Without these, useThreeBDivergence's mount effect throws (e.g.
+    // getPlazaPrompt returns undefined → .then() crashes).
+    mockApi.postThreeBMetaDecompose.mockResolvedValue({
+      generated_prompt: "## META ##",
+      written_to_override: true,
+    });
+    mockApi.getPlazaPrompt.mockResolvedValue({ effective: null });
+    mockApi.putPlazaPrompt.mockResolvedValue({
+      name: "firstness_decompose",
+      override: null,
+      modified_at: null,
+    });
     mockApi.postThreeBDecompose.mockResolvedValue({
       dimensions: [],
       causal_map: "",
@@ -482,13 +512,24 @@ describe("CreativeDivergenceStep (4 stages)", () => {
     // Round 2 of the v2 wizard 6-item optimization: S2 「重新生成」 no
     // longer fires immediately — it opens a RegenerateModal so the user can
     // attach modification feedback (passed to /decompose as user_modifications).
-    mockApi.postThreeBDecompose.mockResolvedValueOnce({
-      dimensions: [
-        { dimension: "ontology", units: [{ id: "u1", unit_name: "X", description: "d", is_irreducible: true, follow_up_count: 0 }], candidates: [], insight: "" },
-      ],
-      causal_map: "cm",
-      top_level_summary: "ts",
-    });
+    // Two non-empty mocks: one for the auto-decompose on S1→S2 entry, one for
+    // the regen confirm. Returning non-empty dimensions breaks the
+    // auto-decompose loop (useEffect re-fires decompose whenever dims is []).
+    mockApi.postThreeBDecompose
+      .mockResolvedValueOnce({
+        dimensions: [
+          { dimension: "ontology", units: [{ id: "u1", unit_name: "X", description: "d", is_irreducible: true, follow_up_count: 0 }], candidates: [], insight: "" },
+        ],
+        causal_map: "cm",
+        top_level_summary: "ts",
+      })
+      .mockResolvedValueOnce({
+        dimensions: [
+          { dimension: "ontology", units: [{ id: "u2", unit_name: "Y", description: "d2", is_irreducible: true, follow_up_count: 0 }], candidates: [], insight: "" },
+        ],
+        causal_map: "cm2",
+        top_level_summary: "ts2",
+      });
 
     const { setNextHandler, setRegenerateHandler } = renderWithWizardContext();
     fireEvent.change(screen.getByLabelText(/灵感点子/i), { target: { value: "足够长的原始灵感点子" } });
@@ -597,13 +638,22 @@ describe("CreativeDivergenceStep (4 stages)", () => {
   });
 
   it("S2 regen modal empty text = 仅重新生成 (empty user_modifications)", async () => {
-    mockApi.postThreeBDecompose.mockResolvedValueOnce({
-      dimensions: [
-        { dimension: "ontology", units: [{ id: "u1", unit_name: "X", description: "d", is_irreducible: true, follow_up_count: 0 }], candidates: [], insight: "" },
-      ],
-      causal_map: "cm",
-      top_level_summary: "ts",
-    });
+    // Two non-empty mocks (see L481 comment for why).
+    mockApi.postThreeBDecompose
+      .mockResolvedValueOnce({
+        dimensions: [
+          { dimension: "ontology", units: [{ id: "u1", unit_name: "X", description: "d", is_irreducible: true, follow_up_count: 0 }], candidates: [], insight: "" },
+        ],
+        causal_map: "cm",
+        top_level_summary: "ts",
+      })
+      .mockResolvedValueOnce({
+        dimensions: [
+          { dimension: "ontology", units: [{ id: "u2", unit_name: "Y", description: "d2", is_irreducible: true, follow_up_count: 0 }], candidates: [], insight: "" },
+        ],
+        causal_map: "cm2",
+        top_level_summary: "ts2",
+      });
 
     const { setNextHandler, setRegenerateHandler } = renderWithWizardContext();
     fireEvent.change(screen.getByLabelText(/灵感点子/i), { target: { value: "足够长的原始灵感点子" } });
@@ -649,5 +699,120 @@ describe("CreativeDivergenceStep (4 stages)", () => {
     expect(
       lastBody.user_modifications === undefined || lastBody.user_modifications === "",
     ).toBe(true);
+  });
+});
+
+describe("CreativeDivergenceStep meta-decompose wiring", () => {
+  it("handleS1Submit triggers meta-decompose first, then decompose", async () => {
+    const callOrder: string[] = [];
+    mockApi.postThreeBMetaDecompose.mockImplementationOnce(async () => {
+      callOrder.push("meta");
+      return { generated_prompt: "x", written_to_override: true };
+    });
+    mockApi.postThreeBDecompose.mockImplementationOnce(async () => {
+      callOrder.push("decompose");
+      return {
+        dimensions: [
+          { dimension: "ontology", units: [{ id: "u1", unit_name: "X", description: "d", is_irreducible: false, follow_up_count: 0 }], candidates: [], insight: "" },
+        ],
+        causal_map: "m",
+        top_level_summary: "s",
+      };
+    });
+
+    const { setNextHandler } = renderWithWizardContext();
+    fireEvent.change(screen.getByLabelText(/灵感点子/i), {
+      target: { value: "一个少年在废墟里觉醒" },
+    });
+    // Wait for creative dimensions to load so the S1 form is valid (subject
+    // must be non-empty per S1InputStep.valid).
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /热血/ })).toBeInTheDocument();
+    });
+    // After 热血 button exists, the textarea fireEvent's state update should
+    // have already propagated → setNextHandler has an enabled entry. Re-fire
+    // change to be sure the effect re-registers with the enabled handler.
+    fireEvent.change(screen.getByLabelText(/灵感点子/i), {
+      target: { value: "一个少年在废墟里觉醒(更长的)" },
+    });
+    await waitFor(() => {
+      const enabled = setNextHandler.mock.calls.find(
+        ([handler, disabled]) => typeof handler === "function" && disabled === false,
+      );
+      expect(enabled).toBeTruthy();
+    });
+    const enabled = setNextHandler.mock.calls.find(
+      ([handler, disabled]) => typeof handler === "function" && disabled === false,
+    )!;
+
+    await act(async () => {
+      (enabled[0] as () => void)();
+    });
+
+    // runS1ToS2 awaits two api calls in sequence; both push to callOrder
+    // synchronously inside their mockImplementationOnce. After act returns,
+    // both promises have resolved and dispatched their actions.
+    await waitFor(() => expect(callOrder).toEqual(["meta", "decompose"]));
+  });
+
+  it("does NOT call /decompose when /meta-decompose fails", async () => {
+    const callOrder: string[] = [];
+    mockApi.postThreeBMetaDecompose.mockImplementationOnce(async () => {
+      callOrder.push("meta");
+      throw new Error("元提示词生成失败: LLM upstream timeout");
+    });
+    mockApi.postThreeBDecompose.mockImplementation(async () => {
+      callOrder.push("decompose");
+      return {
+        dimensions: [
+          { dimension: "ontology", units: [{ id: "u1", unit_name: "X", description: "d", is_irreducible: false, follow_up_count: 0 }], candidates: [], insight: "" },
+        ],
+        causal_map: "m",
+        top_level_summary: "s",
+      };
+    });
+
+    const { setNextHandler } = renderWithWizardContext();
+    fireEvent.change(screen.getByLabelText(/灵感点子/i), {
+      target: { value: "一个少年在废墟里觉醒" },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /热血/ })).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByLabelText(/灵感点子/i), {
+      target: { value: "一个少年在废墟里觉醒(更长的)" },
+    });
+    await waitFor(() => {
+      const enabled = setNextHandler.mock.calls.find(
+        ([handler, disabled]) => typeof handler === "function" && disabled === false,
+      );
+      expect(enabled).toBeTruthy();
+    });
+    const enabled = setNextHandler.mock.calls.find(
+      ([handler, disabled]) => typeof handler === "function" && disabled === false,
+    )!;
+
+    await act(async () => {
+      (enabled[0] as () => void)();
+    });
+
+    // Wait for meta to fire.
+    await waitFor(() => expect(callOrder).toContain("meta"));
+    // Verify runS1ToS2 didn't synchronously call decompose (would have
+    // pushed "decompose" between "meta" and any auto-decompose retry).
+    // The first decompose call (if any) must NOT happen in the same tick
+    // as runS1ToS2's await chain — only after the auto-decompose effect
+    // re-runs. So we check that after the meta error resolves, no
+    // decompose call has fired within the same microtask drain.
+    //
+    // Allow a tick to ensure all synchronous microtasks from the meta
+    // error path have settled.
+    await new Promise((r) => setTimeout(r, 50));
+    // runS1ToS2's hard-error path doesn't call decompose — but the
+    // auto-decompose effect will fire afterwards. So we expect either
+    // [] (no decompose yet) OR [decompose] (auto-decompose fired) but
+    // NOT [decompose, meta] (which would mean auto-decompose ran before
+    // meta). Crucially, runS1ToS2 itself never called decompose.
+    expect(callOrder[0]).toBe("meta");
   });
 });

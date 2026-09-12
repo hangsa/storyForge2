@@ -5,6 +5,7 @@ import S3DivergeStep from "./divergence_v2/S3DivergeStep";
 import S4CommitStep from "./divergence_v2/S4CommitStep";
 import { StepIndicator } from "./divergence_v2/StepIndicator";
 import { ConfirmNextDialog } from "./divergence_v2/ConfirmNextDialog";
+import { RegenerateModal } from "@/components/shared/RegenerateModal";
 import { useOptionalWizard } from "./WizardContext";
 import { hasDownstreamData, useThreeBDivergence } from "./divergence_v2/useThreeBDivergence";
 import type { RawIntent, SubStage } from "./divergence_v2/types";
@@ -18,13 +19,20 @@ export default function CreativeDivergenceStep({
   projectId, onAdvanceSuccess,
 }: Props) {
   const {
-    state, projectGenre, decompose, diverge, regenerateUnit, selectCandidate,
+    state, projectGenre, runS1ToS2, savePrompt,
+    decompose, diverge, regenerateUnit, selectCandidate,
     commit, editConcept, advance, jumpToStage,
   } = useThreeBDivergence(projectId);
 
   const wizard = useOptionalWizard();
 
   const [confirmNext, setConfirmNext] = useState<{ target: SubStage; affected: SubStage[] } | null>(null);
+
+  // S2 footer 「重新生成」 opens a modal for modification suggestions before
+  // re-running /decompose (Round 2 — item 3 of the v2 wizard 6-item
+  // optimization). Previously the handler fired decompose() directly and
+  // bypassed user_modifications, so the user couldn't attach feedback.
+  const [regenModalOpen, setRegenModalOpen] = useState(false);
 
   // S1 (灵感输入) submits via the page-level wizard footer, not an in-stage
   // button — see S1InputStep's onSubmitReady. We track the latest handler
@@ -79,14 +87,16 @@ export default function CreativeDivergenceStep({
     }
 
     // ── Regenerate handler ──────────────────────────────────────────
-    // S2 re-runs /decompose with the current raw intent. S3 re-runs
-    // /diverge (the bulk "全部重新生成" button moved to the footer on
-    // 2026-09-08 as a sibling of "下一步:提交 →"). S4 keeps its in-stage
-    // 「重新生成」 + 「全部重新生成」 buttons, so the footer slot stays
-    // clear there to avoid two "重新生成" buttons on one screen.
+    // S2 opens a RegenerateModal for modification suggestions; the actual
+    // decompose call (with user_modifications) is dispatched from the
+    // modal's onConfirm below. S3 re-runs /diverge directly (the bulk
+    // "全部重新生成" button moved to the footer on 2026-09-08 as a sibling
+    // of "下一步:提交 →"). S4 keeps its in-stage 「重新生成」 + 「全部重新
+    // 生成」 buttons, so the footer slot stays clear there to avoid two
+    // "重新生成" buttons on one screen.
     if (setRegen) {
       if (sub === "2" && state.rawIntent) {
-        setRegen(() => { decompose(state.rawIntent!); }, state.loading);
+        setRegen(() => { setRegenModalOpen(true); }, state.loading);
       } else if (sub === "3") {
         setRegen(() => { diverge(); }, state.loading);
       } else {
@@ -110,11 +120,14 @@ export default function CreativeDivergenceStep({
       );
     } else if (sub === "2") {
       const disabled = state.loading;
+      const loadingLabel = state.metaLoading
+        ? "生成专用提示词中…"
+        : "拆解中…";
       setNext(
         () => requestNext("3"),
         disabled,
         "下一步:发散 →",
-        "拆解中…",
+        loadingLabel,
       );
     } else if (sub === "3") {
       const disabled = state.loading;
@@ -140,19 +153,30 @@ export default function CreativeDivergenceStep({
       setNext(null, false);
       setPrev(null);
       setRegen?.(null, false);
+      setRegenModalOpen(false);
     };
     // requestNext / jumpToStage / advance are stable from useThreeBDivergence
     // (useCallback), so we don't need to list them. The shape of the
     // registration changes per sub-stage; we re-run the effect whenever the
     // relevant inputs change.
-  }, [state.currentSubStage, state.loading, state.committedConcept, state.rawIntent, s1Ready.handler, s1Ready.valid]);
+  }, [state.currentSubStage, state.loading, state.metaLoading, state.committedConcept, state.rawIntent, s1Ready.handler, s1Ready.valid]);
 
   // 进入 S2 时若 dimensions 为空自动跑 decompose
+  // Round 7 (2026-09-12): also guard on !state.metaLoading so the auto-
+  // decompose doesn't race with the S1→S2 two-stage runS1ToS2 (meta →
+  // decompose) flow. Without this, the auto-decompose could fire while
+  // meta is still in flight, leading to a duplicate /decompose call.
   useEffect(() => {
-    if (state.currentSubStage === "2" && state.dimensions.length === 0 && state.rawIntent && !state.loading) {
+    if (
+      state.currentSubStage === "2" &&
+      state.dimensions.length === 0 &&
+      state.rawIntent &&
+      !state.loading &&
+      !state.metaLoading
+    ) {
       decompose(state.rawIntent);
     }
-  }, [state.currentSubStage, state.dimensions.length, state.rawIntent, state.loading, decompose]);
+  }, [state.currentSubStage, state.dimensions.length, state.rawIntent, state.loading, state.metaLoading, decompose]);
 
   // 「下一步」按钮触发 REQUEST_NEXT:检查下游,有则 dialog
   function requestNext(target: SubStage) {
@@ -185,8 +209,8 @@ export default function CreativeDivergenceStep({
 
   const handleS1Submit = useCallback((intent: RawIntent) => {
     jumpToStage("2");
-    decompose(intent);
-  }, [jumpToStage, decompose]);
+    runS1ToS2(intent);
+  }, [jumpToStage, runS1ToS2]);
 
   return (
     <div data-testid="creative-divergence-step" className="flex flex-col flex-1 min-h-0">
@@ -214,6 +238,9 @@ export default function CreativeDivergenceStep({
           <S2DecomposeStep
             dimensions={state.dimensions}
             topLevelSummary={state.topLevelSummary}
+            decomposePrompt={state.decomposePrompt}
+            promptBusy={state.promptBusy}
+            onSavePrompt={savePrompt}
           />
         )}
 
@@ -248,6 +275,18 @@ export default function CreativeDivergenceStep({
         affectedStages={confirmNext?.affected ?? []}
         onConfirm={confirmAndExecute}
         onCancel={() => setConfirmNext(null)}
+      />
+
+      <RegenerateModal
+        open={regenModalOpen && state.currentSubStage === "2"}
+        target="第一性拆解"
+        busy={state.loading}
+        onConfirm={(text) => {
+          if (!state.rawIntent) return;
+          decompose(state.rawIntent, text);
+          setRegenModalOpen(false);
+        }}
+        onCancel={() => setRegenModalOpen(false)}
       />
     </div>
   );

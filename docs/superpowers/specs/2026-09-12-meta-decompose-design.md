@@ -86,6 +86,21 @@ POST /decompose  body={..., user_modifications}
 
 用户修改 S1 灵感点子后点「下一步」,会再次走 `runS1ToS2`,**覆盖**之前生成的专用提示词。用户之前的图标准编辑**会丢失**(符合用户原文「在用户重新从'灵感输入'点击下一步进入拆解环节,调用元提示词生成新拆解提示词时,覆盖原有的拆解提示词」)。
 
+### 编辑图标可见性边界
+
+图标挂在 `topLevelSummary` 块的左上角。如果 meta 成功但 **decompose 失败**(`topLevelSummary=""`),图标不可见 — 用户看不到自己刚生成的专用提示词。**接受这个边界**:失败时 footer 「重试」按钮 → 页面 reload → HYDRATE 后要么进入正常流程,要么用户回 S1 重新触发 meta。如需调整可后续在 S2 顶部加一个独立的「查看专用提示词」锚点(独立于 topLevelSummary),但本 spec 不引入。
+
+### 全局 firstness_decompose 覆盖的兼容性说明
+
+**现状**:`config/global_prompt_overrides.json` 目前含 `firstness_decompose` 的全局覆盖(2026-09-11 编辑过)。
+
+**变更后**:每个走完 S1→S2 的项目都会有 `prompt_overrides.json` 里的项目级覆盖;`load_prompt_effective` 优先取项目级 → 项目级存在时,全局覆盖**被静默忽略**。这意味着用户之前在全局对 firstness_decompose 的自定义将不再生效。
+
+**用户告知建议**(实施时同步):
+- 在 `CLAUDE.md` 增补一句:「S2 第一性拆解从 v2.x 起使用项目级专用提示词(由元提示词动态生成或用户编辑);全局 firstness_decompose 覆盖不再生效。如需影响所有项目的拆解风格,改为编辑全局 `meta_decompose` 提示词(影响专用提示词的生成方向)」。
+- 不自动删除全局 firstness_decompose 覆盖(保留为遗留数据;若用户想清理可走 Plaza 「重置」)。
+- `meta_decompose` 是新的全局调优入口:用户编辑全局 meta_decompose 后,所有项目下次 S1→S2 都会按新元提示词生成专用提示词。
+
 ## 后端实现
 
 ### 新增文件:`backend/prompts/creative/meta_decompose.yaml`
@@ -144,6 +159,10 @@ async def invoke_meta_llm(self, project_id: str, raw_intent: RawIntent) -> str:
     if not text:
         raise ValueError("meta_decompose: LLM 返回空文本")
     # 写入项目级覆盖(让 /decompose 通过 load_prompt_effective 读到)
+    # set_override 内部做 3 件事:
+    #   1. 读取项目现有 overrides,merge 现有字段(保留 user_prompt_template 等其它覆盖)
+    #   2. _pruned_override 只保留与 YAML 不同的字段(LLM 偶尔返回等于 YAML 的文本时会被裁掉,无副作用)
+    #   3. 原子写回 prompt_overrides.json
     self._override_store.set_override(
         project_id, "firstness_decompose", {"system_prompt": text}
     )
@@ -432,6 +451,7 @@ PROMPT_LABEL_OVERRIDES: dict[str, str] = {
 4. `test_subsequent_decompose_reads_meta_override`:先调 `/meta-decompose`,再调 `/decompose`,断言 router.execute 的第二次调用 messages[0].content 等于 override 里的 system_prompt
 5. `test_regenerate_does_not_call_meta`:只调 `/decompose`(不调 meta),断言 router.execute 只被调 1 次且 task_name="decompose"(不应出现 "meta_decompose")
 6. `test_decompose_with_no_override_uses_yaml`:fresh project(无 prompt_overrides.json)调 `/decompose`,断言 router.execute 的 system_prompt 等于 YAML 默认值
+7. `test_decompose_after_user_edit_uses_edited_prompt`:PUT `/api/projects/{id}/prompts/firstness_decompose` 把 system_prompt 改为 "<edited text>"(复用 Plaza 现有 endpoint + set_override),再 POST `/decompose`,断言 router.execute 的 messages[0].content 等于 "<edited text>" 而非 meta 生成的或 YAML 默认的。这是图标编辑流程的端到端测试,缺它整个图标功能就没回归保护。
 
 ### 前端新增 / 扩展
 

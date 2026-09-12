@@ -1907,6 +1907,16 @@ export const api = {
       body,
     ),
 
+  postThreeBMetaDecompose: (
+    projectId: string,
+    body: ThreeBRawIntent,
+  ) =>
+    request<{ generated_prompt: string; written_to_override: boolean }>(
+      "POST",
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/meta-decompose`,
+      body,
+    ),
+
   postThreeBFollowUp: (
     projectId: string,
     body: { unit_id: string; user_question: string | null },

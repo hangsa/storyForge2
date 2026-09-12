@@ -15,6 +15,7 @@ const { mockApi } = vi.hoisted(() => ({
   mockApi: {
     getThreeBState: vi.fn(),
     postThreeBDecompose: vi.fn(),
+    postThreeBMetaDecompose: vi.fn(),
     postThreeBFollowUp: vi.fn(),
     postThreeBDiverge: vi.fn(),
     postThreeBRegenerateUnit: vi.fn(),
@@ -23,10 +24,21 @@ const { mockApi } = vi.hoisted(() => ({
     postThreeBEditConcept: vi.fn(),
     postThreeBAdvance: vi.fn(),
     getProjectStatus: vi.fn().mockResolvedValue({ genre: "" }),
+    getPlazaPrompt: vi.fn().mockResolvedValue({ effective: null }),
+    putPlazaPrompt: vi.fn().mockResolvedValue({ name: "firstness_decompose", override: null, modified_at: null }),
   },
 }));
 
 vi.mock("@/api/client", () => ({ __esModule: true, default: mockApi, api: mockApi, ...mockApi }));
+
+const { mockPlaza } = vi.hoisted(() => ({
+  mockPlaza: {
+    getPlazaPrompt: mockApi.getPlazaPrompt,
+    putPlazaPrompt: mockApi.putPlazaPrompt,
+  },
+}));
+
+vi.mock("@/api/promptPlaza", () => mockPlaza);
 
 // Factory for a fully-formed ThreeBState payload — minimises per-test boilerplate
 // while keeping shape explicit so type-mismatch regressions surface clearly.
@@ -379,5 +391,126 @@ describe("hasDownstreamData", () => {
     expect(hasDownstreamData(empty, "4")).toBe(false);
     expect(hasDownstreamData(withCandidates, "4")).toBe(false);
     expect(hasDownstreamData(committed, "4")).toBe(true);
+  });
+});
+
+// ─— runS1ToS2 + savePrompt ─────────────────────────────────────────────
+
+describe("runS1ToS2 (S1 → S2 two-stage)", () => {
+  beforeEach(() => {
+    mockApi.postThreeBMetaDecompose.mockReset();
+    mockApi.postThreeBDecompose.mockReset();
+    mockApi.postThreeBMetaDecompose.mockResolvedValue({
+      generated_prompt: "## META-GENERATED ##",
+      written_to_override: true,
+    });
+    mockApi.postThreeBDecompose.mockResolvedValue({
+      dimensions: [],
+      causal_map: "m",
+      top_level_summary: "summary",
+    });
+  });
+
+  it("calls /meta-decompose first, then /decompose after meta resolves", async () => {
+    const { result } = renderHook(() => useThreeBDivergence("p1"));
+    await waitFor(() => result.current !== null);
+
+    let counter = 0;
+    const callOrder = () => ++counter;
+    let metaCallOrder = -1;
+    let decompCallOrder = -1;
+
+    mockApi.postThreeBMetaDecompose.mockImplementation(async () => {
+      metaCallOrder = callOrder();
+      return { generated_prompt: "x", written_to_override: true };
+    });
+    mockApi.postThreeBDecompose.mockImplementation(async () => {
+      decompCallOrder = callOrder();
+      return { dimensions: [], causal_map: "m", top_level_summary: "s" };
+    });
+
+    await act(async () => {
+      await result.current.runS1ToS2({
+        prompt: "一个少年在废墟里觉醒",
+        genre_primary: "玄幻",
+        tone: "热血",
+        style: "爽文",
+      });
+    });
+
+    expect(metaCallOrder).toBe(1);
+    expect(decompCallOrder).toBe(2);
+  });
+
+  it("does NOT call /decompose when /meta-decompose fails (hard error path)", async () => {
+    const { result } = renderHook(() => useThreeBDivergence("p1"));
+    await waitFor(() => result.current !== null);
+
+    mockApi.postThreeBMetaDecompose.mockRejectedValueOnce(
+      new Error("元提示词生成失败: LLM upstream timeout"),
+    );
+
+    await act(async () => {
+      await result.current.runS1ToS2({
+        prompt: "一个少年在废墟里觉醒",
+        genre_primary: "玄幻",
+        tone: "",
+        style: "",
+      });
+    });
+
+    expect(mockApi.postThreeBDecompose).not.toHaveBeenCalled();
+  });
+
+  it("exposes metaLoading=true on entry, false after both phases complete", async () => {
+    // React 18 + @testing-library/react: result.current lags one render
+    // cycle behind in-flight dispatches, so we cannot observe the
+    // intermediate metaLoading=true state from inside an awaited mock.
+    // The call-order test above already proves sequencing; here we just
+    // verify the start-state and end-state of the metaLoading flag.
+    const { result } = renderHook(() => useThreeBDivergence("p1"));
+    await waitFor(() => result.current !== null);
+    expect(result.current.state.metaLoading).toBe(false);
+
+    await act(async () => {
+      await result.current.runS1ToS2({
+        prompt: "一个少年在废墟里觉醒",
+        genre_primary: "玄幻",
+        tone: "",
+        style: "",
+      });
+    });
+
+    expect(result.current.state.metaLoading).toBe(false);
+    expect(result.current.state.loading).toBe(false);
+  });
+
+  it("updates state.decomposePrompt from meta response", async () => {
+    const { result } = renderHook(() => useThreeBDivergence("p1"));
+    await waitFor(() => result.current !== null);
+
+    mockApi.postThreeBMetaDecompose.mockResolvedValueOnce({
+      generated_prompt: "## SPECIAL ##",
+      written_to_override: true,
+    });
+
+    await act(async () => {
+      await result.current.runS1ToS2({
+        prompt: "x",
+        genre_primary: "玄幻",
+        tone: "",
+        style: "",
+      });
+    });
+
+    expect(result.current.state.decomposePrompt).toBe("## SPECIAL ##");
+  });
+});
+
+describe("savePrompt (icon-edit save)", () => {
+  it("savePrompt is exposed on the hook return value", async () => {
+    const { result } = renderHook(() => useThreeBDivergence("p1"));
+    await waitFor(() => result.current !== null);
+    expect(typeof result.current.savePrompt).toBe("function");
   });
 });

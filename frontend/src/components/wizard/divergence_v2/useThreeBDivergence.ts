@@ -1,5 +1,6 @@
 import { useReducer, useEffect, useCallback } from "react";
 import api from "@/api/client";
+import { getPlazaPrompt, putPlazaPrompt } from "@/api/promptPlaza";
 import type {
   ThreeBState,
   DimensionDecomposition,
@@ -12,11 +13,14 @@ import type {
 
 interface State {
   loading: boolean;
+  metaLoading: boolean;       // new — distinguish meta phase from decompose phase
+  promptBusy: boolean;        // new — PUT in-flight
   error: string | null;
   rawIntent: RawIntent | null;
   dimensions: DimensionDecomposition[];
   causalMap: string;
   topLevelSummary: string;
+  decomposePrompt: string;    // new — current specialized prompt text
   committedConcept: CommittedConcept | null;
   noveltyScores: NoveltyScores | null;
   followUpLoadingUnitId: string | null;
@@ -29,6 +33,13 @@ type Action =
   | { type: "HYDRATE"; state: ThreeBState | null }
   | { type: "HYDRATE_PROJECT_GENRE"; genre: string }
   | { type: "STAGE1_SUCCESS"; intent: RawIntent }
+  | { type: "META_DECOMPOSE_START" }
+  | { type: "META_DECOMPOSE_SUCCESS"; generatedPrompt: string }
+  | { type: "META_DECOMPOSE_ERROR"; message: string }
+  | { type: "SAVE_PROMPT_START" }
+  | { type: "SAVE_PROMPT_SUCCESS"; decomposePrompt: string }
+  | { type: "SAVE_PROMPT_ERROR"; message: string }
+  | { type: "HYDRATE_DECOMPOSE_PROMPT"; decomposePrompt: string }
   | { type: "DECOMPOSE_START" }
   | { type: "DECOMPOSE_SUCCESS"; dimensions: DimensionDecomposition[]; causalMap: string; topLevelSummary: string }
   | { type: "DECOMPOSE_ERROR"; message: string }
@@ -55,11 +66,14 @@ type Action =
 
 const initial: State = {
   loading: false,
+  metaLoading: false,
+  promptBusy: false,
   error: null,
   rawIntent: null,
   dimensions: [],
   causalMap: "",
   topLevelSummary: "",
+  decomposePrompt: "",
   committedConcept: null,
   noveltyScores: null,
   followUpLoadingUnitId: null,
@@ -197,6 +211,24 @@ function reducer(state: State, action: Action): State {
         rawIntent: action.intent,
         completedSubStages: Array.from(new Set([...state.completedSubStages, "1"])),
       };
+    case "META_DECOMPOSE_START":
+      return { ...state, loading: true, metaLoading: true, error: null };
+    case "META_DECOMPOSE_SUCCESS":
+      return {
+        ...state,
+        metaLoading: false,
+        decomposePrompt: action.generatedPrompt,
+      };
+    case "META_DECOMPOSE_ERROR":
+      return { ...state, loading: false, metaLoading: false, error: action.message };
+    case "SAVE_PROMPT_START":
+      return { ...state, promptBusy: true };
+    case "SAVE_PROMPT_SUCCESS":
+      return { ...state, promptBusy: false, decomposePrompt: action.decomposePrompt };
+    case "SAVE_PROMPT_ERROR":
+      return { ...state, promptBusy: false, error: action.message };
+    case "HYDRATE_DECOMPOSE_PROMPT":
+      return { ...state, decomposePrompt: action.decomposePrompt };
     case "RESET":
       return { ...initial };
     default:
@@ -222,7 +254,7 @@ export function useThreeBDivergence(projectId: string) {
 
   useEffect(() => {
     let cancelled = false;
-    // Fire both fetches in parallel. The 3b state file doesn't exist for
+    // Fire all three fetches in parallel. The 3b state file doesn't exist for
     // fresh projects, so the catch branch is normal, not an error.
     // `getProjectStatus` is best-effort: project genre is only used to
     // pre-fill the S1 subject dropdown when no rawIntent is saved yet —
@@ -247,6 +279,23 @@ export function useThreeBDivergence(projectId: string) {
       .catch(() => {
         // leave projectGenre as ""; S1InputStep's fallback chain still
         // resolves to subject[0]?.id or DEFAULT_GENRE_FALLBACK
+      });
+    // Fetch the specialized prompt from project-level override (if any).
+    // Best-effort: failure here just leaves decomposePrompt="" — the
+    // icon's modal will prefill empty (acceptable; user can still edit).
+    getPlazaPrompt(projectId, "firstness_decompose")
+      .then((detail) => {
+        if (cancelled) return;
+        const text =
+          (detail.effective &&
+            typeof detail.effective.system_prompt === "string" &&
+            detail.effective.system_prompt) ||
+          "";
+        dispatch({ type: "HYDRATE_DECOMPOSE_PROMPT", decomposePrompt: text });
+      })
+      .catch(() => {
+        // 404 / network — leave decomposePrompt as "". Icon modal opens
+        // empty; user can still edit and save.
       });
     return () => {
       cancelled = true;
@@ -277,6 +326,47 @@ export function useThreeBDivergence(projectId: string) {
       });
     } catch (e: any) {
       dispatch({ type: "DECOMPOSE_ERROR", message: e.message });
+    }
+  }, [projectId]);
+
+  const runS1ToS2 = useCallback(async (intent: RawIntent) => {
+    // Persist rawIntent in-session BEFORE the meta call so the footer regen
+    // handler in CreativeDivergenceStep registers on first entry to S2.
+    dispatch({ type: "STAGE1_SUCCESS", intent });
+    // Stage 1: meta-prompt → writes project-level firstness_decompose override.
+    dispatch({ type: "META_DECOMPOSE_START" });
+    try {
+      const r = await api.postThreeBMetaDecompose(projectId, intent);
+      dispatch({ type: "META_DECOMPOSE_SUCCESS", generatedPrompt: r.generated_prompt });
+    } catch (e: any) {
+      dispatch({ type: "META_DECOMPOSE_ERROR", message: e.message });
+      return; // Hard error: do NOT proceed to decompose.
+    }
+    // Stage 2: decompose with the meta-generated (or user-edited) override.
+    dispatch({ type: "DECOMPOSE_START" });
+    try {
+      const r = await api.postThreeBDecompose(projectId, {
+        ...intent,
+        user_modifications: undefined,
+      });
+      dispatch({
+        type: "DECOMPOSE_SUCCESS",
+        dimensions: r.dimensions,
+        causalMap: r.causal_map,
+        topLevelSummary: r.top_level_summary,
+      });
+    } catch (e: any) {
+      dispatch({ type: "DECOMPOSE_ERROR", message: e.message });
+    }
+  }, [projectId]);
+
+  const savePrompt = useCallback(async (newText: string) => {
+    dispatch({ type: "SAVE_PROMPT_START" });
+    try {
+      await putPlazaPrompt(projectId, "firstness_decompose", { system_prompt: newText });
+      dispatch({ type: "SAVE_PROMPT_SUCCESS", decomposePrompt: newText });
+    } catch (e: any) {
+      dispatch({ type: "SAVE_PROMPT_ERROR", message: e.message });
     }
   }, [projectId]);
 
@@ -391,6 +481,8 @@ export function useThreeBDivergence(projectId: string) {
     state,
     projectGenre: state.projectGenre,
     decompose,
+    runS1ToS2,        // new
+    savePrompt,       // new
     followUp,
     diverge,
     regenerateUnit,

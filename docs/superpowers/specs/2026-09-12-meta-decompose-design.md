@@ -73,9 +73,9 @@ POST /decompose  body={..., user_modifications}
 
 ```
 点 S2 顶部图标 → EditPromptModal 打开
-  ↓ textarea 预填 GET /api/v1/projects/{id}/prompts/firstness_decompose 返回的 system_prompt
+  ↓ textarea 预填 `getPlazaPrompt(projectId, "firstness_decompose").effective.system_prompt` 返回的文本
 用户修改 → 点「保存」
-  ↓ PUT /api/v1/projects/{id}/prompts/firstness_decompose  body={system_prompt: <新文本>}
+  ↓ `putPlazaPrompt(projectId, "firstness_decompose", {system_prompt: <新文本>})`
   → 后端 PromptOverrideStore.set_override 覆盖 prompt_overrides.json
 关闭弹窗 → 用户自行点 footer「重新生成」走上面流程
 ```
@@ -107,12 +107,9 @@ user_prompt_template: |
   主类型: {genre_primary}
   基调: {tone}
   风格: {style}
-
-output_format:
-  type: text
 ```
 
-`output_format.type: text` 是个新枚举值;`_invoke_llm_text` 会基于它选择 `json_mode=False`。
+**注**:`output_format.type` 在当前 `_invoke_llm_*` 实现里**不被消费**(只有 `temperature` / `max_tokens` 被读取,`json_mode` 由调用方硬编码)。`invoke_meta_llm` 直接传 `json_mode=False`,YAML 不需要写 `output_format`。如果未来 LLM provider 支持 mode per-prompt,可以在那时补。
 
 ### 改动:`backend/creative_os/three_b_engine.py`
 
@@ -300,7 +297,8 @@ const runS1ToS2 = useCallback(async (intent: RawIntent) => {
 const savePrompt = useCallback(async (newText: string) => {
   dispatch({ type: "SAVE_PROMPT_START" });
   try {
-    await api.putProjectPrompt(projectId, "firstness_decompose", { system_prompt: newText });
+    // 用 Plaza 现有 helper — 后端路由是 PUT /api/projects/{id}/prompts/{name}
+    await putPlazaPrompt(projectId, "firstness_decompose", { system_prompt: newText });
     dispatch({ type: "SAVE_PROMPT_SUCCESS", decomposePrompt: newText });
   } catch (e: any) {
     dispatch({ type: "SAVE_PROMPT_ERROR", message: e.message });
@@ -308,7 +306,9 @@ const savePrompt = useCallback(async (newText: string) => {
 }, [projectId]);
 ```
 
-`HYDRATE` 时同时拉取现有 decomposePrompt:在 useEffect 里多发一个 `api.getProjectPrompt(projectId, "firstness_decompose")`,dispatch `HYDRATE_DECOMPOSE_PROMPT`。这样回到 S2 时 textarea 能预填(若 override 存在)。
+`HYDRATE` 时同时拉取现有 decomposePrompt:在 useEffect 里多发一个 `getPlazaPrompt(projectId, "firstness_decompose")`,读取 `effective.system_prompt`,dispatch `HYDRATE_DECOMPOSE_PROMPT`。这样回到 S2 时 textarea 能预填(若 override 存在)。
+
+**`runS1ToS2` 内的 reducer 状态机**:`META_DECOMPOSE_SUCCESS` 把 `decomposePrompt` 也更新为 `r.generated_prompt`(这样 S2 图标的 modal 立刻能预填新生成的专用提示词,不用等 HYDRATE)。
 
 ### 改动:`frontend/src/components/wizard/CreativeDivergenceStep.tsx`
 
@@ -321,7 +321,7 @@ const handleS1Submit = useCallback((intent: RawIntent) => {
 }, [jumpToStage, runS1ToS2]);
 ```
 
-S2 footer next handler 按 `state.metaLoading` 区分 loading label:
+S2 footer next handler 按 `state.metaLoading` 区分 loading label。**关键**:`metaLoading` 必须出现在 useEffect 的依赖数组里(`CreativeDivergenceStep.tsx:158` 现依赖数组含 `state.loading` 但不含 `metaLoading` — 实施时必须加,否则 S2 footer label 不会从「生成专用提示词中…」切换到「拆解中…」):
 
 ```tsx
 } else if (sub === "2") {
@@ -331,6 +331,7 @@ S2 footer next handler 按 `state.metaLoading` 区分 loading label:
     : "拆解中…";
   setNext(() => requestNext("3"), disabled, "下一步:发散 →", loadingLabel);
 }
+// useEffect 依赖数组末尾加: state.metaLoading
 ```
 
 S2 backward jump 触发 decompose 的 useEffect(现 L161-165)保持不变 — 但只在 `!state.metaLoading` 时才允许重新 decompose(否则会被并发的 `runS1ToS2` 干扰):
@@ -364,6 +365,10 @@ async function postThreeBMetaDecompose(
 ```
 
 `api.getProjectPrompt(projectId, "firstness_decompose")` 与 `api.putProjectPrompt(...)` 已经存在,直接复用。
+
+**已存在 helper**(复用,不新建):
+- `frontend/src/api/promptPlaza.ts:getPlazaPrompt(projectId, name)` → `GET /api/projects/{id}/prompts/{name}`
+- `frontend/src/api/promptPlaza.ts:putPlazaPrompt(projectId, name, payload)` → `PUT /api/projects/{id}/prompts/{name}`
 
 ## Prompt Plaza 改造
 

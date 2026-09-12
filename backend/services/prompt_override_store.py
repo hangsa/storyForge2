@@ -37,6 +37,27 @@ PROMPT_LABEL_OVERRIDES: dict[str, str] = {
     "sf_log_suggestion": "SF_LOG 建议",
     "branch_simulation_llm": "分支模拟",
     "canvas_to_concept": "画布转概念",
+    "canvas_v2_next_step": "画布推下一步",
+    "world_power_system_rewrite": "力量体系改写",
+    "trope_extraction": "套路提取",
+    # creative/*
+    "contradiction_expand": "矛盾展开",
+    "creative_director_direction": "创意总监·方向",
+    "creative_director_mutation": "创意总监·变异",
+    "creative_director_path": "创意总监·路径",
+    "firstness_decompose": "第一性拆解",
+    "genre_fusion": "题材融合",
+    "mutation_operation": "变异操作",
+    "novelty_evaluation_llm": "新颖度评估",
+    "adaptive_diverge": "三分支·自适应发散",
+    "meta_decompose": "拆解元提示词",   # 2026-09-12 meta-decompose 引入
+    "three_b_commit": "三分支·确定",
+    "three_b_follow_up": "三分支·追问",
+    "whatif_expand": "假设扩展",
+    # character_designer/*
+    "growth_discuss": "成长讨论",
+    # style_engine/*
+    "sandbox_preview": "风格沙盒预览",
 }
 
 

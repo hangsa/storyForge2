@@ -45,7 +45,19 @@ def _get_engine(request: Request) -> ThreeBEngine:
     engine = getattr(request.app.state, "three_b_engine", None)
     if engine is None:
         from backend.llm.model_router import ModelRouter
-        engine = ThreeBEngine(model_router=ModelRouter())
+        # v2 prompt-override wiring: pass the same stores BranchSimulator
+        # uses so Prompt Plaza edits to the 4 creative prompts
+        # (firstness_decompose, three_b_*) actually land in the LLM call.
+        # Without these, load_prompt_effective silently returns YAML defaults.
+        from backend.services.agent_prompt_stores import (
+            global_override_store,
+            project_override_store,
+        )
+        engine = ThreeBEngine(
+            model_router=ModelRouter(),
+            override_store=project_override_store(),
+            global_override_store=global_override_store(),
+        )
         request.app.state.three_b_engine = engine
     return engine
 
@@ -79,6 +91,18 @@ class DecomposeRequest(BaseModel):
     tone: str = ""
     style: str = ""
     user_modifications: Optional[str] = Field(default=None, max_length=1700)
+
+
+class MetaDecomposeRequest(BaseModel):
+    prompt: str = Field(..., min_length=10)
+    genre_primary: str
+    tone: str = ""
+    style: str = ""
+
+
+class MetaDecomposeResponse(BaseModel):
+    generated_prompt: str
+    written_to_override: bool = True
 
 
 class FollowUpRequest(BaseModel):
@@ -152,6 +176,39 @@ async def decompose(project_id: str, body: DecomposeRequest, request: Request) -
         "causal_map": causal_map,
         "top_level_summary": summary,
     }
+
+
+@router.post("/meta-decompose")
+async def meta_decompose(
+    project_id: str, body: MetaDecomposeRequest, request: Request
+) -> dict:
+    """Stage 1 of S1→S2: generate a per-project specialized firstness_decompose prompt.
+
+    Runs the meta-prompt LLM, writes the result to the project-level
+    `firstness_decompose` override, and returns the text so the frontend
+    can prefill the EditPromptModal.
+
+    Errors:
+        422: LLM returned empty content.
+        503: any other LLM failure (network, parse, etc).
+    """
+    engine = _get_engine(request)
+    try:
+        text = await engine.invoke_meta_llm(
+            project_id,
+            RawIntent(
+                prompt=body.prompt,
+                genre_primary=body.genre_primary,
+                tone=body.tone,
+                style=body.style,
+            ),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("meta_decompose failed")
+        raise HTTPException(status_code=503, detail=f"元提示词生成失败: {e}")
+    return {"generated_prompt": text, "written_to_override": True}
 
 
 @router.post("/follow-up")

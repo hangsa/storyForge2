@@ -30,7 +30,11 @@ from backend.config import settings
 from backend.services.dimension_labels import Dimension  # noqa: F401  (re-exported)
 from backend.creative_os.creative_dimensions import DimensionEntry  # noqa: F401  (re-exported)
 from backend.utils.file_manager import FileManager
-from backend.services.prompt_override_store import load_prompt_effective
+from backend.services.prompt_override_store import (
+    PromptOverrideStore,
+    load_prompt_effective,
+)
+from backend.services.global_prompt_override_store import GlobalPromptOverrideStore
 from backend.agents._injection_helpers import _build_user_modifications_block
 
 
@@ -46,8 +50,9 @@ STATE_FILE = "three_b_state.json"
 STATE_DIR = "creative_os"
 
 OPERATORS = ("distort", "break", "blend", "chain")
-ADAPTIVE_DIVERGE_PROMPT = "three_b_adaptive_diverge"
+ADAPTIVE_DIVERGE_PROMPT = "adaptive_diverge"
 DECOMPOSE_PROMPT = "firstness_decompose"
+META_DECOMPOSE_PROMPT = "meta_decompose"
 COMMIT_PROMPT = "three_b_commit"
 FOLLOW_UP_PROMPT = "three_b_follow_up"
 
@@ -143,11 +148,21 @@ def _new_id(prefix: str) -> str:
 
 
 def _parse_json_or_raise(raw_text: str, op: str) -> dict:
-    """Parse LLM JSON output; raise engine-friendly ValueError on failure."""
-    try:
-        data = json.loads(raw_text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"{op}: LLM 返回非 JSON: {e}") from e
+    """Parse LLM JSON output; raise engine-friendly ValueError on failure.
+
+    Uses `parse_json_text` so we accept the same shapes BaseAgent / Reviewer
+    do: bare JSON, JSON wrapped in a markdown code fence (```json ... ``` or
+    bare ``` ... ```), or JSON with leading / trailing prose. This aligns 3B
+    with the rest of the codebase — without it, deepseek's occasional mode
+    leak (```json fence even with response_format=json_object) bubbles up
+    as "Expecting ',' delimiter: line N column M" to the user. Observed on
+    proj_47738f64 firstness_decompose, 2026-09-11.
+    """
+    from backend.utils.json_parser import parse_json_text
+
+    data = parse_json_text(raw_text)
+    if data is None:
+        raise ValueError(f"{op}: LLM 返回非 JSON: 无法解析 LLM 输出")
     if not isinstance(data, dict):
         raise ValueError(f"{op}: LLM 输出不是 dict")
     return data
@@ -311,9 +326,24 @@ def _append_original_candidate(
 class ThreeBEngine:
     """4 阶段创意发散引擎。Tasks 3-9 will populate engine methods."""
 
-    def __init__(self, model_router=None, novelty_evaluator=None) -> None:
+    def __init__(
+        self,
+        model_router=None,
+        novelty_evaluator=None,
+        *,
+        override_store: Optional[PromptOverrideStore] = None,
+        global_override_store: Optional[GlobalPromptOverrideStore] = None,
+    ) -> None:
         self._router = model_router
         self._novelty_evaluator = novelty_evaluator
+        # v2 prompt override wiring: when these stores are injected, the
+        # _invoke_llm_json* helpers route through `load_prompt_effective(name,
+        # project_id, override_store, global_override_store)` so per-project
+        # and global Prompt Plaza edits (e.g. `第一性拆解`) actually land in
+        # the LLM call. Without these, `load_prompt_effective` silently
+        # returns YAML defaults and override edits no-op at runtime.
+        self._override_store = override_store
+        self._global_override_store = global_override_store
 
     async def decompose(
         self, project_id: str, raw_intent: RawIntent, user_modifications: str = ""
@@ -330,6 +360,7 @@ class ThreeBEngine:
         response = await self._invoke_llm_json_with_block(
             DECOMPOSE_PROMPT, "decompose",
             raw_intent=raw_intent,
+            project_id=project_id,
             prompt=raw_intent.prompt,
             genre_primary=raw_intent.genre_primary,
             tone=raw_intent.tone or "(无)",
@@ -359,6 +390,52 @@ class ThreeBEngine:
         state.commit_completed_at = None
         atomic_write_state(project_id, state)
         return state.dimensions, state.causal_map, state.top_level_summary
+
+    async def invoke_meta_llm(
+        self, project_id: str, raw_intent: RawIntent
+    ) -> str:
+        """Generate a specialized firstness_decompose prompt from raw_intent.
+
+        Plain-text output (json_mode=False). Writes the result to the
+        project-level `firstness_decompose` override so subsequent
+        /decompose calls see it via load_prompt_effective. Returns the
+        raw LLM text for callers that want to surface it.
+
+        Raises:
+            ValueError: if the LLM returns empty content (mapped to 422).
+            Exception: any other LLM failure (mapped to 503 by the route).
+        """
+        prompt_data = self._load_prompt(META_DECOMPOSE_PROMPT, project_id)
+        system = prompt_data["system_prompt"].format(negative_constraints="")
+        user = prompt_data["user_prompt_template"].format(
+            prompt=raw_intent.prompt,
+            genre_primary=raw_intent.genre_primary,
+            tone=raw_intent.tone or "(无)",
+            style=raw_intent.style or "(无)",
+        )
+        response = await self._router.execute(
+            agent_name="three_b",
+            task_name="meta_decompose",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            json_mode=False,
+            temperature=prompt_data.get("temperature", 0.7),
+            max_tokens=prompt_data.get("max_tokens", 8192),
+        )
+        text = (response.get("content") or "").strip()
+        if not text:
+            raise ValueError("meta_decompose: LLM 返回空文本")
+
+        # set_override 内部做 3 件事:
+        #   1. 读取项目现有 overrides,merge 现有字段(保留 user_prompt_template 等其它覆盖)
+        #   2. _pruned_override 只保留与 YAML 不同的字段(LLM 偶尔返回等于 YAML 的文本时会被裁掉,无副作用)
+        #   3. 原子写回 prompt_overrides.json
+        self._override_store.set_override(
+            project_id, "firstness_decompose", {"system_prompt": text}
+        )
+        return text
 
     def _parse_decompose_output(self, raw_text: str) -> tuple[list[DimensionDecomposition], str, str]:
         data = _parse_json_or_raise(raw_text, "decompose")
@@ -392,25 +469,43 @@ class ThreeBEngine:
         top_level_summary = data.get("top_level_summary", "") or ""
         return dims, causal_map, top_level_summary
 
-    def _build_prompt_messages(self, prompt_name: str, **fmt) -> tuple[str, str]:
+    def _build_prompt_messages(
+        self, prompt_name: str, project_id: Optional[str] = None, **fmt
+    ) -> tuple[str, str]:
         """Load + format a v2 prompt. Returns (system, user) messages.
 
         Negative constraints are always substituted with empty string.
         All other format kwargs are passed through to user_prompt_template.
         """
-        prompt_data = load_prompt_effective(prompt_name)
+        prompt_data = self._load_prompt(prompt_name, project_id)
         system = prompt_data["system_prompt"].format(negative_constraints="")
         user = prompt_data["user_prompt_template"].format(**fmt)
         return system, user
 
-    async def _invoke_llm_json(self, prompt_name: str, task_name: str, **fmt) -> dict:
+    def _load_prompt(self, prompt_name: str, project_id: Optional[str]) -> dict:
+        """3-tier merge: YAML → global override → project override.
+
+        Wraps `load_prompt_effective` so the engine's injected stores
+        actually take effect (caller has project_id; the helper skips layers
+        that were never wired in).
+        """
+        return load_prompt_effective(
+            prompt_name,
+            project_id=project_id,
+            override_store=self._override_store,
+            global_override_store=self._global_override_store,
+        )
+
+    async def _invoke_llm_json(
+        self, prompt_name: str, task_name: str, project_id: Optional[str] = None, **fmt
+    ) -> dict:
         """Call the LLM with standard 3B envelope (json_mode, three_b agent).
 
         Returns the raw response dict from router.execute (caller is responsible
         for extracting/parsing content).
         """
-        system, user = self._build_prompt_messages(prompt_name, **fmt)
-        prompt_data = load_prompt_effective(prompt_name)
+        system, user = self._build_prompt_messages(prompt_name, project_id=project_id, **fmt)
+        prompt_data = self._load_prompt(prompt_name, project_id)
         return await self._router.execute(
             agent_name="three_b",
             task_name=task_name,
@@ -421,10 +516,16 @@ class ThreeBEngine:
         )
 
     async def _invoke_llm_json_with_block(
-        self, prompt_name: str, task_name: str, *, raw_intent: Optional[RawIntent] = None, **fmt
+        self,
+        prompt_name: str,
+        task_name: str,
+        *,
+        raw_intent: Optional[RawIntent] = None,
+        project_id: Optional[str] = None,
+        **fmt,
     ) -> dict:
         """与 _invoke_llm_json 相同，但额外在 user 消息前注入「设定背景」块。"""
-        prompt_data = load_prompt_effective(prompt_name)
+        prompt_data = self._load_prompt(prompt_name, project_id)
         system = prompt_data["system_prompt"].format(negative_constraints="")
         user = prompt_data["user_prompt_template"].format(**fmt)
         user = _maybe_inject_block(user, raw_intent)
@@ -452,6 +553,7 @@ class ThreeBEngine:
 
         response = await self._invoke_llm_json(
             FOLLOW_UP_PROMPT, "follow_up",
+            project_id=project_id,
             unit_name=target.unit_name,
             description=target.description,
             user_question=user_question or "(无明确问题,请基于该单元当前描述做一次深化)",
@@ -480,7 +582,7 @@ class ThreeBEngine:
 
         async def _diverge_unit(dim: DimensionDecomposition, unit: Unit) -> list[UnitCandidate]:
             async with sem:
-                return await self._diverge_single_unit(state.raw_intent, dim, unit)
+                return await self._diverge_single_unit(state.raw_intent, dim, unit, project_id)
 
         started_at = _now_iso()
         tasks = [_diverge_unit(d, u) for d, u in all_units]
@@ -515,13 +617,18 @@ class ThreeBEngine:
         return state.dimensions
 
     async def _diverge_single_unit(
-        self, raw_intent: Optional[RawIntent], dim: DimensionDecomposition, unit: Unit
+        self,
+        raw_intent: Optional[RawIntent],
+        dim: DimensionDecomposition,
+        unit: Unit,
+        project_id: Optional[str] = None,
     ) -> list[UnitCandidate]:
         if raw_intent is None:
             return []
         response = await self._invoke_llm_json_with_block(
             ADAPTIVE_DIVERGE_PROMPT, "diverge_unit",
             raw_intent=raw_intent,
+            project_id=project_id,
             prompt=raw_intent.prompt,
             genre_primary=raw_intent.genre_primary,
             tone=raw_intent.tone or "(无)",
@@ -604,7 +711,7 @@ class ThreeBEngine:
             raise ValueError(f"unit {unit_id} 不存在")
         target_dim, target_unit = found
 
-        new_cands = await self._diverge_single_unit(state.raw_intent, target_dim, target_unit)
+        new_cands = await self._diverge_single_unit(state.raw_intent, target_dim, target_unit, project_id)
         if not new_cands:
             raise ValueError("regenerate_unit: LLM 未返回候选")
 
@@ -692,7 +799,7 @@ class ThreeBEngine:
         # We can't reuse _invoke_llm_json because the user template needs
         # selected_units (a list of bullets built from candidates), not a
         # flat format-string substitution.
-        prompt_data = load_prompt_effective(COMMIT_PROMPT)
+        prompt_data = self._load_prompt(COMMIT_PROMPT, project_id)
         system = prompt_data["system_prompt"].format(negative_constraints="")
         user = self._build_commit_user_prompt(prompt_data["user_prompt_template"], state)
         user = _maybe_inject_block(user, state.raw_intent)

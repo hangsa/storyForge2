@@ -36,14 +36,18 @@ const MOCK_DIMENSIONS: DimensionDecomposition[] = [
 
 function renderS2(overrides: Partial<Parameters<typeof S2DecomposeStep>[0]> = {}) {
   const onFollowUp = vi.fn();
+  const onSavePrompt = vi.fn();
   const props = {
     dimensions: MOCK_DIMENSIONS,
     topLevelSummary: "",
+    decomposePrompt: "",           // new (default empty)
+    promptBusy: false,             // new
     followUpLoadingUnitId: null,
     onFollowUp,
+    onSavePrompt,                  // new
     ...overrides,
   };
-  return { ...render(<S2DecomposeStep {...props} />), onFollowUp };
+  return { ...render(<S2DecomposeStep {...props} />), onFollowUp, onSavePrompt };
 }
 
 describe("S2DecomposeStep", () => {
@@ -223,5 +227,89 @@ describe("S2DecomposeStep", () => {
     fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
     fireEvent.click(screen.getByTestId("follow-up-u3"));
     expect(screen.getByText(/追问 — 修行|追问 - 修行/)).toBeInTheDocument();
+  });
+
+  // ─— Round 7: edit icon on top-level summary ─────────────────────────────
+
+  describe("S2DecomposeStep edit-decompose-prompt icon", () => {
+    it("does NOT render the icon when topLevelSummary is empty", () => {
+      renderS2({ topLevelSummary: "" });
+      expect(screen.queryByTestId("edit-decompose-prompt-btn")).toBeNull();
+    });
+
+    it("renders the edit-decompose-prompt icon next to topLevelSummary", () => {
+      renderS2({ topLevelSummary: "一句话总结" });
+      const summary = screen.getByTestId("top-level-summary");
+      const btn = screen.getByTestId("edit-decompose-prompt-btn");
+      expect(summary).toContainElement(btn);
+      expect(btn).toHaveAttribute("aria-label", expect.stringMatching(/查看|编辑/));
+    });
+
+    it("clicking the icon opens EditPromptModal prefilled with decomposePrompt", () => {
+      renderS2({
+        topLevelSummary: "一句话",
+        decomposePrompt: "你是一位叙事结构诊断师...",
+      });
+      expect(screen.queryByTestId("edit-prompt-modal")).toBeNull();
+      fireEvent.click(screen.getByTestId("edit-decompose-prompt-btn"));
+      expect(screen.getByTestId("edit-prompt-modal")).toBeInTheDocument();
+      const textarea = screen.getByLabelText("专用提示词") as HTMLTextAreaElement;
+      expect(textarea.value).toBe("你是一位叙事结构诊断师...");
+    });
+
+    it("confirming EditPromptModal calls onSavePrompt with edited text", () => {
+      const onSavePrompt = vi.fn();
+      renderS2({
+        topLevelSummary: "一句话",
+        decomposePrompt: "初始文本",
+        onSavePrompt,
+      });
+      fireEvent.click(screen.getByTestId("edit-decompose-prompt-btn"));
+      const textarea = screen.getByLabelText("专用提示词");
+      fireEvent.change(textarea, { target: { value: "修改后" } });
+      fireEvent.click(screen.getByTestId("edit-prompt-modal-confirm"));
+      expect(onSavePrompt).toHaveBeenCalledWith("修改后");
+    });
+
+    it("canceling EditPromptModal does NOT call onSavePrompt", () => {
+      const onSavePrompt = vi.fn();
+      renderS2({
+        topLevelSummary: "一句话",
+        decomposePrompt: "x",
+        onSavePrompt,
+      });
+      fireEvent.click(screen.getByTestId("edit-decompose-prompt-btn"));
+      fireEvent.click(screen.getByTestId("edit-prompt-modal-cancel"));
+      expect(onSavePrompt).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("edit-prompt-modal")).toBeNull();
+    });
+
+    it("does NOT auto-trigger decompose after save — user must click footer regen", () => {
+      // The component itself never calls onFollowUp-like; onSavePrompt is the
+      // only side-effect. onFollowUp (the existing prop) is for unit 追问 only.
+      const onSavePrompt = vi.fn();
+      const onFollowUp = vi.fn();
+      renderS2({
+        topLevelSummary: "一句话",
+        decomposePrompt: "x",
+        onSavePrompt,
+        onFollowUp,
+      });
+      fireEvent.click(screen.getByTestId("edit-decompose-prompt-btn"));
+      fireEvent.click(screen.getByTestId("edit-prompt-modal-confirm"));
+      expect(onSavePrompt).toHaveBeenCalled();
+      expect(onFollowUp).not.toHaveBeenCalled();
+    });
+
+    it("disables the modal save button while promptBusy=true", () => {
+      renderS2({
+        topLevelSummary: "一句话",
+        decomposePrompt: "x",
+        promptBusy: true,
+      });
+      fireEvent.click(screen.getByTestId("edit-decompose-prompt-btn"));
+      expect(screen.getByTestId("edit-prompt-modal-confirm")).toBeDisabled();
+      expect(screen.getByTestId("edit-prompt-modal-cancel")).toBeDisabled();
+    });
   });
 });

@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { SecondaryButton } from "@/components/ds";
 import { RegenerateModal } from "@/components/shared/RegenerateModal";
+import { EditPromptModal } from "./EditPromptModal";
 import type { DimensionDecomposition, Unit } from "./types";
 
 interface Props {
   dimensions: DimensionDecomposition[];
   topLevelSummary: string;
+  decomposePrompt: string;       // 当前专用提示词(来自 backend override)
+  promptBusy: boolean;            // PUT 是否 in-flight
+  onSavePrompt: (newText: string) => void | Promise<void>;  // 保存编辑
   followUpLoadingUnitId: string | null;
   onFollowUp: (unitId: string, userQuestion: string | null) => void;
   // Footer navigation (上一步 / 下一步 / 重新生成) is registered through the
@@ -49,7 +53,8 @@ function withCoreContradictionUnit(dim: DimensionDecomposition): DimensionDecomp
 }
 
 export default function S2DecomposeStep({
-  dimensions, topLevelSummary, followUpLoadingUnitId, onFollowUp,
+  dimensions, topLevelSummary, decomposePrompt, promptBusy,
+  onSavePrompt, followUpLoadingUnitId, onFollowUp,
 }: Props) {
   // Defense-in-depth: callers upstream (reducer / HYDRATE) already coerce
   // undefined to [], but a stray malformed payload must not crash the
@@ -59,6 +64,8 @@ export default function S2DecomposeStep({
   // Round 3: 追问弹窗提到顶层,共享一个 RegenerateModal,避免每个 unit
   // 都维护自己的 inline dialog 状态(text 泄漏 / 弹窗叠加 / 焦点跳跃)。
   const [followUpTarget, setFollowUpTarget] = useState<{ unitId: string; unitName: string } | null>(null);
+  // Round 7: edit-decompose-prompt modal state.
+  const [editPromptOpen, setEditPromptOpen] = useState(false);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -69,11 +76,25 @@ export default function S2DecomposeStep({
           // tighter py-2 (vs the original p-4) so the overall conclusion
           // sits as a compact header strip above the 5 dimensions rather
           // than dominating the page.
+          // Round 7 (2026-09-12): the edit-decompose-prompt icon anchors on
+          // this block; clicking opens EditPromptModal prefilled with the
+          // current specialized prompt.
           <div
             className="bg-primary-container/5 rounded-lg py-2 px-3"
             data-testid="top-level-summary"
           >
-            <p className="text-sm text-primary">{topLevelSummary}</p>
+            <div className="flex items-start gap-2">
+              <button
+                type="button"
+                aria-label="查看/编辑本次拆解的专用提示词"
+                data-testid="edit-decompose-prompt-btn"
+                onClick={() => setEditPromptOpen(true)}
+                className="shrink-0 mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded hover:bg-primary-container/15 text-primary-container"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[16px] leading-none">edit_note</span>
+              </button>
+              <p className="flex-1 text-sm text-primary">{topLevelSummary}</p>
+            </div>
           </div>
         )}
 
@@ -112,6 +133,17 @@ export default function S2DecomposeStep({
           setFollowUpTarget(null);
         }}
         onCancel={() => setFollowUpTarget(null)}
+      />
+
+      <EditPromptModal
+        open={editPromptOpen}
+        initialText={decomposePrompt}
+        busy={promptBusy}
+        onSave={async (text) => {
+          await onSavePrompt(text);
+          setEditPromptOpen(false);
+        }}
+        onCancel={() => setEditPromptOpen(false)}
       />
     </div>
   );
@@ -195,9 +227,6 @@ function UnitCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
-              Unit #{unit.id}
-            </span>
             <span className="font-display text-sm font-semibold text-primary">{unit.unit_name}</span>
             {isVirtualCore && (
               <span

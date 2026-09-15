@@ -20,14 +20,21 @@ interface Props {
   // The 「总览」 h3 title row above the top-level summary was removed on
   // 2026-09-11 — the heading felt redundant with the body text below it.
   // The summary paragraph itself is still surfaced (without the heading).
+  //
+  // 2026-09-15: the 5 维度 (ontology / energetics / power_structure /
+  // protagonist_engine / narrative_physics) are now presented as a sticky
+  // horizontal tab strip at the top, with the active panel below. Inactive
+  // panels are kept in DOM under `hidden` so existing testids
+  // (dimension-{key}, unit-{id}, follow-up-{id}) still resolve — only one
+  // panel is visually rendered at a time.
 }
 
 const DIMENSION_LABELS: Record<string, { label: string; icon: string }> = {
-  ontology: { label: "世界构成 (Ontology)", icon: "public" },
-  energetics: { label: "能量体系 (Energetics)", icon: "bolt" },
-  power_structure: { label: "社会控制 (Power Structure)", icon: "gavel" },
-  protagonist_engine: { label: "主角机制 (Protagonist Engine)", icon: "person" },
-  narrative_physics: { label: "叙事动力 (Narrative Physics)", icon: "auto_stories" },
+  ontology: { label: "世界构成", icon: "public" },
+  energetics: { label: "能量体系", icon: "bolt" },
+  power_structure: { label: "社会控制", icon: "gavel" },
+  protagonist_engine: { label: "主角机制", icon: "person" },
+  narrative_physics: { label: "叙事动力", icon: "auto_stories" },
 };
 
 const DIMENSION_ORDER = ["ontology", "energetics", "power_structure", "protagonist_engine", "narrative_physics"] as const;
@@ -67,9 +74,30 @@ export default function S2DecomposeStep({
   // Round 7: edit-decompose-prompt modal state.
   const [editPromptOpen, setEditPromptOpen] = useState(false);
 
+  // 2026-09-15: 维度 tab 化。默认选中 DIMENSION_ORDER 中第一个存在的维度;
+  // 若全是 unknown 维度,fallback 到 safeDimensions[0]。
+  const orderedKeys: string[] = [
+    ...DIMENSION_ORDER.filter((k) => safeDimensions.some((d) => d.dimension === k)),
+    ...safeDimensions
+      .filter((d) => !DIMENSION_ORDER.includes(d.dimension as typeof DIMENSION_ORDER[number]))
+      .map((d) => d.dimension),
+  ];
+  const [activeKey, setActiveKey] = useState<string>(
+    () => orderedKeys[0] ?? "",
+  );
+
+  // Apply 核心矛盾 prepend once per dim so tab count matches panel unit count
+  // (narrative_physics + virtual unit = 2, not 1).
+  const effectiveDimByKey: Record<string, DimensionDecomposition> = Object.fromEntries(
+    orderedKeys.map((k) => {
+      const d = safeDimensions.find((x) => x.dimension === k);
+      return [k, d ? withCoreContradictionUnit(d) : d];
+    }).filter(([, d]) => d !== undefined) as [string, DimensionDecomposition][],
+  );
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6">
+      <div className="flex-1 min-h-0 overflow-y-auto px-6">
         {topLevelSummary && (
           // The 「总览」 h3 title row above this paragraph was removed on
           // 2026-09-11 — it felt redundant. The summary block keeps a
@@ -98,29 +126,72 @@ export default function S2DecomposeStep({
           </div>
         )}
 
-        {DIMENSION_ORDER.map((key) => {
-          const dim = safeDimensions.find((d) => d.dimension === key);
+        {orderedKeys.length > 0 && (
+          // 2026-09-15: sticky 横向 tab,5 维度平铺,点击切换 activeKey。
+          // Inactive panels 在 DOM 中保留(用 `hidden` 隐藏),所有现有 testid
+          // (dimension-{key} / unit-{id} / follow-up-{id}) 仍然可定位,
+          // 这样 tab 化改造对单测零侵入。
+          <div
+            role="tablist"
+            aria-label="拆解维度"
+            data-testid="dimension-tabs"
+            className="sticky top-0 z-10 -mx-6 px-6 bg-surface-container-low/95 backdrop-blur-sm flex gap-1 mt-3 border-b border-outline-variant overflow-x-auto"
+          >
+            {orderedKeys.map((key) => {
+              const dim = effectiveDimByKey[key];
+              if (!dim) return null;
+              const meta = DIMENSION_LABELS[key] ?? { label: key, icon: "auto_awesome" };
+              const isActive = activeKey === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`dimension-panel-${key}`}
+                  data-testid={`dimension-tab-${key}`}
+                  onClick={() => setActiveKey(key)}
+                  className={
+                    "shrink-0 px-3 py-2 text-sm font-display font-medium border-b-2 -mb-px flex items-center gap-2 transition-colors " +
+                    (isActive
+                      ? "border-primary text-primary"
+                      : "border-transparent text-on-surface-variant hover:text-primary hover:border-outline-variant")
+                  }
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-base leading-none">
+                    {meta.icon}
+                  </span>
+                  <span>{meta.label}</span>
+                  <span className="font-mono text-[10px] opacity-70" aria-label={`${dim.units.length} 个单元`}>
+                    {dim.units.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {orderedKeys.map((key) => {
+          const dim = effectiveDimByKey[key];
           if (!dim) return null;
+          const isActive = activeKey === key;
           return (
-            <DimensionBlock
-              key={dim.dimension}
-              dimension={withCoreContradictionUnit(dim)}
-              followUpLoadingUnitId={followUpLoadingUnitId}
-              onFollowUpClick={(unitId, unitName) => setFollowUpTarget({ unitId, unitName })}
-            />
+            <div
+              key={key}
+              id={`dimension-panel-${key}`}
+              role="tabpanel"
+              aria-labelledby={`dimension-tab-${key}`}
+              hidden={!isActive}
+              data-testid={`dimension-${key}`}
+            >
+              <DimensionBlock
+                dimension={dim}
+                followUpLoadingUnitId={followUpLoadingUnitId}
+                onFollowUpClick={(unitId, unitName) => setFollowUpTarget({ unitId, unitName })}
+              />
+            </div>
           );
         })}
-
-        {safeDimensions
-          .filter((d) => !DIMENSION_ORDER.includes(d.dimension as typeof DIMENSION_ORDER[number]))
-          .map((dim) => (
-            <DimensionBlock
-              key={dim.dimension}
-              dimension={withCoreContradictionUnit(dim)}
-              followUpLoadingUnitId={followUpLoadingUnitId}
-              onFollowUpClick={(unitId, unitName) => setFollowUpTarget({ unitId, unitName })}
-            />
-          ))}
       </div>
 
       <RegenerateModal
@@ -156,47 +227,29 @@ function DimensionBlock({
   followUpLoadingUnitId: string | null;
   onFollowUpClick: (unitId: string, unitName: string) => void;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
-
-  const meta = DIMENSION_LABELS[dimension.dimension] ?? { label: dimension.dimension, icon: "auto_awesome" };
-
+  // 2026-09-15: 维度 header 折叠按钮移除 — 改用 tab strip 切换可见性后,
+  // 单个面板不再需要内嵌展开/折叠。每个 panel 现在只剩 insight + units,
+  // label/count 已上移到 tab 按钮上。
   return (
-    <section className="bg-surface-container-low border border-outline-variant rounded-lg p-3" data-testid={`dimension-${dimension.dimension}`}>
-      <button
-        type="button"
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-2 w-full text-left"
-      >
-        <span aria-hidden="true" className="material-symbols-outlined text-base leading-none text-on-surface-variant">
-          {collapsed ? "chevron_right" : "expand_more"}
-        </span>
-        <span aria-hidden="true" className="material-symbols-outlined text-primary-container text-base leading-none">
-          {meta.icon}
-        </span>
-        <h3 className="font-display text-sm font-semibold text-primary">
-          {meta.label}
-        </h3>
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-on-surface-variant">
-          {dimension.units.length} 单元
-        </span>
-      </button>
+    <section className="py-3 space-y-3">
       {dimension.insight && (
-        <p className="text-xs text-on-surface-variant mt-1 ml-10">
-          核心洞察:{dimension.insight}
+        <p
+          className="text-xs text-on-surface-variant"
+          data-testid={`dimension-insight-${dimension.dimension}`}
+        >
+          <span className="font-medium">核心洞察:</span>{dimension.insight}
         </p>
       )}
-      {!collapsed && (
-        <div className="space-y-2 mt-3">
-          {dimension.units.map((u) => (
-            <UnitCard
-              key={u.id}
-              unit={u}
-              loading={followUpLoadingUnitId === u.id}
-              onFollowUpClick={() => onFollowUpClick(u.id, u.unit_name)}
-            />
-          ))}
-        </div>
-      )}
+      <div className="space-y-2">
+        {dimension.units.map((u) => (
+          <UnitCard
+            key={u.id}
+            unit={u}
+            loading={followUpLoadingUnitId === u.id}
+            onFollowUpClick={() => onFollowUpClick(u.id, u.unit_name)}
+          />
+        ))}
+      </div>
     </section>
   );
 }

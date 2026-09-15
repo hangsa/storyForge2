@@ -261,10 +261,11 @@ describe("CreativeDivergenceStep (4 stages)", () => {
     const body = call[1] as Record<string, unknown>;
     expect(body).toMatchObject({
       prompt: "足够长的原始灵感点子",
-      genre_primary: "cool_novel",
-      // Task 12: tone + style now forward the option id (not the label).
-      tone: "heian",
-      style: "duoxian",
+      genre_primary: "网文快读",
+      // 2026-09-14 修复:S1InputStep dropdown value 改为 name,后端 raw_intent 收到的是 name
+      // (用户看到的标签 = 后端收到的值)。tone/style 同理。
+      tone: "黑暗",
+      style: "多线",
     });
     expect(body).not.toHaveProperty("genre_secondary");
   });
@@ -301,7 +302,7 @@ describe("CreativeDivergenceStep (4 stages)", () => {
 
     await waitFor(() => {
       // S2 no longer renders its own title — the only on-screen signal
-      // that the S2 stage is active is the StepIndicator "第一性拆解"
+      // that the S2 stage is active is the StepIndicator "拆解"
       // pill. Asserting the parent is on S2 by counting dimension blocks
       // (zero with this malformed payload) is sufficient as a reachability
       // check.
@@ -359,7 +360,7 @@ describe("CreativeDivergenceStep (4 stages)", () => {
   });
 
   it("S2 renders dimension blocks after a successful DECOMPOSE_SUCCESS (Bug: S2 page empty after first decompose)", async () => {
-    // Regression for: "第一性拆解生成后未展示信息，页面为空".
+    // Regression for: "拆解生成后未展示信息，页面为空".
     // A real 5-dimension payload comes back from /decompose; S2 must
     // render all 5 dimension blocks (not just the summary).
     mockApi.postThreeBDecompose.mockResolvedValueOnce({
@@ -393,11 +394,15 @@ describe("CreativeDivergenceStep (4 stages)", () => {
       (enabled![0] as () => void)();
     });
 
-    // S2 must render all 5 dimension blocks + the top-level summary
+    // S2 must render all 5 dimension panels + the top-level summary
     // paragraph (the 「总览」 h3 heading was removed on 2026-09-11;
     // the summary text itself is still surfaced).
+    // 2026-09-15: tab strip 化后还有 dimension-tab-* / dimension-tabs /
+    // dimension-insight-* 元素,所以正则收紧到只数 panel 容器。
     await waitFor(() => {
-      expect(screen.queryAllByTestId(/^dimension-/)).toHaveLength(5);
+      expect(screen.queryAllByTestId(
+        /^dimension-(ontology|energetics|power_structure|protagonist_engine|narrative_physics)$/,
+      )).toHaveLength(5);
       expect(screen.getByTestId("top-level-summary")).toHaveTextContent(
         "一句话总结:这是一个关于修仙殖民的故事",
       );
@@ -566,7 +571,7 @@ describe("CreativeDivergenceStep (4 stages)", () => {
 
     expect(screen.getByTestId("regenerate-modal")).toBeInTheDocument();
     // Modal title shows the target stage name.
-    expect(screen.getByText(/重新生成 — 第一性拆解/)).toBeInTheDocument();
+    expect(screen.getByText(/重新生成 — 拆解/)).toBeInTheDocument();
     // Modal is overlay (role="dialog") — confirm it has aria-modal.
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");

@@ -122,6 +122,68 @@ describe("S2DecomposeStep", () => {
     expect(screen.queryAllByTestId(/^dimension-/)).toHaveLength(0);
   });
 
+  // ── 2026-09-15: stacked cards → horizontal tab strip ──────────────
+
+  describe("S2DecomposeStep tab strip", () => {
+    it("renders one tab per dimension in DIMENSION_ORDER (5 total)", () => {
+      // MOCK_DIMENSIONS covers ontology/energetics/narrative_physics.
+      // power_structure / protagonist_engine 没数据,不应出 tab。
+      renderS2();
+      expect(screen.getByTestId("dimension-tabs")).toBeInTheDocument();
+      expect(screen.getByTestId("dimension-tab-ontology")).toBeInTheDocument();
+      expect(screen.getByTestId("dimension-tab-energetics")).toBeInTheDocument();
+      expect(screen.getByTestId("dimension-tab-narrative_physics")).toBeInTheDocument();
+      expect(screen.queryByTestId("dimension-tab-power_structure")).toBeNull();
+      expect(screen.queryByTestId("dimension-tab-protagonist_engine")).toBeNull();
+    });
+
+    it("marks the first DIMENSION_ORDER dimension as active by default", () => {
+      renderS2();
+      expect(screen.getByTestId("dimension-tab-ontology")).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByTestId("dimension-tab-energetics")).toHaveAttribute("aria-selected", "false");
+      expect(screen.getByTestId("dimension-tab-narrative_physics")).toHaveAttribute("aria-selected", "false");
+    });
+
+    it("switches active tab on click", () => {
+      renderS2();
+      fireEvent.click(screen.getByTestId("dimension-tab-narrative_physics"));
+      expect(screen.getByTestId("dimension-tab-narrative_physics")).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByTestId("dimension-tab-ontology")).toHaveAttribute("aria-selected", "false");
+    });
+
+    it("only one dimension panel is visible at a time; others carry `hidden`", () => {
+      // All panels are still in DOM (testids resolve regardless of `hidden`),
+      // but only the active one lacks the `hidden` attribute.
+      renderS2();
+      const ontology = screen.getByTestId("dimension-ontology") as HTMLElement;
+      const energetics = screen.getByTestId("dimension-energetics") as HTMLElement;
+      const narrative = screen.getByTestId("dimension-narrative_physics") as HTMLElement;
+      // 默认 ontology 可见,其它两个 hidden
+      expect(ontology.hasAttribute("hidden")).toBe(false);
+      expect(energetics.hasAttribute("hidden")).toBe(true);
+      expect(narrative.hasAttribute("hidden")).toBe(true);
+
+      // 切到 energetics → 状态互换
+      fireEvent.click(screen.getByTestId("dimension-tab-energetics"));
+      expect((screen.getByTestId("dimension-ontology") as HTMLElement).hasAttribute("hidden")).toBe(true);
+      expect((screen.getByTestId("dimension-energetics") as HTMLElement).hasAttribute("hidden")).toBe(false);
+      expect((screen.getByTestId("dimension-narrative_physics") as HTMLElement).hasAttribute("hidden")).toBe(true);
+    });
+
+    it("tab labels show Chinese dimension name + unit count", () => {
+      renderS2();
+      expect(screen.getByTestId("dimension-tab-ontology")).toHaveTextContent("世界构成");
+      expect(screen.getByTestId("dimension-tab-ontology")).toHaveTextContent("3");  // 3 units
+      expect(screen.getByTestId("dimension-tab-energetics")).toHaveTextContent("能量体系");
+      expect(screen.getByTestId("dimension-tab-energetics")).toHaveTextContent("1");
+    });
+
+    it("does not render the tab strip when no dimensions are present", () => {
+      renderS2({ dimensions: [] });
+      expect(screen.queryByTestId("dimension-tabs")).toBeNull();
+    });
+  });
+
   // 「总览」 top-level summary was removed on 2026-09-11 — the scroll
   // container now goes straight to dimension blocks. The state field
   // `state.topLevelSummary` is still persisted (round-trip with backend)
@@ -147,11 +209,11 @@ describe("S2DecomposeStep", () => {
     expect(screen.queryByTestId("regenerate-modal")).toBeNull();
   });
 
-  it("核心矛盾 virtual unit counts toward the dimension header tally", () => {
+  it("核心矛盾 virtual unit counts toward the dimension tab tally (2026-09-15: header moved to tab)", () => {
     renderS2();
-    // narrative_physics had 1 real unit; +1 virtual → "2 单元"
-    const dimHeader = screen.getByTestId("dimension-narrative_physics");
-    expect(dimHeader).toHaveTextContent("2 单元");
+    // narrative_physics had 1 real unit; +1 virtual → tab shows "2".
+    const tab = screen.getByTestId("dimension-tab-narrative_physics");
+    expect(tab).toHaveTextContent("2");
   });
 
   it("核心矛盾 virtual unit NOT prepended when narrative_physics has empty insight", () => {

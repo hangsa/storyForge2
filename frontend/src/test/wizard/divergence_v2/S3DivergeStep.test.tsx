@@ -129,7 +129,73 @@ describe("S3DivergeStep", () => {
     expect(originalRow.textContent).not.toMatch(/连锁推演/);
   });
 
-  // Task 8: legacy-state auto-/diverge. S3 should fire onRegenerateAll exactly
+  // ── 2026-09-15: stacked dim sections → horizontal tab strip ──────────────
+
+  describe("S3DivergeStep tab strip", () => {
+    it("renders one tab per dimension in DIMENSION_ORDER", () => {
+      // MOCK covers ontology + energetics. Other 3 dims have no data → no tabs.
+      render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
+      expect(screen.getByTestId("diverge-dim-tabs")).toBeInTheDocument();
+      expect(screen.getByTestId("diverge-dim-tab-ontology")).toBeInTheDocument();
+      expect(screen.getByTestId("diverge-dim-tab-energetics")).toBeInTheDocument();
+      expect(screen.queryByTestId("diverge-dim-tab-power_structure")).toBeNull();
+    });
+
+    it("marks the first DIMENSION_ORDER dimension as active by default", () => {
+      render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
+      expect(screen.getByTestId("diverge-dim-tab-ontology")).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByTestId("diverge-dim-tab-energetics")).toHaveAttribute("aria-selected", "false");
+    });
+
+    it("switches active tab on click", () => {
+      render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
+      fireEvent.click(screen.getByTestId("diverge-dim-tab-energetics"));
+      expect(screen.getByTestId("diverge-dim-tab-energetics")).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByTestId("diverge-dim-tab-ontology")).toHaveAttribute("aria-selected", "false");
+    });
+
+    it("only one dim panel is visible at a time; others carry `hidden`", () => {
+      render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
+      const ontology = screen.getByTestId("diverge-dim-ontology") as HTMLElement;
+      const energetics = screen.getByTestId("diverge-dim-energetics") as HTMLElement;
+      expect(ontology.hasAttribute("hidden")).toBe(false);
+      expect(energetics.hasAttribute("hidden")).toBe(true);
+
+      fireEvent.click(screen.getByTestId("diverge-dim-tab-energetics"));
+      expect((screen.getByTestId("diverge-dim-ontology") as HTMLElement).hasAttribute("hidden")).toBe(true);
+      expect((screen.getByTestId("diverge-dim-energetics") as HTMLElement).hasAttribute("hidden")).toBe(false);
+    });
+
+    it("tab labels show Chinese dimension name + unit count", () => {
+      render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
+      expect(screen.getByTestId("diverge-dim-tab-ontology")).toHaveTextContent("世界构成");
+      expect(screen.getByTestId("diverge-dim-tab-ontology")).toHaveTextContent("1");
+      expect(screen.getByTestId("diverge-dim-tab-energetics")).toHaveTextContent("能量体系");
+      expect(screen.getByTestId("diverge-dim-tab-energetics")).toHaveTextContent("1");
+    });
+
+    it("does not render the tab strip when no dimensions are present", () => {
+      render(<S3DivergeStep dimensions={[]} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={vi.fn()} />);
+      expect(screen.queryByTestId("diverge-dim-tabs")).toBeNull();
+    });
+
+    it("clicking a candidate in a hidden panel still fires onSelectCandidate (DOM preserved under hidden)", () => {
+      // Regression guard: with stacked cards every unit is reachable; with tabs,
+      // inactive panels live under `hidden` but their radio rows must still
+      // resolve and fire the callback. fireEvent.click is unaffected by hidden.
+      const onSelect = vi.fn();
+      render(<S3DivergeStep dimensions={MOCK} loading={false} onRegenerateUnit={vi.fn()} onSelectCandidate={onSelect} />);
+      // c2 lives in ontology (default active), but we exercise the cross-tab
+      // path by switching to energetics first and verifying candidate-c2 still
+      // resolves from the now-hidden ontology section.
+      fireEvent.click(screen.getByTestId("diverge-dim-tab-energetics"));
+      expect(screen.getByTestId("candidate-c2")).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("candidate-c2"));
+      expect(onSelect).toHaveBeenCalledWith("u1", 1);
+    });
+  });
+
+// Task 8: legacy-state auto-/diverge. S3 should fire onRegenerateAll exactly
   // once on mount when a unit has candidates but none of them is the virtual
   // __original row (state.json predates the backend helper).
   describe("legacy state auto-/diverge", () => {

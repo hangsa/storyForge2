@@ -5,7 +5,7 @@ blending / commit) with four prompts that follow the new 4-stage pipeline:
 
   - firstness_decompose         (Stage 1 → 2: 5-dimension decomposition)
   - three_b_follow_up          (Stage 2: per-unit follow-up deepening)
-  - three_b_adaptive_diverge   (Stage 2 → 3: adaptive divergence with chain reaction)
+  - adaptive_diverge           (Stage 2 → 3: adaptive divergence with chain reaction)
   - three_b_commit             (Stage 3 → 4: synthesis using causal_map + summary)
 
 Each is a single prompt template consumed by ThreeBEngine via
@@ -39,7 +39,7 @@ from backend.services.global_prompt_override_store import (
 EXPECTED_NAMES = (
     "firstness_decompose",
     "three_b_follow_up",
-    "three_b_adaptive_diverge",
+    "adaptive_diverge",
     "three_b_commit",
 )
 
@@ -348,7 +348,7 @@ def test_firstness_decompose_yaml_mentions_genre(genre: str):
     assert genre in content, (
         f"firstness_decompose.yaml 未提及题材 {genre!r} — "
         f"提示词可能退化为单一题材(原版仅侧重玄幻/仙侠)。"
-        f"需在题材适配层加入该题材的承重维度与校验判据。"
+        f"需在题材适配层加入该题材的承重维度信息。"
     )
 
 
@@ -416,19 +416,19 @@ def test_firstness_decompose_yaml_avoids_fantasy_only_vocabulary_in_dimensions()
             )
 
 
-# --- three_b_adaptive_diverge (Stage 2→3 prompt, added in rewrite Task 11) -----
+# --- adaptive_diverge (Stage 2→3 prompt, added in rewrite Task 11) -----
 
 
-def test_three_b_adaptive_diverge_yaml_exists():
+def test_adaptive_diverge_yaml_exists():
     from pathlib import Path
-    p = Path("backend/prompts/creative/three_b_adaptive_diverge.yaml")
+    p = Path("backend/prompts/creative/adaptive_diverge.yaml")
     assert p.exists()
 
 
-def test_three_b_adaptive_diverge_yaml_includes_4_operators_and_chain_reaction():
+def test_adaptive_diverge_yaml_includes_4_operators_and_chain_reaction():
     import yaml
     from pathlib import Path
-    p = Path("backend/prompts/creative/three_b_adaptive_diverge.yaml")
+    p = Path("backend/prompts/creative/adaptive_diverge.yaml")
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     content = data["system_prompt"] + data["user_prompt_template"]
     for op in ("扭曲", "打破", "融合", "组合链"):
@@ -476,7 +476,7 @@ def test_three_b_commit_yaml_uses_causal_map_and_summary():
 
 def test_all_v2_yamls_in_creative_dir():
     from pathlib import Path
-    expected = {"firstness_decompose", "three_b_follow_up", "three_b_adaptive_diverge", "three_b_commit"}
+    expected = {"firstness_decompose", "three_b_follow_up", "adaptive_diverge", "three_b_commit"}
     found = {p.stem for p in Path("backend/prompts/creative/").glob("*.yaml")}
     assert expected.issubset(found)
 
@@ -525,7 +525,7 @@ def test_prompts_format_with_engine_kwargs_without_keyerror():
             "style": sample.style,
             "user_modifications": "",
         }),
-        ("three_b_adaptive_diverge", {
+        ("adaptive_diverge", {
             "raw_intent": sample,
             "prompt": sample.prompt,
             "genre_primary": sample.genre_primary,

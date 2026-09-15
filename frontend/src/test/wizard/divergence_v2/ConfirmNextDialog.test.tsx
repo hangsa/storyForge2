@@ -15,8 +15,8 @@ describe("ConfirmNextDialog", () => {
       <ConfirmNextDialog open={true} targetStage="2" affectedStages={["3", "4"]} onConfirm={vi.fn()} onCancel={vi.fn()} />,
     );
     // targetStage label appears twice (title + body paragraph) — use getAllByText
-    expect(screen.getAllByText(/第一性拆解/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/自适应发散/)).toBeInTheDocument();
+    expect(screen.getAllByText(/拆解/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/发散/)).toBeInTheDocument();
     expect(screen.getByText(/提交/)).toBeInTheDocument();
   });
 

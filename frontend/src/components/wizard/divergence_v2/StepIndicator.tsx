@@ -2,9 +2,9 @@ import React from "react";
 import type { SubStage } from "./types";
 
 const STAGES: Array<{ key: SubStage; label: string; icon: string }> = [
-  { key: "1", label: "灵感输入", icon: "edit_note" },
-  { key: "2", label: "第一性拆解", icon: "account_tree" },
-  { key: "3", label: "自适应发散", icon: "call_split" },
+  { key: "1", label: "灵感", icon: "edit_note" },
+  { key: "2", label: "拆解", icon: "account_tree" },
+  { key: "3", label: "发散", icon: "call_split" },
   { key: "4", label: "提交", icon: "task_alt" },
 ];
 

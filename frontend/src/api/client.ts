@@ -13,7 +13,11 @@ import type { ActiveDimensions, DimensionEntry, DimensionEntryPayload, Dimension
 export type { Genre };
 
 const API_BASE = "/api";
-const TIMEOUT_MS = 600_000;
+// 2026-09-13 proj_4e6f888f: 600s was tight against MiniMax-M3 (3×60s timeout)
+// + deepseek-v4-flash ~7min for a 4000-char reasoning prompt = 10min exactly,
+// which fired the abort right when the backend finished. 15min gives headroom
+// while we work on faster fallbacks. Reduce once tier_1 LLM latency improves.
+const TIMEOUT_MS = 900_000;
 
 class ApiError extends Error {
   code: string;

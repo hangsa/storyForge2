@@ -709,6 +709,10 @@ async def init_canvas(project_id: str, request: InitRequest):
         from backend.creative_os.novelty_evaluator import NoveltyEvaluator
         from backend.creative_os.trope_pool import TropePool
         from backend.creative_os.contradiction_engine import ContradictionEngine
+        from backend.services.agent_prompt_stores import (
+            global_override_store,
+            project_override_store,
+        )
 
         project_dir = settings.projects_dir / project_id
         catalog_path = settings.projects_dir.parent / "config" / "trope_catalog.yaml"
@@ -718,6 +722,8 @@ async def init_canvas(project_id: str, request: InitRequest):
             contradiction_engine=ContradictionEngine(),
             model_router=None,
             embedder=None,
+            override_store=project_override_store(),
+            global_override_store=global_override_store(),
         )
 
         llm_client = _build_trope_extraction_llm_client()
@@ -728,6 +734,7 @@ async def init_canvas(project_id: str, request: InitRequest):
                     raw_intent=raw_intent_ref,
                     llm_client=llm_client,
                     save_callback=lambda ri: _save_raw_intent_trope_tags(project_id, ri),
+                    project_id=project_id,
                 )
             )
             # Hold a strong reference; otherwise the task may be GC'd before

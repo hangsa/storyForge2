@@ -45,7 +45,7 @@ PROMPT_LABEL_OVERRIDES: dict[str, str] = {
     "creative_director_direction": "创意总监·方向",
     "creative_director_mutation": "创意总监·变异",
     "creative_director_path": "创意总监·路径",
-    "firstness_decompose": "第一性拆解",
+    "firstness_decompose": "兜底拆解提示词",
     "genre_fusion": "题材融合",
     "mutation_operation": "变异操作",
     "novelty_evaluation_llm": "新颖度评估",

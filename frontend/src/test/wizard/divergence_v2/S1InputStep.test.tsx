@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("@/hooks/useCreativeDimensions", () => ({
   useCreativeDimensions: vi.fn(),
@@ -60,15 +60,36 @@ describe("S1InputStep with creative dimensions", () => {
     expect(screen.getByText("热血")).toBeInTheDocument();
   });
 
-  it("submits RawIntent with id strings", () => {
+  it("submits RawIntent with name strings (not id slugs)", async () => {
+    // 契约变更:旧实现把 dropdown value 设成 store id(如 "xuanhuan"/"rexue"),
+    // 后端 raw_intent 持久化的也是 id;修复后 dropdown value 改为 name,
+    // 用户看到什么标签 = 后端收到什么值。
     (useCreativeDimensions as any).mockReturnValue({ ...stubAll, loading: false, error: null, refresh: vi.fn() });
     const onSubmitted = vi.fn();
-    render(<S1InputStep projectId="p1" initial={null} onSubmitted={onSubmitted} />);
-    // 通过底部 wizard footer 触发（onSubmitReady 回调）
-    // 这里直接调用 textarea 改值
+    let submitHandler: (() => void) | null = null;
+    const onSubmitReady = vi.fn((handler: (() => void) | null, _valid: boolean) => {
+      submitHandler = handler;
+    });
+    render(
+      <S1InputStep
+        projectId="p1"
+        initial={null}
+        onSubmitted={onSubmitted}
+        onSubmitReady={onSubmitReady}
+      />,
+    );
+    // prompt 必须 ≥10 字才会让 valid 变 true → useEffect 才会把 handler 注入 onSubmitReady
     const ta = screen.getByPlaceholderText(/赛博朋克/) as HTMLTextAreaElement;
-    // 检查下拉选项可访问即可
-    expect(ta).toBeInTheDocument();
+    fireEvent.change(ta, { target: { value: "一个足够长的灵感点子用来通过校验" } });
+    expect(submitHandler).not.toBeNull();
+    submitHandler!();
+    expect(onSubmitted).toHaveBeenCalledTimes(1);
+    expect(onSubmitted).toHaveBeenCalledWith({
+      prompt: "一个足够长的灵感点子用来通过校验",
+      genre_primary: "玄幻",  // stubAll.subject[0].name,NOT id "xuanhuan"
+      tone: "热血",           // NOT id "rexue"
+      style: "爽文",          // NOT id "shuangwen"
+    });
   });
 
   it("prefills genre from defaultGenre when initial is null", () => {
@@ -102,5 +123,34 @@ describe("S1InputStep with creative dimensions", () => {
     // 模拟异步 fetch 完成后 defaultGenre 到达
     rerender(<S1InputStep projectId="p1" initial={null} defaultGenre="xianxia" onSubmitted={() => {}} />);
     expect(screen.getByText("仙侠")).toBeInTheDocument();  // 异步到达后应切换到 defaultGenre
+  });
+
+  it("recovers legacy id like '黑暗' to its name when initial carries polluted old id", () => {
+    // 回归测试,对应 2026-09-14 修复的 raw_intent id 污染 bug。
+    // 旧 config/creative_dimensions.json 把 tone[5] id/name 互换 (id="黑暗",name="热血"),
+    // 用户在 S1 选「热血」时,旧 S1InputStep 把 dropdown value=id="黑暗" 写进 raw_intent,
+    // 重开 S1 时 initial.tone="黑暗"。
+    // 修复后 S1InputStep 必须通过 resolveInitialValue 的 byId 分支把它反查为 name "热血",
+    // 让 dropdown 显示用户原选的标签,而不是显示空字符串或首项。
+    const legacyPollutedStore = {
+      subject: stubAll.subject,
+      tone: [
+        // 模拟互换态:id="黑暗",name="热血"(这就是旧数据里"用户选热血但持久化为黑暗"的形态)
+        { id: "黑暗", name: "热血", description: "", status: "active" as const, order: 0, created_at: "a", updated_at: "a" },
+      ],
+      style: stubAll.style,
+    };
+    (useCreativeDimensions as any).mockReturnValue({
+      ...legacyPollutedStore, loading: false, error: null, refresh: vi.fn(),
+    });
+    const initial = {
+      prompt: "a long enough prompt for validation",
+      genre_primary: "xuanhuan",
+      tone: "黑暗",     // 旧 raw_intent 里被污染的旧 id
+      style: "shuangwen",
+    };
+    render(<S1InputStep projectId="p1" initial={initial} onSubmitted={() => {}} />);
+    // dropdown 应显示「热血」(byId("黑暗") → name="热血"),不是「黑暗」也不是首项
+    expect(screen.getByText("热血")).toBeInTheDocument();
   });
 });

@@ -19,6 +19,8 @@ import asyncio
 import json
 import logging
 import os
+import re
+import re
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -44,6 +46,110 @@ def _file_manager() -> FileManager:
 
 
 logger = logging.getLogger(__name__)
+
+
+# Strip reasoning-model <think>...</think> blocks from LLM output before we
+# parse it / save it as a prompt override. Reasoning models (MiniMax-M3 etc.)
+# wrap chain-of-thought inside the think block and put the actual answer
+# AFTER `</think>` — without this strip, the JSON parser fails because the
+# think block + `###TASK_COMPLETED###` etc. get treated as the response body.
+# Pattern mirrors `novelty_evaluator._THINK_BLOCK_RE`.
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_think_block(text: str) -> str:
+    """Drop reasoning-model think blocks; return the residual trimmed text.
+
+    Handles the common closed form (`<think>...</think>`). For the rarer
+    truncated/unterminated case (model emits `<think>` but never closes it),
+    we conservatively drop only when no JSON-like payload survives — that
+    way we don't accidentally eat a real answer that just happens to be
+    preceded by an unclosed think opener.
+    """
+    if not text:
+        return ""
+    cleaned = _THINK_BLOCK_RE.sub("", text).strip()
+    return cleaned
+
+
+def _safe_format(template: str, **kwargs: object) -> str:
+    """Format `template` with kwargs, surviving literal `{...}` from
+    LLM-generated overrides.
+
+    Background: meta_decompose writes a per-project override for
+    `firstness_decompose.system_prompt` whose content includes a canonical
+    JSON template (literal `{...}` for the LLM that runs /decompose to see).
+    Plain `.format(negative_constraints="")` cannot handle literal `{...}`
+    because Python's formatter interprets every `{X}` as a placeholder
+    start, raising `KeyError` on the first `{` that doesn't name a kwarg
+    (e.g. `{` in `{"dimensions": [...]}`) — surfacing as
+    `503 DECOMPOSE_FAILED: '\\n  "dimensions"'` (proj_4e6f888f 2026-09-13
+    17:32).
+
+    Strategy: walk the template once with balanced-brace tracking,
+    treating `{{` / `}}` as YAML-escape units. For each balanced `{X}`
+    group:
+      - if X names a kwarg → emit `str(kwargs[X])`
+      - else → emit `{` + recursively-rendered X + `}` (literal preserved)
+    Lone `{` / `}` (no matching pair) passes through unchanged.
+
+    No `.format()` call is needed — substitution is done manually, so
+    balanced literal groups never get re-interpreted.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(template)
+    while i < n:
+        # YAML-escaped braces: `{{` / `}}` round-trip to a single
+        # `{` / `}` in the output.
+        if i + 1 < n and template[i] == "{" and template[i + 1] == "{":
+            out.append("{")
+            i += 2
+            continue
+        if i + 1 < n and template[i] == "}" and template[i + 1] == "}":
+            out.append("}")
+            i += 2
+            continue
+        ch = template[i]
+        if ch != "{":
+            out.append(ch)
+            i += 1
+            continue
+        # Walk a balanced `{X}` group, treating `{{` / `}}` inside as units.
+        depth = 1
+        j = i + 1
+        while j < n and depth > 0:
+            tj = template[j]
+            if tj == "{" and j + 1 < n and template[j + 1] == "{":
+                j += 2
+                continue
+            if tj == "}" and j + 1 < n and template[j + 1] == "}":
+                j += 2
+                continue
+            if tj == "{":
+                depth += 1
+            elif tj == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        if depth != 0:
+            # Unmatched `{` — pass through literally.
+            out.append("{")
+            i += 1
+            continue
+        inner = template[i + 1 : j]
+        if inner in kwargs:
+            out.append(str(kwargs[inner]))
+        else:
+            # Literal balanced group — recurse so nested braces are
+            # also rendered correctly (a literal `{X}` may itself
+            # contain a literal `{Y}`).
+            out.append("{")
+            out.append(_safe_format(inner, **kwargs))
+            out.append("}")
+        i = j + 1
+    return "".join(out)
 
 
 STATE_FILE = "three_b_state.json"
@@ -160,7 +266,14 @@ def _parse_json_or_raise(raw_text: str, op: str) -> dict:
     """
     from backend.utils.json_parser import parse_json_text
 
-    data = parse_json_text(raw_text)
+    # Defense-in-depth: strip reasoning-model think blocks before parsing.
+    # `invoke_meta_llm` strips at write time, but a polluted override can
+    # still reach here via: (a) global firstness_decompose override that
+    # predates the strip; (b) a hand-edited system_prompt in Prompt Plaza
+    # that landed from a previous polluted run before this fix; (c) any
+    # other 3B LLM call (commit / follow_up) when the model thinks first.
+    cleaned = _strip_think_block(raw_text)
+    data = parse_json_text(cleaned)
     if data is None:
         raise ValueError(f"{op}: LLM 返回非 JSON: 无法解析 LLM 输出")
     if not isinstance(data, dict):
@@ -267,10 +380,29 @@ def _register_dimensions_store(store) -> None:
     globals()["_dimensions_store_ref"] = lambda: store
 
 
-def _build_dimension_block(raw_intent: Optional[RawIntent]) -> str:
-    """根据 raw_intent 选中的 id，从 store 查 description，拼出「设定背景」块内容。
+def _resolve_dim_entry(store, kind: str, value: str):
+    """按 id 或 name 解析 store entry;优先 id(name 在数据 corruption 修复后也可以命中)。
 
-    没有 description 的维度行不出现；找不到 id 的条目也不出现。
+    raw_intent.genre_primary/tone/style 自 2026-09-14 起前端发送 name(用户可见标签)
+    而非 store id;但历史 raw_intent 仍可能存旧 id(老项目未迁移 / 用户从未重开)。
+    同时 id 优先是防御 — 万一后端别处还在按 id 写入,这里也能解析。
+    """
+    if not value:
+        return None
+    entry = store.get(kind, value)
+    if entry is not None:
+        return entry
+    cat = getattr(store._get_catalog(), kind)  # type: ignore[attr-defined]
+    for e in cat:
+        if e.name == value:
+            return e
+    return None
+
+
+def _build_dimension_block(raw_intent: Optional[RawIntent]) -> str:
+    """根据 raw_intent 选中的 id 或 name，从 store 查 description，拼出「设定背景」块内容。
+
+    没有 description 的维度行不出现；找不到的条目也不出现。
     """
     store = _get_dimensions_store()
     if raw_intent is None or store is None:
@@ -283,7 +415,7 @@ def _build_dimension_block(raw_intent: Optional[RawIntent]) -> str:
     ]:
         if not value:
             continue
-        entry = store.get(kind, value)
+        entry = _resolve_dim_entry(store, kind, value)
         if entry and entry.description and entry.description.strip():
             lines.append(f"{label}（{entry.name}）：{entry.description.strip()}")
     return "\n".join(lines)
@@ -355,20 +487,48 @@ class ThreeBEngine:
         empty, the LLM receives an empty-string hint and ignores it. When
         non-empty, it's injected into the decompose prompt as a "user
         additional feedback" block — same pattern as concept_generation.yaml.
+
+        On schema-invalid output (e.g. LLM returned parseable JSON but
+        `dimensions: []`), the router's network-error retry does NOT help —
+        the call succeeded at HTTP level, the JSON parsed, but the schema is
+        degenerate. We retry the whole router.execute once with the same args
+        to give the model another shot. Observed on proj_4e6f888f 2026-09-13
+        where the MiniMax-M3 fallback (`deepseek-v4-flash`) returned
+        `{"dimensions": []}` after the primary timed out three times.
         """
         started_at = _now_iso()
-        response = await self._invoke_llm_json_with_block(
-            DECOMPOSE_PROMPT, "decompose",
-            raw_intent=raw_intent,
-            project_id=project_id,
-            prompt=raw_intent.prompt,
-            genre_primary=raw_intent.genre_primary,
-            tone=raw_intent.tone or "(无)",
-            style=raw_intent.style or "(无)",
-            user_modifications=_build_user_modifications_block(user_modifications),
-        )
-        raw_text = response.get("content", "")
-        dims, causal_map, summary = self._parse_decompose_output(raw_text)
+        last_schema_error: Optional[ValueError] = None
+        for schema_attempt in range(2):
+            response = await self._invoke_llm_json_with_block(
+                DECOMPOSE_PROMPT, "decompose",
+                raw_intent=raw_intent,
+                project_id=project_id,
+                prompt=raw_intent.prompt,
+                genre_primary=raw_intent.genre_primary,
+                tone=raw_intent.tone or "(无)",
+                style=raw_intent.style or "(无)",
+                user_modifications=_build_user_modifications_block(user_modifications),
+            )
+            raw_text = response.get("content", "")
+            try:
+                dims, causal_map, summary = self._parse_decompose_output(raw_text)
+                break
+            except ValueError as e:
+                # Schema-invalid: log which model produced it (router.execute
+                # echoes `model` in its response), then retry once. Network
+                # errors / 503s are surfaced by the router itself, so this
+                # only catches ValueError from _parse_decompose_output.
+                last_schema_error = e
+                logger.warning(
+                    "decompose: schema-invalid response from model=%s (attempt %d): %s | raw[:500]=%r",
+                    response.get("model", "?"), schema_attempt + 1, e, raw_text[:500],
+                )
+                if schema_attempt == 1:
+                    raise
+        else:
+            # Defensive: loop completed without break (shouldn't happen since
+            # the second attempt raises). Re-raise the captured error.
+            raise last_schema_error or ValueError("decompose: schema retry exhausted")
         completed_at = _now_iso()
         state = load_state(project_id) or ThreeBState(project_id=project_id)
         # 清空下游(decompose 自身的 dimensions 字段会被覆盖)
@@ -406,7 +566,7 @@ class ThreeBEngine:
             Exception: any other LLM failure (mapped to 503 by the route).
         """
         prompt_data = self._load_prompt(META_DECOMPOSE_PROMPT, project_id)
-        system = prompt_data["system_prompt"].format(negative_constraints="")
+        system = _safe_format(prompt_data["system_prompt"], negative_constraints="")
         user = prompt_data["user_prompt_template"].format(
             prompt=raw_intent.prompt,
             genre_primary=raw_intent.genre_primary,
@@ -424,7 +584,12 @@ class ThreeBEngine:
             temperature=prompt_data.get("temperature", 0.7),
             max_tokens=prompt_data.get("max_tokens", 8192),
         )
-        text = (response.get("content") or "").strip()
+        # Strip reasoning-model think blocks BEFORE saving. Without this the
+        # override gets polluted with `<think>...</think>` English self-review
+        # (proj_4e6f888f 2026-09-13) and the next /decompose call loads the
+        # polluted prompt as its system_prompt → LLM responds inside another
+        # think block → /decompose 422s with "无法解析 LLM 输出".
+        text = _strip_think_block(response.get("content") or "")
         if not text:
             raise ValueError("meta_decompose: LLM 返回空文本")
 
@@ -478,7 +643,7 @@ class ThreeBEngine:
         All other format kwargs are passed through to user_prompt_template.
         """
         prompt_data = self._load_prompt(prompt_name, project_id)
-        system = prompt_data["system_prompt"].format(negative_constraints="")
+        system = _safe_format(prompt_data["system_prompt"], negative_constraints="")
         user = prompt_data["user_prompt_template"].format(**fmt)
         return system, user
 
@@ -526,7 +691,7 @@ class ThreeBEngine:
     ) -> dict:
         """与 _invoke_llm_json 相同，但额外在 user 消息前注入「设定背景」块。"""
         prompt_data = self._load_prompt(prompt_name, project_id)
-        system = prompt_data["system_prompt"].format(negative_constraints="")
+        system = _safe_format(prompt_data["system_prompt"], negative_constraints="")
         user = prompt_data["user_prompt_template"].format(**fmt)
         user = _maybe_inject_block(user, raw_intent)
         return await self._router.execute(
@@ -800,7 +965,7 @@ class ThreeBEngine:
         # selected_units (a list of bullets built from candidates), not a
         # flat format-string substitution.
         prompt_data = self._load_prompt(COMMIT_PROMPT, project_id)
-        system = prompt_data["system_prompt"].format(negative_constraints="")
+        system = _safe_format(prompt_data["system_prompt"], negative_constraints="")
         user = self._build_commit_user_prompt(prompt_data["user_prompt_template"], state)
         user = _maybe_inject_block(user, state.raw_intent)
 

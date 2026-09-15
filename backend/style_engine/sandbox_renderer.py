@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
@@ -53,9 +54,30 @@ def _build_params_description(params: SandboxParams) -> str:
 _PROMPT_PATH = Path(settings.prompts_dir) / "style_engine" / "sandbox_preview.yaml"
 
 
-def _load_prompt() -> dict:
-    with open(_PROMPT_PATH, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+def _load_prompt(
+    project_id: Optional[str] = None,
+    *,
+    override_store=None,
+    global_override_store=None,
+) -> dict:
+    """Load sandbox_preview prompt via `load_prompt_effective`.
+
+    Resolution order: YAML default → global override → project override.
+    `project_id` + stores mirror the wiring used by ThreeBEngine / BranchSimulator
+    so Prompt Plaza edits to `sandbox_preview` actually land at runtime.
+
+    The pre-fix version used `yaml.safe_load` directly on the path, which
+    silently bypassed the override stores — Prompt Plaza edits to this
+    prompt would never reach the LLM until the backend restarted.
+    """
+    from backend.services.prompt_override_store import load_prompt_effective
+
+    return load_prompt_effective(
+        "sandbox_preview",
+        project_id=project_id,
+        override_store=override_store,
+        global_override_store=global_override_store,
+    )
 
 
 async def render_preview(
@@ -64,11 +86,18 @@ async def render_preview(
     source_text: str,
     params: SandboxParams,
     genre: str,
+    project_id: Optional[str] = None,
+    override_store=None,
+    global_override_store=None,
 ) -> PreviewResponse:
     """Render a style preview via Tier 3 LLM. Returns skipped response on failure."""
     source_avg = compute_avg_length(source_text)
     try:
-        prompt = _load_prompt()
+        prompt = _load_prompt(
+            project_id,
+            override_store=override_store,
+            global_override_store=global_override_store,
+        )
         user_prompt = prompt["user_prompt_template"].format(
             genre=genre,
             params_description=_build_params_description(params),

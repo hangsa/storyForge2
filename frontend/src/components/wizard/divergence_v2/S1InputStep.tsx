@@ -7,9 +7,8 @@ interface Props {
   projectId: string;
   initial: RawIntent | null;
   /**
-   * 新建项目时用户在 CreateProjectModal 选的题材模板 ID。
-   * 当 rawIntent 还没落盘(initial === null)时,用它预填题材 dropdown,
-   * 避免回退到硬编码的 DEFAULT_GENRE_FALLBACK。
+   * 新建项目时用户在 CreateProjectModal 选的题材模板 ID(slug 如 "cool_novel"/"qihuan")。
+   * 当 rawIntent 还没落盘(initial === null)时,用它预填题材 dropdown,避免回退到硬编码 fallback。
    * rawIntent 已存在时,initial.genre_primary 优先级更高。
    */
   defaultGenre?: string;
@@ -24,19 +23,40 @@ interface Props {
   onSubmitReady?: (handler: (() => void) | null, valid: boolean) => void;
 }
 
-const DEFAULT_GENRE_FALLBACK = "cool_novel";
+const DEFAULT_GENRE_FALLBACK = "玄幻";
 const MAX_PROMPT = 1000;
 
 const KIND_LABEL = { subject: "题材", tone: "基调", style: "风格" } as const;
 type DropdownKind = keyof typeof KIND_LABEL;
 
+/**
+ * Resolve the initial dropdown value for a dimension from a saved raw_intent
+ * field or a defaultGenre prop.
+ *
+ * 历史原因:`raw_intent.genre_primary/tone/style` 旧版本存的是数据 store 里的
+ * slug id(如 "cool_novel"/"9edeacbe"/"rexue"),而不是用户可见的 name。
+ * S1InputStep 现在把 dropdown 的 value 改成 name(用户看到的标签 = 后端收到的值),
+ * 所以这里要做三段兼容:
+ *   1. exact name match → 直接返回 name
+ *   2. legacy id match  → 用旧 id 反查到对应 entry,返回 entry.name
+ *   3. 全没命中         → fallbackName / entries[0].name / ""
+ *
+ * 旧项目(proj_4e6f888f 等)即便不跑迁移脚本也能在这里被救回来 —— 重开 S1 时
+ * dropdown 自动显示「奇幻」「热血」「爽文」而不是「9edeacbe」「黑暗」。
+ */
 function resolveInitialValue(
   initialValue: string | undefined,
-  activeIds: Set<string>,
-  fallbackId: string | undefined,
+  entries: ReadonlyArray<{ id: string; name: string }>,
+  fallbackName: string | undefined,
 ): string {
-  if (initialValue && activeIds.has(initialValue)) return initialValue;
-  if (fallbackId) return fallbackId;
+  if (initialValue) {
+    const byName = entries.find((e) => e.name === initialValue);
+    if (byName) return byName.name;
+    const byId = entries.find((e) => e.id === initialValue);
+    if (byId) return byId.name;
+  }
+  if (fallbackName) return fallbackName;
+  if (entries.length > 0) return entries[0].name;
   return "";
 }
 
@@ -45,20 +65,16 @@ export default function S1InputStep({
 }: Props) {
   const { subject, tone, style, loading, error } = useCreativeDimensions();
 
-  const subjectOptions = useMemo(() => subject.map((e) => ({ value: e.id, label: e.name })), [subject]);
-  const toneOptions    = useMemo(() => tone.map((e) => ({ value: e.id, label: e.name })), [tone]);
-  const styleOptions   = useMemo(() => style.map((e) => ({ value: e.id, label: e.name })), [style]);
-
-  const subjectActiveIds = useMemo(() => new Set(subject.map((e) => e.id)), [subject]);
-  const toneActiveIds    = useMemo(() => new Set(tone.map((e) => e.id)), [tone]);
-  const styleActiveIds   = useMemo(() => new Set(style.map((e) => e.id)), [style]);
+  const subjectOptions = useMemo(() => subject.map((e) => ({ value: e.name, label: e.name })), [subject]);
+  const toneOptions    = useMemo(() => tone.map((e) => ({ value: e.name, label: e.name })), [tone]);
+  const styleOptions   = useMemo(() => style.map((e) => ({ value: e.name, label: e.name })), [style]);
 
   const [prompt, setPrompt] = useState(initial?.prompt ?? "");
   const [genrePrimary, setGenrePrimary] = useState(() =>
-    resolveInitialValue(initial?.genre_primary ?? defaultGenre, subjectActiveIds, subject[0]?.id) || DEFAULT_GENRE_FALLBACK
+    resolveInitialValue(initial?.genre_primary ?? defaultGenre, subject, subject[0]?.name) || DEFAULT_GENRE_FALLBACK
   );
-  const [toneVal, setTone] = useState(() => resolveInitialValue(initial?.tone, toneActiveIds, tone[0]?.id));
-  const [styleVal, setStyle] = useState(() => resolveInitialValue(initial?.style, styleActiveIds, style[0]?.id));
+  const [toneVal, setTone] = useState(() => resolveInitialValue(initial?.tone, tone, tone[0]?.name));
+  const [styleVal, setStyle] = useState(() => resolveInitialValue(initial?.style, style, style[0]?.name));
 
   const subjectDisabled = subjectOptions.length === 0;
   const toneDisabled    = toneOptions.length === 0;
@@ -72,37 +88,37 @@ export default function S1InputStep({
   // above ran with the empty first-render data; once the catalog
   // resolves, the previous state may no longer match any active option
   // (e.g. `toneVal === ""` because resolveInitialValue returned "" with
-  // no active ids). Snap to the first active option so the trigger
+  // no active entries). Snap to the first active option so the trigger
   // button always renders a meaningful label.
   //
   // 第二个责任:defaultGenre 在 S1InputStep 首次渲染后才异步到达(useThreeBDivergence
   // 的 getProjectStatus 在 mount effect 里发起,完成时 defaultGenre 从 "" 变 "xuanyi")。
   // useState 的 lazy initializer 只跑一次,故需此 effect 把迟到的 defaultGenre 写入 state。
-  // 仅在 initial 为空(用户尚未提交过灵感输入)时覆盖,避免覆盖用户已选的值。
+  // 仅在 initial 为空(用户尚未提交过灵感)时覆盖,避免覆盖用户已选的值。
+  // defaultGenre 可能是 slug(项目 create 时存的是 id)或 name(任何后续传递),
+  // resolveInitialValue 内部已统一处理,这里只需把对应 name 写入 state。
   useEffect(() => {
-    if (subject.length > 0 && !subjectActiveIds.has(genrePrimary)) {
-      setGenrePrimary(subject[0].id);
+    if (subject.length > 0 && !subject.some((e) => e.name === genrePrimary)) {
+      setGenrePrimary(subject[0].name);
       return;
     }
-    if (
-      defaultGenre &&
-      !initial?.genre_primary &&
-      subjectActiveIds.has(defaultGenre) &&
-      genrePrimary !== defaultGenre
-    ) {
-      setGenrePrimary(defaultGenre);
+    if (defaultGenre && !initial?.genre_primary) {
+      const match = subject.find((e) => e.id === defaultGenre || e.name === defaultGenre);
+      if (match && match.name !== genrePrimary) {
+        setGenrePrimary(match.name);
+      }
     }
-  }, [subject, subjectActiveIds, genrePrimary, defaultGenre, initial?.genre_primary]);
+  }, [subject, genrePrimary, defaultGenre, initial?.genre_primary]);
   useEffect(() => {
-    if (tone.length > 0 && !toneActiveIds.has(toneVal)) {
-      setTone(tone[0].id);
+    if (tone.length > 0 && !tone.some((e) => e.name === toneVal)) {
+      setTone(tone[0].name);
     }
-  }, [tone, toneActiveIds, toneVal]);
+  }, [tone, toneVal]);
   useEffect(() => {
-    if (style.length > 0 && !styleActiveIds.has(styleVal)) {
-      setStyle(style[0].id);
+    if (style.length > 0 && !style.some((e) => e.name === styleVal)) {
+      setStyle(style[0].name);
     }
-  }, [style, styleActiveIds, styleVal]);
+  }, [style, styleVal]);
 
   const stateRef = useRef({ prompt, genrePrimary, tone: toneVal, style: styleVal });
   stateRef.current = { prompt, genrePrimary, tone: toneVal, style: styleVal };

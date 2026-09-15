@@ -52,12 +52,32 @@ _logger = logging.getLogger(__name__)
 _EVALUATOR_TIMEOUT_S = 3.0
 
 
-def _load_next_step_prompt() -> dict:
-    """Load next-step prompt template from YAML. Cached after first call."""
-    if not hasattr(_load_next_step_prompt, "_cache"):
-        with open(_NEXT_STEP_PROMPT_PATH, encoding="utf-8") as f:
-            _load_next_step_prompt._cache = yaml.safe_load(f)
-    return _load_next_step_prompt._cache
+def _load_next_step_prompt(
+    project_id: str,
+    *,
+    override_store=None,
+    global_override_store=None,
+) -> dict:
+    """Load next-step prompt template via `load_prompt_effective`.
+
+    Resolution order: YAML default → global override → project override.
+    `project_id` + stores mirror the wiring used by ThreeBEngine / BranchSimulator
+    so Prompt Plaza edits to `canvas_v2_next_step` actually land at runtime.
+
+    The pre-fix cache (`_cache` attribute on this function) silently pinned
+    the first YAML read for the lifetime of the process, which made Prompt
+    Plaza edits a no-op until restart. Removed: `_next_step` and the commit
+    path run only on user-driven clicks (1-2× per session), so re-reading
+    each time is fine and is what we want — overrides take effect immediately.
+    """
+    from backend.services.prompt_override_store import load_prompt_effective
+
+    return load_prompt_effective(
+        "canvas_v2_next_step",
+        project_id=project_id,
+        override_store=override_store,
+        global_override_store=global_override_store,
+    )
 
 
 async def _call_llm_with_retry(llm_call, context, max_attempts=2):
@@ -345,6 +365,17 @@ async def _next_step_impl(project_id: str, current_step: int) -> dict:
 
     Raises HTTPException on validation failure.
     """
+    # v2.x prompt-override wiring: resolve the override stores once and
+    # capture them in nested closures so `_load_next_step_prompt` can thread
+    # them through to `load_prompt_effective`. Without this, Prompt Plaza
+    # edits to `canvas_v2_next_step` silently fall back to YAML defaults.
+    from backend.services.agent_prompt_stores import (
+        global_override_store as _global_override_store,
+        project_override_store as _project_override_store,
+    )
+    _override_store = _project_override_store()
+    _global_store = _global_override_store()
+
     canvas = _read_canvas(project_id)
     if canvas is None:
         raise HTTPException(
@@ -401,7 +432,11 @@ async def _next_step_impl(project_id: str, current_step: int) -> dict:
             f"candidate_operation_hint: {context.get('hint')}\n"
             f"\n{axis_block}\n"
         )
-        system_prompt = _load_next_step_prompt()["system"]
+        system_prompt = _load_next_step_prompt(
+            project_id,
+            override_store=_override_store,
+            global_override_store=_global_store,
+        )["system"]
         return await router.complete(
             tier="tier1",
             system=system_prompt,
@@ -518,6 +553,13 @@ async def _regenerate_options_with_hint(
     """
     from backend.llm.model_router import get_model_router
     from backend.config import settings as _settings
+    from backend.services.agent_prompt_stores import (
+        global_override_store as _global_override_store,
+        project_override_store as _project_override_store,
+    )
+    # v2.x prompt-override wiring — see `_next_step_impl` for rationale.
+    _override_store = _project_override_store()
+    _global_store = _global_override_store()
 
     canvas = _read_canvas(project_id)
     path_entry = canvas["creative_path"][current_step - 1]
@@ -569,7 +611,11 @@ async def _regenerate_options_with_hint(
             + f"candidate_operation_hint: {hint}\n"
             + f"\n{axis_block}\n"
         )
-        system_prompt = _load_next_step_prompt()["system"]
+        system_prompt = _load_next_step_prompt(
+            project_id,
+            override_store=_override_store,
+            global_override_store=_global_store,
+        )["system"]
         return await router.complete(
             tier="tier1",
             system=system_prompt,

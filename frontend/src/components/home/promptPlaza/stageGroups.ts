@@ -36,18 +36,11 @@ export const PROMPT_STAGE_ORDER: string[] = [
   "other",
 ];
 
-/** 从 Plaza UI 隐藏的内置提示词 — 后端 YAML 仍存在供 load_prompt_effective 兜底。*/
-export const HIDDEN_BUILTIN_PROMPTS: ReadonlyArray<string> = [
-  // firstness_decompose 在 S2 由元提示词动态生成;Plaza UI 不能让用户手编
-  // 这份动态提示词(否则会出现「用户编辑了但下次 S1→S2 触发 meta 时被覆盖」的歧义)。
-  // 后端仍以 YAML 形式保留文件,作为 S1→S2 流程被破坏时系统层的最后兜底,
-  // 以及 /meta-decompose 写入 prompt_overrides.json 时的 base 用于
-  // _pruned_override 计算。
-  //
-  // Hide 是纯 UI 行为:stageOf(name) 仍返回真实 stage,load_prompt_effective
-  // 仍按 bare stem 加载 YAML;只有 groupByStage 在渲染侧过滤。
-  "firstness_decompose",
-];
+/** 从 Plaza UI 隐藏的内置提示词。后端 YAML 仍存在供 load_prompt_effective 兜底:
+ * load_prompt_effective 按 bare stem 加载 YAML 不受影响;Hide 是纯 UI 行为,
+ * groupByStage 在渲染侧过滤,stageOf / load_prompt_effective 仍按真实 stage 工作。
+ */
+export const HIDDEN_BUILTIN_PROMPTS: ReadonlyArray<string> = [];
 
 /**
  * 当前没有工作流调用的提示词 — 落在「其他」兜底组。
@@ -111,9 +104,7 @@ export const EXPECTED_ORPHAN_PROMPTS: ReadonlyArray<{
 
 /** 提示词名 → 阶段 key。每个内置提示词必须命中,`other` 仅作未映射兜底。 */
 export const PROMPT_NAME_TO_STAGE: Record<string, string> = {
-  // 创意发散 — firstness_decompose 已从 Plaza UI 隐藏(HIDDEN_BUILTIN_PROMPTS),
-  // 但 stageOf() 仍要能解析它,否则后端 _pruned_override 计算会丢失 stage 信息。
-  // Hide 是纯 UI 行为;后端 load_prompt_effective 按 bare stem 加载 YAML 不受影响。
+  // 创意发散
   firstness_decompose: "divergence",
   meta_decompose: "divergence",
   adaptive_diverge: "divergence",

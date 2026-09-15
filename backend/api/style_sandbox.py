@@ -28,6 +28,14 @@ def _err(code: str, message: str, status: int = 400, detail: Optional[dict] = No
 
 @router.post("/preview")
 async def preview_endpoint(project_id: str, req: PreviewRequest) -> dict:
+    # v2.x prompt-override wiring — thread the same stores ThreeBEngine /
+    # BranchSimulator use, so Prompt Plaza edits to `sandbox_preview` actually
+    # land at runtime. Without these, render_preview silently falls back to
+    # the YAML default.
+    from backend.services.agent_prompt_stores import (
+        global_override_store,
+        project_override_store,
+    )
     mr = get_model_router()
     if mr is None:
         resp = PreviewResponse(
@@ -38,6 +46,9 @@ async def preview_endpoint(project_id: str, req: PreviewRequest) -> dict:
     resp = await render_preview(
         model_router=mr, source_text=req.source_text,
         params=req.params, genre=req.genre,
+        project_id=project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
     )
     return _envelope(resp.model_dump())
 

@@ -74,13 +74,6 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
     );
   }, [detail, systemPrompt, userTemplate, temperature, maxTokens, outputFormatJson, negativeConstraints]);
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-on-surface-variant text-sm">
-        加载中…
-      </div>
-    );
-  }
   if (error) {
     return (
       <div className="flex-1 flex items-center justify-center text-error text-sm" role="alert">
@@ -114,7 +107,7 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col h-full overflow-hidden relative">
       <header className="px-4 py-3 border-b border-outline-variant flex items-center justify-between gap-3">
         <div>
           <h3 className="font-display text-primary text-lg">{detail.name}</h3>
@@ -212,12 +205,20 @@ export default function PromptEditPanel({ detail, loading, error, onSave, onRese
           type="button"
           onClick={handleSave}
           data-testid="save-button"
-          disabled={!dirty}
+          disabled={!dirty || loading}
           className="px-3 py-1.5 bg-primary-container text-sm rounded text-surface-container-lowest hover:opacity-90 disabled:opacity-40"
         >
           保存
         </button>
       </footer>
+      {loading && (
+        <div
+          data-testid="edit-loading-overlay"
+          className="absolute inset-0 z-10 flex items-center justify-center bg-surface-container-lowest/70 text-on-surface-variant text-sm"
+        >
+          加载中…
+        </div>
+      )}
     </div>
   );
 }

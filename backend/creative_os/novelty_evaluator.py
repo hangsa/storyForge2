@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import numpy as np
 
@@ -123,11 +123,26 @@ def _parse_trope_tags(text: str) -> list[str]:
 
 class NoveltyEvaluator:
 
-    def __init__(self, trope_pool, contradiction_engine, model_router, embedder) -> None:
+    def __init__(
+        self,
+        trope_pool,
+        contradiction_engine,
+        model_router,
+        embedder,
+        *,
+        override_store=None,
+        global_override_store=None,
+    ) -> None:
         self._trope_pool = trope_pool
         self._contradiction_engine = contradiction_engine
         self._router = model_router
         self._embedder = embedder
+        # v2.x prompt-override wiring: only `fill_trope_tags_async` consumes
+        # these. Storing on self keeps the API uniform with ThreeBEngine /
+        # BranchSimulator and lets non-trope callers (scoring-only paths)
+        # skip the stores without breaking the constructor signature.
+        self._override_store = override_store
+        self._global_override_store = global_override_store
 
     def evaluate(self, content: str) -> NoveltyScore:
         # TODO(Phase 2): extract trope tags via Tier 3 LLM (trope_extraction.yaml)
@@ -228,6 +243,7 @@ class NoveltyEvaluator:
         raw_intent: dict,
         llm_client: Any,
         save_callback: Callable[[dict], Any],
+        project_id: Optional[str] = None,
     ) -> None:
         """Best-effort Tier 3 Trope tag extraction for raw_intent.
 
@@ -243,6 +259,9 @@ class NoveltyEvaluator:
         via `load_prompt_effective` (Correction 3). The resolved dict's
         `user_prompt_template` is rendered with `{prompt}`; everything else
         (`max_tokens`, `temperature`) is left to the caller's llm_client.
+
+        `project_id` threads through to the override stores so Prompt Plaza
+        edits land here at runtime — same shape as ThreeBEngine / BranchSimulator.
         """
         if raw_intent.get("trope_tags"):
             return
@@ -254,7 +273,12 @@ class NoveltyEvaluator:
         try:
             from backend.services.prompt_override_store import load_prompt_effective
 
-            prompt_data = load_prompt_effective("trope_extraction")
+            prompt_data = load_prompt_effective(
+                "trope_extraction",
+                project_id=project_id,
+                override_store=self._override_store,
+                global_override_store=self._global_override_store,
+            )
             system_prompt = prompt_data.get("system_prompt", "").strip()
             user_template = prompt_data.get("user_prompt_template", "")
             user_prompt = user_template.format(prompt=prompt_text)

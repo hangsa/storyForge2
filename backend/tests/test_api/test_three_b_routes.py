@@ -17,6 +17,7 @@ Covers all 10 endpoints + 1 convenience (reset-and-restart):
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -504,6 +505,78 @@ def test_decompose_422_on_value_error(mock_router):
         json={"prompt": "足够长的原始灵感 text", "genre_primary": "玄幻"},
     )
     assert resp.status_code == 422
+
+
+def test_decompose_applies_global_override_for_firstness_decompose(
+    mock_router, tmp_path, monkeypatch
+):
+    """Regression: ThreeBEngine must thread global/project override stores
+    through to `load_prompt_effective`, otherwise Prompt Plaza edits
+    (e.g. `第一性拆解`) silently no-op at runtime — the user sees YAML defaults
+    even though their override is saved correctly on disk.
+    """
+    import json as _json
+    from backend.services.global_prompt_override_store import GlobalPromptOverrideStore
+    from backend.services.prompt_override_store import PromptOverrideStore
+
+    # Drop a global override file into a temp dir; firstness_decompose gets
+    # a sentinel system prompt + user template so we can detect it lands in
+    # the LLM message.
+    global_file = tmp_path / "global_prompt_overrides.json"
+    global_file.write_text(
+        _json.dumps(
+            {
+                "firstness_decompose": {
+                    "system_prompt": "GLOBAL_OVERRIDE_MARKER_SYSTEM\n{negative_constraints}",
+                    "user_prompt_template": "GLOBAL_OVERRIDE_MARKER_USER prompt={prompt} genre={genre_primary}",
+                    "temperature": 0.42,
+                    "max_tokens": 1234,
+                    "_modified_at": "2026-09-11T00:00:00Z",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    global_store = GlobalPromptOverrideStore(
+        global_overrides_path=global_file,
+        prompts_dir=settings.prompts_dir,
+    )
+    project_store = PromptOverrideStore(
+        projects_dir=tmp_path / "projects",
+        prompts_dir=settings.prompts_dir,
+    )
+
+    captured: dict = {}
+
+    async def fake_execute(*args, **kwargs):
+        captured["messages"] = kwargs.get("messages")
+        captured["temperature"] = kwargs.get("temperature")
+        captured["max_tokens"] = kwargs.get("max_tokens")
+        return {"content": "{}"}
+
+    mock_router.execute = fake_execute
+    engine = ThreeBEngine(
+        model_router=mock_router,
+        novelty_evaluator=_FakeNoveltyEvaluator(),
+        override_store=project_store,
+        global_override_store=global_store,
+    )
+
+    raw_intent = RawIntent(prompt="脑洞文字", genre_primary="玄幻", tone="热血", style="爽文")
+    # `{}` will fail the 5-dim parse check downstream; that's fine — we only
+    # care that the override marker landed in the LLM message before parsing.
+    with pytest.raises(ValueError, match="LLM 返回 0 维度"):
+        asyncio.run(engine.decompose("p_ovr", raw_intent))
+
+    assert "messages" in captured, "router.execute was never called"
+    system_msg, user_msg = captured["messages"][0], captured["messages"][1]
+    assert "GLOBAL_OVERRIDE_MARKER_SYSTEM" in system_msg["content"], (
+        f"global override not applied; system content was:\n{system_msg['content'][:200]}"
+    )
+    assert "GLOBAL_OVERRIDE_MARKER_USER" in user_msg["content"]
+    assert captured["temperature"] == 0.42
+    assert captured["max_tokens"] == 1234
 
 
 # ---------------------------------------------------------------------------

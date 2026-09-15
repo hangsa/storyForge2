@@ -118,9 +118,43 @@ describe("PromptEditPanel", () => {
     expect(payload).not.toHaveProperty("model");
   });
 
-  it("shows loading state", () => {
-    render(<PromptEditPanel detail={null} loading={true} error={null} onSave={vi.fn()} onReset={vi.fn()} onClose={vi.fn()} />);
+  it("shows loading overlay when detail is loaded but saving/refreshing", () => {
+    render(<PromptEditPanel detail={DETAIL} loading={true} error={null} onSave={vi.fn()} onReset={vi.fn()} onClose={vi.fn()} />);
+    // Overlay shows loading text but the textarea stays mounted
+    expect(screen.getByTestId("edit-loading-overlay")).toBeInTheDocument();
     expect(screen.getByText(/加载中/)).toBeInTheDocument();
+    expect(screen.getByTestId("edit-system")).toBeInTheDocument();
+  });
+
+  it("does not show loading state when detail is null (placeholder takes precedence)", () => {
+    render(<PromptEditPanel detail={null} loading={true} error={null} onSave={vi.fn()} onReset={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText(/请从左侧选择一个提示词/)).toBeInTheDocument();
+  });
+
+  it("preserves textarea height after save (loading true → false round-trip)", () => {
+    // Bug repro: clicking save sets loading=true, which unmounts the textarea.
+    // When the textarea remounts after save completes, useAutoHeight's
+    // effect must run again so the new DOM element gets the correct height.
+    // Before the fix, the deps `[systemPrompt]` didn't change across the
+    // unmount/remount cycle, so the new textarea was left at default height
+    // (no inline style.height at all).
+    const longDetail = makeDetail({ system_prompt: "long content that should be tall" });
+    const props = { detail: longDetail, error: null as string | null, onSave: vi.fn(), onReset: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<PromptEditPanel {...props} loading={false} />);
+
+    // Sanity: on initial mount useAutoHeight writes style.height (jsdom
+    // scrollHeight is 0, so we get "0px"). This baseline proves the hook works.
+    const initialTa = screen.getByTestId("edit-system") as HTMLTextAreaElement;
+    expect(initialTa.style.height).toBe("0px");
+
+    // Simulate save flow: loading flips true (textarea unmounts), then false (remounts)
+    rerender(<PromptEditPanel {...props} loading={true} />);
+    rerender(<PromptEditPanel {...props} loading={false} />);
+
+    const ta = screen.getByTestId("edit-system") as HTMLTextAreaElement;
+    // After the fix, useAutoHeight must have run on the remounted textarea too.
+    // Without the fix, the new DOM element has no inline style.height at all.
+    expect(ta.style.height).toBe("0px");
   });
 
   it("shows error state", () => {

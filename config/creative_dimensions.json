@@ -78,7 +78,7 @@
       "updated_at": "2026-09-10T06:55:50.831478+00:00"
     },
     {
-      "id": "9edeacbe",
+      "id": "qihuan",
       "name": "奇幻",
       "description": "西方文化基底，常含魔法、龙、精灵、骑士等要素",
       "status": "active",
@@ -91,7 +91,7 @@
   ],
   "tone": [
     {
-      "id": "热血",
+      "id": "shuangwen",
       "name": "爽文",
       "description": "碾压、畅快、长驱直入，主角受挫必须快速反弹，反派必须被清算，忌长时间压抑",
       "status": "active",
@@ -102,7 +102,7 @@
       "updated_at": "2026-09-10T06:50:25.494475+00:00"
     },
     {
-      "id": "黑暗",
+      "id": "rexue",
       "name": "热血",
       "description": "牺牲、友情、集体荣耀、明知不可为而为之，允许悲壮结局，但过程必须闪耀，忌全员自私冷漠",
       "status": "active",
@@ -113,7 +113,7 @@
       "updated_at": "2026-09-10T06:50:58.781487+00:00"
     },
     {
-      "id": "轻松",
+      "id": "qingsong",
       "name": "轻松",
       "description": "搞笑、玩梗、不正经、乐子人，危机必须被解构，人物可犯蠢但不可真惨，忌沉重伦理困境",
       "status": "active",
@@ -124,57 +124,57 @@
       "updated_at": "2026-09-10T06:49:33.958066+00:00"
     },
     {
-      "id": "虐心",
+      "id": "nuexin",
       "name": "虐心",
       "description": "意难平、BE美学、爱而不得、命运碾压，允许主角失败/死亡，但必须\"死得其所\"或\"美得令人心碎\"，忌无意义的惨",
       "status": "active",
       "family": null,
       "label_en": null,
-      "order": 4,
+      "order": 3,
       "created_at": "1970-01-01T00:00:00Z",
       "updated_at": "2026-09-10T06:52:43.389525+00:00"
     },
     {
-      "id": "悬疑",
+      "id": "tianchong",
       "name": "甜宠",
       "description": "高糖、温馨、治愈、安全感，误会必须快速解开，核心CP不可出现原则性背叛，忌长时间虐心",
       "status": "active",
       "family": null,
       "label_en": null,
-      "order": 6,
+      "order": 4,
       "created_at": "1970-01-01T00:00:00Z",
       "updated_at": "2026-09-10T06:51:31.886473+00:00"
     },
     {
-      "id": "成长",
+      "id": "heian",
       "name": "黑暗",
       "description": "残酷、弱肉强食、道德灰色、全员恶人，世界观必须支撑此逻辑，主角可以黑化，忌突然伟光正",
       "status": "active",
       "family": null,
       "label_en": null,
-      "order": 7,
+      "order": 5,
       "created_at": "1970-01-01T00:00:00Z",
       "updated_at": "2026-09-10T06:52:15.447053+00:00"
     },
     {
-      "id": "7c1753ed",
+      "id": "xuanyi_tone",
       "name": "悬疑",
       "description": "烧脑、步步惊心、信息迷雾，必须有可靠谜底，伏笔必须回收，忌机械降神",
       "status": "active",
       "family": null,
       "label_en": null,
-      "order": 0,
+      "order": 6,
       "created_at": "2026-09-10T06:53:32.663085+00:00",
       "updated_at": "2026-09-10T06:53:32.663085+00:00"
     },
     {
-      "id": "bd23310f",
+      "id": "huangdan",
       "name": "荒诞",
       "description": "黑色幽默、解构、系统吃人、无意义感，逻辑必须自洽地走向虚无，忌突然热血逆袭破坏荒诞感",
       "status": "active",
       "family": null,
       "label_en": null,
-      "order": 0,
+      "order": 7,
       "created_at": "2026-09-10T06:54:05.113216+00:00",
       "updated_at": "2026-09-10T06:54:05.113216+00:00"
     }

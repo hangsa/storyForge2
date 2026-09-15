@@ -192,8 +192,8 @@ describe("backend/prompts/ canary", () => {
   });
 });
 
-describe("HIDDEN_BUILTIN_PROMPTS", () => {
-  it("hides firstness_decompose from groupByStage output", () => {
+describe("firstness_decompose exposure (2026-09-15: removed from HIDDEN_BUILTIN_PROMPTS)", () => {
+  it("firstness_decompose now appears in groupByStage output (Plaza-visible fallback)", () => {
     const prompts = [
       fakePrompt("firstness_decompose"),
       fakePrompt("adaptive_diverge"),
@@ -201,24 +201,17 @@ describe("HIDDEN_BUILTIN_PROMPTS", () => {
     ];
     const groups = groupByStage(prompts);
     const allNames = groups.flatMap(([, items]) => items.map((p) => p.name));
-    expect(allNames).not.toContain("firstness_decompose");
-    // sanity: other divergence prompts still surface
+    expect(allNames).toContain("firstness_decompose");
     expect(allNames).toContain("adaptive_diverge");
     expect(allNames).toContain("scene_writing");
   });
 
-  it("stageOf still resolves firstness_decompose (backend plumbing unaffected)", () => {
-    // Hide is UI-only — stageOf and load_prompt_effective both still
-    // work with the bare stem. Only groupByStage filters it out.
+  it("stageOf still resolves firstness_decompose to divergence", () => {
     expect(stageOf("firstness_decompose")).toBe("divergence");
   });
 
-  it("HIDDEN_BUILTIN_PROMPTS is a non-empty list of strings", () => {
-    expect(HIDDEN_BUILTIN_PROMPTS.length).toBeGreaterThan(0);
-    for (const name of HIDDEN_BUILTIN_PROMPTS) {
-      expect(typeof name).toBe("string");
-      expect(name.length).toBeGreaterThan(0);
-    }
+  it("HIDDEN_BUILTIN_PROMPTS is currently empty (infrastructure kept for future hides)", () => {
+    expect(HIDDEN_BUILTIN_PROMPTS).toEqual([]);
   });
 });
 

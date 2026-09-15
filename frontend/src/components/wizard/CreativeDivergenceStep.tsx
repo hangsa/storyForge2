@@ -34,7 +34,7 @@ export default function CreativeDivergenceStep({
   // bypassed user_modifications, so the user couldn't attach feedback.
   const [regenModalOpen, setRegenModalOpen] = useState(false);
 
-  // S1 (灵感输入) submits via the page-level wizard footer, not an in-stage
+  // S1 (灵感) submits via the page-level wizard footer, not an in-stage
   // button — see S1InputStep's onSubmitReady. We track the latest handler
   // + validity here so we can re-register with the wizard context as form
   // state changes.
@@ -279,7 +279,7 @@ export default function CreativeDivergenceStep({
 
       <RegenerateModal
         open={regenModalOpen && state.currentSubStage === "2"}
-        target="第一性拆解"
+        target="拆解"
         busy={state.loading}
         onConfirm={(text) => {
           if (!state.rawIntent) return;

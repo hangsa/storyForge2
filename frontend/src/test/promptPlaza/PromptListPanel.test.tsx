@@ -150,16 +150,15 @@ describe("PromptListPanel", () => {
     expect(screen.getByText("新颖度评分").closest('[data-testid="plaza-row"]')).toBeInTheDocument();
   });
 
-  it("divergence group contains meta_decompose and adaptive_diverge (firstness_decompose is hidden by HIDDEN_BUILTIN_PROMPTS)", () => {
-    // 2026-09-12 行为变更:第一性拆解 (firstness_decompose) 已从 Plaza UI 隐藏
-    // (HIDDEN_BUILTIN_PROMPTS,见 stageGroups.ts) — S2 由元提示词动态生成,
-    // 用户编辑会与 S1→S2 自动生成产生歧义。创意发散分组当前展示的是
-    // 元提示词 (meta_decompose) + 三分支·自适应发散 (adaptive_diverge)。
-    // 其余 11 个历史/未来提示词在 EXPECTED_ORPHAN_PROMPTS 里,落在「其他」。
-    // 这里用一个完整 SAMPLE 模拟后端列出全部内置 prompt,断言 divergence 组恰好 2 行。
+  it("divergence group contains meta_decompose, adaptive_diverge and firstness_decompose (2026-09-15: firstness_decompose no longer hidden)", () => {
+    // 2026-09-15 行为变更:第一性拆解 (firstness_decompose) 从 HIDDEN_BUILTIN_PROMPTS
+    // 移除,以「兜底拆解提示词」label 暴露在 Plaza UI 创意发散分组下。后端 YAML 仍
+    // 是 S1→S2 流程被破坏时的兜底;Plaza 编辑会写 global/project override,流程
+    // 正常时仍以 meta_decompose 生成的 per-project prompt 为准。
     const fullBuiltin = [
       { name: "meta_decompose", category: "", label: "元提示词", has_override: false, modified_at: null, builtin: true },
       { name: "adaptive_diverge", category: "", label: "三分支·自适应发散", has_override: false, modified_at: null, builtin: true },
+      { name: "firstness_decompose", category: "", label: "兜底拆解提示词", has_override: false, modified_at: null, builtin: true },
     ];
     const { container } = render(
       <PromptListPanel prompts={fullBuiltin} selectedName={null} onSelect={vi.fn()} />,
@@ -171,6 +170,10 @@ describe("PromptListPanel", () => {
     ).map((el) => el.textContent);
     expect(headings).toEqual(["创意发散"]);
     const rows = Array.from(container.querySelectorAll<HTMLElement>('[data-testid="plaza-row"]'));
-    expect(rows.map((r) => r.textContent).sort()).toEqual(["三分支·自适应发散", "元提示词"]);
+    expect(rows.map((r) => r.textContent).sort()).toEqual([
+      "三分支·自适应发散",
+      "元提示词",
+      "兜底拆解提示词",
+    ]);
   });
 });

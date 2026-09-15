@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { PromptSummary } from "../../../api/promptPlaza";
-import { PROMPT_CATEGORY_LABELS } from "./categoryLabels";
+import { groupByStage, PROMPT_STAGE_LABELS } from "./stageGroups";
 
 interface Props {
   prompts: PromptSummary[];
@@ -18,15 +18,7 @@ export default function PromptListPanel({ prompts, selectedName, onSelect }: Pro
     );
   }, [prompts, query]);
 
-  const grouped = useMemo(() => {
-    const groups = new Map<string, PromptSummary[]>();
-    for (const p of filtered) {
-      const arr = groups.get(p.category) ?? [];
-      arr.push(p);
-      groups.set(p.category, arr);
-    }
-    return groups;
-  }, [filtered]);
+  const grouped = useMemo(() => groupByStage(filtered), [filtered]);
 
   if (prompts.length === 0) {
     return (
@@ -51,10 +43,10 @@ export default function PromptListPanel({ prompts, selectedName, onSelect }: Pro
         />
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {Array.from(grouped.entries()).map(([category, items]) => (
-          <div key={category || "_root"}>
+        {grouped.map(([stageKey, items]) => (
+          <div key={stageKey}>
             <div className="font-mono text-[10px] text-on-surface-variant uppercase tracking-wider mb-1.5">
-              {PROMPT_CATEGORY_LABELS[category] ?? category}
+              {PROMPT_STAGE_LABELS[stageKey] ?? stageKey}
             </div>
             <div className="space-y-1">
               {items.map((p) => (

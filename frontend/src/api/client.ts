@@ -265,6 +265,16 @@ export interface CoreRule {
   text: string;
 }
 
+/** Mirrors `backend.models.world.CoreRuleCategory`. String-literal union kept
+ *  loose (also `| string`) to match `CoreRule.category` and tolerate legacy
+ *  values from older projects. 2026-09-20: added for the WorldStep 二级 tab
+ *  per-subtab ↻ API client extensions. */
+export type CoreRuleCategory = "physical" | "social" | "narrative" | "protagonist";
+
+/** Mirrors `backend.models.world.PowerSystemSource`. 2026-09-20: added for
+ *  the WorldStep 二级 tab per-subtab ↻ API client extensions. */
+export type PowerSystemSource = "energetics" | "protagonist_engine";
+
 export interface World {
   era: string;
   geography: string;
@@ -1242,11 +1252,33 @@ export const api = {
     projectId: string,
     section: "era" | "power_system" | "core_rules" | "factions",
     userModifications: string = "",
+    options: {
+      field?: "era" | "geography" | "era_social_structure" | "era_cultural_history";
+      category?: CoreRuleCategory;
+      systemSource?: PowerSystemSource;
+    } = {},
   ): Promise<World> =>
     request<World>(
       "POST",
       `/stage2/regenerate-world-section?project_id=${encodeURIComponent(projectId)}`,
-      { section, user_modifications: userModifications },
+      {
+        section,
+        user_modifications: userModifications,
+        ...(options.field ? { field: options.field } : {}),
+        ...(options.category ? { category: options.category } : {}),
+        ...(options.systemSource ? { system_source: options.systemSource } : {}),
+      },
+    ),
+
+  regenerateFaction: (
+    projectId: string,
+    factionIndex: number,
+    userModifications: string = "",
+  ): Promise<World> =>
+    request<World>(
+      "POST",
+      `/stage2/regenerate-faction?project_id=${encodeURIComponent(projectId)}`,
+      { faction_index: factionIndex, user_modifications: userModifications },
     ),
 
   regeneratePowerSystemItem: (

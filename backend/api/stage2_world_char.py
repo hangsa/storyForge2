@@ -838,6 +838,106 @@ async def regenerate_power_system_item(
     }
 
 
+class RegenerateFactionPayload(BaseModel):
+    # 2026-09-20: WorldStep 二级 tab 势力分布 per-subtab ↻ 后端通路。
+    # faction_index 必须 >= 0 (Pydantic ge=0 自动拒绝负值, FastAPI 转 422);
+    # >= len(factions) 是 handler 层的自定义 422 (FACTION_INDEX_OUT_OF_RANGE),
+    # 因为 Pydantic 无法在 model 构造阶段读取 world.json。
+    faction_index: int = Field(ge=0)
+    user_modifications: str = Field(default="", max_length=1700)
+
+
+@router.post("/regenerate-faction")
+async def regenerate_faction(
+    project_id: str = Query(...),
+    payload: RegenerateFactionPayload = None,
+):
+    """Re-generate a single faction at factions[faction_index]. Other factions
+    byte-preserved. Mirrors /regenerate-power-system-item semantics.
+
+    2026-09-20: WorldStep 二级 tab 势力分布 per-subtab ↻ 后端通路。
+    """
+    from backend.agents.planner import PlannerAgent
+
+    if not project_id:
+        raise http_error(400, "VALIDATION_ERROR", "project_id 不能为空")
+
+    project = _file_manager().read_json(project_id, "project.json")
+    if project is None:
+        raise http_error(404, "PROJECT_NOT_FOUND", f"项目 {project_id} 不存在")
+
+    existing = _file_manager().read_json(project_id, "world.json") or {}
+    concept_and_dna = _file_manager().read_json(project_id, "concept_and_dna.json") or {}
+    genre = project.get("genre", "cool_novel")
+
+    existing_factions = existing.get("factions", [])
+    if payload.faction_index >= len(existing_factions):
+        raise http_error(
+            422,
+            "FACTION_INDEX_OUT_OF_RANGE",
+            f"faction_index {payload.faction_index} 越界 (现有 {len(existing_factions)} 条)",
+            faction_index=payload.faction_index,
+            total=len(existing_factions),
+        )
+
+    agent = PlannerAgent(
+        project_id,
+        override_store=project_override_store(),
+        global_override_store=global_override_store(),
+        genre=genre,
+    )
+
+    # 附加单条重生提示语到 user_modifications — LLM 端据此只返回一条新 faction。
+    extra = (
+        f"【单条重生】仅重生 factions[{payload.faction_index}],"
+        f"其余 {len(existing_factions) - 1} 条势力原样保留。"
+        f"返回 JSON 时只包含一条新的 faction 对象。"
+    )
+    full_mods = (payload.user_modifications + "\n" + extra).strip()
+
+    try:
+        decompose_data = _load_decompose_data(project_id)
+        result, _resp = await agent.generate_world(
+            concept=concept_and_dna.get("concept", {}),
+            story_dna=concept_and_dna.get("story_dna", {}),
+            genre=genre,
+            user_modifications=full_mods,
+            decompose_data=decompose_data,
+            faction_only_index=f"仅修改第 {payload.faction_index} 条",
+        )
+    except ValueError as e:
+        raise http_error(503, "LLM_GENERATION_FAILED", str(e))
+
+    new_factions = result.get("factions", [])
+    if not new_factions:
+        raise http_error(503, "LLM_GENERATION_FAILED", "LLM 未返回任何 faction")
+
+    # Defensive: 即使 LLM 端错误地返回了多条, 也只接受第一条写到目标 index。
+    # 其他 slot 完全不碰 (byte-preserve)。
+    merged_factions = list(existing_factions)
+    merged_factions[payload.faction_index] = new_factions[0]
+
+    merged = dict(existing)
+    merged["factions"] = merged_factions
+
+    # Validate before writing so a legacy singular `power_system` in either
+    # `existing` or the LLM result is folded into `power_systems` here rather
+    # than lingering in world.json alongside the new key.
+    try:
+        merged = World.model_validate(merged).model_dump()
+    except Exception:
+        merged.pop("power_system", None)
+
+    _file_manager().write_json(project_id, "world.json", merged)
+
+    return {
+        "error": False,
+        "code": "OK",
+        "message": f"factions[{payload.faction_index}] 已重新生成",
+        "detail": merged,
+    }
+
+
 class RegenerateCharacterSectionPayload(BaseModel):
     section: str
     keep_existing: bool = False

@@ -14,7 +14,7 @@ vi.mock("../api/client", () => ({
     getOutline: vi.fn(),
     regenerateWorldSection: vi.fn(),
     regeneratePowerSystemItem: vi.fn(),
-    regenerateFaction: vi.fn(),   // 新增
+    regenerateFaction: vi.fn(),
   },
 }));
 
@@ -69,8 +69,8 @@ describe("WorldStep sub-tab state memory", () => {
       core_rules: [{ category: "physical", text: "灵气存在" }],
     });
 
-    // 默认 active 顶级 tab = era, active sub-tab = era (第一个字段)
-    expect(await screen.findByTestId("world-tab-era-subtab-era").getAttribute("aria-selected")).toBe("true");
+    // 默认 active 顶级 tab = era, active sub-tab 应是 era 字段 (Task 6 决定具体顺序)
+    expect((await screen.findByTestId("world-tab-era-subtab-era")).getAttribute("aria-selected")).toBe("true");
 
     // 切到 era 第 2 个 sub-tab (geography)
     fireEvent.click(screen.getByTestId("world-tab-era-subtab-geography"));

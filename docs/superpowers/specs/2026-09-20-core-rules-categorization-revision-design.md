@@ -1,7 +1,7 @@
 # 世界规则(core_rules)散乱问题 修订方案 设计文档
 
 **Date**: 2026-09-20
-**Status**: Draft (用户已批准方向,等待实现 plan)
+**Status**: Approved (用户已批准方向 + 3 项决策已锁定,等待 writing-plans 出实现 plan)
 **Scope**: 文档 / 后端 schema / 后端 prompt / 前端 UI / API 多层协同修订
 
 ## 1. 背景
@@ -346,7 +346,7 @@ function CoreRulesPanel({ active, world, setWorld, busy }) {
       <div data-testid="world-core-rules" className="space-y-2">
         <CategoryGroup category="physical" label="物理公理" source="ontology"
           rules={grouped.physical}
-          onChange={t => setCategory("physical", t)} saving={busy} defaultOpen />
+          onChange={t => setCategory("physical", t)} saving={busy} />
         <CategoryGroup category="social" label="结构性瓶颈" source="power_structure"
           rules={grouped.social}
           onChange={t => setCategory("social", t)} saving={busy} />
@@ -361,8 +361,8 @@ function CoreRulesPanel({ active, world, setWorld, busy }) {
   );
 }
 
-function CategoryGroup({ category, label, source, rules, onChange, saving, defaultOpen }) {
-  const [open, setOpen] = useState(defaultOpen ?? true);
+function CategoryGroup({ category, label, source, rules, onChange, saving }) {
+  const [open, setOpen] = useState(true);  // 默认展开, 视觉密度高的项目再选择性折叠
   return (
     <details open={open} data-testid={`world-core-rules-${category}`} className="border border-outline-variant rounded">
       <summary onClick={(e) => { e.preventDefault(); setOpen(!open); }}
@@ -499,7 +499,7 @@ G3 character_generation prompt 引用 protagonist_engine(G3,~半天)
 |---|---|---|
 | G workstream 是否纳入 | **全部纳入** | 用户希望一次性解决所有相关断层,避免后续回炉 |
 | regenerate 端点 category 形态 | **独立 category 字段** | payload model 显式声明,前端传值无歧义;字符串拼接需要 parser 容错 |
-| UI 形态 | **4 个折叠 group** | 视觉密度可控,用户主动折叠不需要的 category;4 个 group 默认展开 active 类别即可 |
+| UI 形态 | **4 个折叠 group** | 视觉密度可控,用户主动折叠不需要的 category;4 个 group 默认全部展开 (单一物理公理折叠后, 4 个 category 总高度合理) |
 
 ## 10. 不在本期范围
 

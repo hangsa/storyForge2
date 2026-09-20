@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from backend.agents.base_agent import BaseAgent, LLMResponse, StreamChunk
-from backend.models.world import iter_power_systems
+from backend.models.world import CoreRule, CoreRuleCategory, iter_power_systems
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,31 @@ def _resolve_genre_scene_pacing(genre: str) -> str:
     if isinstance(mbk, (int, float)) and not isinstance(mbk, bool):
         lines.append(f"- SF_LOG 标签密度：≥ {mbk} 个/千字")
     return "\n".join(lines)
+
+
+_CATEGORY_LABELS = {
+    CoreRuleCategory.PHYSICAL: "物理公理 (ontology)",
+    CoreRuleCategory.SOCIAL: "结构性瓶颈 (power_structure)",
+    CoreRuleCategory.NARRATIVE: "解决路径封闭性 (narrative_physics)",
+    CoreRuleCategory.PROTAGONIST: "主角机制硬约束 (protagonist_engine)",
+}
+
+
+def _format_core_rules_grouped(rules: list[CoreRule]) -> str:
+    """Format world.core_rules for scene-writing context, grouped by
+    category with subheaders. Empty categories are omitted.
+    """
+    by_cat: dict[CoreRuleCategory, list[str]] = defaultdict(list)
+    for r in rules:
+        by_cat[r.category].append(r.text)
+    parts = []
+    for cat in CoreRuleCategory:
+        items = by_cat.get(cat, [])
+        if not items:
+            continue
+        parts.append(f"### {_CATEGORY_LABELS[cat]}")
+        parts.extend(f"  - {t}" for t in items)
+    return "\n".join(parts) if parts else "(无世界规则)"
 
 
 def _name_in_text(name: str, text: str, other_names: set[str] | None = None) -> bool:
@@ -427,11 +453,16 @@ class WriterAgent(BaseAgent):
         )
 
         core_rules = world_rules.get("core_rules", [])
-        core_rules_str = (
-            "\n".join(f"  - {r}" for r in core_rules)
-            if isinstance(core_rules, list)
-            else str(core_rules)
-        )
+        # world.json stores core_rules as list[CoreRule{category,text}] post-Task-2,
+        # but legacy projects may still carry list[str]. Coerce per-item before
+        # grouping by category.
+        core_rules_obj = [
+            CoreRule(**c) if isinstance(c, dict) else CoreRule(
+                category=CoreRuleCategory.PHYSICAL, text=str(c)
+            )
+            for c in core_rules
+        ] if isinstance(core_rules, list) else []
+        core_rules_str = _format_core_rules_grouped(core_rules_obj)
 
         ceilings = world_rules.get("ceilings", [])
         ceilings_str = (

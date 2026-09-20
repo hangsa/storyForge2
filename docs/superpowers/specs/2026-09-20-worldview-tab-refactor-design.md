@@ -145,7 +145,7 @@ const handleTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
   <Field label="时代背景"><AutoTextarea ... /></Field>
   <Field label="地理环境"><AutoTextarea ... /></Field>
   <Field label="社会结构"><AutoTextarea testid="world-era-social-structure" ... /></Field>
-  <Field label="历史文化"><AutoTextarea testid="world-era-cultural-structure" ... /></Field>
+  <Field label="历史文化"><AutoTextarea testid="world-era-cultural-history" ... /></Field>
 </div>
 ```
 
@@ -197,7 +197,7 @@ const handleTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
 
 ### 8. 内部组件提取
 
-在 WorldStep.tsx 文件内部新增 3 个组件 (不导出,仅文件内使用):
+在 WorldStep.tsx 文件内部新增 5 个组件 (不导出,仅文件内使用):
 
 ```tsx
 function WorldTabs({ activeKey, counts, regenerateDisabled, onTabChange, onRegenerate, onTabKeyDown }) { ... }
@@ -243,15 +243,26 @@ function FactionsPanel({ world, setWorld, busy, onAdd, onUpdateField, onRemove }
 
 ### 10. 测试改动
 
-#### 需更新的测试
+WorldStep 现有两条 regenerate 触发链路:
+- **section 级**(本 spec 改动目标):tab 内嵌 ↻ → `handleSectionRegenerate(key)` → 弹 modal → `api.regenerateWorldSection`
+- **整页级**(本 spec 不动):wizard footer「重新生成」→ `setShowRegenerateModal(true)` → 弹 modal(target="世界观") → `api.generateWorld`
 
-- `frontend/src/test/InitWizardModal.test.tsx:518` — "renders 4 section regenerate icons" → 改为 "renders 4 tab regenerate icons",用新 testid (`world-tab-era-regenerate` 等),断言从 4 个 section header 中找 ↻ 改为在 4 个 tab 中找
-- 任何其它测试如果用 `getByTestId("world-era-regenerate")` 等,改为新 testid
+#### 需更新的测试 (使用旧 section regenerate testid 的所有位置)
+
+`frontend/src/test/InitWizardModal.test.tsx`:
+- 第 518 行 `it("world-step renders 4 section regenerate icons...")`:把 524–527 行的 4 个 `getByTestId("world-{section}-regenerate")` 改为新 testid (`world-tab-era-regenerate` 等)
+- 第 530 行 `it("clicking world-power-system-regenerate + confirm...")`:第 535 行 `findByTestId("world-power-system-regenerate")` 改为 `world-tab-power_system-regenerate`
+- 第 745 行附近 `describe("section regenerate footer status badge", ...)` 下的 3 个用例 (第 752、774、793 行均调 `screen.getByTestId("world-era-regenerate").click()`):改为 `world-tab-era-regenerate`
+
+`frontend/src/test/WorldStep.test.tsx`:
+- 第 473 行 `expect(screen.getByTestId("world-power-system-regenerate")).toBeInTheDocument()`:改为 `world-tab-power_system-regenerate`
+
+`frontend/src/test/SectionRegenerateButton.test.tsx`:**不动**。该文件测的是 `SectionRegenerateButton` 组件本身,testId 是作为 prop 传入,跟 WorldStep 实际用什么 testid 无关 — 即使 WorldStep 改完不再调用 `SectionRegenerateButton`,该组件仍被 CharacterStep / OutlineStep 使用,该测试集不受影响。
 
 #### 不动的测试
 
-- 字段级 testid (era-social-structure 等) 测试不变
-- 卡片级 testid (power-system-0-name 等) 测试不变
+- 字段级 testid (`world-era-social-structure` / `world-era-cultural-history` 等) 测试不变
+- 卡片级 testid (`world-power-system-{i}-name/description/.../regenerate/remove`) 测试不变 — `world-power-system-{i}-regenerate` 是**卡片级** (每个 power_system 卡片右上角),与 tab 级的 `world-tab-power_system-regenerate` 是两个不同的 testid,**两者并存**
 - `world-step` / `world-form` / `world-power-system-add` / `world-faction-add` 测试不变 (testid 保留)
 
 ### 11. 文件改动范围
@@ -275,7 +286,7 @@ function FactionsPanel({ world, setWorld, busy, onAdd, onUpdateField, onRemove }
 ## 风险与注意
 
 - **键盘切换 a11y**: 必须 `e.preventDefault()` 防止浏览器原生 ← → 滚动页面;焦点跟随 `nextTab?.focus()` 后,用户按 Tab 会从新 tab 出发。
-- **嵌套 button 警告**: tab 按钮已是 `<button>`,内部 ↻ 必须用 `span role="button"` 而非 `<button>`,否则 React 会抛 hydration warning。
+- **嵌套 button 警告**: tab 按钮已是 `<button>`,内部 ↻ 必须用 `span role="button"` 而非 `<button>`,否则 React 会抛 hydration warning。已知 a11y 取舍:屏幕阅读器对内嵌 `role="button"` 朗读可能不完美 — 用户在 Q1 决策里明确选了「tab 按钮内嵌」,此 tradeoff 是知情接受的。
 - **`hidden` 与 `space-y-3`**: panel 用 `hidden` 属性,不影响布局计算 (不参与 layout tree)。active panel 内的 `space-y-3` 在非 active panel 不会生效,符合预期。
 - **StrictMode 双挂载**: 不变,本改动不影响 useEffect 行为。
 - **empty world.json 恢复**: 4 个 panel 的 count 都是 0,UI 显示空态文案 — 现状已有,无回归。

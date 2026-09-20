@@ -14,37 +14,6 @@ interface ErrorState {
   paths?: string[];
 }
 
-function ApiKeyModal({ providerId, onClose, onSaved }: { providerId: string; onClose: () => void; onSaved: () => void }) {
-  const [value, setValue] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div data-testid="provider-apikey-modal" className="fixed inset-0 z-30 flex items-center justify-center bg-black/40">
-      <div className="rounded bg-canvas-bg p-6 shadow-xl">
-        <h4 className="mb-3 text-sm font-semibold">设置 {providerId} API Key</h4>
-        <input data-testid="provider-apikey-input" type="password" className="w-80 rounded border border-canvas-text-muted/40 bg-canvas-surface px-2 py-1 text-sm" value={value} onChange={(e) => setValue(e.target.value)} />
-        {error && <div data-testid="provider-apikey-error" className="mt-2 text-xs text-rose-600">{error}</div>}
-        <div className="mt-3 flex justify-end gap-2">
-          <button type="button" className="rounded border px-3 py-1 text-sm" onClick={onClose}>取消</button>
-          <button type="button" data-testid="provider-apikey-save" disabled={!value || saving} className="rounded bg-canvas-accent px-3 py-1 text-sm text-white disabled:opacity-50" onClick={async () => {
-            setSaving(true);
-            setError(null);
-            try {
-              await llmConsole.setProviderApiKey(providerId, value);
-              await onSaved();
-              onClose();
-            } catch (e) {
-              setError(e instanceof Error ? e.message : '保存失败');
-            } finally {
-              setSaving(false);
-            }
-          }}>保存</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 interface ProviderFormModalProps {
   initial?: { id: string; display_name: string; type: ProviderEntry['type']; base_url: string; api_key_env: string; enabled: boolean } | null;
   onClose: () => void;
@@ -59,7 +28,7 @@ function ProviderFormModal({ initial, onClose, onSaved }: ProviderFormModalProps
   const [displayName, setDisplayName] = useState(initial?.display_name ?? '');
   const [type, setType] = useState<ProviderEntry['type']>(initial?.type ?? 'openai_compatible');
   const [baseUrl, setBaseUrl] = useState(initial?.base_url ?? '');
-  const [apiKeyEnv, setApiKeyEnv] = useState(initial?.api_key_env ?? '');
+  const [apiKeyInput, setApiKeyInput] = useState(initial?.api_key_env ? `$${initial.api_key_env}` : '');
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +42,11 @@ function ProviderFormModal({ initial, onClose, onSaved }: ProviderFormModalProps
           <label className="block"><span className="text-canvas-text-muted">显示名</span><input data-testid="provider-form-displayname" value={displayName} onChange={(e) => { setDisplayName(e.target.value); setError(null); }} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
           <label className="block"><span className="text-canvas-text-muted">类型</span><select data-testid="provider-form-type" value={type} onChange={(e) => setType(e.target.value as ProviderEntry['type'])} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1"><option value="anthropic">anthropic</option><option value="openai_compatible">openai_compatible</option><option value="mock">mock</option></select></label>
           <label className="block"><span className="text-canvas-text-muted">Base URL</span><input data-testid="provider-form-baseurl" value={baseUrl} onChange={(e) => { setBaseUrl(e.target.value); setError(null); }} className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
-          <label className="block"><span className="text-canvas-text-muted">API Key 环境变量名</span><input data-testid="provider-form-apikeyenv" value={apiKeyEnv} onChange={(e) => { setApiKeyEnv(e.target.value); setError(null); }} placeholder="如：ANTHROPIC_API_KEY" className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" /></label>
+          <label className="block">
+            <span className="text-canvas-text-muted">API Key</span>
+            <input data-testid="provider-form-apikey" value={apiKeyInput} onChange={(e) => { setApiKeyInput(e.target.value); setError(null); }} placeholder="$ANTHROPIC_API_KEY 或直接粘贴 sk-…" className="mt-1 w-full rounded border border-canvas-text-muted/30 bg-canvas-surface px-2 py-1" />
+            <span className="mt-1 block text-xs text-canvas-text-muted">以 <code className="font-mono">$</code> 开头引用环境变量；其余内容作为 API Key 直接保存到 .env</span>
+          </label>
           <label className="flex items-center gap-2"><input data-testid="provider-form-enabled" type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /><span>启用</span></label>
         </div>
         {error && <div data-testid="provider-form-error" className="mt-3 rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-700">{error}</div>}
@@ -83,6 +56,23 @@ function ProviderFormModal({ initial, onClose, onSaved }: ProviderFormModalProps
             setSaving(true);
             setError(null);
             try {
+              const trimmed = apiKeyInput.trim();
+              let apiKeyEnv = '';
+              if (trimmed.startsWith('$')) {
+                const envName = trimmed.slice(1).trim();
+                if (!envName) {
+                  setError('环境变量名不能为空');
+                  return;
+                }
+                apiKeyEnv = envName;
+                // Clear any stale raw key in .env so resolution order falls
+                // through to the env var reference (path 1 still wins otherwise).
+                await llmConsole.setProviderApiKey(id, '');
+              } else if (trimmed) {
+                await llmConsole.setProviderApiKey(id, trimmed);
+              } else {
+                await llmConsole.setProviderApiKey(id, '');
+              }
               const provider = { type, display_name: displayName, base_url: baseUrl, api_key_env: apiKeyEnv, enabled };
               await llmConsole.upsertProvider(id, isEdit ? provider as ProviderEntry : { ...provider, models: {} });
               await onSaved();
@@ -165,7 +155,6 @@ function ModelFormModal({ providerId, modelId, initial, onClose, onSaved }: Mode
 
 export default function ProviderPanel({ providers, dirty, onChange, onReload }: Props) {
   const [editingProvider, setEditingProvider] = useState<EditingProvider | null>(null);
-  const [apikeyFor, setApikeyFor] = useState<string | null>(null);
   const [addingModelFor, setAddingModelFor] = useState<string | null>(null);
   const [editingModelFor, setEditingModelFor] = useState<{ providerId: string; modelId: string } | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
@@ -236,11 +225,6 @@ export default function ProviderPanel({ providers, dirty, onChange, onReload }: 
     onChange();
   };
 
-  const handleApiKeySaved = async () => {
-    await onReload();
-    onChange();
-  };
-
   const handleModelSaved = async () => {
     await onReload();
     onChange();
@@ -284,7 +268,6 @@ export default function ProviderPanel({ providers, dirty, onChange, onReload }: 
             <div className="mt-2 truncate text-xs text-canvas-text-muted" title={p.base_url}>{p.base_url || '(无 base_url)'}</div>
             <div className="mt-3 flex flex-wrap gap-1">
               <button type="button" data-testid={`provider-${p.provider}-edit`} className="rounded border px-2 py-0.5 text-xs" onClick={() => setEditingProvider({ id: p.provider, display_name: p.display_name, type: p.type, base_url: p.base_url, api_key_env: p.api_key_env, enabled: p.enabled })}>编辑</button>
-              <button type="button" data-testid={`provider-${p.provider}-apikey`} className="rounded border px-2 py-0.5 text-xs" onClick={() => setApikeyFor(p.provider)}>API Key</button>
               <button type="button" data-testid={`provider-${p.provider}-probe`} disabled={probeState[p.provider]?.loading} className="rounded border px-2 py-0.5 text-xs disabled:opacity-50" onClick={() => handleProbe(p.provider)}>{probeState[p.provider]?.loading ? '探测中…' : '🔌 探测'}</button>
               <button type="button" data-testid={`provider-${p.provider}-delete`} className="rounded border border-rose-500/40 px-2 py-0.5 text-xs text-rose-600" onClick={() => handleDelete(p.provider)}>删除</button>
             </div>
@@ -356,7 +339,6 @@ export default function ProviderPanel({ providers, dirty, onChange, onReload }: 
         ))}
       </div>
       {error && <div data-testid="provider-error-toast" className="rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-700">{error.message}{error.paths && <ul className="mt-1 list-disc pl-5 text-xs">{error.paths.map((p) => <li key={p}>{p}</li>)}</ul>}</div>}
-      {apikeyFor && <ApiKeyModal providerId={apikeyFor} onClose={() => setApikeyFor(null)} onSaved={handleApiKeySaved} />}
       {editingProvider !== null && <ProviderFormModal initial={Object.keys(editingProvider).length ? editingProvider as NonNullable<ProviderFormModalProps['initial']> : null} onClose={() => setEditingProvider(null)} onSaved={handleProviderSaved} />}
       {addingModelFor && <ModelFormModal providerId={addingModelFor} onClose={() => setAddingModelFor(null)} onSaved={handleModelSaved} />}
       {editingModelFor && (() => {

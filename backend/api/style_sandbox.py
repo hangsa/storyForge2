@@ -28,7 +28,7 @@ def _err(code: str, message: str, status: int = 400, detail: Optional[dict] = No
 
 @router.post("/preview")
 async def preview_endpoint(project_id: str, req: PreviewRequest) -> dict:
-    # v2.x prompt-override wiring — thread the same stores ThreeBEngine /
+    # v2.x prompt-override wiring — thread the same stores B3Engine /
     # BranchSimulator use, so Prompt Plaza edits to `sandbox_preview` actually
     # land at runtime. Without these, render_preview silently falls back to
     # the YAML default.

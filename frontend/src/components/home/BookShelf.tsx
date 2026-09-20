@@ -40,11 +40,6 @@ const PAGE_SIZE_OPTIONS = [
 ];
 
 const DEFAULT_PAGE_SIZE = 15;
-// Fixed height for the populated table card. Sized so the rows area scrolls
-// internally when its content exceeds the available space, while the
-// pagination footer stays anchored at the bottom of the card. The page
-// itself scrolls naturally — only the rows area is constrained.
-const CARD_HEIGHT = "640px";
 
 export default function BookShelf({ projects, loading, onProjectsDeleted, onResumeWizard, onOpenCreate, onRefresh }: BookShelfProps) {
   const genres = useGenres(false);
@@ -169,7 +164,7 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
   }
 
   return (
-    <section data-testid="book-shelf" className="space-y-3">
+    <section data-testid="book-shelf" className="space-y-3 flex-1 min-h-0 flex flex-col">
       <div className="pl-4 flex items-center gap-3 flex-wrap shrink-0">
         <SearchInput value={search} onChange={setSearch} />
         <DropdownSelect label="题材" options={genreOptions} value={genre} onChange={setGenre} />
@@ -250,8 +245,7 @@ export default function BookShelf({ projects, loading, onProjectsDeleted, onResu
         </div>
       ) : (
         <div
-          className="flex flex-col bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden"
-          style={{ height: CARD_HEIGHT }}
+          className="flex flex-col flex-1 min-h-0 bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden"
           data-testid="bookshelf-card"
         >
           <div className="grid grid-cols-[40px_2fr_1fr_1fr_1fr_1fr_1fr_1fr] items-center py-2 px-3 border-b border-outline-variant font-mono uppercase tracking-wider text-on-surface-variant text-sm shrink-0">

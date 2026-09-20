@@ -2,9 +2,9 @@ import type { Genre } from "../hooks/useGenres";
 import type {
   CommittedConcept,
   DimensionDecomposition,
-  NoveltyScores as ThreeBNoveltyScores,
-  RawIntent as ThreeBRawIntent,
-  ThreeBState as ThreeBStatePayload,
+  NoveltyScores as B3NoveltyScores,
+  RawIntent as B3RawIntent,
+  B3State as B3StatePayload,
   Unit,
   UnitCandidate,
 } from "../components/wizard/divergence_v2/types";
@@ -122,7 +122,7 @@ export async function request<T>(
 
   // Status-code fallback (2026-09-11): FastAPI's bare-detail shape
   // `{"detail": "<string>"}` (returned by `raise HTTPException(detail=str(e))`
-  // in three_b_routes.py, v2_canvas.py, etc.) hits neither topError nor
+  // in b3_routes.py, v2_canvas.py, etc.) hits neither topError nor
   // nestedError, so the previous branch silently returned the string as data.
   // Reducers downstream would then treat e.g.
   //   `"DECOMPOSE_FAILED: 'genre_secondary'"` as a successful decomposition,
@@ -1897,101 +1897,113 @@ export const api = {
     request<LLMUsageEntry[]>("GET", `/settings/llm-usage?limit=${limit}`),
 
   // --- 3B Four-stage divergence (creative decomposition + adaptive diverge) ---
-  // Router prefix: /api/v1/projects/{project_id}/creative/diverge/three-b/*.
-  // See backend/api/three_b_routes.py. 4 stages: decompose (S2) → follow_up /
+  // Router prefix: /api/v1/projects/{project_id}/creative/diverge/b3/*.
+  // See backend/api/b3_routes.py. 4 stages: decompose (S2) → follow_up /
   // diverge (S3) → commit (S4) → advance.
 
-  postThreeBDecompose: (
+  postB3Decompose: (
     projectId: string,
-    body: ThreeBRawIntent & { user_modifications?: string },
+    body: B3RawIntent & { user_modifications?: string },
+    options?: { signal?: AbortSignal },
   ) =>
     request<DecomposeResponse>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/decompose`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/decompose`,
       body,
+      undefined,
+      options?.signal,
     ),
 
-  postThreeBMetaDecompose: (
+  postB3MetaDecompose: (
     projectId: string,
-    body: ThreeBRawIntent,
+    body: B3RawIntent,
+    options?: { signal?: AbortSignal },
   ) =>
     request<{ generated_prompt: string; written_to_override: boolean }>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/meta-decompose`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/meta-decompose`,
       body,
+      undefined,
+      options?.signal,
     ),
 
-  postThreeBFollowUp: (
+  postB3FollowUp: (
     projectId: string,
-    body: { unit_id: string; user_question: string | null },
+    body: { unit_id: string; user_question: string | null; operator: string },
   ) =>
     request<{ unit: Unit }>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/follow-up-unit`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/follow-up-unit`,
       body,
     ),
 
-  postThreeBDiverge: (projectId: string) =>
+  postB3Diverge: (projectId: string, options?: { signal?: AbortSignal }) =>
     request<DivergeResponse>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/diverge`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/diverge`,
       {},
+      undefined,
+      options?.signal,
     ),
 
-  postThreeBRegenerateUnit: (
+  postB3RegenerateUnit: (
     projectId: string,
     body: { unit_id: string },
   ) =>
     request<RegenerateUnitResponse>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/regenerate-unit`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/regenerate-unit`,
       body,
     ),
 
-  postThreeBSelectUnit: (
+  postB3SelectUnit: (
     projectId: string,
     body: { unit_id: string; candidate_index: number },
   ) =>
     request<{ dimension: DimensionDecomposition }>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/select-unit`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/select-unit`,
       body,
     ),
 
-  postThreeBCommit: (projectId: string) =>
+  postB3Commit: (projectId: string, options?: { signal?: AbortSignal }) =>
     request<CommitResponse>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/commit`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/commit`,
       {},
+      undefined,
+      options?.signal,
     ),
 
-  postThreeBEditConcept: (
+  postB3EditConcept: (
     projectId: string,
     body: Partial<CommittedConcept>,
   ) =>
     request<{ committed_concept: CommittedConcept }>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/edit-concept`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/edit-concept`,
       body,
     ),
 
-  postThreeBAdvance: (projectId: string) =>
+  postB3Advance: (projectId: string, options?: { signal?: AbortSignal }) =>
     request<AdvanceResponse>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/advance`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/advance`,
       {},
+      undefined,
+      options?.signal,
     ),
 
-  getThreeBState: (projectId: string) =>
-    request<ThreeBStatePayload | null>(
+  getB3State: (projectId: string) =>
+    request<B3StatePayload | null>(
       "GET",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/state`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/state`,
     ),
 
-  deleteThreeBState: (projectId: string) =>
+  deleteB3State: (projectId: string) =>
     request<{ ok: boolean }>(
       "DELETE",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/three-b/state`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/state`,
     ),
 
   // --- 创作维度 (subject/tone/style) ---
@@ -2031,7 +2043,7 @@ export interface RegenerateUnitResponse {
 
 export interface CommitResponse {
   committed_concept: CommittedConcept;
-  novelty_scores: ThreeBNoveltyScores;
+  novelty_scores: B3NoveltyScores;
 }
 
 export interface AdvanceResponse {

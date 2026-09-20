@@ -8,12 +8,12 @@ the override stores, so Prompt Plaza edits had no runtime effect:
   3. sandbox_renderer._load_prompt            — `sandbox_preview`
 
 Each test writes a sentinel into a temp global override file, constructs
-the unit with the same stores ThreeBEngine / BranchSimulator use, and
+the unit with the same stores B3Engine / BranchSimulator use, and
 asserts the sentinel lands in the LLM message. Without the fix, the LLM
 sees the unmodified YAML default and the assertion fails.
 
 Mirrors `test_decompose_applies_global_override_for_firstness_decompose`
-in test_api/test_three_b_routes.py.
+in test_api/test_b3_routes.py.
 """
 
 from __future__ import annotations

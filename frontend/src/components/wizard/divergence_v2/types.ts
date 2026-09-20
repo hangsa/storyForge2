@@ -23,6 +23,11 @@ export interface Unit {
   description: string;
   follow_up_count: number;
   is_irreducible: boolean;
+  // 自适应追问模式下由 LLM 写入。无算子追问后保持 undefined。
+  // 旧 state 加载时这些字段不存在,前端用可选链 fallback。
+  main_operator?: Operator | null;
+  aux_operator?: Operator | null;
+  chain_reaction?: string | null;
 }
 
 export interface UnitCandidate {
@@ -62,7 +67,7 @@ export interface NoveltyScores {
   grade: string;
 }
 
-export interface ThreeBState {
+export interface B3State {
   schema_version: 2;
   project_id: string;
   raw_intent: RawIntent | null;

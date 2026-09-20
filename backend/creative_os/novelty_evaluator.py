@@ -138,7 +138,7 @@ class NoveltyEvaluator:
         self._router = model_router
         self._embedder = embedder
         # v2.x prompt-override wiring: only `fill_trope_tags_async` consumes
-        # these. Storing on self keeps the API uniform with ThreeBEngine /
+        # these. Storing on self keeps the API uniform with B3Engine /
         # BranchSimulator and lets non-trope callers (scoring-only paths)
         # skip the stores without breaking the constructor signature.
         self._override_store = override_store
@@ -261,7 +261,7 @@ class NoveltyEvaluator:
         (`max_tokens`, `temperature`) is left to the caller's llm_client.
 
         `project_id` threads through to the override stores so Prompt Plaza
-        edits land here at runtime — same shape as ThreeBEngine / BranchSimulator.
+        edits land here at runtime — same shape as B3Engine / BranchSimulator.
         """
         if raw_intent.get("trope_tags"):
             return

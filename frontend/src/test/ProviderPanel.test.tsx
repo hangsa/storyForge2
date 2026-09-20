@@ -53,20 +53,51 @@ describe('ProviderPanel', () => {
     expect((idInput as HTMLInputElement).value).toBe('');
   });
 
-  it('opens API Key modal and submits to PUT endpoint', async () => {
-    const onReload = vi.fn();
-    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={onReload} />);
-    fireEvent.click(screen.getByTestId('provider-anthropic-apikey'));
-    const input = await screen.findByTestId('provider-apikey-input');
-    fireEvent.change(input, { target: { value: 'sk-new' } });
-    fireEvent.click(screen.getByTestId('provider-apikey-save'));
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/settings/llm-config/providers/anthropic/api-key'),
-        expect.objectContaining({ method: 'PUT' }),
-      ),
-    );
-    expect(onReload).toHaveBeenCalled();
+  it('shows API Key field with $ prefix for existing env var on edit', async () => {
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={() => {}} />);
+    fireEvent.click(screen.getByTestId('provider-anthropic-edit'));
+    const apiKeyInput = await screen.findByTestId('provider-form-apikey');
+    expect((apiKeyInput as HTMLInputElement).value).toBe('$ANTHROPIC_API_KEY');
+  });
+
+  it('saving $ENV_VAR_NAME writes upsertProvider with stripped name and clears .env', async () => {
+    const calls: Array<{ url: string; method: string; body: unknown }> = [];
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url);
+      const body = init?.body ? JSON.parse(init.body as string) : null;
+      calls.push({ url: u, method: init?.method ?? 'GET', body });
+      return new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: {} }), { status: 200 });
+    });
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={() => {}} />);
+    fireEvent.click(screen.getByTestId('provider-anthropic-edit'));
+    const apiKeyInput = await screen.findByTestId('provider-form-apikey');
+    fireEvent.change(apiKeyInput, { target: { value: '$NEW_VAR' } });
+    fireEvent.click(screen.getByTestId('provider-form-save'));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/api-key'))).toBe(true));
+    const clearCall = calls.find((c) => c.url.includes('/api-key'));
+    expect(clearCall?.body).toEqual({ value: '' });
+    const upsertCall = calls.find((c) => c.url.endsWith('/settings/llm-config/providers') && c.method === 'POST');
+    expect(upsertCall?.body).toMatchObject({ id: 'anthropic', provider: { api_key_env: 'NEW_VAR' } });
+  });
+
+  it('saving raw API key writes setProviderApiKey and upsertProvider with empty env', async () => {
+    const calls: Array<{ url: string; method: string; body: unknown }> = [];
+    global.fetch = vi.fn(async (url, init) => {
+      const u = String(url);
+      const body = init?.body ? JSON.parse(init.body as string) : null;
+      calls.push({ url: u, method: init?.method ?? 'GET', body });
+      return new Response(JSON.stringify({ error: false, code: 'OK', message: '', detail: {} }), { status: 200 });
+    });
+    render(<ProviderPanel providers={PROVIDERS} dirty onChange={() => {}} onReload={() => {}} />);
+    fireEvent.click(screen.getByTestId('provider-anthropic-edit'));
+    const apiKeyInput = await screen.findByTestId('provider-form-apikey');
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-raw-key' } });
+    fireEvent.click(screen.getByTestId('provider-form-save'));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/api-key'))).toBe(true));
+    const keyCall = calls.find((c) => c.url.includes('/api-key'));
+    expect(keyCall?.body).toEqual({ value: 'sk-raw-key' });
+    const upsertCall = calls.find((c) => c.url.endsWith('/settings/llm-config/providers') && c.method === 'POST');
+    expect(upsertCall?.body).toMatchObject({ id: 'anthropic', provider: { api_key_env: '' } });
   });
 
   it('delete model button calls DELETE endpoint', async () => {

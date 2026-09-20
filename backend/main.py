@@ -8,17 +8,26 @@ previous process died (spec §4E).
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+# Root logger at INFO so module-level logger.info(...) (e.g.
+# b3_engine.meta_decompose/decompose elapsed=) is captured. Must run before
+# any other logging.getLogger() so the StreamHandler is installed.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 from backend.api import (
     project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing,
     stage5_diagnosis, stage6_export, style_extractor, conductor, storyos,
     settings_api, creative_diverge, growth_workshop, style_sandbox, autopilot,
     stage4_fact_guard, prompt_plaza, prompt_defaults,
-    llm_config_api, creative_divergence, three_b_routes, creative_dimensions,
+    llm_config_api, creative_divergence, b3_routes, creative_dimensions,
 )
 from backend.api import genres as genres_api
 from backend.api.autopilot import broadcaster as autopilot_broadcaster
@@ -65,7 +74,7 @@ async def lifespan(app: FastAPI):
         seed_loader=load_seed,
     )
     app.state.creative_dimensions_store.load()
-    from backend.creative_os.three_b_engine import _register_dimensions_store
+    from backend.creative_os.b3_engine import _register_dimensions_store
     _register_dimensions_store(app.state.creative_dimensions_store)
     try:
         yield
@@ -113,7 +122,7 @@ app.include_router(prompt_defaults.router)
 app.include_router(llm_config_api.router)
 app.include_router(genres_api.router)
 app.include_router(creative_divergence.router)
-app.include_router(three_b_routes.router)
+app.include_router(b3_routes.router)
 app.include_router(creative_dimensions.router)
 
 if settings.enable_canvas_v2:

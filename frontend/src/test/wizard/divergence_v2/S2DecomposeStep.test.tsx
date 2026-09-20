@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import S2DecomposeStep from "@/components/wizard/divergence_v2/S2DecomposeStep";
 import type { DimensionDecomposition } from "@/components/wizard/divergence_v2/types";
@@ -259,7 +259,7 @@ describe("S2DecomposeStep", () => {
     });
     fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
     await waitFor(() =>
-      expect(onFollowUp).toHaveBeenCalledWith("u1", "灵窍如何验证?"),
+      expect(onFollowUp).toHaveBeenCalledWith("u1", "灵窍如何验证?", "none"),
     );
     expect(screen.queryByTestId("regenerate-modal")).toBeNull();
   });
@@ -268,7 +268,7 @@ describe("S2DecomposeStep", () => {
     const { onFollowUp } = renderS2();
     fireEvent.click(screen.getByTestId("follow-up-u1"));
     fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
-    expect(onFollowUp).toHaveBeenCalledWith("u1", null);
+    expect(onFollowUp).toHaveBeenCalledWith("u1", null, "none");
   });
 
   it("canceling modal does not call onFollowUp (Round 3 — item 4)", () => {
@@ -289,6 +289,51 @@ describe("S2DecomposeStep", () => {
     fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
     fireEvent.click(screen.getByTestId("follow-up-u3"));
     expect(screen.getByText(/追问 — 修行|追问 - 修行/)).toBeInTheDocument();
+  });
+
+  // ── 2026-09-15: 追问 modal title/button context (user-reported) ───────
+
+  it("modal title is exactly 「追问 — {unit}」, NOT 「重新生成 — 追问 - {unit}」", () => {
+    // Regression guard for the user-reported "auto-regenerate" confusion:
+    // the title used to be "重新生成 — 追问 - 灵窍" which mixed both words
+    // and made it sound like regenerate was already happening. The new
+    // title is just "追问 — 灵窍".
+    renderS2();
+    fireEvent.click(screen.getByTestId("follow-up-u1"));
+    const title = document.getElementById("regenerate-modal-title");
+    expect(title?.textContent).toBe("追问 — 灵窍");
+    expect(title?.textContent).not.toContain("重新生成");
+  });
+
+  it("modal confirm button is labeled 「追问」 (not 「重新生成」)", () => {
+    // The user explicitly asked for the button inside the modal to be
+    // labeled "追问" — matches the outer button label so the second click
+    // feels like a confirmation of the same action.
+    renderS2();
+    fireEvent.click(screen.getByTestId("follow-up-u1"));
+    // Use the modal's specific testid to disambiguate from the per-unit
+    // 追问 button (which is still in the DOM with the same label).
+    const modal = screen.getByTestId("regenerate-modal");
+    expect(within(modal).getByRole("button", { name: "追问" })).toBeInTheDocument();
+    expect(within(modal).queryByRole("button", { name: "重新生成" })).toBeNull();
+  });
+
+  it("modal busy text becomes 「追问中…」 when followUpLoadingUnitId is set", () => {
+    renderS2({ followUpLoadingUnitId: "u1" });
+    fireEvent.click(screen.getByTestId("follow-up-u1"));
+    expect(screen.getByText("追问中…")).toBeInTheDocument();
+  });
+
+  it("does NOT auto-fire onFollowUp when the modal opens — only on confirm", () => {
+    // Regression guard for the user-reported "auto-regenerate" behavior.
+    // Opening the modal (without clicking confirm) must NOT trigger the
+    // follow-up API call.
+    const { onFollowUp } = renderS2();
+    fireEvent.click(screen.getByTestId("follow-up-u1"));
+    expect(onFollowUp).not.toHaveBeenCalled();
+    // Cancel also must not fire it.
+    fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
+    expect(onFollowUp).not.toHaveBeenCalled();
   });
 
   // ─— Round 7: edit icon on top-level summary ─────────────────────────────
@@ -372,6 +417,150 @@ describe("S2DecomposeStep", () => {
       fireEvent.click(screen.getByTestId("edit-decompose-prompt-btn"));
       expect(screen.getByTestId("edit-prompt-modal-confirm")).toBeDisabled();
       expect(screen.getByTestId("edit-prompt-modal-cancel")).toBeDisabled();
+    });
+  });
+
+  // ── 2026-09-19: S2 追问 modal operator selector (无算子 / 自适应) ─────
+
+  describe("S2DecomposeStep follow-up operator selector", () => {
+    it("the follow-up modal exposes an operator dropdown defaulting to 「无算子」", () => {
+      // Opening any unit's 追问 modal should reveal a dropdown with two
+      // options; the default value should be 「无算子」 (preserves legacy
+      // behavior — clicking 追问 without touching the dropdown must keep
+      // the original 追问式深化 prompt path).
+      renderS2();
+      fireEvent.click(screen.getByTestId("follow-up-u1"));
+      const dropdown = screen.getByTestId("regenerate-modal-operator") as HTMLSelectElement;
+      expect(dropdown).toBeInTheDocument();
+      expect(dropdown.value).toBe("none");
+      const options = within(dropdown).getAllByRole("option");
+      expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(["none", "adaptive"]);
+    });
+
+    it("confirming with 「自适应」 selected forwards operator='adaptive' to onFollowUp", () => {
+      const { onFollowUp } = renderS2();
+      fireEvent.click(screen.getByTestId("follow-up-u1"));
+      const dropdown = screen.getByTestId("regenerate-modal-operator") as HTMLSelectElement;
+      fireEvent.change(dropdown, { target: { value: "adaptive" } });
+      fireEvent.change(screen.getByLabelText(/修改意见/i), {
+        target: { value: "让门派结构更松动" },
+      });
+      fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+      expect(onFollowUp).toHaveBeenCalledWith("u1", "让门派结构更松动", "adaptive");
+    });
+
+    it("confirming with 「自适应」 + empty text still calls onFollowUp (null question, 'adaptive' operator)", () => {
+      // Adaptive mode should work even when the user provides no question —
+      // the operator alone is enough for the prompt to scan-and-route.
+      const { onFollowUp } = renderS2();
+      fireEvent.click(screen.getByTestId("follow-up-u3"));
+      const dropdown = screen.getByTestId("regenerate-modal-operator") as HTMLSelectElement;
+      fireEvent.change(dropdown, { target: { value: "adaptive" } });
+      fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+      expect(onFollowUp).toHaveBeenCalledWith("u3", null, "adaptive");
+    });
+
+    it("cancelling after switching operator does NOT call onFollowUp", () => {
+      // The dropdown is open-state; cancel must discard any operator switch.
+      const { onFollowUp } = renderS2();
+      fireEvent.click(screen.getByTestId("follow-up-u1"));
+      fireEvent.change(screen.getByTestId("regenerate-modal-operator"), {
+        target: { value: "adaptive" },
+      });
+      fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
+      expect(onFollowUp).not.toHaveBeenCalled();
+    });
+
+    it("the operator resets to 'none' between consecutive 追问 invocations", () => {
+      // After closing the modal (cancel or confirm), the next 追问 click
+      // must start from the default again — otherwise a single accidental
+      // switch would lock the user into adaptive mode for all subsequent
+      // units. The hook owns the state; cancel/confirm reset it explicitly.
+      const { onFollowUp } = renderS2();
+      // First round: switch to adaptive, then cancel.
+      fireEvent.click(screen.getByTestId("follow-up-u1"));
+      fireEvent.change(screen.getByTestId("regenerate-modal-operator"), {
+        target: { value: "adaptive" },
+      });
+      fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
+      // Second round: open on a different unit, default should be 'none'.
+      fireEvent.click(screen.getByTestId("follow-up-u3"));
+      expect(
+        (screen.getByTestId("regenerate-modal-operator") as HTMLSelectElement).value,
+      ).toBe("none");
+      fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+      expect(onFollowUp).toHaveBeenLastCalledWith("u3", null, "none");
+    });
+  });
+
+  // ── 2026-09-19: UnitCard renders operator label after unit_name ────────
+
+  describe("S2DecomposeStep UnitCard operator label", () => {
+    it("renders the operator tag when main_operator is set on the unit", () => {
+      // Adaptive follow-up responses carry main_operator / aux_operator /
+      // chain_reaction; the UI must surface the chosen operator so users
+      // can see what the last round actually applied.
+      const dims: DimensionDecomposition[] = [
+        {
+          dimension: "ontology",
+          insight: "",
+          units: [
+            {
+              id: "u_op",
+              dimension: "ontology",
+              unit_name: "灵窍",
+              description: "扭曲后的版本",
+              follow_up_count: 1,
+              is_irreducible: false,
+              main_operator: "distort",
+              aux_operator: "break",
+              chain_reaction: "参数调试后整个灵脉网络反相",
+            },
+          ],
+          candidates: [],
+          dimension_status: "decomposed",
+        },
+      ];
+      renderS2({ dimensions: dims });
+      const tag = screen.getByTestId("unit-operator-u_op");
+      expect(tag).toHaveTextContent("扭曲");
+      expect(tag).toHaveTextContent("打破");
+    });
+
+    it("does NOT render an operator tag when main_operator is null", () => {
+      // Units produced before the operator feature shipped (or units whose
+      // last 追问 was the legacy 无算子 path) have no operator metadata —
+      // the UI must render nothing rather than an empty tag.
+      renderS2();
+      expect(screen.queryByTestId("unit-operator-u1")).toBeNull();
+    });
+
+    it("renders only the main operator when aux_operator is null", () => {
+      const dims: DimensionDecomposition[] = [
+        {
+          dimension: "ontology",
+          insight: "",
+          units: [
+            {
+              id: "u_main_only",
+              dimension: "ontology",
+              unit_name: "灵脉",
+              description: "融合后",
+              follow_up_count: 1,
+              is_irreducible: false,
+              main_operator: "blend",
+              aux_operator: null,
+            },
+          ],
+          candidates: [],
+          dimension_status: "decomposed",
+        },
+      ];
+      renderS2({ dimensions: dims });
+      const tag = screen.getByTestId("unit-operator-u_main_only");
+      expect(tag).toHaveTextContent("融合");
+      expect(tag).not.toHaveTextContent("打破");
+      expect(tag).not.toHaveTextContent("+");
     });
   });
 });

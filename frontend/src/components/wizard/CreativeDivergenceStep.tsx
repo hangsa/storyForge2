@@ -7,7 +7,7 @@ import { StepIndicator } from "./divergence_v2/StepIndicator";
 import { ConfirmNextDialog } from "./divergence_v2/ConfirmNextDialog";
 import { RegenerateModal } from "@/components/shared/RegenerateModal";
 import { useOptionalWizard } from "./WizardContext";
-import { hasDownstreamData, useThreeBDivergence } from "./divergence_v2/useThreeBDivergence";
+import { hasDownstreamData, useB3Divergence } from "./divergence_v2/useB3Divergence";
 import type { RawIntent, SubStage } from "./divergence_v2/types";
 
 interface Props {
@@ -22,7 +22,9 @@ export default function CreativeDivergenceStep({
     state, projectGenre, runS1ToS2, savePrompt,
     decompose, diverge, regenerateUnit, selectCandidate,
     commit, editConcept, advance, jumpToStage,
-  } = useThreeBDivergence(projectId);
+    followUp,
+    pause, resume,
+  } = useB3Divergence(projectId);
 
   const wizard = useOptionalWizard();
 
@@ -63,11 +65,23 @@ export default function CreativeDivergenceStep({
   setPrevHandlerRef.current = wizard?.setPrevHandler;
   const setRegenerateHandlerRef = useRef(wizard?.setRegenerateHandler);
   setRegenerateHandlerRef.current = wizard?.setRegenerateHandler;
+  const setNextLoadingClickHandlerRef = useRef(wizard?.setNextLoadingClickHandler);
+  setNextLoadingClickHandlerRef.current = wizard?.setNextLoadingClickHandler;
+
+  // Pause/resume toggle wired onto the footer loading label. Reads the
+  // freshest state.paused via the effect's dep array — every time the
+  // reducer flips paused, the effect re-registers a fresh togglePause
+  // closure with the up-to-date value.
+  const togglePause = useCallback(() => {
+    if (state.paused) resume();
+    else pause();
+  }, [state.paused, pause, resume]);
 
   useEffect(() => {
     const setNext = setNextHandlerRef.current;
     const setPrev = setPrevHandlerRef.current;
     const setRegen = setRegenerateHandlerRef.current;
+    const setNextLoadingClick = setNextLoadingClickHandlerRef.current;
     if (!setNext || !setPrev) return;
 
     const sub = state.currentSubStage;
@@ -105,6 +119,49 @@ export default function CreativeDivergenceStep({
     }
 
     // ── Next handler + label/loading label ──────────────────────────
+    // The loading label reflects the *actual* inflight operation, not the
+    // currently-visible sub-stage. This is the fix for the user-reported
+    // "S3 → S2 back-nav during in-flight /diverge shows '拆解中…'" bug —
+    // the API call in flight is /diverge (S3) even though the user landed
+    // back at S2, so the footer should say "发散中…" instead of "拆解中…".
+    // metaLoading is checked first because it overlays the meta-prompt
+    // generation phase which is conceptually part of /decompose but
+    // warrants a distinct label. When nothing is in flight
+    // (inflightStage === null AND metaLoading === false) the label is
+    // null — previously we fell back to the current sub-stage's static
+    // label, but with the new cancel-on-navigate-away behavior the user
+    // explicitly expects "no loading text" once they've aborted (Round 2
+    // fix, 2026-09-18).
+    //
+    // state.paused takes precedence over metaLoading/inflightStage because
+    // the PAUSE reducer has already cleared those fields; checking them
+    // first would yield null instead of "已暂停" — leaving the button label
+    // stuck on "下一步:发散 →" while the user is paused mid-operation.
+    const loadingLabel = state.paused
+      ? "已暂停"
+      : state.metaLoading
+        ? "生成专用提示词中…"
+        : state.inflightStage === "2"
+          ? "拆解中…"
+          : state.inflightStage === "3"
+            ? "发散中…"
+            : state.inflightStage === "4"
+              ? "提交中…"
+              : null;
+
+    // Wire the loading label itself as a pause/resume toggle. While
+    // loadingLabel is showing, the footer next button stays clickable and
+    // routes clicks here instead of advancing — WorkspaceWizardPanel/Init
+    // WizardModal use `nextLoadingClickHandler ?? nextHandler` in onClick
+    // and `nextDisabled && !nextLoadingClickHandler` for the disabled
+    // attr, so the user gets one button that doubles as "下一步" (when
+    // idle) and "暂停 / 继续" (while running / paused).
+    if (setNextLoadingClick && loadingLabel !== null) {
+      setNextLoadingClick(() => togglePause());
+    } else {
+      setNextLoadingClick?.(null);
+    }
+
     if (sub === "1") {
       const disabled = !s1Ready.valid || state.loading;
       // Always register a function (no-op fallback when form is invalid)
@@ -119,10 +176,11 @@ export default function CreativeDivergenceStep({
         null,
       );
     } else if (sub === "2") {
-      const disabled = state.loading;
-      const loadingLabel = state.metaLoading
-        ? "生成专用提示词中…"
-        : "拆解中…";
+      // Include state.paused so the visible label flips to "已暂停"
+      // (footer button renders nextLoadingLabel only when nextDisabled=true).
+      // Otherwise paused mid-decompose would still display "下一步:发散 →"
+      // because state.loading is cleared by the PAUSE reducer.
+      const disabled = state.loading || state.paused;
       setNext(
         () => requestNext("3"),
         disabled,
@@ -130,22 +188,22 @@ export default function CreativeDivergenceStep({
         loadingLabel,
       );
     } else if (sub === "3") {
-      const disabled = state.loading;
+      const disabled = state.loading || state.paused;
       setNext(
         () => requestNext("4"),
         disabled,
         "下一步:提交 →",
-        "发散中…",
+        loadingLabel,
       );
     } else if (sub === "4") {
       // S4: empty-state (committedConcept === null) and committed-state both
       // call onAdvance. The footer button is the user's only path forward.
-      const disabled = state.loading;
+      const disabled = state.loading || state.paused;
       setNext(
         () => { void advance(); },
         disabled,
         "下一步:进入概念DNA →",
-        "提交中…",
+        loadingLabel,
       );
     }
 
@@ -153,27 +211,44 @@ export default function CreativeDivergenceStep({
       setNext(null, false);
       setPrev(null);
       setRegen?.(null, false);
+      setNextLoadingClick?.(null);
       setRegenModalOpen(false);
     };
-    // requestNext / jumpToStage / advance are stable from useThreeBDivergence
+    // requestNext / jumpToStage / advance are stable from useB3Divergence
     // (useCallback), so we don't need to list them. The shape of the
     // registration changes per sub-stage; we re-run the effect whenever the
-    // relevant inputs change.
-  }, [state.currentSubStage, state.loading, state.metaLoading, state.committedConcept, state.rawIntent, s1Ready.handler, s1Ready.valid]);
+    // relevant inputs change. togglePause is intentionally NOT in deps —
+    // it's rebuilt whenever state.paused changes (via the useCallback's own
+    // dep on state.paused), and listing it here would cause an extra
+    // re-run on every paused-flip without changing behavior.
+  }, [state.currentSubStage, state.loading, state.metaLoading, state.committedConcept, state.rawIntent, state.paused, s1Ready.handler, s1Ready.valid]);
 
   // 进入 S2 时若 dimensions 为空自动跑 decompose
   // Round 7 (2026-09-12): also guard on !state.metaLoading so the auto-
   // decompose doesn't race with the S1→S2 two-stage runS1ToS2 (meta →
   // decompose) flow. Without this, the auto-decompose could fire while
   // meta is still in flight, leading to a duplicate /decompose call.
+  //
+  // 2026-09-18: track the last rawIntent we've auto-decomposed with via a
+  // ref. Without this, the effect would re-fire whenever state.dimensions
+  // becomes empty after the fact — e.g. /diverge returns a malformed payload
+  // (all units fail) and the reducer coerces dimensions to [], then the user
+  // clicks 上一步 from S3 → S2. The guard `dimensions.length === 0` alone
+  // can't distinguish "never decomposed" from "decomposed and then cleared",
+  // so we use the ref to remember which rawIntent we've already auto-fired
+  // for. Manual regenerate via the footer regen modal still works because
+  // it calls decompose() directly without going through this effect.
+  const lastAutoDecomposedRawIntentRef = useRef<RawIntent | null>(null);
   useEffect(() => {
     if (
       state.currentSubStage === "2" &&
       state.dimensions.length === 0 &&
       state.rawIntent &&
       !state.loading &&
-      !state.metaLoading
+      !state.metaLoading &&
+      lastAutoDecomposedRawIntentRef.current !== state.rawIntent
     ) {
+      lastAutoDecomposedRawIntentRef.current = state.rawIntent;
       decompose(state.rawIntent);
     }
   }, [state.currentSubStage, state.dimensions.length, state.rawIntent, state.loading, state.metaLoading, decompose]);
@@ -241,6 +316,8 @@ export default function CreativeDivergenceStep({
             decomposePrompt={state.decomposePrompt}
             promptBusy={state.promptBusy}
             onSavePrompt={savePrompt}
+            followUpLoadingUnitId={state.followUpLoadingUnitId}
+            onFollowUp={followUp}
           />
         )}
 

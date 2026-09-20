@@ -1,4 +1,4 @@
-"""Tests for /three-b/meta-decompose + invoke_meta_llm + override behavior.
+"""Tests for /b3/meta-decompose + invoke_meta_llm + override behavior.
 
 Covers:
 - POST /meta-decompose writes project-level firstness_decompose override
@@ -21,10 +21,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import settings
-from backend.creative_os.three_b_engine import (
+from backend.creative_os.b3_engine import (
     RawIntent,
-    ThreeBEngine,
-    ThreeBState,
+    B3Engine,
+    B3State,
     Unit,
     DimensionDecomposition,
     Dimension,
@@ -39,7 +39,7 @@ from backend.services.prompt_override_store import (
 
 client = TestClient(app)
 PROJ_PREFIX = "p_meta_"
-BASE = "/api/v1/projects/{project_id}/creative/diverge/three-b"
+BASE = "/api/v1/projects/{project_id}/creative/diverge/b3"
 
 
 @pytest.fixture(autouse=True)
@@ -53,8 +53,8 @@ def _patch_projects_dir(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def _reset_engine_state():
     yield
-    if hasattr(app.state, "three_b_engine"):
-        del app.state.three_b_engine
+    if hasattr(app.state, "b3_engine"):
+        del app.state.b3_engine
 
 
 @pytest.fixture
@@ -66,9 +66,9 @@ def _route(path: str, project_id: str) -> str:
     return BASE.format(project_id=project_id) + path
 
 
-def _make_engine_with_overrides(mock_router: AsyncMock) -> ThreeBEngine:
+def _make_engine_with_overrides(mock_router: AsyncMock) -> B3Engine:
     """Engine wired to the real PromptOverrideStore (per-project file at tmp_path)."""
-    return ThreeBEngine(
+    return B3Engine(
         model_router=mock_router,
         override_store=get_project_override_store(),
     )
@@ -90,7 +90,7 @@ def _make_basic_dims() -> list[DimensionDecomposition]:
 
 
 def _seed_state_with_dims(project_id: str) -> None:
-    state = ThreeBState(
+    state = B3State(
         project_id=project_id,
         raw_intent=RawIntent(prompt="一个少年在废墟里觉醒", genre_primary="玄幻"),
         dimensions=_make_basic_dims(),
@@ -115,7 +115,7 @@ def test_meta_decompose_endpoint_writes_override(mock_router):
     mock_router.execute = AsyncMock(
         return_value={"content": "你是一位修仙设定诊断师,专攻灵界天道体系..."}
     )
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/meta-decompose", f"{PROJ_PREFIX}ok"),
@@ -145,7 +145,7 @@ def test_meta_decompose_failure_returns_503(mock_router):
 
     # Router raises — invoke_meta_llm lets it propagate, route catches as 503.
     mock_router.execute = AsyncMock(side_effect=RuntimeError("LLM upstream timeout"))
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/meta-decompose", f"{PROJ_PREFIX}fail"),
@@ -162,7 +162,7 @@ def test_meta_decompose_empty_response_returns_422(mock_router):
 
     # Router returns empty content — invoke_meta_llm raises ValueError → 422.
     mock_router.execute = AsyncMock(return_value={"content": "   "})
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/meta-decompose", f"{PROJ_PREFIX}empty"),
@@ -175,7 +175,7 @@ def test_meta_decompose_empty_response_returns_422(mock_router):
 def test_meta_decompose_short_prompt_rejected(mock_router):
     """Pydantic min_length=10 on the prompt field — same gate as /decompose."""
     engine = _make_engine_with_overrides(mock_router)
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/meta-decompose", f"{PROJ_PREFIX}short"),
@@ -201,7 +201,7 @@ def test_subsequent_decompose_reads_meta_override(mock_router):
     mock_router.execute = AsyncMock(
         return_value={"content": "## SPECIALIZED-META-PROMPT ##"}
     )
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/meta-decompose", project_id),
@@ -278,7 +278,7 @@ def test_decompose_with_no_override_uses_yaml(mock_router):
         }
 
     mock_router.execute = fake_router_execute  # type: ignore[assignment]
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/decompose", project_id),
@@ -333,7 +333,7 @@ def test_decompose_after_user_edit_uses_edited_prompt(mock_router):
         }
 
     mock_router.execute = fake_router_execute  # type: ignore[assignment]
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/decompose", project_id),
@@ -383,7 +383,7 @@ def test_regenerate_does_not_call_meta(mock_router):
         return await original_execute(*args, **kwargs)
 
     mock_router.execute = tracking_router_execute  # type: ignore[assignment]
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/decompose", project_id),
@@ -423,7 +423,7 @@ def test_meta_decompose_strips_think_block_before_saving_override(mock_router):
         + clean_prompt
     )
     mock_router.execute = AsyncMock(return_value={"content": polluted_response})
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/meta-decompose", project_id),
@@ -460,7 +460,7 @@ def test_meta_decompose_empty_after_think_strip_returns_422(mock_router):
     mock_router.execute = AsyncMock(
         return_value={"content": "<think>just thinking, never produced the prompt</think>"}
     )
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/meta-decompose", project_id),
@@ -522,7 +522,7 @@ def test_decompose_retries_on_schema_invalid_response(mock_router):
         }
 
     mock_router.execute = stub_execute
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/decompose", project_id),
@@ -561,7 +561,7 @@ def test_decompose_raises_after_two_schema_invalid_responses(mock_router):
         }
 
     mock_router.execute = stub_execute
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     resp = client.post(
         _route("/decompose", project_id),

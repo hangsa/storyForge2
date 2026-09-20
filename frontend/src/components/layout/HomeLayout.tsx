@@ -128,7 +128,7 @@ export default function HomeLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-canvas-bg flex flex-col">
+    <div className="h-screen bg-canvas-bg flex flex-col overflow-hidden">
       <header
         data-testid="home-top-bar"
         className="shrink-0 border-b border-outline-variant bg-canvas-bg px-4 py-2 flex items-center"

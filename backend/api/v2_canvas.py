@@ -61,7 +61,7 @@ def _load_next_step_prompt(
     """Load next-step prompt template via `load_prompt_effective`.
 
     Resolution order: YAML default → global override → project override.
-    `project_id` + stores mirror the wiring used by ThreeBEngine / BranchSimulator
+    `project_id` + stores mirror the wiring used by B3Engine / BranchSimulator
     so Prompt Plaza edits to `canvas_v2_next_step` actually land at runtime.
 
     The pre-fix cache (`_cache` attribute on this function) silently pinned

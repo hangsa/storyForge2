@@ -63,7 +63,7 @@ def _load_prompt(
     """Load sandbox_preview prompt via `load_prompt_effective`.
 
     Resolution order: YAML default → global override → project override.
-    `project_id` + stores mirror the wiring used by ThreeBEngine / BranchSimulator
+    `project_id` + stores mirror the wiring used by B3Engine / BranchSimulator
     so Prompt Plaza edits to `sandbox_preview` actually land at runtime.
 
     The pre-fix version used `yaml.safe_load` directly on the path, which

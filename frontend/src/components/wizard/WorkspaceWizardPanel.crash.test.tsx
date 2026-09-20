@@ -63,10 +63,10 @@ vi.mock("../../api/client", () => ({
     getCharacter: vi.fn().mockResolvedValue({}),
     getNovelOutline: vi.fn().mockResolvedValue({}),
     getOutline: vi.fn().mockResolvedValue({}),
-    // 3B divergence (Plan 2026-09-05): useThreeBDivergence fires
-    // getThreeBState on mount. Mock empty-state so the hook's HYDRATE
+    // 3B divergence (Plan 2026-09-05): useB3Divergence fires
+    // getB3State on mount. Mock empty-state so the hook's HYDRATE
     // runs without throwing.
-    getThreeBState: vi.fn().mockResolvedValue({
+    getB3State: vi.fn().mockResolvedValue({
       schema_version: 1,
       project_id: "proj_test",
       raw_intent: null,
@@ -74,14 +74,14 @@ vi.mock("../../api/client", () => ({
       stage3_deepened: [],
       committed: false,
     }),
-    deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
+    deleteB3State: vi.fn().mockResolvedValue({ ok: true }),
     // Theme migration (2026-09-05): S1InputStep calls useGenres → api.listGenres
     listGenres: vi.fn().mockResolvedValue([]),
     // Task 12 (2026-09-10): S1InputStep now reads creative dimensions via
     // useCreativeDimensions → api.listActiveCreativeDimensions. Empty
     // arrays keep these crash tests focused on the prefill paths.
     listActiveCreativeDimensions: vi.fn().mockResolvedValue({ subject: [], tone: [], style: [] }),
-    // Genre-inheritance fix (2026-09-11): useThreeBDivergence fires
+    // Genre-inheritance fix (2026-09-11): useB3Divergence fires
     // getProjectStatus on mount. Empty genre is safe because the S1 form
     // is not exercised in these crash tests.
     getProjectStatus: vi.fn().mockResolvedValue({ title: "T", genre: "" }),
@@ -132,7 +132,7 @@ describe("WorkspaceWizardPanel crash repro", () => {
         getNovelOutline: vi.fn().mockResolvedValue(null),
         getOutline: vi.fn().mockResolvedValue(null),
         // 3B divergence (Plan 2026-09-05): mirror first-block mock.
-        getThreeBState: vi.fn().mockResolvedValue({
+        getB3State: vi.fn().mockResolvedValue({
           schema_version: 1,
           project_id: "proj_test",
           raw_intent: null,
@@ -140,7 +140,7 @@ describe("WorkspaceWizardPanel crash repro", () => {
           stage3_deepened: [],
           committed: false,
         }),
-        deleteThreeBState: vi.fn().mockResolvedValue({ ok: true }),
+        deleteB3State: vi.fn().mockResolvedValue({ ok: true }),
         // Theme migration (2026-09-05): mirror first-block mock
         listGenres: vi.fn().mockResolvedValue([]),
         // Task 12 (2026-09-10): mirror first-block mock.

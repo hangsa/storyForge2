@@ -1,6 +1,6 @@
 """5 维度中英标签映射(前后端共用)。
 
-后端在 ThreeBEngine + 错误信息中引用;前端在 StepIndicator / S2 header 中引用。
+后端在 B3Engine + 错误信息中引用;前端在 StepIndicator / S2 header 中引用。
 未来 i18n 时,本文件可改为读 i18n catalog。
 """
 

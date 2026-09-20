@@ -1,4 +1,4 @@
-"""Tests for `three_b_engine._parse_json_or_raise` robustness.
+"""Tests for `b3_engine._parse_json_or_raise` robustness.
 
 Regression: deepseek (and other providers) sometimes wrap their JSON output in
 a markdown code fence (` ```json ... ``` `) even when `response_format=
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.creative_os.three_b_engine import _parse_json_or_raise
+from backend.creative_os.b3_engine import _parse_json_or_raise
 
 
 VALID_PAYLOAD = {

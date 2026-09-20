@@ -1,6 +1,6 @@
 """4 阶段创意发散 API 路由。
 
-Mounted at /api/v1/projects/{project_id}/creative/diverge/three-b/*.
+Mounted at /api/v1/projects/{project_id}/creative/diverge/b3/*.
 
 端点(共 10):
 - GET    /state              — 读 state(走 migrate)
@@ -26,39 +26,53 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from backend.config import settings
-from backend.creative_os.three_b_engine import (
+from backend.creative_os.b3_engine import (
     RawIntent,
-    ThreeBEngine,
+    B3Engine,
     migrate_state_on_load,
 )
+from backend.llm.model_router import get_model_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/projects/{project_id}/creative/diverge/three-b",
-    tags=["three_b"],
+    prefix="/api/v1/projects/{project_id}/creative/diverge/b3",
+    tags=["b3"],
 )
 
 
-def _get_engine(request: Request) -> ThreeBEngine:
-    """Get ThreeBEngine singleton (created in app lifespan or on-demand)."""
-    engine = getattr(request.app.state, "three_b_engine", None)
+def _get_engine(request: Request) -> B3Engine:
+    """Get B3Engine singleton (created on first call, cached on app.state).
+
+    The model_router MUST be the global singleton (`get_model_router()`),
+    not a fresh `ModelRouter()` — the singleton is the only thing the
+    AI Console / `llm_config_api` hot-reload path mutates in place
+    (`reload_config()` clears its `_tiers/_mappings/_providers` dicts and
+    repopulates from disk). A private ModelRouter instance reads the YAML
+    exactly once at construction and stays frozen forever, so any config
+    edit after the first b3 request would be silently ignored. proj_4e6f888f
+    2026-09-18: user deleted the kimi provider and re-pointed tier_1 at
+    MiniMax-M3 via the AI Console, but the cached B3Engine still held a
+    router pinned to the pre-edit state (`tier_1.default=kimi-k3`) and the
+    next /decompose request failed with
+    `ModelUnavailableError: 'kimi-k3' ... is unavailable`.
+    """
+    engine = getattr(request.app.state, "b3_engine", None)
     if engine is None:
-        from backend.llm.model_router import ModelRouter
         # v2 prompt-override wiring: pass the same stores BranchSimulator
         # uses so Prompt Plaza edits to the 4 creative prompts
-        # (firstness_decompose, three_b_*) actually land in the LLM call.
+        # (firstness_decompose, b3_*) actually land in the LLM call.
         # Without these, load_prompt_effective silently returns YAML defaults.
         from backend.services.agent_prompt_stores import (
             global_override_store,
             project_override_store,
         )
-        engine = ThreeBEngine(
-            model_router=ModelRouter(),
+        engine = B3Engine(
+            model_router=get_model_router(),
             override_store=project_override_store(),
             global_override_store=global_override_store(),
         )
-        request.app.state.three_b_engine = engine
+        request.app.state.b3_engine = engine
     return engine
 
 
@@ -67,12 +81,12 @@ def _state_path(project_id: str) -> Path:
         Path(settings.projects_dir)
         / project_id
         / "creative_os"
-        / "three_b_state.json"
+        / "b3_state.json"
     )
 
 
 def _serialize_state(state) -> dict:
-    """Convert ThreeBState dataclass to JSON-friendly dict."""
+    """Convert B3State dataclass to JSON-friendly dict."""
     return asdict(state)
 
 
@@ -108,6 +122,10 @@ class MetaDecomposeResponse(BaseModel):
 class FollowUpRequest(BaseModel):
     unit_id: str
     user_question: Optional[str] = None
+    # "none" (默认) = 追问式深化; "adaptive" = 自适应算子模式,LLM 会扫描
+    # unit 后自动匹配主+辅算子,并把 main_operator/aux_operator/chain_reaction
+    # 写回 Unit。前端 S2DecomposeStep 在 modal 里通过 dropdown 选择。
+    operator: Optional[str] = None
 
 
 class RegenerateUnitRequest(BaseModel):
@@ -215,7 +233,10 @@ async def meta_decompose(
 async def follow_up(project_id: str, body: FollowUpRequest, request: Request) -> dict:
     engine = _get_engine(request)
     try:
-        unit = await engine.follow_up_unit(project_id, body.unit_id, body.user_question)
+        unit = await engine.follow_up_unit(
+            project_id, body.unit_id, body.user_question,
+            operator=body.operator or "none",
+        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:

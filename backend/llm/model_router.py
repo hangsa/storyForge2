@@ -22,6 +22,20 @@ from backend.llm.base_provider import BaseLLMProvider, LLMConfig, LLMResponse
 logger = logging.getLogger(__name__)
 
 
+# Per-model temperature overrides. Some reasoning-model endpoints reject any
+# value other than 1.0 (e.g. Moonshot's kimi-k* family — confirmed 2026-09-18
+# that all 4 accessible kimi models return 400 "only 1 is allowed" for T=0.7),
+# while the rest of the provider fleet accepts the prompt YAML's default 0.7.
+# Keyed by exact model_id so unrelated models aren't affected. Add new entries
+# here when the next reasoning-only model appears.
+TEMPERATURE_OVERRIDES: dict[str, float] = {
+    "kimi-k3": 1.0,
+    "kimi-k2.6": 1.0,
+    "kimi-k2.7-code": 1.0,
+    "kimi-k2.7-code-highspeed": 1.0,
+}
+
+
 # --- Data Classes ---
 
 
@@ -420,6 +434,17 @@ class ModelRouter:
                     # (it is already explicitly set from model config above)
                     generate_kwargs = {k: v for k, v in kwargs.items()
                                        if k != "max_tokens"}
+                    # Per-model temperature override (e.g. kimi reasoning models
+                    # lock to T=1.0). Only fires when the caller's prompt YAML
+                    # disagrees with the model's hard requirement — otherwise we
+                    # pass the caller's value through untouched.
+                    override = TEMPERATURE_OVERRIDES.get(attempt_model_id)
+                    if override is not None and generate_kwargs.get("temperature") != override:
+                        logger.info(
+                            "temperature override (model=%s): %s -> %s",
+                            attempt_model_id, generate_kwargs.get("temperature"), override,
+                        )
+                        generate_kwargs["temperature"] = override
                     response = await provider.generate(
                         system_prompt=system_prompt,
                         user_prompt=user_prompt,
@@ -546,6 +571,7 @@ class ModelRouter:
                 "ANTHROPIC_API_KEY": "anthropic_api_key",
                 "DEEPSEEK_API_KEY": "deepseek_api_key",
                 "MINIMAX_API_KEY": "minimax_api_key",
+                "KIMI_API_KEY": "kimi_api_key",
             }
             attr = env_to_attr.get(provider.api_key_env)
             if attr:

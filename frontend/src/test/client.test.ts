@@ -311,7 +311,7 @@ describe("postDivergeInit", () => {
 //
 // Backend two HTTPException styles coexist today:
 //   - Style A (nested envelope, ~project.py):  {"detail": {error: true, code, message, detail}}
-//   - Style B (bare string, ~three_b_routes.py + most error paths): {"detail": "<字符串>"}
+//   - Style B (bare string, ~b3_routes.py + most error paths): {"detail": "<字符串>"}
 //
 // Pre-fix, `request()` only threw on Style A (and top-level `error`). Style B
 // 4xx/5xx responses slipped through as data — the S1→S2 decompose call returned
@@ -331,7 +331,7 @@ describe("4xx/5xx must throw ApiError (proj 2026-09-11 regression guard)", () =>
   });
 
   it("throws ApiError on style-B 503 with bare string detail", async () => {
-    // This is the EXACT shape three_b_routes.py /decompose returned when
+    // This is the EXACT shape b3_routes.py /decompose returned when
     // firstness_decompose.yaml referenced {genre_secondary} and the
     // .format(**fmt) call raised KeyError. Before the fix, request()
     // returned the string as data and the reducer silently swallowed it.

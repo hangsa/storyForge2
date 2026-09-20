@@ -2,7 +2,7 @@ import { useState } from "react";
 import { SecondaryButton } from "@/components/ds";
 import { RegenerateModal } from "@/components/shared/RegenerateModal";
 import { EditPromptModal } from "./EditPromptModal";
-import type { DimensionDecomposition, Unit } from "./types";
+import type { DimensionDecomposition, Unit, Operator } from "./types";
 
 interface Props {
   dimensions: DimensionDecomposition[];
@@ -11,7 +11,7 @@ interface Props {
   promptBusy: boolean;            // PUT 是否 in-flight
   onSavePrompt: (newText: string) => void | Promise<void>;  // 保存编辑
   followUpLoadingUnitId: string | null;
-  onFollowUp: (unitId: string, userQuestion: string | null) => void;
+  onFollowUp: (unitId: string, userQuestion: string | null, operator: string) => void;
   // Footer navigation (上一步 / 下一步 / 重新生成) is registered through the
   // page-level wizard footer by CreativeDivergenceStep. The Stage-2 header
   // and the causal_map <pre> block were removed on 2026-09-08 (see git
@@ -44,6 +44,23 @@ const DIMENSION_ORDER = ["ontology", "energetics", "power_structure", "protagoni
 // 顶部,unit_name="核心矛盾",is_irreducible=true (无追问按钮)。
 const CORE_CONTRADICTION_ID = "__core_contradiction__";
 
+// 追问 modal 的算子选项 — 默认无算子(原追问式深化行为不变)。
+// 自适应模式按 adaptive_diverge.yaml 的"扫描-路由-主辅算子"方法论深化,
+// 结合用户修改意见(可空)综合生成。
+const FOLLOW_UP_OPERATORS = [
+  { value: "none", label: "无算子" },
+  { value: "adaptive", label: "自适应" },
+] as const;
+
+// 自适应追问后,unit 上会写入 main_operator / aux_operator / chain_reaction。
+// UnitCard 在 unit_name 后用小字展示这俩算子标签,让用户能看见本轮应用了什么。
+const OPERATOR_LABELS: Record<Operator, string> = {
+  distort: "扭曲",
+  break: "打破",
+  blend: "融合",
+  chain: "组合链",
+};
+
 function withCoreContradictionUnit(dim: DimensionDecomposition): DimensionDecomposition {
   if (dim.dimension !== "narrative_physics" || !dim.insight?.trim()) {
     return dim;
@@ -71,6 +88,10 @@ export default function S2DecomposeStep({
   // Round 3: 追问弹窗提到顶层,共享一个 RegenerateModal,避免每个 unit
   // 都维护自己的 inline dialog 状态(text 泄漏 / 弹窗叠加 / 焦点跳跃)。
   const [followUpTarget, setFollowUpTarget] = useState<{ unitId: string; unitName: string } | null>(null);
+  // 追问算子选择 — 默认 "none",即原追问式深化。选 "adaptive" 时后端
+  // 会按自适应方法论生成,并把 main_operator/aux_operator/chain_reaction
+  // 写回 Unit。模态关闭时重置回默认。
+  const [followUpOperator, setFollowUpOperator] = useState<string>("none");
   // Round 7: edit-decompose-prompt modal state.
   const [editPromptOpen, setEditPromptOpen] = useState(false);
 
@@ -196,14 +217,25 @@ export default function S2DecomposeStep({
 
       <RegenerateModal
         open={followUpTarget !== null}
-        target={followUpTarget ? `追问 - ${followUpTarget.unitName}` : ""}
+        target={followUpTarget ? followUpTarget.unitName : ""}
+        titlePrefix="追问"
+        confirmLabel="追问"
         busy={followUpLoadingUnitId !== null}
+        // 算子选择器:仅在追问 modal 中显示(传了 operators prop),
+        // S2 重新生成 modal 不受影响(继续显示原"留空 = 仅重新生成"提示行)。
+        operator={followUpOperator}
+        operators={FOLLOW_UP_OPERATORS}
+        onOperatorChange={setFollowUpOperator}
         onConfirm={(text) => {
           if (!followUpTarget) return;
-          onFollowUp(followUpTarget.unitId, text.trim() || null);
+          onFollowUp(followUpTarget.unitId, text.trim() || null, followUpOperator);
           setFollowUpTarget(null);
+          setFollowUpOperator("none");
         }}
-        onCancel={() => setFollowUpTarget(null)}
+        onCancel={() => {
+          setFollowUpTarget(null);
+          setFollowUpOperator("none");
+        }}
       />
 
       <EditPromptModal
@@ -281,6 +313,16 @@ function UnitCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-display text-sm font-semibold text-primary">{unit.unit_name}</span>
+            {/* 自适应追问后展示本轮使用的算子。无算子追问保持 null,不渲染。 */}
+            {unit.main_operator && (
+              <span
+                className="font-mono text-[10px] text-on-surface-variant"
+                data-testid={`unit-operator-${unit.id}`}
+              >
+                · {OPERATOR_LABELS[unit.main_operator]}
+                {unit.aux_operator ? ` + ${OPERATOR_LABELS[unit.aux_operator]}` : ""}
+              </span>
+            )}
             {isVirtualCore && (
               <span
                 className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container"

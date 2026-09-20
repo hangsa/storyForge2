@@ -116,7 +116,7 @@ describe("S1InputStep with creative dimensions", () => {
 
   it("applies defaultGenre when it arrives AFTER first render (async fetch race)", async () => {
     // 真实场景:CreativeDivergenceStep mount 时 defaultGenre 还未加载(async fetch),
-    // useThreeBDivergence 完成 getProjectStatus 后 defaultGenre 从 "" 变成 "xianxia",
+    // useB3Divergence 完成 getProjectStatus 后 defaultGenre 从 "" 变成 "xianxia",
     // S1InputStep 必须 react 这一变化,而不是锁死在首次渲染的 "cool_novel" fallback。
     const { rerender } = render(<S1InputStep projectId="p1" initial={null} defaultGenre="" onSubmitted={() => {}} />);
     expect(screen.getByText("玄幻")).toBeInTheDocument();  // 初始 fallback 是 subject[0]

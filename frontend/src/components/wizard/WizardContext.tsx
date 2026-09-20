@@ -134,6 +134,15 @@ interface WizardState {
   nextLabel: string | null;
   nextLoadingLabel: string | null;
   /**
+   * Optional click handler attached to the footer's loading label (e.g.
+   * "发散中…"). When set, the modal/panel next button stays clickable even
+   * while loadingLabel is showing, and clicking it invokes this handler
+   * instead of nextHandler. Used by CreativeDivergenceStep to wire the
+   * "暂停 / 继续" toggle onto the loading label itself. null when the step
+   * has no pause/resume affordance (most steps).
+   */
+  nextLoadingClickHandler: (() => void) | null;
+  /**
    * The current step's "previous" action — handled by the modal footer. When
    * registered, the footer's 上一步 button calls this handler instead of the
    * default `jumpToStep(currentStep - 1)`. Used by the divergence wizard's
@@ -214,6 +223,10 @@ type WizardAction =
       handler: (() => void) | null;
       disabled: boolean;
     }
+  | {
+      type: "SET_NEXT_LOADING_CLICK_HANDLER";
+      handler: (() => void) | null;
+    }
   | { type: "SET_DIVERGENCE_SUBSTAGE"; subStage: CreativeDivergenceSubStage }
   | { type: "JUMP_TO_CREATIVE_DIVERGENCE"; subStage: CreativeDivergenceSubStage };
 
@@ -229,6 +242,7 @@ const initialState: WizardState = {
   nextDisabled: false,
   nextLabel: null,
   nextLoadingLabel: null,
+  nextLoadingClickHandler: null,
   prevHandler: null,
   regenerateHandler: null,
   regenerateDisabled: false,
@@ -374,6 +388,8 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, regenerateHandler: action.handler, regenerateDisabled: action.disabled };
     case "SET_SAVE_HANDLER":
       return { ...state, saveHandler: action.handler, saveDisabled: action.disabled };
+    case "SET_NEXT_LOADING_CLICK_HANDLER":
+      return { ...state, nextLoadingClickHandler: action.handler };
     default:
       return state;
   }
@@ -407,6 +423,7 @@ function loadPersisted(projectId: string): WizardState | null {
         nextDisabled: false,
         nextLabel: null,
         nextLoadingLabel: null,
+        nextLoadingClickHandler: null,
         prevHandler: null,
         regenerateHandler: null,
         regenerateDisabled: false,
@@ -490,6 +507,14 @@ interface WizardContextValue extends WizardState {
    * non-null. Use null when the step has nothing to persist (e.g. MapStep).
    */
   setSaveHandler: (handler: (() => void) | null, disabled?: boolean) => void;
+  /**
+   * Register a click handler on the footer's loading label (when one is
+   * showing). When set, the footer keeps its next button clickable during
+   * loading and routes clicks here instead of nextHandler. Used by
+   * CreativeDivergenceStep's 暂停 / 继续 toggle. Pass null on unmount /
+   * when no loading label is showing.
+   */
+  setNextLoadingClickHandler: (handler: (() => void) | null) => void;
   /** Update the section-regenerate footer status indicator. */
   setRegenerateBusy: (target: string) => void;
   setRegenerateSuccess: (target: string) => void;
@@ -587,6 +612,8 @@ export function WizardProvider({ projectId, children }: WizardProviderProps) {
       dispatch({ type: "SET_REGENERATE_HANDLER", handler, disabled }),
     setSaveHandler: (handler, disabled = false) =>
       dispatch({ type: "SET_SAVE_HANDLER", handler, disabled }),
+    setNextLoadingClickHandler: (handler) =>
+      dispatch({ type: "SET_NEXT_LOADING_CLICK_HANDLER", handler }),
     setRegenerateBusy: (target) =>
       dispatch({ type: "REGENERATE_BUSY", target }),
     setRegenerateSuccess: (target) =>

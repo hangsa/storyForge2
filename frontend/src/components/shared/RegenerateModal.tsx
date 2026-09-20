@@ -8,11 +8,39 @@ interface RegenerateModalProps {
   onCancel: () => void;
   /**
    * True while the parent is awaiting the regenerate call. The confirm
-   * button shows a spinner and "重新生成中…" to give the user feedback that
-   * the request is in flight (otherwise the modal sits silently for several
-   * seconds while the LLM responds).
+   * button shows a spinner and "<confirmLabel>中…" to give the user feedback
+   * that the request is in flight (otherwise the modal sits silently for
+   * several seconds while the LLM responds).
    */
   busy?: boolean;
+  /**
+   * Prefix used in the modal title (`${titlePrefix} — ${target}`).
+   * Default: "重新生成". Set to "追问" for per-unit follow-up flows so the
+   * title reads "追问 — 灵窍" instead of "重新生成 — 追问 - 灵窍".
+   */
+  titlePrefix?: string;
+  /**
+   * Label of the confirm button. Default: "重新生成". Set to "追问" for
+   * per-unit follow-up flows so the button matches the action the user just
+   * initiated (the outer button they clicked was also labeled "追问").
+   * Busy text is derived: "${confirmLabel}中…".
+   */
+  confirmLabel?: string;
+  /**
+   * Optional operator selector shown in place of the default "留空 = 仅重新生成"
+   * hint row. Pass an array of `{value, label}` to enable — when undefined,
+   * the original hint row is rendered (so callers like S2 regenerate keep their
+   * existing UX). Used by S2 follow-up to let users pick "无算子" / "自适应"
+   * before confirming.
+   *
+   * State is owned by the parent (controlled component): pass `operator` for
+   * the current value and `onOperatorChange` to update it. The modal does
+   * NOT internally hold operator state — this keeps it composable with
+   * other forms that may share the same dropdown elsewhere.
+   */
+  operator?: string;
+  operators?: ReadonlyArray<{ value: string; label: string }>;
+  onOperatorChange?: (op: string) => void;
 }
 
 const MAX_LEN = 1700;
@@ -24,6 +52,11 @@ export function RegenerateModal({
   onConfirm,
   onCancel,
   busy = false,
+  titlePrefix = "重新生成",
+  confirmLabel = "重新生成",
+  operator,
+  operators,
+  onOperatorChange,
 }: RegenerateModalProps) {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -80,7 +113,7 @@ export function RegenerateModal({
             id="regenerate-modal-title"
             className="font-display text-primary text-base font-semibold"
           >
-            重新生成 — {target}
+            {titlePrefix} — {target}
           </h2>
           <p className="font-body-ui text-system-log/60 text-xs mt-1">
             原内容将被覆盖,AI 会结合你的意见重新生成
@@ -106,7 +139,32 @@ export function RegenerateModal({
             className="w-full h-[140px] border border-system-divider rounded-md px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-primary-container/40 bg-surface-container text-system-log font-body-ui"
           />
           <div className="mt-2 flex justify-between font-body-ui text-system-log/50 text-[11px]">
-            <span>留空 = 仅重新生成 · 最多 {MAX_LEN} 字</span>
+            {operators && operators.length > 0 ? (
+              // Operator selector mode (e.g. S2 follow-up with 无算子/自适应).
+              // Replace the "留空 = 仅重新生成" hint row with a dropdown +
+              // character counter. The hint disappears entirely — the user's
+              // question textarea is still optional (adaptive mode works
+              // empty), but the new dropdown is the primary signal.
+              <label className="flex items-center gap-2 text-system-log/70">
+                <span className="font-medium">算子</span>
+                <select
+                  data-testid="regenerate-modal-operator"
+                  value={operator ?? operators[0].value}
+                  onChange={(e) => onOperatorChange?.(e.target.value)}
+                  disabled={busy}
+                  className="border border-system-divider rounded px-2 py-1 text-xs bg-surface-container text-system-log focus:outline-none focus:ring-2 focus:ring-primary-container/40"
+                >
+                  {operators.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              // Default hint for non-operator callers (e.g. S2 regenerate).
+              <span>留空 = 仅重新生成 · 最多 {MAX_LEN} 字</span>
+            )}
             <span>
               {text.length} / {MAX_LEN}
             </span>
@@ -143,7 +201,7 @@ export function RegenerateModal({
                   progress_activity
                 </span>
               )}
-              {busy ? "重新生成中…" : "重新生成"}
+              {busy ? `${confirmLabel}中…` : confirmLabel}
             </button>
           </div>
         </div>

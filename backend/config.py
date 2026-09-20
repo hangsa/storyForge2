@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     minimax_api_key: str = ""
     minimax_base_url: str = "https://api.minimax.chat/v1"
+    kimi_api_key: str = ""
 
     llm_max_tokens: int = 8192
     llm_temperature: float = 0.7

@@ -24,7 +24,10 @@ import yaml
 from backend.config import settings
 
 # Reuse the same label constants as the per-project store so the UI stays consistent.
-from backend.services.prompt_override_store import PROMPT_LABEL_OVERRIDES  # noqa: F401
+from backend.services.prompt_override_store import (  # noqa: F401
+    PROMPT_LABEL_OVERRIDES,
+    _resolve_override_entry,
+)
 
 
 class GlobalPromptOverrideStore:
@@ -87,7 +90,7 @@ class GlobalPromptOverrideStore:
         result: list[dict[str, Any]] = []
         for path, category in self._iter_yaml_files():
             name = path.stem
-            override_entry = overrides.get(name) or {}
+            override_entry, _ = _resolve_override_entry(overrides, name)
             modified_at = override_entry.get("_modified_at")
             result.append({
                 "name": name,
@@ -109,7 +112,7 @@ class GlobalPromptOverrideStore:
         if base is None:
             base = self._load_yaml(name)
         overrides = self._read_overrides()
-        entry = overrides.get(name) or {}
+        entry, _ = _resolve_override_entry(overrides, name)
         # Strip metadata keys before merging
         fields = {k: v for k, v in entry.items() if not k.startswith("_")}
         return {**base, **fields}
@@ -118,7 +121,7 @@ class GlobalPromptOverrideStore:
         # Validate name exists in YAML (raises FileNotFoundError if not)
         self._load_yaml(name)
         overrides = self._read_overrides()
-        entry = overrides.get(name)
+        entry, _ = _resolve_override_entry(overrides, name)
         return entry if entry else None
 
     def _pruned_override(self, name: str, full: dict[str, Any]) -> dict[str, Any]:
@@ -138,7 +141,7 @@ class GlobalPromptOverrideStore:
         self._load_yaml(name)
 
         existing = self._read_overrides()
-        current_entry = existing.get(name) or {}
+        current_entry, legacy_used = _resolve_override_entry(existing, name)
         # Strip metadata before merging so payload doesn't clobber _modified_at
         current_fields = {k: v for k, v in current_entry.items() if not k.startswith("_")}
         merged_fields = {**current_fields, **payload}
@@ -148,6 +151,8 @@ class GlobalPromptOverrideStore:
         # "last touched at X". DELETE is the only way to drop the entry
         # entirely; if the resulting JSON has no entries at all, drop the file.
         existing[name] = pruned
+        if legacy_used is not None:
+            existing.pop(legacy_used, None)
 
         if existing:
             self._write_overrides(existing)
@@ -160,9 +165,13 @@ class GlobalPromptOverrideStore:
 
     def delete_override(self, name: str) -> None:
         existing = self._read_overrides()
-        if name not in existing:
+        legacy = _legacy_key_for(name)
+        changed = name in existing or (legacy is not None and legacy in existing)
+        if not changed:
             return
-        existing.pop(name)
+        existing.pop(name, None)
+        if legacy is not None:
+            existing.pop(legacy, None)
         if existing:
             self._write_overrides(existing)
         else:

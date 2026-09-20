@@ -289,21 +289,21 @@ class TestResolve:
             router.resolve("reviewer", "fact_guard")
 
 
-class TestThreeBWiring:
-    """Regression guard: ThreeBEngine._invoke_llm_json hard-codes 4 task
+class TestB3Wiring:
+    """Regression guard: B3Engine._invoke_llm_json hard-codes 4 task
     names ("decompose" / "follow_up" / "diverge_unit" / "commit"). If any
     of those names is missing from config/model_tiers.yaml under the
-    three_b agent, the production engine raises KeyError → 503 on the
+    b3 agent, the production engine raises KeyError → 503 on the
     /decompose /follow-up /diverge /regenerate-unit endpoints. Repro
     surfaced on 2026-09-08 — backend log:
-      KeyError: "Task 'decompose' not found for agent 'three_b'.
+      KeyError: "Task 'decompose' not found for agent 'b3'.
                  Known tasks: ['breaking', 'bending', ...]"
     where the config had been edited to add 3B tasks under different
     names (breaking/bending/blending) without registering the names the
     engine actually calls.
     """
 
-    def _three_b_config(self, tmp_path):
+    def _b3_config(self, tmp_path):
         cfg = {
             "providers": {"deepseek": {
                 "type": "openai_compatible", "display_name": "D",
@@ -317,7 +317,7 @@ class TestThreeBWiring:
                                               "cost_per_1k_input": 0,
                                               "cost_per_1k_output": 0,
                                               "max_tokens": 8}]}},
-            "agent_mapping": {"three_b": {
+            "agent_mapping": {"b3": {
                 "decompose": {"tier": "tier_1"},
                 "follow_up": {"tier": "tier_1"},
                 "diverge_unit": {"tier": "tier_1"},
@@ -329,17 +329,17 @@ class TestThreeBWiring:
         return path
 
     @pytest.mark.parametrize("task_name", ["decompose", "follow_up", "diverge_unit", "commit"])
-    def test_three_b_task_resolves(self, tmp_path, task_name):
-        router = ModelRouter(self._three_b_config(tmp_path))
+    def test_b3_task_resolves(self, tmp_path, task_name):
+        router = ModelRouter(self._b3_config(tmp_path))
         # Each call must succeed — no KeyError. Previously the live config
         # only had breaking/bending/blending/... registered, so this test
         # would fail for "decompose" / "follow_up" / "diverge_unit".
-        decision = router.resolve("three_b", task_name)
+        decision = router.resolve("b3", task_name)
         assert decision.tier_name == "tier_1"
 
     def test_live_config_registers_all_engine_tasks(self):
         """The on-disk config/model_tiers.yaml must register every task name
-        ThreeBEngine._invoke_llm_json calls. If anyone removes one of these,
+        B3Engine._invoke_llm_json calls. If anyone removes one of these,
         the corresponding /decompose /follow-up /diverge /regenerate-unit
         endpoint starts returning 503 in production. The engine tests
         use a mock router and therefore cannot catch this regression."""
@@ -347,9 +347,9 @@ class TestThreeBWiring:
         config_path = Path(__file__).parent.parent / "config" / "model_tiers.yaml"
         router = ModelRouter(config_path)
         for task_name in ["decompose", "follow_up", "diverge_unit", "commit"]:
-            decision = router.resolve("three_b", task_name)
+            decision = router.resolve("b3", task_name)
             assert decision.tier_name == "tier_1", (
-                f"engine calls three_b/{task_name} but config doesn't register it "
+                f"engine calls b3/{task_name} but config doesn't register it "
                 f"(would 503 in production)"
             )
 

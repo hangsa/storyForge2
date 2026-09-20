@@ -91,7 +91,7 @@ export default function S1InputStep({
   // no active entries). Snap to the first active option so the trigger
   // button always renders a meaningful label.
   //
-  // 第二个责任:defaultGenre 在 S1InputStep 首次渲染后才异步到达(useThreeBDivergence
+  // 第二个责任:defaultGenre 在 S1InputStep 首次渲染后才异步到达(useB3Divergence
   // 的 getProjectStatus 在 mount effect 里发起,完成时 defaultGenre 从 "" 变 "xuanyi")。
   // useState 的 lazy initializer 只跑一次,故需此 effect 把迟到的 defaultGenre 写入 state。
   // 仅在 initial 为空(用户尚未提交过灵感)时覆盖,避免覆盖用户已选的值。

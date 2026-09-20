@@ -11,7 +11,7 @@ config/creative_dimensions.json 又把 tone 6 项的 id/name 互换 + 把 subjec
 - 前端 S1InputStep 改发 name(用户看到的标签 = 后端收到的值)
 - config/creative_dimensions.json 已清理:subject[7]→qihuan,tone 全用 slug,id/name
   互换回到正常顺序
-- 本脚本扫所有 projects/<id>/creative_os/three_b_state.json,把 raw_intent 里
+- 本脚本扫所有 projects/<id>/creative_os/b3_state.json,把 raw_intent 里
   还能在 OLD 数据里命中的旧 id 反查为对应 name(id→name);命中不到的(已经是 name
   / 是新 slug / 是 None)原样不动
 
@@ -156,9 +156,9 @@ def main(argv: list[str]) -> int:
         print(f"projects dir not found: {args.projects_dir}", file=sys.stderr)
         return 1
 
-    targets = sorted(args.projects_dir.glob("*/creative_os/three_b_state.json"))
+    targets = sorted(args.projects_dir.glob("*/creative_os/b3_state.json"))
     if not targets:
-        print(f"no three_b_state.json files under {args.projects_dir}")
+        print(f"no b3_state.json files under {args.projects_dir}")
         return 0
 
     new_names = _load_new_names()

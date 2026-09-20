@@ -173,8 +173,8 @@ function Inner({ projectId }: Props) {
               </button>
             )}
             {wizard.nextHandler && (
-              <button data-testid="wizard-next" type="button" onClick={wizard.nextHandler}
-                      disabled={wizard.nextDisabled}
+              <button data-testid="wizard-next" type="button" onClick={wizard.nextLoadingClickHandler ?? wizard.nextHandler}
+                      disabled={wizard.nextDisabled && !wizard.nextLoadingClickHandler}
                       className="px-5 py-2 bg-tertiary-container text-surface-container-low text-sm rounded-lg hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-2">
                 {wizard.nextDisabled && wizard.nextLoadingLabel
                   ? wizard.nextLoadingLabel
@@ -183,7 +183,7 @@ function Inner({ projectId }: Props) {
                     : wizard.currentStep === 1
                       ? "下一步:拆解 →"
                       : "确认修改并继续"}
-                {wizard.nextDisabled && wizard.nextLoadingLabel && (
+                {wizard.nextDisabled && wizard.nextLoadingLabel && !wizard.nextLoadingClickHandler && (
                   <span className="material-symbols-outlined text-base leading-none animate-spin">progress_activity</span>
                 )}
               </button>

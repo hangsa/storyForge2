@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.creative_os.three_b_engine import _safe_format
+from backend.creative_os.b3_engine import _safe_format
 
 
 def test_safe_format_substitutes_known_placeholder():
@@ -48,7 +48,7 @@ def test_safe_format_preserves_doubled_braces():
 
 
 def test_safe_format_passes_negative_constraints_through():
-    """The actual call site for system_prompt in three_b_engine.py."""
+    """The actual call site for system_prompt in b3_engine.py."""
     template = "Some prompt.\n\n{negative_constraints}\nEnd."
     out = _safe_format(template, negative_constraints="")
     assert out == "Some prompt.\n\n\nEnd."

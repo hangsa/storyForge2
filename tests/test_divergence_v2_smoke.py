@@ -13,8 +13,8 @@ Walks the backend/API smoke path end-to-end:
            unit.description and does NOT add a 连锁推演 line
 
 No real LLM calls — a deterministic AsyncMock router is injected via
-app.state.three_b_engine. Mirrors the fixture pattern in
-backend/tests/test_api/test_three_b_routes.py.
+app.state.b3_engine. Mirrors the fixture pattern in
+backend/tests/test_api/test_b3_routes.py.
 
 Note on test layout: the plan calls for `tests/e2e/test_divergence_v2_smoke.py`.
 That subdirectory does not exist in this repo — the existing E2E test
@@ -31,12 +31,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.config import settings
-from backend.creative_os.three_b_engine import (
+from backend.creative_os.b3_engine import (
     Dimension,
     DimensionDecomposition,
     RawIntent,
-    ThreeBEngine,
-    ThreeBState,
+    B3Engine,
+    B3State,
     Unit,
     atomic_write_state,
     load_state,
@@ -45,7 +45,7 @@ from backend.main import app
 
 
 PROJ = "proj_div_v2_smoke"
-BASE = f"/api/v1/projects/{PROJ}/creative/diverge/three-b"
+BASE = f"/api/v1/projects/{PROJ}/creative/diverge/b3"
 
 
 # ---------------------------------------------------------------------------
@@ -95,22 +95,22 @@ def _patch_projects_dir(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _reset_engine_state():
-    """Drop any cached engine from prior tests — three_b_routes._get_engine
-    checks request.app.state.three_b_engine each call, so we delete the attr
+    """Drop any cached engine from prior tests — b3_routes._get_engine
+    checks request.app.state.b3_engine each call, so we delete the attr
     before each test to force a fresh engine wired to the current mock router.
     """
     yield
-    if hasattr(app.state, "three_b_engine"):
-        del app.state.three_b_engine
+    if hasattr(app.state, "b3_engine"):
+        del app.state.b3_engine
 
 
 @pytest.fixture
 def client():
-    """Reuse the module-level TestClient from three_b_routes's convention."""
+    """Reuse the module-level TestClient from b3_routes's convention."""
     return TestClient(app)
 
 
-def _seed_state_with_units(project_id: str, n_units: int = 3) -> ThreeBState:
+def _seed_state_with_units(project_id: str, n_units: int = 3) -> B3State:
     """Seed S2-decomposed state (units exist, candidates don't yet).
 
     Each unit has a unique `description` so the assertion that the
@@ -125,7 +125,7 @@ def _seed_state_with_units(project_id: str, n_units: int = 3) -> ThreeBState:
         )
         for i in range(n_units)
     ]
-    state = ThreeBState(
+    state = B3State(
         project_id=project_id,
         raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
         causal_map="A → B",
@@ -191,11 +191,11 @@ async def test_s3_default_original_unit_full_flow(
     _seed_state_with_units(PROJ, n_units=3)
 
     # Inject engine wired to mock router + fake novelty evaluator
-    engine = ThreeBEngine(
+    engine = B3Engine(
         model_router=mock_router,
         novelty_evaluator=_FakeNoveltyEvaluator(),
     )
-    app.state.three_b_engine = engine
+    app.state.b3_engine = engine
 
     # ----------------------------------------------------------------------
     # S3: POST /diverge — LLM returns 2 candidates per unit
@@ -414,7 +414,7 @@ def _patch_dimensions_store(tmp_path):
     Autouse so the two tests below don't need to declare the fixture, but the
     only side effect on the existing divergence test is overwriting the
     lifespan-installed store — harmless because that test only hits the
-    three_b diverge endpoints (which use _get_dimensions_store() at request
+    b3 diverge endpoints (which use _get_dimensions_store() at request
     time and read app.state via the same slot).
     """
     from backend.creative_os.creative_dimensions import (

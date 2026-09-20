@@ -1,4 +1,4 @@
-"""ThreeBEngine v2 dataclass + 8 方法测试。"""
+"""B3Engine v2 dataclass + 8 方法测试。"""
 from __future__ import annotations
 
 import json
@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from backend.creative_os.three_b_engine import (
+from backend.creative_os.b3_engine import (
     Dimension,
     DimensionDecomposition,
     RawIntent,
-    ThreeBEngine,
-    ThreeBState,
+    B3Engine,
+    B3State,
     Unit,
     UnitCandidate,
     atomic_write_state,
@@ -57,7 +57,7 @@ def fake_novelty_evaluator():
 def test_state_round_trip(tmp_path, monkeypatch):
     """State writes + loads preserve all fields."""
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
         causal_map="A → B",
@@ -89,7 +89,7 @@ def test_state_round_trip(tmp_path, monkeypatch):
 
 def test_state_round_trip_handles_empty_dimensions(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    state = ThreeBState(project_id="proj_test")
+    state = B3State(project_id="proj_test")
     atomic_write_state("proj_test", state)
     loaded = load_state("proj_test")
     assert loaded.dimensions == []
@@ -97,10 +97,10 @@ def test_state_round_trip_handles_empty_dimensions(tmp_path, monkeypatch):
 
 def test_state_file_is_atomic_no_tmp_left(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    state = ThreeBState(project_id="proj_test")
+    state = B3State(project_id="proj_test")
     atomic_write_state("proj_test", state)
     parent = tmp_path / "proj_test" / "creative_os"
-    tmp_files = list(parent.glob(".three_b_state.json.*.tmp"))
+    tmp_files = list(parent.glob(".b3_state.json.*.tmp"))
     assert tmp_files == []
 
 
@@ -108,7 +108,7 @@ def test_state_file_is_atomic_no_tmp_left(tmp_path, monkeypatch):
 
 def test_migrate_deletes_v1_file(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    state_path = tmp_path / "proj_test" / "creative_os" / "three_b_state.json"
+    state_path = tmp_path / "proj_test" / "creative_os" / "b3_state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"schema_version": 1, "stage1_completed_at": "2026-09-01"}), encoding="utf-8")
     result = migrate_state_on_load("proj_test")
@@ -124,7 +124,7 @@ def test_migrate_returns_none_when_no_file(tmp_path, monkeypatch):
 def test_migrate_deletes_file_without_schema_version(tmp_path, monkeypatch):
     """A file with no schema_version key is treated as v1 and deleted."""
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    state_path = tmp_path / "proj_test" / "creative_os" / "three_b_state.json"
+    state_path = tmp_path / "proj_test" / "creative_os" / "b3_state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"raw_intent": {"prompt": "x", "genre_primary": "y"}}), encoding="utf-8")
     result = migrate_state_on_load("proj_test")
@@ -134,7 +134,7 @@ def test_migrate_deletes_file_without_schema_version(tmp_path, monkeypatch):
 
 def test_migrate_passes_v2_state_through(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    state = ThreeBState(project_id="proj_test", schema_version=2)
+    state = B3State(project_id="proj_test", schema_version=2)
     atomic_write_state("proj_test", state)
     result = migrate_state_on_load("proj_test")
     assert result is not None
@@ -146,7 +146,7 @@ def test_migrate_passes_v2_state_through(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_decompose_returns_5_dimensions_with_insight_and_summary(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
+    engine = B3Engine(model_router=mock_router)
     mock_router.execute.return_value = {"content": json.dumps({
         "dimensions": [
             {"dimension": "ontology", "insight": "本土 vs 异域天道",
@@ -189,9 +189,9 @@ async def test_decompose_returns_5_dimensions_with_insight_and_summary(tmp_path,
 async def test_decompose_clears_downstream_state(tmp_path, monkeypatch, mock_router):
     """Re-decomposing should clear candidates + committed_concept from prior runs."""
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
+    engine = B3Engine(model_router=mock_router)
     # Seed prior state
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         dimensions=[DimensionDecomposition(
             dimension=DimLabel.ONTOLOGY, insight="旧",
@@ -224,7 +224,7 @@ async def test_decompose_clears_downstream_state(tmp_path, monkeypatch, mock_rou
 @pytest.mark.asyncio
 async def test_decompose_raises_on_invalid_json(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
+    engine = B3Engine(model_router=mock_router)
     mock_router.execute.return_value = {"content": "not json"}
     with pytest.raises(Exception):
         await engine.decompose("proj_test", RawIntent(prompt="x", genre_primary="y"))
@@ -233,7 +233,7 @@ async def test_decompose_raises_on_invalid_json(tmp_path, monkeypatch, mock_rout
 @pytest.mark.asyncio
 async def test_decompose_raises_when_less_than_5_dimensions(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
+    engine = B3Engine(model_router=mock_router)
     mock_router.execute.return_value = {"content": json.dumps({
         "dimensions": [{"dimension": "ontology", "insight": "x", "units": []}],
         "causal_map": "y", "top_level_summary": "z",
@@ -247,8 +247,8 @@ async def test_decompose_raises_when_less_than_5_dimensions(tmp_path, monkeypatc
 @pytest.mark.asyncio
 async def test_follow_up_unit_replaces_description_in_place(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(
         project_id="proj_test",
         dimensions=[DimensionDecomposition(
             dimension=DimLabel.ONTOLOGY, insight="i",
@@ -273,8 +273,8 @@ async def test_follow_up_unit_replaces_description_in_place(tmp_path, monkeypatc
 @pytest.mark.asyncio
 async def test_follow_up_unit_empty_question_uses_default(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(project_id="proj_test", dimensions=[DimensionDecomposition(
         dimension=DimLabel.ONTOLOGY, insight="i",
         units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="x", description="d")],
     )])
@@ -288,8 +288,8 @@ async def test_follow_up_unit_empty_question_uses_default(tmp_path, monkeypatch,
 @pytest.mark.asyncio
 async def test_follow_up_unit_rejects_irreducible(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(project_id="proj_test", dimensions=[DimensionDecomposition(
         dimension=DimLabel.ONTOLOGY, insight="i",
         units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="x", description="d", is_irreducible=True)],
     )])
@@ -303,8 +303,8 @@ async def test_follow_up_unit_rejects_irreducible(tmp_path, monkeypatch, mock_ro
 @pytest.mark.asyncio
 async def test_follow_up_unit_preserves_is_irreducible_flag(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(project_id="proj_test", dimensions=[DimensionDecomposition(
         dimension=DimLabel.ONTOLOGY, insight="i",
         units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="x", description="d")],
     )])
@@ -320,8 +320,8 @@ async def test_follow_up_unit_preserves_is_irreducible_flag(tmp_path, monkeypatc
 async def test_follow_up_unit_raises_on_invalid_json(tmp_path, monkeypatch, mock_router):
     """Non-JSON LLM response should raise engine-friendly ValueError (not raw json.JSONDecodeError)."""
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(project_id="proj_test", dimensions=[DimensionDecomposition(
         dimension=DimLabel.ONTOLOGY, insight="i",
         units=[Unit(id="unit_abc", dimension=DimLabel.ONTOLOGY, unit_name="x", description="d")],
     )])
@@ -336,12 +336,12 @@ async def test_follow_up_unit_raises_on_invalid_json(tmp_path, monkeypatch, mock
 @pytest.mark.asyncio
 async def test_diverge_runs_one_llm_per_unit_in_parallel(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
+    engine = B3Engine(model_router=mock_router)
     units = [
         Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}")
         for i in range(3)
     ]
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
         dimensions=[
@@ -392,9 +392,9 @@ async def test_diverge_runs_one_llm_per_unit_in_parallel(tmp_path, monkeypatch, 
 @pytest.mark.asyncio
 async def test_diverge_degrades_per_unit_on_failure(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
+    engine = B3Engine(model_router=mock_router)
     units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(3)]
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
         dimensions=[DimensionDecomposition(
@@ -424,8 +424,8 @@ async def test_diverge_degrades_per_unit_on_failure(tmp_path, monkeypatch, mock_
 @pytest.mark.asyncio
 async def test_diverge_clears_committed_concept(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
         committed_concept={"one_line": "old"},
@@ -450,9 +450,9 @@ async def test_diverge_clears_committed_concept(tmp_path, monkeypatch, mock_rout
 @pytest.mark.asyncio
 async def test_diverge_raises_when_all_units_fail(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
+    engine = B3Engine(model_router=mock_router)
     units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(2)]
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
         dimensions=[DimensionDecomposition(
@@ -473,8 +473,8 @@ async def test_diverge_raises_when_all_units_fail(tmp_path, monkeypatch, mock_ro
 async def test_diverge_rerun_replaces_candidates_not_appends(tmp_path, monkeypatch, mock_router):
     """整轮重跑 diverge 应替换 candidates,而非累积。"""
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
         dimensions=[DimensionDecomposition(
@@ -498,8 +498,8 @@ async def test_diverge_rerun_replaces_candidates_not_appends(tmp_path, monkeypat
 @pytest.mark.asyncio
 async def test_regenerate_unit_replaces_candidates_for_that_unit_only(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="x", genre_primary="y"),
         dimensions=[DimensionDecomposition(
@@ -538,8 +538,8 @@ async def test_regenerate_unit_replaces_candidates_for_that_unit_only(tmp_path, 
 async def test_regenerate_unit_clears_committed_concept(tmp_path, monkeypatch, mock_router):
     """Regenerating a unit must invalidate any prior committed_concept (mirrors diverge)."""
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="x", genre_primary="y"),
         committed_concept={"one_line": "old"},
@@ -566,8 +566,8 @@ async def test_regenerate_unit_clears_committed_concept(tmp_path, monkeypatch, m
 
 def test_select_unit_candidate_swaps_rank(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine()
-    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+    engine = B3Engine()
+    state = B3State(project_id="proj_test", dimensions=[DimensionDecomposition(
         dimension=DimLabel.ONTOLOGY, insight="i",
         units=[Unit(id="unit_a", dimension=DimLabel.ONTOLOGY, unit_name="a", description="d")],
         candidates=[
@@ -584,8 +584,8 @@ def test_select_unit_candidate_swaps_rank(tmp_path, monkeypatch):
 
 def test_select_unit_candidate_rejects_out_of_range(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine()
-    state = ThreeBState(project_id="proj_test", dimensions=[DimensionDecomposition(
+    engine = B3Engine()
+    state = B3State(project_id="proj_test", dimensions=[DimensionDecomposition(
         dimension=DimLabel.ONTOLOGY, insight="i",
         units=[Unit(id="u", dimension=DimLabel.ONTOLOGY, unit_name="u", description="d")],
         candidates=[UnitCandidate(id="c", unit_id="u", unit_name="u", description="d", chain_reaction="r", main_operator="distort")],
@@ -600,14 +600,14 @@ def test_select_unit_candidate_rejects_out_of_range(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_commit_synthesizes_5_fields(tmp_path, monkeypatch, mock_router, fake_novelty_evaluator):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
+    engine = B3Engine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
     units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(5)]
     candidates = [
         UnitCandidate(id=f"cand_{i}", unit_id=f"unit_{i}", unit_name=f"u{i}", description=f"cd{i}",
                       chain_reaction=f"cr{i}", main_operator="distort", selection_rank=0)
         for i in range(5)
     ]
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         causal_map="A → B → C",
         top_level_summary="一句话总结",
@@ -632,7 +632,7 @@ async def test_commit_synthesizes_5_fields(tmp_path, monkeypatch, mock_router, f
 @pytest.mark.asyncio
 async def test_commit_rejects_when_too_few_candidates(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
+    engine = B3Engine(model_router=mock_router)
     # 20 units,只有 2 个有候选 (< MIN_UNITS_WITH_CANDIDATES_FOR_COMMIT = 3)
     units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(20)]
     candidates = [
@@ -640,7 +640,7 @@ async def test_commit_rejects_when_too_few_candidates(tmp_path, monkeypatch, moc
                       chain_reaction=f"cr{i}", main_operator="distort", selection_rank=0)
         for i in range(2)
     ]
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="x", genre_primary="y"),
         dimensions=[DimensionDecomposition(dimension=DimLabel.ONTOLOGY, insight="i", units=units, candidates=candidates)],
@@ -654,14 +654,14 @@ async def test_commit_rejects_when_too_few_candidates(tmp_path, monkeypatch, moc
 async def test_commit_includes_failed_units_in_prompt(tmp_path, monkeypatch, mock_router, fake_novelty_evaluator):
     """Failed units (no candidates) should be marked in prompt as [unit X 未参与]."""
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
+    engine = B3Engine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
     units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(5)]
     candidates = [
         UnitCandidate(id=f"cand_{i}", unit_id=f"unit_{i}", unit_name=f"u{i}", description=f"cd{i}",
                       chain_reaction=f"cr{i}", main_operator="distort", selection_rank=0)
         for i in range(3)  # 只有 3 个有候选
     ]
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="x", genre_primary="y"),
         dimensions=[DimensionDecomposition(dimension=DimLabel.ONTOLOGY, insight="i", units=units, candidates=candidates)],
@@ -682,8 +682,8 @@ async def test_commit_includes_failed_units_in_prompt(tmp_path, monkeypatch, moc
 @pytest.mark.asyncio
 async def test_edit_committed_concept_overrides_fields(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine()
-    state = ThreeBState(
+    engine = B3Engine()
+    state = B3State(
         project_id="proj_test",
         committed_concept={"one_line": "原", "expanded": "原", "core_tension": "原", "tone": "原", "logline": "原", "edited_by_user": False},
     )
@@ -698,8 +698,8 @@ async def test_edit_committed_concept_overrides_fields(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_edit_committed_concept_rejects_unknown_fields(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine()
-    state = ThreeBState(project_id="proj_test", committed_concept={"one_line": "x"})
+    engine = B3Engine()
+    state = B3State(project_id="proj_test", committed_concept={"one_line": "x"})
     atomic_write_state("proj_test", state)
     with pytest.raises(ValueError, match="未知字段"):
         await engine.edit_committed_concept("proj_test", {"unknown_field": "y"})
@@ -708,8 +708,8 @@ async def test_edit_committed_concept_rejects_unknown_fields(tmp_path, monkeypat
 @pytest.mark.asyncio
 async def test_edit_committed_concept_rejects_when_no_concept(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine()
-    state = ThreeBState(project_id="proj_test")
+    engine = B3Engine()
+    state = B3State(project_id="proj_test")
     atomic_write_state("proj_test", state)
     with pytest.raises(ValueError, match="未提交"):
         await engine.edit_committed_concept("proj_test", {"one_line": "x"})
@@ -720,8 +720,8 @@ async def test_edit_committed_concept_rejects_when_no_concept(tmp_path, monkeypa
 @pytest.mark.asyncio
 async def test_advance_writes_concept_and_dna_and_divergence(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="修仙", genre_primary="修仙"),
         committed_concept={"one_line": "x", "expanded": "y", "core_tension": "z", "tone": "w", "logline": "v", "edited_by_user": False},
@@ -741,7 +741,7 @@ async def test_advance_writes_concept_and_dna_and_divergence(tmp_path, monkeypat
     assert dna["concept"]["one_line"] == "x"
     assert dna["story_dna"]["tone"] == "w"
     assert dna["novelty_scores"]["grade"] == "B+"
-    assert dna["three_b_snapshot"]["schema_version"] == 2
+    assert dna["b3_snapshot"]["schema_version"] == 2
 
     # creative_divergence.json
     div_path = tmp_path / "proj_test" / "creative_divergence.json"
@@ -754,7 +754,7 @@ async def test_advance_writes_concept_and_dna_and_divergence(tmp_path, monkeypat
 @pytest.mark.asyncio
 async def test_advance_calls_commit_when_no_concept(tmp_path, monkeypatch, mock_router, fake_novelty_evaluator):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
+    engine = B3Engine(model_router=mock_router, novelty_evaluator=fake_novelty_evaluator)
     # 设 state 但 committed_concept = None + 充分 units 有候选
     units = [Unit(id=f"unit_{i}", dimension=DimLabel.ONTOLOGY, unit_name=f"u{i}", description=f"d{i}") for i in range(5)]
     candidates = [
@@ -762,7 +762,7 @@ async def test_advance_calls_commit_when_no_concept(tmp_path, monkeypatch, mock_
                       chain_reaction=f"cr{i}", main_operator="distort", selection_rank=0)
         for i in range(5)
     ]
-    state = ThreeBState(
+    state = B3State(
         project_id="proj_test",
         raw_intent=RawIntent(prompt="x", genre_primary="y"),
         dimensions=[DimensionDecomposition(dimension=DimLabel.ONTOLOGY, insight="i", units=units, candidates=candidates)],
@@ -779,8 +779,8 @@ async def test_advance_calls_commit_when_no_concept(tmp_path, monkeypatch, mock_
 @pytest.mark.asyncio
 async def test_advance_is_idempotent(tmp_path, monkeypatch, mock_router):
     monkeypatch.setattr("backend.config.settings.projects_dir", tmp_path)
-    engine = ThreeBEngine(model_router=mock_router)
-    state = ThreeBState(project_id="proj_test", committed_concept={"one_line": "x", "expanded": "y", "core_tension": "z", "tone": "w", "logline": "v", "edited_by_user": False})
+    engine = B3Engine(model_router=mock_router)
+    state = B3State(project_id="proj_test", committed_concept={"one_line": "x", "expanded": "y", "core_tension": "z", "tone": "w", "logline": "v", "edited_by_user": False})
     atomic_write_state("proj_test", state)
     mock_router.execute.return_value = {"content": json.dumps({"one_line": "x"})}  # 不该被调用
     await engine.advance("proj_test")
@@ -793,7 +793,7 @@ async def test_advance_is_idempotent(tmp_path, monkeypatch, mock_router):
 
 def test_append_original_candidate_appends_virtual_with_rank_zero():
     """虚拟 candidate 追加到末尾,rank=0;LLM 候选 rank 顺移到 1,2,3。"""
-    from backend.creative_os.three_b_engine import _append_original_candidate
+    from backend.creative_os.b3_engine import _append_original_candidate
 
     unit = Unit(id="u1", dimension=DimLabel.ONTOLOGY, unit_name="灵窍", description="修炼者根本穴位")
     llm = [
@@ -820,7 +820,7 @@ def test_append_original_candidate_appends_virtual_with_rank_zero():
 
 def test_append_original_candidate_handles_empty_llm_list():
     """LLM 完全失败(candidates=[]) 时,只追加虚拟(用户回退到原始)。"""
-    from backend.creative_os.three_b_engine import _append_original_candidate
+    from backend.creative_os.b3_engine import _append_original_candidate
 
     unit = Unit(id="u1", dimension=DimLabel.ONTOLOGY, unit_name="灵窍", description="d")
     result = _append_original_candidate(unit, [])
@@ -833,7 +833,7 @@ def test_append_original_candidate_handles_empty_llm_list():
 
 def test_append_original_candidate_is_idempotent():
     """重复调用不会产生重复虚拟 candidate。"""
-    from backend.creative_os.three_b_engine import _append_original_candidate
+    from backend.creative_os.b3_engine import _append_original_candidate
 
     unit = Unit(id="u1", dimension=DimLabel.ONTOLOGY, unit_name="灵窍", description="d")
     llm = [
@@ -848,8 +848,8 @@ def test_append_original_candidate_is_idempotent():
 
 # ---- _build_dimension_block / _maybe_inject_block ----
 
-"""追加 test_three_b_engine.py 中的 _build_dimension_block 用例。"""
-from backend.creative_os.three_b_engine import (
+"""追加 test_b3_engine.py 中的 _build_dimension_block 用例。"""
+from backend.creative_os.b3_engine import (
     _build_dimension_block,
 )
 
@@ -880,7 +880,7 @@ def stub_store(monkeypatch):
         # empty description → 不应出现在 block 中
         ("subject", "empty"): _StubEntry("empty", "空题材", ""),
     })
-    from backend.creative_os import three_b_engine as engine_mod
+    from backend.creative_os import b3_engine as engine_mod
     monkeypatch.setattr(engine_mod, "_get_dimensions_store", lambda: s)
     return s
 
@@ -916,7 +916,7 @@ def test_block_returns_empty_when_no_intent(stub_store):
 
 
 def test_maybe_inject_block_no_block_no_change(stub_store):
-    from backend.creative_os.three_b_engine import _maybe_inject_block
+    from backend.creative_os.b3_engine import _maybe_inject_block
     user = "原始 prompt"
     # 全空描述 → block 为空 → 返回原 prompt
     intent = RawIntent(prompt="p", genre_primary="empty", tone="", style="")
@@ -924,7 +924,7 @@ def test_maybe_inject_block_no_block_no_change(stub_store):
 
 
 def test_maybe_inject_block_prepends_with_header(stub_store):
-    from backend.creative_os.three_b_engine import _maybe_inject_block
+    from backend.creative_os.b3_engine import _maybe_inject_block
     user = "原始 prompt"
     intent = RawIntent(prompt="p", genre_primary="xuanhuan",
                         tone="rexue", style="shuangwen")

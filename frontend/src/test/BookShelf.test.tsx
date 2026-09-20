@@ -433,18 +433,22 @@ describe("BookShelf pagination", () => {
     expect(screen.getByTestId("bookshelf-footer").className).not.toContain("pl-4");
   });
 
-  it("table card has a fixed height so the rows area scrolls internally, not the page", () => {
+  it("table card flexes to fill the viewport so the rows area scrolls internally, not the page", () => {
     render(<BookShelf projects={makeProjects(50)} loading={false} onProjectsDeleted={() => {}} />);
     const card = screen.getByTestId("bookshelf-card");
-    // Fixed height via inline style — keeps the pagination footer pinned
-    // to the card's bottom while the rows area scrolls.
-    expect(card.style.height).toBe("640px");
+    // No fixed height — the card flex-fills the section so the page itself
+    // never scrolls; only the rows area inside the card does.
+    expect(card.style.height).toBe("");
     expect(card.className).toContain("flex-col");
-    // Section itself is NOT flex-1 / not filling the viewport — the page
-    // scrolls naturally above the card.
+    expect(card.className).toContain("flex-1");
+    expect(card.className).toContain("min-h-0");
+    // The section flexes too, so the card has a bounded height to fill
+    // (rather than shrinking to content). This keeps the pagination footer
+    // anchored at the bottom of the visible card on every viewport size.
     const shelf = screen.getByTestId("book-shelf");
-    expect(shelf.className).not.toContain("flex-1");
-    expect(shelf.className).not.toContain("min-h-0");
+    expect(shelf.className).toContain("flex-1");
+    expect(shelf.className).toContain("min-h-0");
+    expect(shelf.className).toContain("flex-col");
   });
 
   it("bookshelf-footer stays anchored at the bottom (shrink-0) while rows scroll", () => {

@@ -124,14 +124,26 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   busyRef.current = busy;
 
   const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    // Task 2 补充完整焦点管理;此处先实现最基本的 ← / → 切换。
+    // Task 2: ← / → 切换 tab + 焦点跟随。
+    // - 阻止默认滚动 (e.preventDefault)
+    // - 边界环绕 (← 从第 1 个绕到最后, → 从最后绕到第 1 个)
+    // - queueMicrotask 等 React 提交 DOM 更新后再 focus 新 tab,保证
+    //   document.activeElement 与 aria-selected 同步 (jsdom 的 rAF/setTimeout
+    //   不能被 @testing-library/react 的 act 自动 drain,微任务可以)
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
     const idx = WORLD_TABS.findIndex((t) => t.key === activeKey);
     const nextIdx = e.key === "ArrowRight"
       ? (idx + 1) % WORLD_TABS.length
       : (idx - 1 + WORLD_TABS.length) % WORLD_TABS.length;
-    setActiveKey(WORLD_TABS[nextIdx].key);
+    const nextKey = WORLD_TABS[nextIdx].key;
+    setActiveKey(nextKey);
+    queueMicrotask(() => {
+      const nextTab = document.querySelector<HTMLButtonElement>(
+        `[data-testid="world-tab-${nextKey}"]`,
+      );
+      nextTab?.focus();
+    });
   };
 
   const handleStart = async (userModifications: string = "") => {

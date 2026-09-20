@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ToastProvider } from "../hooks/useToast";
 
@@ -173,5 +173,37 @@ describe("WorldStep tab strip", () => {
     expect(screen.getByLabelText("1 个")).toBeInTheDocument(); // power_system
     expect(screen.getByLabelText("2 个")).toBeInTheDocument(); // core_rules
     expect(screen.getByLabelText("0 个")).toBeInTheDocument(); // factions
+  });
+
+  it("ArrowRight on active tab switches to next tab and moves focus", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代", geography: "中原",
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [], core_rules: [],
+    });
+    setup();
+    const eraTab = await screen.findByTestId("world-tab-era");
+    eraTab.focus();
+    await act(async () => {
+      fireEvent.keyDown(eraTab, { key: "ArrowRight" });
+    });
+    expect(screen.getByTestId("world-tab-power_system")).toHaveAttribute("aria-selected", "true");
+    expect(document.activeElement).toBe(screen.getByTestId("world-tab-power_system"));
+  });
+
+  it("ArrowLeft on first tab wraps to last tab", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代", geography: "中原",
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [], core_rules: [],
+    });
+    setup();
+    const eraTab = await screen.findByTestId("world-tab-era");
+    eraTab.focus();
+    await act(async () => {
+      fireEvent.keyDown(eraTab, { key: "ArrowLeft" });
+    });
+    expect(screen.getByTestId("world-tab-factions")).toHaveAttribute("aria-selected", "true");
+    expect(document.activeElement).toBe(screen.getByTestId("world-tab-factions"));
   });
 });

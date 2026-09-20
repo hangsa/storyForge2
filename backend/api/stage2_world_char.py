@@ -11,6 +11,7 @@ from backend.agents.planner import PlannerAgent
 from backend.models.character import BehaviorExample, Character as CharacterModel, CharacterPatch
 from backend.models.world import (
     CoreRuleCategory,
+    PowerSystemSource,
     World,
     iter_power_systems,
     _raw_power_systems_list,
@@ -566,6 +567,11 @@ class RegenerateWorldSectionPayload(BaseModel):
     # 取代旧的整组替换。Allowed: physical/social/narrative/protagonist。
     # None = 旧行为(整组重生成)。
     category: Optional[CoreRuleCategory] = None  # 仅 section="core_rules" 时生效; Allowed: physical/social/narrative/protagonist
+    # 2026-09-20: system_source 字段仅在 section="power_system" 时生效 —
+    # 把"仅替换某一 source 的 power_system 卡片、保留其他 source" 拆成细粒度,
+    # 取代旧的整组替换。Allowed: energetics/protagonist_engine。
+    # None = 旧行为(整组重生成)。
+    system_source: Optional[PowerSystemSource] = None  # 仅 section="power_system" 时生效; Allowed: energetics/protagonist_engine
     user_modifications: str = Field(default="", max_length=1700)
 
 
@@ -625,9 +631,29 @@ async def regenerate_world_section(
     elif payload.section == "power_system":
         # The section literal stays singular (front-end contract), but the
         # stored shape is the `power_systems` array.
-        merged["power_systems"] = result.get(
-            "power_systems", iter_power_systems(existing)
-        )
+        if payload.system_source is None:
+            # 旧行为: 整组重生成 (向后兼容旧调用方)
+            merged["power_systems"] = result.get(
+                "power_systems", iter_power_systems(existing)
+            )
+        else:
+            # 新行为: 仅替换指定 source 的 power_system 卡片,其他 source
+            # byte-preserve。filter 在 result 与 existing 两侧都做 —
+            # LLM 端即使混入其他 source 的卡片,也不会污染目标 source。
+            # existing 侧缺失 source 时按 energetics 处理 (与 PowerSystem
+            # _migrate_source 默认一致)。
+            target_source = payload.system_source.value
+            new_systems = result.get("power_systems", [])
+            merged_systems = [
+                ps for ps in existing.get("power_systems", [])
+                if isinstance(ps, dict)
+                and ps.get("source", "energetics") != target_source
+            ]
+            merged_systems.extend(
+                ps for ps in new_systems
+                if isinstance(ps, dict) and ps.get("source") == target_source
+            )
+            merged["power_systems"] = merged_systems
     elif payload.section == "core_rules":
         if payload.category is None:
             # 旧行为: 整组重生成 (向后兼容旧调用方)

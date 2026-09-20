@@ -452,3 +452,257 @@ def test_regenerate_core_rules_by_category_migrates_legacy_string_list(tmp_path)
     # rejected by the LLM-side filter to avoid polluting the social category.)
     assert not any(r["text"].startswith("新 physical") for r in merged_rules)
     assert len(merged_rules) == 3
+
+
+# ---------------------------------------------------------------------------
+# Power-system-source filtered regeneration (Task 6 / 修订 E2).
+#
+# When the user picks a system_source (e.g. only "protagonist_engine"), only
+# power_systems entries with that source get replaced; other-source entries
+# stay byte-preserved. When `system_source` is omitted, the legacy full-array
+# replace is used (back-compat for older callers).
+#
+# `PowerSystem.source` defaults to "energetics" on read (Task 3 schema), so
+# older world.json without source: keys are treated as energetics.
+# ---------------------------------------------------------------------------
+
+
+def _seed_two_source_world():
+    """Seeded world with TWO power systems of DIFFERENT sources. The
+    existing task test fixtures use only single-source — this one is used
+    by Task 6 tests to verify per-source preservation."""
+    return {
+        "era": "旧时代",
+        "geography": "旧地理",
+        "era_social_structure": "旧社会",
+        "era_cultural_history": "旧历史",
+        "power_systems": [
+            {
+                "name": "灵力",
+                "description": "天地灵气",
+                "stages": ["炼气", "金丹"],
+                "core_rules": ["有限"],
+                "ceilings": ["凡人上限"],
+                "cost_system": "资源稀缺",
+                "source": "energetics",
+            },
+            {
+                "name": "天道系统",
+                "description": "主角专属金手指",
+                "stages": ["启灵"],
+                "core_rules": ["必死开局"],
+                "ceilings": [],
+                "cost_system": None,
+                "source": "protagonist_engine",
+            },
+        ],
+        "factions": [
+            {"name": "旧势力A", "type": "国家", "goal": "旧目标A", "relations": "旧关系A"},
+        ],
+        "core_rules": ["世界规则旧"],
+    }
+
+
+def _mock_protagonist_engine_only_payload():
+    """LLM mocked to return ONLY protagonist_engine power_systems. The
+    endpoint should accept this even if energetics is missing — and on
+    the per-source path, only the protagonist_engine slot gets replaced."""
+    return {
+        "era": "新时代",
+        "geography": "新地理",
+        "era_social_structure": "新社会",
+        "era_cultural_history": "新历史",
+        "power_systems": [
+            {
+                "name": "新天道系统",
+                "description": "升级版金手指",
+                "stages": ["启灵", "大成"],
+                "core_rules": ["必死开局→逆袭"],
+                "ceilings": [],
+                "cost_system": None,
+                "source": "protagonist_engine",
+            },
+        ],
+        "factions": [
+            {"name": "新势力A", "type": "宗门", "goal": "新目标A", "relations": "新关系A"},
+        ],
+        "core_rules": ["世界规则新"],
+    }
+
+
+def test_regenerate_power_system_by_source_preserves_other_source_cards(tmp_path):
+    """section='power_system' with system_source='protagonist_engine'
+    only replaces protagonist_engine cards; energetics cards preserved."""
+    _seed_project(tmp_path)
+    _write(tmp_path, "world.json", _seed_two_source_world())
+    with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
+        instance = MockPlanner.return_value
+        instance.generate_world = AsyncMock(return_value=(
+            _mock_protagonist_engine_only_payload(),
+            None,
+        ))
+        resp = client.post(
+            f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+            json={"section": "power_system", "system_source": "protagonist_engine"},
+        )
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    merged_ps = detail["power_systems"]
+    names = [ps["name"] for ps in merged_ps]
+    # energetics card preserved (byte-identical)
+    assert "灵力" in names
+    preserved = next(ps for ps in merged_ps if ps["name"] == "灵力")
+    assert preserved["source"] == "energetics"
+    assert preserved["core_rules"] == ["有限"]
+    # old protagonist_engine card replaced by new one
+    assert "天道系统" not in names
+    assert "新天道系统" in names
+    new_pe = next(ps for ps in merged_ps if ps["name"] == "新天道系统")
+    assert new_pe["source"] == "protagonist_engine"
+    # other top-level keys untouched
+    assert detail["era"] == _seed_two_source_world()["era"]
+    assert detail["factions"] == _seed_two_source_world()["factions"]
+
+
+def test_regenerate_power_system_without_source_replaces_all(tmp_path):
+    """Backward compat — section='power_system' with no system_source
+    keeps the old behavior (replace the entire power_systems array)."""
+    _seed_project(tmp_path)
+    _write(tmp_path, "world.json", _seed_two_source_world())
+    # LLM returns BOTH sources (the legacy full-replace path accepts whatever
+    # the LLM produced — no source filter).
+    mixed_payload = {
+        "era": "新时代",
+        "geography": "新地理",
+        "era_social_structure": "新社会",
+        "era_cultural_history": "新历史",
+        "power_systems": [
+            {
+                "name": "新灵力",
+                "description": "新",
+                "stages": ["炼气"],
+                "core_rules": ["新规则"],
+                "ceilings": ["新上限"],
+                "cost_system": "新代价",
+                "source": "energetics",
+            },
+            {
+                "name": "新天道系统",
+                "description": "新",
+                "stages": ["启灵"],
+                "core_rules": ["新规则PE"],
+                "ceilings": [],
+                "cost_system": None,
+                "source": "protagonist_engine",
+            },
+        ],
+        "factions": [
+            {"name": "新势力A", "type": "宗门", "goal": "新目标A", "relations": "新关系A"},
+        ],
+        "core_rules": ["世界规则新"],
+    }
+    with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
+        instance = MockPlanner.return_value
+        instance.generate_world = AsyncMock(return_value=(mixed_payload, None))
+        resp = client.post(
+            f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+            json={"section": "power_system"},
+        )
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    # Legacy full-replace: 旧 power_systems all gone, only LLM output remains
+    merged_ps = detail["power_systems"]
+    names = [ps["name"] for ps in merged_ps]
+    assert "灵力" not in names
+    assert "天道系统" not in names
+    assert names == ["新灵力", "新天道系统"]
+
+
+def test_regenerate_power_system_with_invalid_source_rejected(tmp_path):
+    """An unknown system_source string must be rejected at the pydantic
+    boundary — typo would otherwise silently return power_systems:[] via
+    the source filter (same gotcha as Task 5's category validation)."""
+    _seed_project(tmp_path)
+    _write(tmp_path, "world.json", _seed_two_source_world())
+    resp = client.post(
+        f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+        json={"section": "power_system", "system_source": "enrgetics"},
+    )
+    assert resp.status_code == 422
+
+
+def test_regenerate_power_system_by_source_defaults_missing_source_to_energetics(tmp_path):
+    """A legacy power_systems entry without a `source` field is treated as
+    'energetics' (matching Task 3's PowerSystem._migrate_source default).
+    A system_source='energetics' regen should pick those up as targets."""
+    _seed_project(tmp_path)
+    legacy_world = {
+        "era": "旧时代",
+        "geography": "旧地理",
+        "era_social_structure": "旧社会",
+        "era_cultural_history": "旧历史",
+        # legacy: no source field on either entry
+        "power_systems": [
+            {
+                "name": "旧体系A",
+                "description": "A",
+                "stages": ["一阶"],
+                "core_rules": [],
+                "ceilings": [],
+                "cost_system": None,
+            },
+            {
+                "name": "旧体系B",
+                "description": "B",
+                "stages": [],
+                "core_rules": [],
+                "ceilings": [],
+                "cost_system": None,
+                "source": "protagonist_engine",
+            },
+        ],
+        "factions": [
+            {"name": "旧势力A", "type": "国家", "goal": "旧目标A", "relations": "旧关系A"},
+        ],
+        "core_rules": ["世界规则旧"],
+    }
+    _write(tmp_path, "world.json", legacy_world)
+    # LLM returns a single energetics card
+    energetics_only = {
+        "era": "新时代",
+        "geography": "新地理",
+        "era_social_structure": "新社会",
+        "era_cultural_history": "新历史",
+        "power_systems": [
+            {
+                "name": "新体系A",
+                "description": "新A",
+                "stages": ["一阶"],
+                "core_rules": [],
+                "ceilings": [],
+                "cost_system": None,
+                "source": "energetics",
+            },
+        ],
+        "factions": [
+            {"name": "新势力A", "type": "宗门", "goal": "新目标A", "relations": "新关系A"},
+        ],
+        "core_rules": ["世界规则新"],
+    }
+    with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
+        instance = MockPlanner.return_value
+        instance.generate_world = AsyncMock(return_value=(energetics_only, None))
+        resp = client.post(
+            f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+            json={"section": "power_system", "system_source": "energetics"},
+        )
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    merged_ps = detail["power_systems"]
+    names = [ps["name"] for ps in merged_ps]
+    # Legacy no-source entry was treated as energetics → replaced
+    assert "旧体系A" not in names
+    assert "新体系A" in names
+    # protagonist_engine card preserved
+    assert "旧体系B" in names
+    assert len(merged_ps) == 2

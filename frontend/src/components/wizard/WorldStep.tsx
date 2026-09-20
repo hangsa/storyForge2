@@ -950,3 +950,83 @@ function FactionsPanel({
     </div>
   );
 }
+
+function SubTabStrip({
+  tabs,
+  active,
+  onChange,
+  onRegenerate,
+  testidPrefix,
+  disabled,
+}: {
+  tabs: { key: string; label: string; testidSuffix?: string }[];
+  active: string;
+  onChange: (key: string) => void;
+  onRegenerate?: (key: string) => void;
+  testidPrefix: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      role="tablist"
+      data-testid={`${testidPrefix}-strip`}
+      className="sticky top-[40px] z-[5] -mx-1 px-1 bg-surface-container-low/95 backdrop-blur-sm flex gap-1 border-b border-outline-variant overflow-x-auto"
+    >
+      {tabs.map((t) => {
+        const isActive = t.key === active;
+        const tid = `${testidPrefix}-${t.testidSuffix ?? t.key}`;
+        const isDisabled = !!disabled;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            aria-controls={`${testidPrefix}-panel-${t.key}`}
+            data-testid={tid}
+            onClick={() => onChange(t.key)}
+            className={
+              "shrink-0 px-2 py-1 text-sm font-display font-medium border-b-2 -mb-px inline-flex items-center gap-1 whitespace-nowrap transition-colors outline-none focus-visible:ring-2 ring-primary-container " +
+              (isActive
+                ? "border-primary text-primary"
+                : "border-transparent text-on-surface-variant hover:text-primary")
+            }
+          >
+            <span>{t.label}</span>
+            {onRegenerate && (
+              <span
+                role="button"
+                aria-label={`重新生成 ${t.label}`}
+                aria-disabled={isDisabled}
+                tabIndex={isDisabled ? -1 : 0}
+                data-testid={`${tid}-regenerate`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isDisabled) onRegenerate(t.key);
+                }}
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === " ") && !isDisabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onRegenerate(t.key);
+                  }
+                }}
+                className={
+                  "ml-1 inline-flex items-center justify-center w-4 h-4 rounded text-on-surface-variant hover:text-primary hover:bg-primary-container/15 " +
+                  (isDisabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer")
+                }
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[12px] leading-none">refresh</span>
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// 内部测试钩子 — 仅 *.test.tsx 引用,生产代码不要 import 这个 namespace。
+export const __testing__ = {
+  SubTabStrip,
+};

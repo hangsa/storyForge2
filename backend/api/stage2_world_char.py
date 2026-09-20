@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -554,6 +556,11 @@ async def regenerate_character_examples(
 
 class RegenerateWorldSectionPayload(BaseModel):
     section: str
+    # 2026-09-20: category 字段仅在 section="core_rules" 时生效 —
+    # 把"仅替换某一 category 的规则、保留其他 category" 拆成细粒度,
+    # 取代旧的整组替换。Allowed: physical/social/narrative/protagonist。
+    # None = 旧行为(整组重生成)。
+    category: Optional[str] = None
     user_modifications: str = Field(default="", max_length=1700)
 
 
@@ -617,7 +624,26 @@ async def regenerate_world_section(
             "power_systems", iter_power_systems(existing)
         )
     elif payload.section == "core_rules":
-        merged["core_rules"] = result.get("core_rules", existing.get("core_rules", []))
+        if payload.category is None:
+            # 旧行为: 整组重生成 (向后兼容旧调用方)
+            merged["core_rules"] = result.get(
+                "core_rules", existing.get("core_rules", [])
+            )
+        else:
+            # 新行为: 仅替换目标 category,其他 3 类 byte-preserve。
+            # 防御性过滤: 即使 LLM 错误地在 result 里混入其他 category,
+            # 也只接受 target_cat 的条目,避免污染。
+            target_cat = payload.category
+            new_rules = result.get("core_rules", [])
+            preserved = [
+                r for r in existing.get("core_rules", [])
+                if isinstance(r, dict) and r.get("category") != target_cat
+            ]
+            replaced = [
+                r for r in new_rules
+                if isinstance(r, dict) and r.get("category") == target_cat
+            ]
+            merged["core_rules"] = preserved + replaced
     else:  # "factions"
         merged["factions"] = result.get("factions", existing.get("factions", []))
 

@@ -230,3 +230,152 @@ def test_regenerate_missing_project_returns_404(tmp_path):
     )
     assert resp.status_code == 404
     assert resp.json()["detail"]["code"] == "PROJECT_NOT_FOUND"
+
+
+# ---------------------------------------------------------------------------
+# Category-filtered core_rules regeneration (Task 5 / 修订 E).
+#
+# When the user picks a category (e.g. only the "physical" rules), only
+# entries with that category get replaced; other categories stay byte-
+# preserved. When `category` is omitted, the legacy full-array replace is
+# used (back-compat for older callers).
+# ---------------------------------------------------------------------------
+
+
+def _seed_old_world_with_all_categories():
+    return {
+        "era": "旧时代",
+        "geography": "旧地理",
+        "era_social_structure": "旧社会",
+        "era_cultural_history": "旧历史",
+        "power_systems": [
+            {
+                "name": "旧体系",
+                "description": "旧描述",
+                "stages": ["旧一阶"],
+                "core_rules": ["旧规则"],
+                "ceilings": ["旧上限"],
+                "cost_system": "旧代价",
+            }
+        ],
+        "factions": [
+            {"name": "旧势力A", "type": "国家", "goal": "旧目标A", "relations": "旧关系A"},
+        ],
+        "core_rules": [
+            {"category": "physical", "text": "旧 physical 规则"},
+            {"category": "social", "text": "旧 social 规则(应保留)"},
+            {"category": "narrative", "text": "旧 narrative 规则(应保留)"},
+            {"category": "protagonist", "text": "旧 protagonist 规则(应保留)"},
+        ],
+    }
+
+
+def _mock_physical_only_payload():
+    """LLM mocked to return ONLY physical rules — even though the schema
+    would allow it to return other categories, we want to verify the
+    endpoint filters on the LLM output as well."""
+    return {
+        "era": "新时代",
+        "geography": "新地理",
+        "era_social_structure": "新社会",
+        "era_cultural_history": "新历史",
+        "power_systems": [
+            {
+                "name": "新体系",
+                "description": "新描述",
+                "stages": ["新一阶"],
+                "core_rules": ["新规则"],
+                "ceilings": ["新上限"],
+                "cost_system": "新代价",
+            }
+        ],
+        "factions": [
+            {"name": "新势力A", "type": "宗门", "goal": "新目标A", "relations": "新关系A"},
+        ],
+        "core_rules": [
+            {"category": "physical", "text": "新 physical 规则 A"},
+            {"category": "physical", "text": "新 physical 规则 B"},
+        ],
+    }
+
+
+def test_regenerate_core_rules_by_category_preserves_other_categories(
+    tmp_path,
+):
+    """When section='core_rules' and category='physical', only physical
+    rules are replaced; social/narrative/protagonist rules in the existing
+    world.json are byte-preserved."""
+    _seed_project(tmp_path)
+    _write(tmp_path, "world.json", _seed_old_world_with_all_categories())
+    with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
+        instance = MockPlanner.return_value
+        instance.generate_world = AsyncMock(return_value=(
+            _mock_physical_only_payload(),
+            None,
+        ))
+        resp = client.post(
+            f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+            json={"section": "core_rules", "category": "physical"},
+        )
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    merged_rules = detail["core_rules"]
+    # Old social/narrative/protagonist entries still present
+    kept = {r["text"] for r in merged_rules if r["text"].startswith("旧 ")}
+    assert kept == {
+        "旧 social 规则(应保留)",
+        "旧 narrative 规则(应保留)",
+        "旧 protagonist 规则(应保留)",
+    }
+    # New physical replaced old physical
+    assert any(r["text"] == "新 physical 规则 A" for r in merged_rules)
+    assert any(r["text"] == "新 physical 规则 B" for r in merged_rules)
+    assert not any(r["text"] == "旧 physical 规则" for r in merged_rules)
+    # Final shape — exactly 5 rules: 3 preserved + 2 new
+    assert len(merged_rules) == 5
+    # Other top-level keys untouched
+    assert detail["era"] == "旧时代"
+    assert detail["factions"] == _seed_old_world_with_all_categories()["factions"]
+
+
+def test_regenerate_core_rules_without_category_replaces_all(tmp_path):
+    """Backward compat — section='core_rules' with no category field
+    keeps the old behavior (replace entire core_rules array)."""
+    _seed_project(tmp_path)
+    _write(tmp_path, "world.json", _seed_old_world_with_all_categories())
+    # LLM returns all four categories
+    mixed_payload = {
+        "era": "新时代",
+        "geography": "新地理",
+        "era_social_structure": "新社会",
+        "era_cultural_history": "新历史",
+        "power_systems": [
+            {
+                "name": "新体系",
+                "description": "新描述",
+                "stages": ["新一阶"],
+                "core_rules": ["新规则"],
+                "ceilings": ["新上限"],
+                "cost_system": "新代价",
+            }
+        ],
+        "factions": [
+            {"name": "新势力A", "type": "宗门", "goal": "新目标A", "relations": "新关系A"},
+        ],
+        "core_rules": [
+            {"category": "physical", "text": "新 physical"},
+            {"category": "social", "text": "新 social"},
+        ],
+    }
+    with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
+        instance = MockPlanner.return_value
+        instance.generate_world = AsyncMock(return_value=(mixed_payload, None))
+        resp = client.post(
+            f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+            json={"section": "core_rules"},
+        )
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    # Legacy full-array path: 旧 rules all gone, only new ones remain
+    assert detail["core_rules"] == mixed_payload["core_rules"]
+    assert not any(r["text"].startswith("旧 ") for r in detail["core_rules"])

@@ -48,6 +48,8 @@ system_prompt: |
   不得重新定义:
   - 世界观层已经记录的 power_systems[] 体系内部规则
   - core_rules[].protagonist category 中已经存在的硬约束
+  - 世界观层已经为 protagonist_engine 派生的 power_system 卡(source="protagonist_engine");
+    若角色卡涉及相同机制, 只引用不重建, 不得在角色层新建同名 source 缺省的体系
 
 user_prompt_template: |
   故事概念：

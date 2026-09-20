@@ -119,7 +119,11 @@ def test_regenerate_era_rewrites_only_era_block(mock_planner, tmp_path):
     assert "power_system" not in detail
     assert detail["power_systems"] == [_seed_old_world()["power_system"]]
     assert detail["factions"] == _seed_old_world()["factions"]
-    assert detail["core_rules"] == _seed_old_world()["core_rules"]
+    # v2.x: legacy list[str] core_rules migrated to list[{category, text}]
+    assert detail["core_rules"] == [
+        {"category": "physical", "text": r}
+        for r in _seed_old_world()["core_rules"]
+    ]
 
 
 def test_regenerate_power_system_rewrites_only_power_system(mock_planner, tmp_path):
@@ -135,7 +139,11 @@ def test_regenerate_power_system_rewrites_only_power_system(mock_planner, tmp_pa
     assert detail["power_systems"][0]["stages"] == ["新一阶", "新二阶"]
     assert detail["era"] == _seed_old_world()["era"]
     assert detail["factions"] == _seed_old_world()["factions"]
-    assert detail["core_rules"] == _seed_old_world()["core_rules"]
+    # v2.x: legacy list[str] core_rules migrated to list[{category, text}]
+    assert detail["core_rules"] == [
+        {"category": "physical", "text": r}
+        for r in _seed_old_world()["core_rules"]
+    ]
 
 
 def test_regenerating_another_section_migrates_a_legacy_world_on_disk(
@@ -166,7 +174,7 @@ def test_regenerate_core_rules_rewrites_only_top_level_array(mock_planner, tmp_p
     )
     assert resp.status_code == 200
     detail = resp.json()["detail"]
-    assert detail["core_rules"] == ["世界规则新"]
+    assert detail["core_rules"] == [{"category": "physical", "text": "世界规则新"}]
     assert detail["era"] == _seed_old_world()["era"]
     assert detail["power_systems"] == [_seed_old_world()["power_system"]]
     assert detail["factions"] == _seed_old_world()["factions"]

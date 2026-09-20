@@ -115,7 +115,10 @@ def test_rewrite_only_target_index(mock_planner, tmp_path):
     assert detail["world"]["era"] == old_world["era"]
     assert detail["world"]["era_social_structure"] == old_world["era_social_structure"]
     assert detail["world"]["factions"] == old_world["factions"]
-    assert detail["world"]["core_rules"] == old_world["core_rules"]
+    assert detail["world"]["core_rules"] == [
+        {"category": "physical", "text": r}
+        for r in old_world["core_rules"]
+    ]
 
 
 def test_rewrite_user_modifications_passed_to_agent(mock_planner, tmp_path):

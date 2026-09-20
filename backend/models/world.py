@@ -1,6 +1,19 @@
 import json
+from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class CoreRuleCategory(str, Enum):
+    PHYSICAL = "physical"        # ontology
+    SOCIAL = "social"            # power_structure
+    NARRATIVE = "narrative"      # narrative_physics
+    PROTAGONIST = "protagonist"  # protagonist_engine (is_irreducible=true)
+
+
+class CoreRule(BaseModel):
+    category: CoreRuleCategory
+    text: str
 
 
 class PowerSystem(BaseModel):
@@ -51,11 +64,13 @@ class WorldRulesSummary(BaseModel):
     def from_world(cls, world: "World") -> "WorldRulesSummary":
         # A world can define several power systems; the summary flattens them
         # into one set of rules because its consumers treat the world's limits
-        # as a single constraint space.
+        # as a single constraint space. core_rules has moved up to the
+        # top-level World model as list[CoreRule] in v2.x — flatten the
+        # text across all 4 categories.
         return cls(
             name=" / ".join(ps.name for ps in world.power_systems if ps.name),
             ceilings=_dedupe(c for ps in world.power_systems for c in ps.ceilings),
-            core_rules=_dedupe(r for ps in world.power_systems for r in ps.core_rules),
+            core_rules=_dedupe(r.text for r in world.core_rules),
         )
 
 
@@ -113,7 +128,28 @@ class World(BaseModel):
     era_cultural_history: Optional[str] = None  # v1.8 [新增] 历史文化
     power_systems: list[PowerSystem] = Field(default_factory=list)
     factions: list[Faction] = []
-    core_rules: list[str] = []
+    core_rules: list[CoreRule] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_core_rules(cls, data):
+        """Old world.json stored core_rules as a flat list[str].
+        Fold it forward to list[CoreRule{category: PHYSICAL, text: s}] —
+        PHYSICAL (ontology) is the default because ontology is the
+        largest contributor. Callers that need a specific category can
+        re-call generate_world or regenerate-world-section after upgrade.
+        """
+        if not isinstance(data, dict):
+            return data
+        rules = data.get("core_rules")
+        if isinstance(rules, list) and rules and isinstance(rules[0], str):
+            data["core_rules"] = [
+                {"category": CoreRuleCategory.PHYSICAL.value, "text": r}
+                for r in rules if isinstance(r, str)
+            ]
+        elif rules is None:
+            data["core_rules"] = []
+        return data
 
     @model_validator(mode="before")
     @classmethod

@@ -145,11 +145,16 @@ describe("WorldStep", () => {
     expect(screen.getByTestId("world-power-system-0-stages")).toBeInTheDocument();
     expect(screen.getByTestId("world-power-system-0-rules")).toBeInTheDocument();
     expect(screen.getByTestId("world-power-system-0-ceilings")).toBeInTheDocument();
-    expect(screen.getByTestId("world-core-rules")).toBeInTheDocument();
+    // 2026-09-20 (Task 8): core_rules 现在以 sub-tab 形式渲染。core_rules=["弱肉强食"]
+    // 被 normalizeLegacyWorld 转成 [{category:"physical",text:"弱肉强食"}],所以会渲染
+    // 1 个 sub-tab(physical)+对应 CategoryGroup。切到 core_rules tab 即可看到。
+    fireEvent.click(screen.getByTestId("world-tab-core_rules"));
+    expect(screen.getByTestId("world-tab-core-rules-subtab-physical")).toBeInTheDocument();
+    expect(screen.getByTestId("world-core-rules-physical")).toBeInTheDocument();
     // Each TagEditor renders existing items as buttons.
     expect(screen.getByTestId("world-power-system-0-stages").textContent).toContain("炼气");
     expect(screen.getByTestId("world-power-system-0-ceilings").textContent).toContain("最高元婴");
-    expect(screen.getByTestId("world-core-rules").textContent).toContain("弱肉强食");
+    expect(screen.getByTestId("world-core-rules-physical").textContent).toContain("弱肉强食");
   });
 
   it("renders every power system as its own card", async () => {

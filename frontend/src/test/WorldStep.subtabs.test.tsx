@@ -223,3 +223,68 @@ describe("WorldStep PowerSystemsPanel sub-tabs", () => {
     expect(screen.getByTestId("world-tab-power-system-subtab-0").getAttribute("aria-selected")).toBe("true");
   });
 });
+
+describe("WorldStep CoreRulesPanel sub-tabs", () => {
+  it("renders sub-tabs only for present categories", async () => {
+    setupWithWorld({
+      era: "", geography: "", era_social_structure: "", era_cultural_history: "",
+      power_systems: [], factions: [],
+      core_rules: [
+        { category: "physical", text: "规则 1" },
+        { category: "narrative", text: "规则 2" },
+      ],
+    });
+    await screen.findByTestId("world-tab-core_rules");
+    fireEvent.click(screen.getByTestId("world-tab-core_rules"));
+    expect(screen.getByTestId("world-tab-core-rules-subtab-physical")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-core-rules-subtab-narrative")).toBeInTheDocument();
+    expect(screen.queryByTestId("world-tab-core-rules-subtab-social")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("world-tab-core-rules-subtab-protagonist")).not.toBeInTheDocument();
+  });
+
+  it("sub-tab title uses Chinese label (物理公理 / 结构性瓶颈 / 解决路径封闭性 / 主角机制硬约束)", async () => {
+    setupWithWorld({
+      era: "", geography: "", era_social_structure: "", era_cultural_history: "",
+      power_systems: [], factions: [],
+      core_rules: [
+        { category: "physical", text: "x" },
+        { category: "social", text: "y" },
+        { category: "narrative", text: "z" },
+        { category: "protagonist", text: "w" },
+      ],
+    });
+    await screen.findByTestId("world-tab-core_rules");
+    fireEvent.click(screen.getByTestId("world-tab-core_rules"));
+    expect(screen.getByTestId("world-tab-core-rules-subtab-physical").textContent).toContain("物理公理");
+    expect(screen.getByTestId("world-tab-core-rules-subtab-social").textContent).toContain("结构性瓶颈");
+    expect(screen.getByTestId("world-tab-core-rules-subtab-narrative").textContent).toContain("解决路径封闭性");
+    expect(screen.getByTestId("world-tab-core-rules-subtab-protagonist").textContent).toContain("主角机制硬约束");
+  });
+
+  it("sub-tab ↻ calls /regenerate-world-section with category", async () => {
+    setupWithWorld({
+      era: "", geography: "", era_social_structure: "", era_cultural_history: "",
+      power_systems: [], factions: [],
+      core_rules: [
+        { category: "physical", text: "x" },
+        { category: "narrative", text: "z" },
+      ],
+    });
+    await screen.findByTestId("world-tab-core_rules");
+    fireEvent.click(screen.getByTestId("world-tab-core_rules"));
+    (api.regenerateWorldSection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "", geography: "", era_social_structure: "", era_cultural_history: "",
+      power_systems: [], factions: [],
+      core_rules: [{ category: "physical", text: "new" }],
+    });
+    fireEvent.click(screen.getByTestId("world-tab-core-rules-subtab-physical-regenerate"));
+    await vi.waitFor(() => {
+      expect(api.regenerateWorldSection).toHaveBeenCalledWith(
+        expect.any(String),
+        "core_rules",
+        "",
+        { category: "physical" },
+      );
+    });
+  });
+});

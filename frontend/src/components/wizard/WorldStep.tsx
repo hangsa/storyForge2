@@ -910,11 +910,19 @@ function CategoryGroup({
   );
 }
 
-// 2026-09-20 (修订 F): CoreRulesPanel 重构 — 把 list[CoreRule] 按 category 分
-// 成 4 个折叠 group,每个 group 内部是 TagEditor。`setCategory` 通过 filter
-// 保留非当前 category 的项,把当前 category 的新 texts 重新 attach 上,这样
-// 切换 / 删除项不会影响其他 group 的内容。外层 `<div data-testid="world-
-// core-rules">` 保留以向后兼容老单测 (回归保护)。
+// 2026-09-20 (Task 8): CoreRulesPanel 改为 sub-tab 布局 — 按已出现的
+// category 渲染 sub-tab,每个 sub-tab 一个 CategoryGroup 折叠面板。空态
+// (无任何 category 规则) 显示「生成核心规则」CTA,直接调
+// /regenerate-world-section?section=core_rules(无 category 限定 = 后端
+// 生成全量 4 组)。sub-tab ↻ 走即时 API,跳过 RegenerateModal,与
+// EraPanel/PowerSystemsPanel 一致。
+const CORE_RULE_CATEGORIES = [
+  { key: "physical",     label: "物理公理",         testidSuffix: "physical" },
+  { key: "social",       label: "结构性瓶颈",       testidSuffix: "social" },
+  { key: "narrative",    label: "解决路径封闭性",   testidSuffix: "narrative" },
+  { key: "protagonist",  label: "主角机制硬约束",   testidSuffix: "protagonist" },
+] as const;
+
 function CoreRulesPanel({
   active, projectId, world, setWorld, busy, activeSubTab, onSubTabChange,
 }: {
@@ -926,8 +934,7 @@ function CoreRulesPanel({
   activeSubTab: string;
   onSubTabChange: (key: string) => void;
 }) {
-  // 临时: 把 props 接进来但暂不渲染 sub-tab,避免 TS 报错
-  void projectId; void activeSubTab; void onSubTabChange;
+  const wizard = useWizard();
   const grouped = useMemo(() => {
     const g: Record<string, string[]> = {
       physical: [], social: [], narrative: [], protagonist: [],
@@ -940,17 +947,57 @@ function CoreRulesPanel({
     return g;
   }, [world.core_rules]);
 
-  const setCategory = (cat: string, texts: string[]) => {
-    const others = ((world.core_rules ?? []) as CoreRule[])
-      .filter(r => r.category !== cat);
-    setWorld({
-      ...world,
-      core_rules: [
-        ...others,
-        ...texts.map(t => ({ category: cat, text: t })),
-      ],
-    });
-  };
+  const presentCategories = CORE_RULE_CATEGORIES.filter((c) => grouped[c.key].length > 0);
+
+  if (presentCategories.length === 0) {
+    return (
+      <div
+        role="tabpanel"
+        id="world-panel-core_rules"
+        aria-labelledby="world-tab-core_rules"
+        hidden={!active}
+        data-testid="world-panel-core_rules"
+      >
+        <div data-testid="world-core-rules-empty" className="text-center py-6 space-y-3">
+          <p className="text-sm text-on-surface-variant">还没有核心规则</p>
+          <button
+            data-testid="world-core-rules-generate-first"
+            onClick={() => {
+              api
+                .regenerateWorldSection(projectId, "core_rules", "")
+                .then((result) => {
+                  setWorld(normalizeLegacyWorld(result));
+                  wizard.markStepGenerated(wizard.currentStep, {
+                    world: normalizeLegacyWorld(result),
+                  });
+                })
+                .catch((e) =>
+                  wizard.setStatus(
+                    "error",
+                    e instanceof Error ? e.message : "核心规则生成失败",
+                  ),
+                );
+            }}
+            disabled={busy}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-container text-on-primary-container hover:opacity-90 disabled:opacity-50"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined text-sm">auto_awesome</span>
+            生成核心规则
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const cat = activeSubTab && presentCategories.find((c) => c.key === activeSubTab)
+    ? activeSubTab
+    : presentCategories[0].key;
+
+  const subTabs = presentCategories.map((c) => ({
+    key: c.key,
+    label: c.label,
+    testidSuffix: c.testidSuffix,
+  }));
 
   return (
     <div
@@ -960,15 +1007,44 @@ function CoreRulesPanel({
       hidden={!active}
       data-testid="world-panel-core_rules"
     >
-      <div data-testid="world-core-rules" className="space-y-2">
-        <CategoryGroup category="physical" label="物理公理" source="ontology"
-          rules={grouped.physical} onChange={t => setCategory("physical", t)} saving={busy} />
-        <CategoryGroup category="social" label="结构性瓶颈" source="power_structure"
-          rules={grouped.social} onChange={t => setCategory("social", t)} saving={busy} />
-        <CategoryGroup category="narrative" label="解决路径封闭性" source="narrative_physics"
-          rules={grouped.narrative} onChange={t => setCategory("narrative", t)} saving={busy} />
-        <CategoryGroup category="protagonist" label="主角机制硬约束" source="protagonist_engine"
-          rules={grouped.protagonist} onChange={t => setCategory("protagonist", t)} saving={busy} />
+      <SubTabStrip
+        tabs={subTabs}
+        active={cat}
+        onChange={onSubTabChange}
+        onRegenerate={(k) => {
+          api
+            .regenerateWorldSection(projectId, "core_rules", "", { category: k as any })
+            .then((result) => {
+              setWorld(normalizeLegacyWorld(result));
+              wizard.markStepGenerated(wizard.currentStep, {
+                world: normalizeLegacyWorld(result),
+              });
+            })
+            .catch((e) =>
+              wizard.setStatus(
+                "error",
+                e instanceof Error ? e.message : "核心规则重生成失败",
+              ),
+            );
+        }}
+        testidPrefix="world-tab-core-rules-subtab"
+        disabled={busy}
+      />
+      <div data-testid={`world-tab-core-rules-subtab-panel-${cat}`} className="mt-3 space-y-2">
+        <CategoryGroup
+          category={cat}
+          label={CORE_RULE_CATEGORIES.find((c) => c.key === cat)!.label}
+          source={CORE_RULE_CATEGORIES.find((c) => c.key === cat)!.key}
+          rules={grouped[cat]}
+          onChange={(t) => {
+            const others = ((world.core_rules ?? []) as CoreRule[]).filter((r) => r.category !== cat);
+            setWorld({
+              ...world,
+              core_rules: [...others, ...t.map((text) => ({ category: cat, text }))],
+            });
+          }}
+          saving={busy}
+        />
       </div>
     </div>
   );

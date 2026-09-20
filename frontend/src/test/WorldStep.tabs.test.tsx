@@ -207,7 +207,7 @@ describe("WorldStep tab strip", () => {
     expect(document.activeElement).toBe(screen.getByTestId("world-tab-factions"));
   });
 
-  it("CoreRulesPanel renders 4 category groups", async () => {
+  it("CoreRulesPanel renders 4 category sub-tabs", async () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代", geography: "中原",
       power_systems: [],
@@ -224,11 +224,18 @@ describe("WorldStep tab strip", () => {
     // 切到 core_rules tab
     const coreRulesTab = screen.getByTestId("world-tab-core_rules");
     fireEvent.click(coreRulesTab);
-    // 4 个 category group 都渲染
+    // 2026-09-20 (Task 8): 4 个 category sub-tab 渲染,active 显示对应 CategoryGroup
+    expect(screen.getByTestId("world-tab-core-rules-subtab-physical")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-core-rules-subtab-social")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-core-rules-subtab-narrative")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-core-rules-subtab-protagonist")).toBeInTheDocument();
+    // 默认 active sub-tab = 第一个出现 category(physical),只渲染该 CategoryGroup
     expect(screen.getByTestId("world-core-rules-physical")).toBeInTheDocument();
+    // 其他 category 的 CategoryGroup 不渲染(需切到对应 sub-tab 后才出现)
+    expect(screen.queryByTestId("world-core-rules-social")).not.toBeInTheDocument();
+    // 切换到 social sub-tab,验证 CategoryGroup 按需切换
+    fireEvent.click(screen.getByTestId("world-tab-core-rules-subtab-social"));
     expect(screen.getByTestId("world-core-rules-social")).toBeInTheDocument();
-    expect(screen.getByTestId("world-core-rules-narrative")).toBeInTheDocument();
-    expect(screen.getByTestId("world-core-rules-protagonist")).toBeInTheDocument();
   });
 
   it("PowerSystemsPanel shows source badge on protagonist_engine cards", async () => {

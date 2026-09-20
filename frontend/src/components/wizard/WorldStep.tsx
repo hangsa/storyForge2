@@ -116,6 +116,14 @@ const EMPTY_POWER_SYSTEM: PowerSystem = {
 
 type FactionField = "name" | "type" | "goal" | "relations";
 
+// 2026-09-20 (Task 7): 把 power_system.name 末尾的全角括号注释去掉,让
+// sub-tab 标题更紧凑。后端 LLM 有时会附加 "(非常规主角能力体系)" 之类的
+// 解释 — 标题里读起来太碎,主面板已经有 source 徽章在传达同义信息。
+// 用全角中括号 `（）`,不动半角 `()`,因为半角括号在英文词组里合法。
+function stripParenthetical(name: string): string {
+  return name.replace(/（[^）]*）/g, "").trim();
+}
+
 // 2026-09-20: WorldStep 改为 sticky 横条 tab + 4 个 panel 的布局(对齐 S2 的
 // dimension-tabs 模式)。activeKey 决定哪个 panel 真正可见,非激活 panel 用
 // `hidden` 隐藏(保留 DOM + 所有 testid,便于单测零侵入)。
@@ -678,8 +686,52 @@ function PowerSystemsPanel({
   activeSubTab: string;
   onSubTabChange: (key: string) => void;
 }) {
-  // 临时: 把 props 接进来但暂不渲染 sub-tab,避免 TS 报错
-  void projectId; void activeSubTab; void onSubTabChange;
+  const items = world.power_systems;
+  const wizard = useWizard();
+
+  // 2026-09-20 (Task 7): N=0 → 空态 CTA。CTA 直接调 onRegenerateItem(0),
+  // 让 WorldStep.handleItemRegenerate 走完整 persist + wizard 状态机,
+  // 而非在 panel 里复制一份生成逻辑。
+  if (items.length === 0) {
+    return (
+      <div
+        role="tabpanel"
+        id="world-panel-power_system"
+        aria-labelledby="world-tab-power_system"
+        hidden={!active}
+        data-testid="world-panel-power_system"
+      >
+        <div data-testid="world-power-system-empty" className="text-center py-6 space-y-3">
+          <p className="text-sm text-on-surface-variant">还没有力量体系</p>
+          <button
+            data-testid="world-power-system-generate-first"
+            onClick={() => onRegenerateItem(0)("")}
+            disabled={busy}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-container text-on-primary-container hover:opacity-90 disabled:opacity-50"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined text-sm">auto_awesome</span>
+            生成首个体系
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // sub-tab ↻ 直接调 API,跳过 RegenerateModal。错误走 wizard.setStatus
+  // (跟 EraPanel 一致);成功用 result.world 直接刷 state。
+  const subTabs = items.map((ps, i) => ({
+    key: String(i),
+    label: stripParenthetical(ps.name) || `体系 ${i + 1}`,
+    testidSuffix: String(i),
+  }));
+  // 2026-09-20 (Task 7): remove 不主动收口 activeSubTab — 删完索引 N 之后,
+  // activeSubTab 可能指向一个已经不存在的 slot。clamp 到最后一个有效
+  // 索引,避免 `ps.source` 读取 undefined 上的字段而 render crash
+  // (proj_7395a53d 这种边界由 WorldStep.subtabs.test.tsx#4 覆盖)。
+  const requestedIdx = parseInt(activeSubTab || "0", 10);
+  const idx = Math.min(Math.max(0, requestedIdx), items.length - 1);
+  const ps = items[idx];
+
   return (
     <div
       role="tabpanel"
@@ -689,94 +741,112 @@ function PowerSystemsPanel({
       data-testid="world-panel-power_system"
       className="space-y-3"
     >
-      <div data-testid="world-power-systems" className="space-y-3">
-        {world.power_systems.length === 0 && (
-          <p className="font-body text-body-md text-primary-container/40 text-xs text-center py-3">暂无力量体系</p>
-        )}
-        {world.power_systems.map((ps, i) => (
-          <div
-            key={i}
-            data-testid={`world-power-system-${i}`}
-            className={
-              "border rounded p-3 space-y-2 relative " +
-              (ps.source === "protagonist_engine"
-                ? "border-primary-container/60 bg-primary-container/5"
-                : "border-outline-variant")
-            }
-          >
-            <div className="absolute top-2 right-2 flex items-center gap-1">
-              {ps.source === "protagonist_engine" && (
-                <span
-                  data-testid={`world-power-system-${i}-source-badge`}
-                  className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container"
-                >
-                  主角能力
-                </span>
-              )}
-              <SectionRegenerateButton
-                target={`力量体系: ${ps.name || `#${i + 1}`}`}
-                onRegenerate={onRegenerateItem(i)}
-                testId={`world-power-system-${i}-regenerate`}
-              />
-              <button
-                type="button"
-                data-testid={`world-power-system-${i}-remove`}
-                onClick={() => onRemove(i)}
-                disabled={busy}
-                aria-label="删除力量体系"
-                className="text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
+      <SubTabStrip
+        tabs={subTabs}
+        active={activeSubTab || "0"}
+        onChange={onSubTabChange}
+        onRegenerate={(k) => {
+          const i = parseInt(k, 10);
+          api
+            .regeneratePowerSystemItem(projectId, i, "")
+            .then((result) => {
+              setWorld(normalizeLegacyWorld(result.world));
+              wizard.markStepGenerated(wizard.currentStep, {
+                world: normalizeLegacyWorld(result.world),
+              });
+            })
+            .catch((e) =>
+              wizard.setStatus(
+                "error",
+                e instanceof Error ? e.message : "体系重新生成失败",
+              ),
+            );
+        }}
+        testidPrefix="world-tab-power-system-subtab"
+        disabled={busy}
+      />
+      <div data-testid={`world-tab-power-system-subtab-panel-${activeSubTab || "0"}`}>
+        <div
+          data-testid={`world-power-system-${idx}`}
+          className={
+            "border rounded p-3 space-y-2 relative " +
+            (ps.source === "protagonist_engine"
+              ? "border-primary-container/60 bg-primary-container/5"
+              : "border-outline-variant")
+          }
+        >
+          <div className="absolute top-2 right-2 flex items-center gap-1">
+            {ps.source === "protagonist_engine" && (
+              <span
+                data-testid={`world-power-system-${idx}-source-badge`}
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container"
               >
-                <span className="material-symbols-outlined text-sm">close</span>
-              </button>
-            </div>
-            <div className="pr-6">
-              <label className="block font-mono text-primary-container mb-1 text-[10px]">体系名称</label>
-              <input
-                data-testid={`world-power-system-${i}-name`}
-                value={ps.name}
-                onChange={(e) => onUpdateField(i, "name", e.target.value)}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-              />
-            </div>
-            <div>
-              <label className="block font-mono text-primary-container mb-1 text-[10px]">描述</label>
-              <AutoTextarea
-                data-testid={`world-power-system-${i}-description`}
-                value={ps.description}
-                onChange={(e) => onUpdateField(i, "description", e.target.value)}
-                rows={2}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
-              />
-            </div>
-            <div>
-              <label className="block font-mono text-primary-container mb-1 text-[10px]">阶段划分</label>
-              <div data-testid={`world-power-system-${i}-stages`}>
-                <TagEditor items={ps.stages ?? []} onItemsChange={(items) => onUpdateField(i, "stages", items)} saving={busy} />
-              </div>
-            </div>
-            <div>
-              <label className="block font-mono text-primary-container mb-1 text-[10px]">体系规则</label>
-              <div data-testid={`world-power-system-${i}-rules`}>
-                <TagEditor items={ps.core_rules ?? []} onItemsChange={(items) => onUpdateField(i, "core_rules", items)} saving={busy} />
-              </div>
-            </div>
-            <div>
-              <label className="block font-mono text-primary-container mb-1 text-[10px]">力量上限</label>
-              <div data-testid={`world-power-system-${i}-ceilings`}>
-                <TagEditor items={ps.ceilings ?? []} onItemsChange={(items) => onUpdateField(i, "ceilings", items)} saving={busy} />
-              </div>
-            </div>
-            <div>
-              <label className="block font-mono text-primary-container mb-1 text-[10px]">代价系统</label>
-              <input
-                data-testid={`world-power-system-${i}-cost`}
-                value={ps.cost_system ?? ""}
-                onChange={(e) => onUpdateField(i, "cost_system", e.target.value)}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-              />
+                主角能力
+              </span>
+            )}
+            <SectionRegenerateButton
+              target={`力量体系: ${ps.name || `#${idx + 1}`}`}
+              onRegenerate={onRegenerateItem(idx)}
+              testId={`world-power-system-${idx}-regenerate`}
+            />
+            <button
+              type="button"
+              data-testid={`world-power-system-${idx}-remove`}
+              onClick={() => onRemove(idx)}
+              disabled={busy}
+              aria-label="删除力量体系"
+              className="text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+            </button>
+          </div>
+          <div className="pr-6">
+            <label className="block font-mono text-primary-container mb-1 text-[10px]">体系名称</label>
+            <input
+              data-testid={`world-power-system-${idx}-name`}
+              value={ps.name}
+              onChange={(e) => onUpdateField(idx, "name", e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+            />
+          </div>
+          <div>
+            <label className="block font-mono text-primary-container mb-1 text-[10px]">描述</label>
+            <AutoTextarea
+              data-testid={`world-power-system-${idx}-description`}
+              value={ps.description}
+              onChange={(e) => onUpdateField(idx, "description", e.target.value)}
+              rows={2}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
+            />
+          </div>
+          <div>
+            <label className="block font-mono text-primary-container mb-1 text-[10px]">阶段划分</label>
+            <div data-testid={`world-power-system-${idx}-stages`}>
+              <TagEditor items={ps.stages ?? []} onItemsChange={(items) => onUpdateField(idx, "stages", items)} saving={busy} />
             </div>
           </div>
-        ))}
+          <div>
+            <label className="block font-mono text-primary-container mb-1 text-[10px]">体系规则</label>
+            <div data-testid={`world-power-system-${idx}-rules`}>
+              <TagEditor items={ps.core_rules ?? []} onItemsChange={(items) => onUpdateField(idx, "core_rules", items)} saving={busy} />
+            </div>
+          </div>
+          <div>
+            <label className="block font-mono text-primary-container mb-1 text-[10px]">力量上限</label>
+            <div data-testid={`world-power-system-${idx}-ceilings`}>
+              <TagEditor items={ps.ceilings ?? []} onItemsChange={(items) => onUpdateField(idx, "ceilings", items)} saving={busy} />
+            </div>
+          </div>
+          <div>
+            <label className="block font-mono text-primary-container mb-1 text-[10px]">代价系统</label>
+            <input
+              data-testid={`world-power-system-${idx}-cost`}
+              value={ps.cost_system ?? ""}
+              onChange={(e) => onUpdateField(idx, "cost_system", e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+            />
+          </div>
+        </div>
       </div>
       <div className="flex justify-center pt-2">
         <button

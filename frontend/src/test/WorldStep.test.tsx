@@ -139,6 +139,9 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
+    // 2026-09-20 (Task 7): power-system cards now render one-at-a-time behind
+    // sub-tabs. Switch to the power_system panel before asserting on the card.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
     expect(screen.getByTestId("world-power-system-0-stages")).toBeInTheDocument();
     expect(screen.getByTestId("world-power-system-0-rules")).toBeInTheDocument();
     expect(screen.getByTestId("world-power-system-0-ceilings")).toBeInTheDocument();
@@ -162,7 +165,12 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
+    // 2026-09-20 (Task 7): only the active sub-tab's card is rendered. Walk
+    // through both sub-tabs to assert each card renders its own data.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
     expect(screen.getByTestId("world-power-system-0-name")).toHaveValue("灵力");
+    expect(screen.getByTestId("world-power-system-0-stages").textContent).toContain("炼气");
+    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
     expect(screen.getByTestId("world-power-system-1-name")).toHaveValue("武道");
     expect(screen.getByTestId("world-power-system-1-stages").textContent).toContain("锻体");
   });
@@ -177,7 +185,12 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
-    expect(screen.getByTestId("world-power-systems").textContent).toContain("暂无力量体系");
+    // 2026-09-20 (Task 7): empty state now lives in world-power-system-empty
+    // CTA, shown after switching to the power_system panel.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
+    expect(screen.getByTestId("world-power-system-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("world-power-system-empty").textContent).toContain("还没有力量体系");
+    expect(screen.getByTestId("world-power-system-generate-first")).toBeInTheDocument();
   });
 
   it("'添加体系' appends an empty power-system card with all 6 fields", async () => {
@@ -191,9 +204,12 @@ describe("WorldStep", () => {
     (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
     await screen.findByTestId("world-form");
+    // 2026-09-20 (Task 7): add button lives on the power_system panel.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
     await act(async () => {
       screen.getByTestId("world-power-system-add").click();
     });
+    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
     expect(screen.getByTestId("world-power-system-1")).toBeInTheDocument();
     for (const field of ["name", "description", "stages", "rules", "ceilings", "cost"]) {
       expect(screen.getByTestId(`world-power-system-1-${field}`)).toBeInTheDocument();
@@ -238,9 +254,12 @@ describe("WorldStep", () => {
     (api.updateWorld as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("disk full"));
     setup();
     await screen.findByTestId("world-form");
+    // 2026-09-20 (Task 7): add button lives on the power_system panel.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
     await act(async () => {
       screen.getByTestId("world-power-system-add").click();
     });
+    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
     // Optimistic: card is visible immediately even though the persist failed.
     expect(screen.getByTestId("world-power-system-1")).toBeInTheDocument();
     // The in-form error banner surfaces the rejection reason.
@@ -256,26 +275,49 @@ describe("WorldStep", () => {
       core_rules: [],
     });
     (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    // 2026-09-20 (Task 7): the empty-state CTA (生成首个体系) calls
+    // regeneratePowerSystemItem under the hood, not updateWorld — the mock
+    // must return a populated world so the panel transitions to N=1 layout.
+    (api.regeneratePowerSystemItem as ReturnType<typeof vi.fn>).mockResolvedValue({
+      system_index: 0,
+      power_system: { name: "", description: "", stages: [], core_rules: [], ceilings: [], source: "energetics" },
+      world: {
+        era: "古代",
+        geography: "中原",
+        era_social_structure: "",
+        era_cultural_history: "",
+        power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [], source: "energetics" }],
+        factions: [],
+        core_rules: [],
+      },
+    });
     setup();
     await screen.findByTestId("world-form");
-    // Two 添加体系 clicks — each one now also calls api.updateWorld (regression
-    // 2026-08-12), so updateWorld is invoked 3 times total by the end of this
-    // test: twice for addPowerSystem, once for the final wizard-next save.
+    // 2026-09-20 (Task 7): add button lives on the power_system panel, and
+    // only the active sub-tab's card is rendered. From the empty state, the
+    // first add must go through world-power-system-generate-first (which
+    // also calls onRegenerateItem(0) under the hood), then add power-system
+    // button takes over for subsequent additions.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
     await act(async () => {
-      screen.getByTestId("world-power-system-add").click();
+      screen.getByTestId("world-power-system-generate-first").click();
     });
+    await waitFor(() => expect(api.regeneratePowerSystemItem).toHaveBeenCalledTimes(1));
     await act(async () => {
       screen.getByTestId("world-power-system-add").click();
     });
     await act(async () => {
       fireEvent.change(screen.getByTestId("world-power-system-0-name"), { target: { value: "灵力" } });
+    });
+    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
+    await act(async () => {
       fireEvent.change(screen.getByTestId("world-power-system-1-name"), { target: { value: "武道" } });
       fireEvent.change(screen.getByTestId("world-power-system-1-cost"), { target: { value: "折寿" } });
     });
     await act(async () => {
       screen.getByTestId("wizard-next").click();
     });
-    await waitFor(() => expect(api.updateWorld).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(api.updateWorld).toHaveBeenCalledTimes(2));
     // The final wizard-next call carries the typed values; earlier calls are
     // the addPowerSystem persists with empty slot(s).
     const finalCall = (api.updateWorld as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
@@ -298,7 +340,12 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
-    expect(screen.getByTestId("world-power-system-1")).toBeInTheDocument();
+    // 2026-09-20 (Task 7): switch to the power_system panel so the per-card
+    // remove button is in the DOM.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
+    expect(screen.getByTestId("world-power-system-0-name")).toHaveValue("A");
+    expect(screen.queryByTestId("world-power-system-1")).not.toBeInTheDocument();
+    // Remove index 0 → slot 0 should now display B; slot 1 no longer exists.
     await act(async () => {
       screen.getByTestId("world-power-system-0-remove").click();
     });
@@ -458,6 +505,9 @@ describe("WorldStep", () => {
     const social = screen.getByTestId("world-era-social-structure") as HTMLTextAreaElement;
     expect(social.value).toContain("人类阶层");
     expect(social.value).toContain("军阀");
+    // 2026-09-20 (Task 7): power-system cards now render one-at-a-time;
+    // switch to the power_system panel before asserting on its card.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
     // power_system is folded into power_systems[0] and its object-shaped
     // stages flattened — all string values appear in the TagEditor.
     const stages = screen.getByTestId("world-power-system-0-stages");
@@ -476,6 +526,9 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
+    // 2026-09-20 (Task 7): the per-card regenerate/remove affordances live
+    // on the active sub-tab's card; switch to the power_system panel first.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
     expect(screen.getByTestId("world-power-system-0-regenerate")).toBeInTheDocument();
     expect(screen.getByTestId("world-power-system-0-remove")).toBeInTheDocument();
     // The section-level regenerate button now lives in the tab strip.
@@ -511,6 +564,10 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
+    // 2026-09-20 (Task 7): the active sub-tab's card holds the per-card
+    // regenerate button — switch panel and sub-tab before clicking it.
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
+    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
     await act(async () => {
       screen.getByTestId("world-power-system-1-regenerate").click();
     });
@@ -558,6 +615,9 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
+    // 2026-09-20 (Task 7): navigate to power_system panel before clicking
+    // the per-card regenerate button (only the active sub-tab's card renders).
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
     await act(async () => {
       screen.getByTestId("world-power-system-0-regenerate").click();
     });
@@ -566,6 +626,7 @@ describe("WorldStep", () => {
     });
     await waitFor(() => expect(api.regeneratePowerSystemItem).toHaveBeenCalledTimes(1));
     expect((screen.getByTestId("world-power-system-0-name") as HTMLInputElement).value).toBe("灵力（新）");
+    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
     expect((screen.getByTestId("world-power-system-1-name") as HTMLInputElement).value).toBe("武道");
   });
 });

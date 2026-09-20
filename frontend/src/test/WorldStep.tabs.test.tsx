@@ -245,9 +245,10 @@ describe("WorldStep tab strip", () => {
     await screen.findByTestId("world-form");
     const psTab = screen.getByTestId("world-tab-power_system");
     fireEvent.click(psTab);
-    // 第 0 张卡 (energetics) 没有徽章
+    // 2026-09-20 (Task 7): only the active sub-tab's card is rendered. Walk
+    // through both sub-tabs to assert the source-badge pattern.
     expect(screen.queryByTestId("world-power-system-0-source-badge")).not.toBeInTheDocument();
-    // 第 1 张卡 (protagonist_engine) 有徽章
+    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
     expect(screen.getByTestId("world-power-system-1-source-badge")).toBeInTheDocument();
   });
 });

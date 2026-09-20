@@ -114,3 +114,48 @@ def test_raw_power_systems_list_drops_non_dict_entries():
     # can't be a `null` placeholder.
     world = {"power_systems": [LEGACY_PS, None, "bad", {"name": "武道"}]}
     assert _raw_power_systems_list(world) == [LEGACY_PS, {"name": "武道"}]
+
+
+def test_legacy_power_system_defaults_source_to_energetics():
+    """Old world.json power_systems[] entries have no `source` field.
+    Default to energetics (the dominant contributor)."""
+    world = World.model_validate({
+        "power_systems": [{"name": "灵力", "core_rules": ["有限"]}]
+    })
+    assert world.power_systems[0].source.value == "energetics"
+
+
+def test_new_power_system_can_explicitly_set_protagonist_engine_source():
+    """LLM output for protagonist_engine-derived systems must tag source."""
+    world = World.model_validate({
+        "power_systems": [
+            {"name": "天道寄体系统", "source": "protagonist_engine",
+             "core_rules": ["使用即加速死亡"]},
+            {"name": "灵力", "source": "energetics"},
+        ]
+    })
+    assert world.power_systems[0].source.value == "protagonist_engine"
+    assert world.power_systems[1].source.value == "energetics"
+
+
+def test_invalid_power_system_source_is_rejected():
+    import pytest
+    with pytest.raises(Exception):
+        World.model_validate({
+            "power_systems": [{"name": "x", "source": "magic"}]
+        })
+
+
+def test_filter_power_systems_by_source_helper():
+    from backend.models.world import filter_power_systems_by_source, PowerSystemSource
+    world_dict = {
+        "power_systems": [
+            {"name": "灵力"},
+            {"name": "天道系统", "source": "protagonist_engine"},
+            {"name": "斗气"},
+        ]
+    }
+    protagonist_only = filter_power_systems_by_source(
+        world_dict, PowerSystemSource.PROTAGONIST_ENGINE
+    )
+    assert [ps["name"] for ps in protagonist_only] == ["天道系统"]

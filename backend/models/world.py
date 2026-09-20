@@ -16,6 +16,11 @@ class CoreRule(BaseModel):
     text: str
 
 
+class PowerSystemSource(str, Enum):
+    ENERGETICS = "energetics"
+    PROTAGONIST_ENGINE = "protagonist_engine"
+
+
 class PowerSystem(BaseModel):
     name: str = ""
     description: str = ""
@@ -23,6 +28,16 @@ class PowerSystem(BaseModel):
     core_rules: list[str] = []
     ceilings: list[str] = []
     cost_system: Optional[str] = None
+    source: PowerSystemSource = PowerSystemSource.ENERGETICS
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_source(cls, data):
+        """Old world.json power_systems[] entries have no source field.
+        Default to energetics (the historical dominant contributor)."""
+        if isinstance(data, dict) and "source" not in data:
+            data = {**data, "source": PowerSystemSource.ENERGETICS.value}
+        return data
 
     @field_validator("stages", mode="before")
     @classmethod
@@ -119,6 +134,22 @@ def iter_power_systems(world: Optional[dict]) -> list[dict]:
     need to address every slot must use `_raw_power_systems_list` instead.
     """
     return [ps for ps in _raw_power_systems_list(world) if any(ps.values())]
+
+
+def filter_power_systems_by_source(
+    world: Optional[dict], source: PowerSystemSource
+) -> list[dict]:
+    """Return the subset of raw power_systems entries whose `source`
+    field equals the given value. Entries without `source` are treated
+    as `energetics` (the migration default).
+
+    Used by the per-source regenerate endpoint (Task 6).
+    """
+    if not isinstance(world, dict):
+        return []
+    raw = _raw_power_systems_list(world)
+    target = source.value
+    return [ps for ps in raw if ps.get("source", "energetics") == target]
 
 
 class World(BaseModel):

@@ -112,6 +112,8 @@ user_prompt_template: |
 
   {user_modifications}
 
+  {faction_only_index}
+
   请生成世界观设定，包含：
   1. 时代背景与地理环境（地理由 ontology + narrative_physics 联合推演）
   2. 当下社会的结构与历史文化（历史断面由 power_structure + narrative_physics 联合推演）

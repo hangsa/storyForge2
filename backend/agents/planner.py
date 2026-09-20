@@ -348,6 +348,7 @@ class PlannerAgent(BaseAgent):
         genre: str = "cool_novel",
         user_modifications: str = "",
         decompose_data: Optional[dict] = None,
+        faction_only_index: str = "",   # 2026-09-20: /regenerate-faction 透传
     ) -> tuple[dict, LLMResponse]:
         """Generate world.json from concept + story_dna + (optional) 5-dimension
         decompose data.
@@ -378,6 +379,7 @@ class PlannerAgent(BaseAgent):
             genre_style_rules=extras["style_rules"],
             genre_trope_patterns=extras["trope_patterns"],
             user_modifications=_build_user_modifications_block(user_modifications),
+            faction_only_index=faction_only_index,
             ontology_units=_format_dimension_units(dd.get("ontology", [])),
             energetics_units=_format_dimension_units(dd.get("energetics", [])),
             power_structure_units=_format_dimension_units(dd.get("power_structure", [])),

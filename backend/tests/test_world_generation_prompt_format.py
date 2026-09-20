@@ -27,6 +27,7 @@ GENERATE_WORLD_KWARGS = {
     "causal_map": "",
     "user_modifications": "",
     "negative_constraints": "",
+    "faction_only_index": "",   # 2026-09-20 新增 (sub-tab 重生单条势力用)
 }
 
 
@@ -37,6 +38,7 @@ def test_world_generation_user_prompt_template_formats_cleanly():
     # Every placeholder is substituted (no {placeholder} residue).
     assert "{ontology_units}" not in formatted
     assert "{narrative_physics_units}" not in formatted
+    assert "{faction_only_index}" not in formatted   # 新增
     # The core_rules example survives format as a JSON-shape hint for the LLM.
     assert '{"category":' in formatted
 

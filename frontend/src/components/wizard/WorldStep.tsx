@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import api, { PowerSystem, World } from "../../api/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import api, { CoreRule, PowerSystem, World } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
 import { RegenerateModal } from "../shared/RegenerateModal";
@@ -69,12 +69,36 @@ function normalizeLegacyWorld(w: World | null): World {
       core_rules: coerceStages(ps.core_rules),
       ceilings: coerceStages(ps.ceilings),
       cost_system: coerceString(ps.cost_system),
+      // 2026-09-20 (修订 F): source 是修订 B2 新加字段 — 老 world.json
+      // 缺失时显式默认 "energetics",让 PowerSystemsPanel 的徽章 / 边框
+      // 分支路径不会因为 undefined 走错分支(energetics = 无徽章,逻辑上
+      // 等价于旧版)。不写入 JSON 是为了保留后端缺省行为,前端不替后端
+      // 做主。
+      source: typeof ps.source === "string" ? ps.source : "energetics",
     }));
+  // 2026-09-20 (修订 F): core_rules 旧版是 string[] — 新 schema 是
+  // `Array<{category, text}>`. 老 world.json 读到后,所有字符串塞进
+  // category="physical" group(物理公理是 4 组里默认承载面最广的)。
+  // 显式保留任何已经是对象形态的项(category 字段缺失时也降级 physical)。
+  const rawCoreRules: unknown[] = Array.isArray(w.core_rules) ? w.core_rules : [];
+  const core_rules: CoreRule[] = rawCoreRules
+    .map((r): CoreRule | null => {
+      if (typeof r === "string") return { category: "physical", text: r };
+      if (r && typeof r === "object") {
+        const obj = r as Record<string, unknown>;
+        const cat = typeof obj["category"] === "string" ? (obj["category"] as string) : "physical";
+        const text = typeof obj["text"] === "string" ? (obj["text"] as string) : "";
+        return { category: cat, text };
+      }
+      return null;
+    })
+    .filter((r): r is CoreRule => r !== null && r.text !== "");
   const next = {
     ...w,
     era_social_structure: coerceString(w.era_social_structure),
     era_cultural_history: coerceString(w.era_cultural_history),
     power_systems,
+    core_rules,
   };
   delete (next as World & { power_system?: unknown }).power_system;
   return next;
@@ -87,6 +111,7 @@ const EMPTY_POWER_SYSTEM: PowerSystem = {
   core_rules: [],
   ceilings: [],
   cost_system: "",
+  source: "energetics",
 };
 
 type FactionField = "name" | "type" | "goal" | "relations";
@@ -627,9 +652,22 @@ function PowerSystemsPanel({
           <div
             key={i}
             data-testid={`world-power-system-${i}`}
-            className="border border-outline-variant rounded p-3 space-y-2 relative"
+            className={
+              "border rounded p-3 space-y-2 relative " +
+              (ps.source === "protagonist_engine"
+                ? "border-primary-container/60 bg-primary-container/5"
+                : "border-outline-variant")
+            }
           >
             <div className="absolute top-2 right-2 flex items-center gap-1">
+              {ps.source === "protagonist_engine" && (
+                <span
+                  data-testid={`world-power-system-${i}-source-badge`}
+                  className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container"
+                >
+                  主角能力
+                </span>
+              )}
               <SectionRegenerateButton
                 target={`力量体系: ${ps.name || `#${i + 1}`}`}
                 onRegenerate={onRegenerateItem(i)}
@@ -711,6 +749,56 @@ function PowerSystemsPanel({
   );
 }
 
+// 2026-09-20 (修订 F): CategoryGroup 是 CoreRulesPanel 内的可折叠 group。
+// 4 个 category group (physical / social / narrative / protagonist) 共享同一
+// 渲染模式:`<details open>` 标题行 + TagEditor 内容。每个 group 独立维护
+// `open` state,首次渲染默认展开。testid 在外层 `<details>` 上,用于单测定位。
+function CategoryGroup({
+  category, label, source, rules, onChange, saving,
+}: {
+  category: string;
+  label: string;
+  source: string;
+  rules: string[];
+  onChange: (texts: string[]) => void;
+  saving: boolean;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <details
+      open={open}
+      data-testid={`world-core-rules-${category}`}
+      className="border border-outline-variant rounded"
+    >
+      <summary
+        onClick={(e) => { e.preventDefault(); setOpen(!open); }}
+        className="cursor-pointer px-3 py-2 flex items-center justify-between hover:bg-surface-container/50"
+      >
+        <span className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-sm">
+            {open ? "expand_less" : "expand_more"}
+          </span>
+          <span className="font-medium text-sm">{label}</span>
+          <span className="font-mono text-[10px] text-primary-container/70">
+            [{source}]
+          </span>
+        </span>
+        <span className="font-mono text-[10px] opacity-70" aria-label={`${rules.length} 条`}>
+          {rules.length}
+        </span>
+      </summary>
+      <div className="px-3 pb-3">
+        <TagEditor items={rules} onItemsChange={onChange} saving={saving} />
+      </div>
+    </details>
+  );
+}
+
+// 2026-09-20 (修订 F): CoreRulesPanel 重构 — 把 list[CoreRule] 按 category 分
+// 成 4 个折叠 group,每个 group 内部是 TagEditor。`setCategory` 通过 filter
+// 保留非当前 category 的项,把当前 category 的新 texts 重新 attach 上,这样
+// 切换 / 删除项不会影响其他 group 的内容。外层 `<div data-testid="world-
+// core-rules">` 保留以向后兼容老单测 (回归保护)。
 function CoreRulesPanel({
   active, world, setWorld, busy,
 }: {
@@ -719,6 +807,30 @@ function CoreRulesPanel({
   setWorld: (w: World) => void;
   busy: boolean;
 }) {
+  const grouped = useMemo(() => {
+    const g: Record<string, string[]> = {
+      physical: [], social: [], narrative: [], protagonist: [],
+    };
+    for (const r of (world.core_rules ?? []) as CoreRule[]) {
+      const cat = r.category ?? "physical";
+      if (!g[cat]) g[cat] = [];
+      g[cat].push(r.text ?? "");
+    }
+    return g;
+  }, [world.core_rules]);
+
+  const setCategory = (cat: string, texts: string[]) => {
+    const others = ((world.core_rules ?? []) as CoreRule[])
+      .filter(r => r.category !== cat);
+    setWorld({
+      ...world,
+      core_rules: [
+        ...others,
+        ...texts.map(t => ({ category: cat, text: t })),
+      ],
+    });
+  };
+
   return (
     <div
       role="tabpanel"
@@ -727,8 +839,15 @@ function CoreRulesPanel({
       hidden={!active}
       data-testid="world-panel-core_rules"
     >
-      <div data-testid="world-core-rules">
-        <TagEditor items={world.core_rules ?? []} onItemsChange={(items) => setWorld({ ...world, core_rules: items })} saving={busy} />
+      <div data-testid="world-core-rules" className="space-y-2">
+        <CategoryGroup category="physical" label="物理公理" source="ontology"
+          rules={grouped.physical} onChange={t => setCategory("physical", t)} saving={busy} />
+        <CategoryGroup category="social" label="结构性瓶颈" source="power_structure"
+          rules={grouped.social} onChange={t => setCategory("social", t)} saving={busy} />
+        <CategoryGroup category="narrative" label="解决路径封闭性" source="narrative_physics"
+          rules={grouped.narrative} onChange={t => setCategory("narrative", t)} saving={busy} />
+        <CategoryGroup category="protagonist" label="主角机制硬约束" source="protagonist_engine"
+          rules={grouped.protagonist} onChange={t => setCategory("protagonist", t)} saving={busy} />
       </div>
     </div>
   );

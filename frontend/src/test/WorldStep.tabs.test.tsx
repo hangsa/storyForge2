@@ -206,4 +206,48 @@ describe("WorldStep tab strip", () => {
     expect(screen.getByTestId("world-tab-factions")).toHaveAttribute("aria-selected", "true");
     expect(document.activeElement).toBe(screen.getByTestId("world-tab-factions"));
   });
+
+  it("CoreRulesPanel renders 4 category groups", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代", geography: "中原",
+      power_systems: [],
+      core_rules: [
+        { category: "physical", text: "灵气存在" },
+        { category: "social", text: "灵脉被垄断" },
+        { category: "narrative", text: "强者受限" },
+        { category: "protagonist", text: "寄体必死" },
+      ],
+      factions: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    // 切到 core_rules tab
+    const coreRulesTab = screen.getByTestId("world-tab-core_rules");
+    fireEvent.click(coreRulesTab);
+    // 4 个 category group 都渲染
+    expect(screen.getByTestId("world-core-rules-physical")).toBeInTheDocument();
+    expect(screen.getByTestId("world-core-rules-social")).toBeInTheDocument();
+    expect(screen.getByTestId("world-core-rules-narrative")).toBeInTheDocument();
+    expect(screen.getByTestId("world-core-rules-protagonist")).toBeInTheDocument();
+  });
+
+  it("PowerSystemsPanel shows source badge on protagonist_engine cards", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代", geography: "中原",
+      power_systems: [
+        { name: "灵力", source: "energetics", description: "", core_rules: [], ceilings: [], stages: [] },
+        { name: "天道系统", source: "protagonist_engine", description: "", core_rules: [], ceilings: [], stages: [] },
+      ],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    const psTab = screen.getByTestId("world-tab-power_system");
+    fireEvent.click(psTab);
+    // 第 0 张卡 (energetics) 没有徽章
+    expect(screen.queryByTestId("world-power-system-0-source-badge")).not.toBeInTheDocument();
+    // 第 1 张卡 (protagonist_engine) 有徽章
+    expect(screen.getByTestId("world-power-system-1-source-badge")).toBeInTheDocument();
+  });
 });

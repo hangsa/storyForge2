@@ -243,6 +243,26 @@ export interface PowerSystem {
   core_rules: string[];
   ceilings: string[];
   cost_system?: string;
+  /**
+   * Distinguishes world-shaping energetics (the LLM-generated magic / qi /
+   * cultivation / martial-arts system) from a "protagonist_engine" — the
+   * hardcoded narrative device that constrains the MC's growth arc (start
+   * with weakness, system-triggered abilities, body-limit, transmigration,
+   * death-and-return, etc.). Absent on legacy projects; wizard treats
+   * undefined as "energetics" for rendering (no accent badge).
+   */
+  source?: string;
+}
+
+/** A single "core rule" entry on the world. 2026-09-20 (修订 F): the schema
+ *  upgraded from `string[]` to `{category, text}[]` so the wizard can group
+ *  rules into 4 collapsible categories (physical / social / narrative /
+ *  protagonist) instead of a flat TagEditor. Legacy `string[]` items still
+ *  pass through `normalizeLegacyWorld` and are coerced into
+ *  `category="physical"` on read. */
+export interface CoreRule {
+  category: "physical" | "social" | "narrative" | "protagonist" | string;
+  text: string;
 }
 
 export interface World {
@@ -258,7 +278,8 @@ export interface World {
    */
   power_systems: PowerSystem[];
   factions: Array<{ name: string; type: string; goal: string; relations: string }>;
-  core_rules: string[];
+  /** Structured world rules, grouped by category. See CoreRule. */
+  core_rules: CoreRule[];
 }
 
 export type GrowthEventType =

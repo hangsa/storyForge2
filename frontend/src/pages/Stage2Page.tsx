@@ -1057,8 +1057,13 @@ export default function Stage2Page() {
                     世界规则
                   </h2>
                   <TagEditor
-                    items={world.core_rules}
-                    onItemsChange={(newItems) => handleArrayChange("core_rules", newItems)}
+                    items={(world.core_rules ?? []).map((r) => r.text)}
+                    onItemsChange={(newItems) =>
+                      handleArrayChange(
+                        "core_rules",
+                        newItems.map((t) => ({ category: "physical", text: t })) as unknown as string[],
+                      )
+                    }
                     saving={saving}
                   />
                 </GlassPanel>

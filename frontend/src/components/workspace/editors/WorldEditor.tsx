@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import api, { PowerSystem, World } from "../../../api/client";
+import api, { CoreRule, PowerSystem, World } from "../../../api/client";
 import { useAutoHeight } from "../../../hooks/useAutoHeight";
 import { useToast } from "../../../hooks/useToast";
 import { AutoTextarea } from "../../shared/AutoTextarea";
@@ -30,7 +30,24 @@ function readWorld(data: unknown): World {
     : raw.power_system && typeof raw.power_system === "object"
       ? [raw.power_system]
       : [];
-  const next = { ...EMPTY_WORLD, ...raw, power_systems };
+  // 2026-09-20 (修订 F): core_rules 旧版 string[],新版 CoreRule[]. 老 world.json
+  // 残留字符串项时升级为 category="physical"(沿用 WorldStep normalizeLegacyWorld
+  // 的兜底语义);已经是 CoreRule 形态的项透传;其他形态(对象但无 category/text)
+  // 静默丢弃。
+  const rawCoreRules = Array.isArray(raw.core_rules) ? raw.core_rules : [];
+  const core_rules: CoreRule[] = rawCoreRules
+    .map((r): CoreRule | null => {
+      if (typeof r === "string") return { category: "physical", text: r };
+      if (r && typeof r === "object") {
+        const obj = r as unknown as Record<string, unknown>;
+        const cat = typeof obj["category"] === "string" ? (obj["category"] as string) : "physical";
+        const text = typeof obj["text"] === "string" ? (obj["text"] as string) : "";
+        return { category: cat, text };
+      }
+      return null;
+    })
+    .filter((r): r is CoreRule => r !== null && r.text !== "");
+  const next = { ...EMPTY_WORLD, ...raw, power_systems, core_rules };
   delete (next as World & { power_system?: unknown }).power_system;
   return next;
 }
@@ -41,6 +58,52 @@ function chipsToString(arr: string[] | undefined): string {
 
 function parseChips(s: string): string[] {
   return s.split(/[、,]/).map((x) => x.trim()).filter(Boolean);
+}
+
+function coreRulesToString(rules: CoreRule[] | undefined): string {
+  // 2026-09-20 (修订 F): workspace 编辑器是单 textarea 入口,无法表达
+  // category 维度。这里把所有 category 拍扁成 text 数组,各 category 间用
+  // 「— cat —」分隔,便于用户识别「下面这堆属于 social」之类的边界感。
+  if (!Array.isArray(rules) || rules.length === 0) return "";
+  const byCat = new Map<string, string[]>();
+  for (const r of rules) {
+    const list = byCat.get(r.category) ?? [];
+    list.push(r.text);
+    byCat.set(r.category, list);
+  }
+  const parts: string[] = [];
+  for (const [cat, texts] of byCat) {
+    if (texts.length > 0) parts.push(`[${cat}] ${texts.join("、")}`);
+  }
+  return parts.join("\n");
+}
+
+/** Parse a multi-line textarea back into CoreRule[].
+ *  - lines starting with "[xxx] ..." set the category for that line
+ *  - lines without a category prefix inherit the most recently seen one
+ *  - blank lines and unrecognized brackets are skipped
+ *  Used to round-trip the workspace editor's flat textarea into the
+ *  structured CoreRule[] schema (修订 F). */
+function stringToCoreRules(s: string): CoreRule[] {
+  const result: CoreRule[] = [];
+  let currentCat = "physical";
+  for (const rawLine of s.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const m = /^\[([a-zA-Z_-]+)\]\s*(.*)$/.exec(line);
+    if (m) {
+      currentCat = m[1];
+      const rest = m[2];
+      for (const t of rest.split(/[、,]/).map(x => x.trim()).filter(Boolean)) {
+        result.push({ category: currentCat, text: t });
+      }
+    } else {
+      for (const t of line.split(/[、,]/).map(x => x.trim()).filter(Boolean)) {
+        result.push({ category: currentCat, text: t });
+      }
+    }
+  }
+  return result;
 }
 
 /**
@@ -78,7 +141,7 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
   useAutoHeight(eraRef, [world.era]);
   useAutoHeight(socialRef, [world.era_social_structure ?? ""]);
   useAutoHeight(culturalRef, [world.era_cultural_history ?? ""]);
-  useAutoHeight(coreRulesRef, [chipsToString(world.core_rules)]);
+  useAutoHeight(coreRulesRef, [coreRulesToString(world.core_rules)]);
 
   useEffect(() => {
     setWorld(readWorld(data));
@@ -221,8 +284,8 @@ export default function WorldEditor({ projectId, data, onSaved, readOnly }: Base
         <textarea
           ref={coreRulesRef}
           data-testid="world-core-rules"
-          value={chipsToString(world.core_rules)}
-          onChange={(e) => setWorld({ ...world, core_rules: parseChips(e.target.value) })}
+          value={coreRulesToString(world.core_rules)}
+          onChange={(e) => setWorld({ ...world, core_rules: stringToCoreRules(e.target.value) })}
           className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container overflow-hidden"
         />
       </div>

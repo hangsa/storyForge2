@@ -1065,8 +1065,66 @@ function FactionsPanel({
   activeSubTab: string;
   onSubTabChange: (key: string) => void;
 }) {
-  // 临时: 把 props 接进来但暂不渲染 sub-tab,避免 TS 报错
-  void projectId; void activeSubTab; void onSubTabChange;
+  const items = world.factions;
+  const wizard = useWizard();
+
+  // 2026-09-20 (Task 9): N=0 → 空态 CTA,直接调 /regenerate-world-section
+  // (section="factions") 让后端生成首批势力。生成完跳到 sub-tab "0",避免
+  // 用户继续停在空态看不到刚生成的内容。
+  if (items.length === 0) {
+    return (
+      <div
+        role="tabpanel"
+        id="world-panel-factions"
+        aria-labelledby="world-tab-factions"
+        hidden={!active}
+        data-testid="world-panel-factions"
+      >
+        <div data-testid="world-faction-empty" className="text-center py-6 space-y-3">
+          <p className="text-sm text-on-surface-variant">还没有势力</p>
+          <button
+            data-testid="world-faction-generate-first"
+            onClick={() => {
+              api
+                .regenerateWorldSection(projectId, "factions", "")
+                .then((result) => {
+                  const merged = normalizeLegacyWorld(result);
+                  setWorld(merged);
+                  wizard.markStepGenerated(wizard.currentStep, { world: merged });
+                  // 跳到第一个新势力
+                  onSubTabChange("0");
+                })
+                .catch((e) =>
+                  wizard.setStatus(
+                    "error",
+                    e instanceof Error ? e.message : "势力生成失败",
+                  ),
+                );
+            }}
+            disabled={busy}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-container text-on-primary-container hover:opacity-90 disabled:opacity-50"
+          >
+            <span aria-hidden="true" className="material-symbols-outlined text-sm">auto_awesome</span>
+            生成首个势力
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // sub-tab ↻ 直接调 /regenerate-faction (Task 3 新增端点),跳过
+  // RegenerateModal,与 PowerSystemsPanel 一致。
+  const subTabs = items.map((f, i) => ({
+    key: String(i),
+    label: stripParenthetical(f.name) || `势力 ${i + 1}`,
+    testidSuffix: String(i),
+  }));
+  // 2026-09-20 (Task 9): 跟 PowerSystemsPanel 一样 clamp idx 到有效范围
+  // (remove 不主动收口 activeSubTab,可能指向已经删除的 slot)。
+  const requestedIdx = parseInt(activeSubTab || "0", 10);
+  const idx = Math.min(Math.max(0, requestedIdx), items.length - 1);
+  const f = items[idx];
+
   return (
     <div
       role="tabpanel"
@@ -1076,67 +1134,85 @@ function FactionsPanel({
       data-testid="world-panel-factions"
       className="space-y-3"
     >
-      <div data-testid="world-factions" className="space-y-3">
-        {world.factions.length === 0 && (
-          <p className="font-body text-body-md text-primary-container/40 text-xs text-center py-3">暂无势力</p>
-        )}
-        {world.factions.map((f, i) => (
-          <div
-            key={i}
-            data-testid={`world-faction-${i}`}
-            className="border border-outline-variant rounded p-3 space-y-2 relative"
+      <SubTabStrip
+        tabs={subTabs}
+        active={activeSubTab || "0"}
+        onChange={onSubTabChange}
+        onRegenerate={(k) => {
+          const i = Number.parseInt(k, 10);
+          if (Number.isNaN(i)) return;
+          api
+            .regenerateFaction(projectId, i, "")
+            .then((result) => {
+              const merged = normalizeLegacyWorld(result);
+              setWorld(merged);
+              wizard.markStepGenerated(wizard.currentStep, { world: merged });
+            })
+            .catch((e) =>
+              wizard.setStatus(
+                "error",
+                e instanceof Error ? e.message : "势力重生成失败",
+              ),
+            );
+        }}
+        testidPrefix="world-tab-factions-subtab"
+        disabled={busy}
+      />
+      <div data-testid={`world-tab-factions-subtab-panel-${activeSubTab || "0"}`}>
+        <div
+          data-testid={`world-faction-${idx}`}
+          className="border border-outline-variant rounded p-3 space-y-2 relative"
+        >
+          <button
+            type="button"
+            data-testid={`world-faction-${idx}-remove`}
+            onClick={() => onRemove(idx)}
+            disabled={busy}
+            aria-label="删除势力"
+            className="absolute top-2 right-2 text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
           >
-            <button
-              type="button"
-              data-testid={`world-faction-${i}-remove`}
-              onClick={() => onRemove(i)}
-              disabled={busy}
-              aria-label="删除势力"
-              className="absolute top-2 right-2 text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
-            >
-              <span className="material-symbols-outlined text-sm">close</span>
-            </button>
-            <div className="grid grid-cols-2 gap-2 pr-6">
-              <div>
-                <label className="block font-mono text-primary-container mb-1 text-[10px]">名称</label>
-                <input
-                  data-testid={`world-faction-${i}-name`}
-                  value={f.name}
-                  onChange={(e) => onUpdateField(i, "name", e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-              <div>
-                <label className="block font-mono text-primary-container mb-1 text-[10px]">类型</label>
-                <input
-                  data-testid={`world-faction-${i}-type`}
-                  value={f.type}
-                  onChange={(e) => onUpdateField(i, "type", e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-                />
-              </div>
-            </div>
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+          <div className="grid grid-cols-2 gap-2 pr-6">
             <div>
-              <label className="block font-mono text-primary-container mb-1 text-[10px]">目标</label>
-              <AutoTextarea
-                data-testid={`world-faction-${i}-goal`}
-                value={f.goal}
-                onChange={(e) => onUpdateField(i, "goal", e.target.value)}
-                rows={2}
-                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">名称</label>
+              <input
+                data-testid={`world-faction-${idx}-name`}
+                value={f.name}
+                onChange={(e) => onUpdateField(idx, "name", e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
               />
             </div>
             <div>
-              <label className="block font-mono text-primary-container mb-1 text-[10px]">关系</label>
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">类型</label>
               <input
-                data-testid={`world-faction-${i}-relations`}
-                value={f.relations}
-                onChange={(e) => onUpdateField(i, "relations", e.target.value)}
+                data-testid={`world-faction-${idx}-type`}
+                value={f.type}
+                onChange={(e) => onUpdateField(idx, "type", e.target.value)}
                 className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
               />
             </div>
           </div>
-        ))}
+          <div>
+            <label className="block font-mono text-primary-container mb-1 text-[10px]">目标</label>
+            <AutoTextarea
+              data-testid={`world-faction-${idx}-goal`}
+              value={f.goal}
+              onChange={(e) => onUpdateField(idx, "goal", e.target.value)}
+              rows={2}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
+            />
+          </div>
+          <div>
+            <label className="block font-mono text-primary-container mb-1 text-[10px]">关系</label>
+            <input
+              data-testid={`world-faction-${idx}-relations`}
+              value={f.relations}
+              onChange={(e) => onUpdateField(idx, "relations", e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+            />
+          </div>
+        </div>
       </div>
       <div className="flex justify-center pt-2">
         <button

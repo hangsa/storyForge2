@@ -224,6 +224,67 @@ describe("WorldStep PowerSystemsPanel sub-tabs", () => {
   });
 });
 
+describe("WorldStep FactionsPanel sub-tabs", () => {
+  it("renders empty-state CTA when factions is empty", async () => {
+    setupWithWorld({
+      era: "", geography: "", era_social_structure: "", era_cultural_history: "",
+      power_systems: [], factions: [], core_rules: [],
+    });
+    await screen.findByTestId("world-tab-factions");
+    fireEvent.click(screen.getByTestId("world-tab-factions"));
+    expect(screen.getByTestId("world-faction-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("world-faction-generate-first")).toBeInTheDocument();
+    expect(screen.queryByTestId("world-tab-factions-subtab-0")).not.toBeInTheDocument();
+  });
+
+  it("renders N sub-tabs by length, title = stripParenthetical(name)", async () => {
+    setupWithWorld({
+      era: "", geography: "", era_social_structure: "", era_cultural_history: "",
+      power_systems: [], core_rules: [],
+      factions: [
+        { name: "天机阁（正派联盟之首）", type: "", goal: "", relations: "" },
+        { name: "血月楼", type: "", goal: "", relations: "" },
+      ],
+    });
+    await screen.findByTestId("world-tab-factions");
+    fireEvent.click(screen.getByTestId("world-tab-factions"));
+    expect(screen.getByTestId("world-tab-factions-subtab-0").textContent).toContain("天机阁");
+    expect(screen.getByTestId("world-tab-factions-subtab-0").textContent).not.toContain("（");
+    expect(screen.getByTestId("world-tab-factions-subtab-1").textContent).toContain("血月楼");
+  });
+
+  it("sub-tab ↻ calls /regenerate-faction with faction_index", async () => {
+    setupWithWorld({
+      era: "", geography: "", era_social_structure: "", era_cultural_history: "",
+      power_systems: [], core_rules: [],
+      factions: [
+        { name: "A", type: "", goal: "", relations: "" },
+        { name: "B", type: "", goal: "", relations: "" },
+      ],
+    });
+    await screen.findByTestId("world-tab-factions");
+    // Mock resolve — without this, api.regenerateFaction returns undefined
+    // and `.then(...)` throws (vitest catches the unhandled error).
+    (api.regenerateFaction as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "", geography: "", era_social_structure: "", era_cultural_history: "",
+      power_systems: [], core_rules: [],
+      factions: [
+        { name: "A", type: "", goal: "", relations: "" },
+        { name: "B (new)", type: "", goal: "", relations: "" },
+      ],
+    });
+    fireEvent.click(screen.getByTestId("world-tab-factions"));
+    fireEvent.click(screen.getByTestId("world-tab-factions-subtab-1-regenerate"));
+    await vi.waitFor(() => {
+      expect(api.regenerateFaction).toHaveBeenCalledWith(
+        expect.any(String),
+        1,
+        "",
+      );
+    });
+  });
+});
+
 describe("WorldStep CoreRulesPanel sub-tabs", () => {
   it("renders sub-tabs only for present categories", async () => {
     setupWithWorld({

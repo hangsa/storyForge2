@@ -368,8 +368,12 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
-    expect(screen.getByTestId("world-factions")).toBeInTheDocument();
-    expect(screen.getByTestId("world-factions").textContent).toContain("暂无势力");
+    // 2026-09-20 (Task 9): factions now lives behind the factions top-level
+    // tab and renders a CTA instead of inline cards.
+    fireEvent.click(screen.getByTestId("world-tab-factions"));
+    expect(screen.getByTestId("world-faction-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("world-faction-empty").textContent).toContain("还没有势力");
+    expect(screen.getByTestId("world-faction-generate-first")).toBeInTheDocument();
   });
 
   it("'添加势力' appends an empty faction card with 4 editable fields", async () => {
@@ -377,20 +381,26 @@ describe("WorldStep", () => {
       era: "古代",
       geography: "中原",
       power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
-      factions: [],
+      // 2026-09-20 (Task 9): empty factions now shows a generate-first CTA
+      // (not inline cards). Pre-seed one faction so the add button is in DOM.
+      factions: [{ name: "现有", type: "", goal: "", relations: "" }],
       core_rules: [],
     });
     setup();
     await screen.findByTestId("world-form");
+    // 2026-09-20 (Task 9): switch to factions tab first so the sub-tab
+    // strip + add button render.
+    fireEvent.click(screen.getByTestId("world-tab-factions"));
     await act(async () => {
       screen.getByTestId("world-faction-add").click();
     });
-    const card = screen.getByTestId("world-faction-0");
+    fireEvent.click(screen.getByTestId("world-tab-factions-subtab-1"));
+    const card = screen.getByTestId("world-faction-1");
     expect(card).toBeInTheDocument();
-    expect(screen.getByTestId("world-faction-0-name")).toBeInTheDocument();
-    expect(screen.getByTestId("world-faction-0-type")).toBeInTheDocument();
-    expect(screen.getByTestId("world-faction-0-goal")).toBeInTheDocument();
-    expect(screen.getByTestId("world-faction-0-relations")).toBeInTheDocument();
+    expect(screen.getByTestId("world-faction-1-name")).toBeInTheDocument();
+    expect(screen.getByTestId("world-faction-1-type")).toBeInTheDocument();
+    expect(screen.getByTestId("world-faction-1-goal")).toBeInTheDocument();
+    expect(screen.getByTestId("world-faction-1-relations")).toBeInTheDocument();
   });
 
   it("typing into faction fields then '确认修改并继续' persists the faction data", async () => {
@@ -398,20 +408,23 @@ describe("WorldStep", () => {
       era: "古代",
       geography: "中原",
       power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
-      factions: [],
+      // 2026-09-20 (Task 9): empty factions → CTA; pre-seed so add flow works.
+      factions: [{ name: "现有", type: "", goal: "", relations: "" }],
       core_rules: [],
     });
     (api.updateWorld as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
     await screen.findByTestId("world-form");
+    fireEvent.click(screen.getByTestId("world-tab-factions"));
     await act(async () => {
       screen.getByTestId("world-faction-add").click();
     });
+    fireEvent.click(screen.getByTestId("world-tab-factions-subtab-1"));
     await act(async () => {
-      fireEvent.change(screen.getByTestId("world-faction-0-name"), { target: { value: "青云宗" } });
-      fireEvent.change(screen.getByTestId("world-faction-0-type"), { target: { value: "修仙门派" } });
-      fireEvent.change(screen.getByTestId("world-faction-0-goal"), { target: { value: "飞升" } });
-      fireEvent.change(screen.getByTestId("world-faction-0-relations"), { target: { value: "与魔道对立" } });
+      fireEvent.change(screen.getByTestId("world-faction-1-name"), { target: { value: "青云宗" } });
+      fireEvent.change(screen.getByTestId("world-faction-1-type"), { target: { value: "修仙门派" } });
+      fireEvent.change(screen.getByTestId("world-faction-1-goal"), { target: { value: "飞升" } });
+      fireEvent.change(screen.getByTestId("world-faction-1-relations"), { target: { value: "与魔道对立" } });
     });
     await act(async () => {
       screen.getByTestId("wizard-next").click();
@@ -419,6 +432,7 @@ describe("WorldStep", () => {
     await waitFor(() => expect(api.updateWorld).toHaveBeenCalledTimes(1));
     const call = (api.updateWorld as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[1].factions).toEqual([
+      { name: "现有", type: "", goal: "", relations: "" },
       { name: "青云宗", type: "修仙门派", goal: "飞升", relations: "与魔道对立" },
     ]);
   });
@@ -436,7 +450,11 @@ describe("WorldStep", () => {
     });
     setup();
     await screen.findByTestId("world-form");
-    expect(screen.getByTestId("world-faction-1")).toBeInTheDocument();
+    // 2026-09-20 (Task 9): faction cards render one-at-a-time behind sub-tabs.
+    // The default sub-tab is 0 — switch to factions tab and click remove on
+    // the active card (slot 0).
+    fireEvent.click(screen.getByTestId("world-tab-factions"));
+    expect(screen.getByTestId("world-faction-0-name")).toHaveValue("A");
     await act(async () => {
       screen.getByTestId("world-faction-0-remove").click();
     });

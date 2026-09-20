@@ -612,6 +612,7 @@ function EraPanel({
   const fieldDef = ERA_FIELDS.find((f) => f.key === field)!;
   // TS 不知道 `field` 是 World 的 key,用 as any 走 codebase 已有模式
   const value = (world as any)[field] ?? "";
+  const wizard = useWizard();
 
   const setValue = (v: string) => setWorld({ ...world, [field]: v });
 
@@ -631,10 +632,15 @@ function EraPanel({
         onRegenerate={(k) => {
           // 直接调 API,跳过 RegenerateModal 二次确认弹窗
           // (sub-tab ↻ 设计意图是即时生效,与顶级 tab ↻ 走 modal 不同)
-          api.regenerateWorldSection(projectId, "era", "", { field: k as any }).then((result: any) => {
-            const next = result?.detail ?? result;
-            if (next) setWorld(normalizeLegacyWorld(next));
-          });
+          api
+            .regenerateWorldSection(projectId, "era", "", { field: k as any })
+            .then((result) => setWorld(normalizeLegacyWorld(result)))
+            .catch((e) =>
+              wizard.setStatus(
+                "error",
+                e instanceof Error ? e.message : "重生成失败",
+              ),
+            );
         }}
         testidPrefix="world-tab-era-subtab"
         disabled={busy}

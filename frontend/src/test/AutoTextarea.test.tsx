@@ -56,11 +56,14 @@ describe("AutoTextarea", () => {
         onChange={() => {}}
       />,
     );
-    expect(refCallback).toHaveBeenCalledTimes(1);
-    const el = refCallback.mock.calls[0][0] as HTMLTextAreaElement;
-    expect(el).not.toBeNull();
-    expect(el.tagName).toBe("TEXTAREA");
-    expect(el.getAttribute("data-testid")).toBe("ta");
+    // Callback refs may be invoked multiple times across renders (the
+    // mount-tick effect causes one re-render). What matters is that the
+    // last call resolves to the actual <textarea> DOM node.
+    expect(refCallback).toHaveBeenCalled();
+    const lastEl = refCallback.mock.calls[refCallback.mock.calls.length - 1][0] as HTMLTextAreaElement;
+    expect(lastEl).not.toBeNull();
+    expect(lastEl.tagName).toBe("TEXTAREA");
+    expect(lastEl.getAttribute("data-testid")).toBe("ta");
   });
 
   it("forwards refs via a ref object", () => {
@@ -85,31 +88,41 @@ describe("AutoTextarea", () => {
     expect((screen.getByTestId("ta") as HTMLTextAreaElement).value).toBe("init");
   });
 
-  it("auto-grows height: sets inline style.height after mount so long content isn't clipped", () => {
-    // jsdom doesn't lay out, so scrollHeight is 0 — but the effect must still
-    // run and set style.height. The presence of an inline style.height is what
-    // distinguishes AutoTextarea from a plain <textarea rows={2}> (which never
-    // sets style.height). Regression test for: OutlineStep volume summary /
-    // milestone desc / plot desc switching from <textarea rows={2}> back to a
-    // fixed-height element, which clipped LLM-generated multi-line content.
+  it("auto-grows height: sets inline style.height from the mirror's scrollHeight", () => {
+    // The 2026-09-20 mirror-element rewrite moved the height source from
+    // <textarea>.scrollHeight to an off-screen <div> mirror's scrollHeight,
+    // because long wrapping Chinese strings (no \n) used to lock
+    // textarea.scrollHeight at minRows height and clip the content.
+    //
+    // jsdom can't lay out either element, so we synthesize a non-zero
+    // scrollHeight on whatever mirror the effect appended to <body>.
     const longContent = "a".repeat(500);
     const { rerender } = render(
       <AutoTextarea data-testid="ta" value="" onChange={() => {}} />,
     );
     const ta = screen.getByTestId("ta") as HTMLTextAreaElement;
+    // Effect ran and wrote *something* to style.height (jsdom scrollHeight = 0).
     expect(ta.style.height).toBe("0px");
+
     rerender(
-      <AutoTextarea data-testid="ta" value={longContent} onChange={() => {}} />,
+      <AutoTextarea data-testid="ta" value={longContent + "x"} onChange={() => {}} />,
     );
-    expect(ta.style.height).toBe("0px");
-    const taWithMockedScroll = screen.getByTestId("ta") as HTMLTextAreaElement;
-    Object.defineProperty(taWithMockedScroll, "scrollHeight", {
+    // Effect re-ran; height is still 0 because mirror.scrollHeight is 0 in
+    // jsdom. The contract this test enforces: the effect ALWAYS runs on
+    // value change. To prove height-tracking works, find the mirror and
+    // mock its scrollHeight, then re-render to confirm the new height
+    // propagates.
+    const mirror = document.body.querySelector(
+      'div[aria-hidden="true"]',
+    ) as HTMLDivElement | null;
+    expect(mirror).not.toBeNull();
+    Object.defineProperty(mirror, "scrollHeight", {
       configurable: true,
       value: 137,
     });
     rerender(
-      <AutoTextarea data-testid="ta" value={longContent + "x"} onChange={() => {}} />,
+      <AutoTextarea data-testid="ta" value={longContent + "xx"} onChange={() => {}} />,
     );
-    expect(taWithMockedScroll.style.height).toBe("137px");
+    expect(ta.style.height).toBe("137px");
   });
 });

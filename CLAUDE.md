@@ -164,15 +164,16 @@ v1.7 single-chapter breakdown: 3× Scene Writing (81K) + 3× Narrative Guard (27
 
 ```bash
 # Backend (port 8000). Reads backend/.env; works without keys but LLM calls fail.
+# --reload-dir limits watch to backend/; --reload-exclude skips tests.
 source venv/bin/activate
-uvicorn backend.main:app --reload --port 8000
+uvicorn backend.main:app --reload --reload-dir backend --reload-exclude 'test_*.py' --port 8000
 
 # Frontend (port 5173). Vite proxies /api → http://localhost:8000.
 cd frontend
 npm run dev
 ```
 
-Open http://localhost:5173. **Important:** do NOT edit backend `.py` files while a cockpit SSE stream is open — `--reload` will hang waiting for the connection to close (kill + restart). See `feedback_worktree_v19.md` / related project memories for known pitfalls.
+Open http://localhost:5173. **Important:** do NOT edit backend `.py` files while a cockpit SSE stream is open — `--reload` will hang waiting for the connection to close (kill + restart). The `--reload-dir backend --reload-exclude 'test_*.py'` flags above prevent reloads when editing docs / claude memory / tests (which would otherwise also hang on any in-flight LLM call). See `feedback_worktree_v19.md` / related project memories for known pitfalls.
 
 ### Run tests
 

@@ -4,7 +4,6 @@ import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
 import { RegenerateModal } from "../shared/RegenerateModal";
 import {
-  SectionRegenerateButton,
   useSectionRegenerate,
 } from "../shared/SectionRegenerateButton";
 import { AutoTextarea } from "../shared/AutoTextarea";
@@ -637,25 +636,29 @@ function EraPanel({
         tabs={ERA_FIELDS.map((f) => ({ key: f.key, label: f.label, testidSuffix: f.testidSuffix }))}
         active={field}
         onChange={onSubTabChange}
-        onRegenerate={(k) => {
-          // 直接调 API,跳过 RegenerateModal 二次确认弹窗
-          // (sub-tab ↻ 设计意图是即时生效,与顶级 tab ↻ 走 modal 不同)
-          api
-            .regenerateWorldSection(projectId, "era", "", { field: k as any })
-            .then((result) => setWorld(normalizeLegacyWorld(result)))
-            .catch((e) =>
-              wizard.setStatus(
-                "error",
-                e instanceof Error ? e.message : "重生成失败",
-              ),
-            );
-        }}
         testidPrefix="world-tab-era-subtab"
-        disabled={busy}
       />
       <div data-testid={`world-tab-era-subtab-panel-${field}`}>
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <label className="block font-mono text-primary-container text-xs pt-1">{fieldDef.label}</label>
+          <SubPanelRegenerateButton
+            testId={`world-tab-era-subtab-panel-${field}-regenerate`}
+            disabled={busy}
+            label={`重新生成 — ${fieldDef.label}`}
+            onClick={() => {
+              api
+                .regenerateWorldSection(projectId, "era", "", { field: field as any })
+                .then((result) => setWorld(normalizeLegacyWorld(result)))
+                .catch((e) =>
+                  wizard.setStatus(
+                    "error",
+                    e instanceof Error ? e.message : "重生成失败",
+                  ),
+                );
+            }}
+          />
+        </div>
         <div>
-          <label className="block font-mono text-primary-container mb-1 text-xs">{fieldDef.label}</label>
           <AutoTextarea
             data-testid={`world-era-${fieldDef.testidSuffix}`}
             value={value}
@@ -745,28 +748,45 @@ function PowerSystemsPanel({
         tabs={subTabs}
         active={activeSubTab || "0"}
         onChange={onSubTabChange}
-        onRegenerate={(k) => {
-          const i = Number.parseInt(k, 10);
-          if (Number.isNaN(i)) return;
-          api
-            .regeneratePowerSystemItem(projectId, i, "")
-            .then((result) => {
-              setWorld(normalizeLegacyWorld(result.world));
-              wizard.markStepGenerated(wizard.currentStep, {
-                world: normalizeLegacyWorld(result.world),
-              });
-            })
-            .catch((e) =>
-              wizard.setStatus(
-                "error",
-                e instanceof Error ? e.message : "体系重新生成失败",
-              ),
-            );
-        }}
         testidPrefix="world-tab-power-system-subtab"
-        disabled={busy}
       />
       <div data-testid={`world-tab-power-system-subtab-panel-${activeSubTab || "0"}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 pt-1">
+            <h3 className="font-display text-sm text-primary">
+              {stripParenthetical(ps.name) || `体系 ${idx + 1}`}
+            </h3>
+            {ps.source === "protagonist_engine" && (
+              <span
+                data-testid={`world-power-system-${idx}-source-badge`}
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container"
+              >
+                主角能力
+              </span>
+            )}
+          </div>
+          <SubPanelRegenerateButton
+            testId={`world-power-system-${idx}-regenerate`}
+            disabled={busy}
+            label={`重新生成 — 力量体系: ${ps.name || `#${idx + 1}`}`}
+            onClick={() => {
+              api
+                .regeneratePowerSystemItem(projectId, idx, "")
+                .then((result) => {
+                  setWorld(normalizeLegacyWorld(result.world));
+                  wizard.markStepGenerated(wizard.currentStep, {
+                    world: normalizeLegacyWorld(result.world),
+                  });
+                })
+                .catch((e) =>
+                  wizard.setStatus(
+                    "error",
+                    e instanceof Error ? e.message : "体系重新生成失败",
+                  ),
+                );
+            }}
+          />
+        </div>
         <div
           data-testid={`world-power-system-${idx}`}
           className={
@@ -776,31 +796,16 @@ function PowerSystemsPanel({
               : "border-outline-variant")
           }
         >
-          <div className="absolute top-2 right-2 flex items-center gap-1">
-            {ps.source === "protagonist_engine" && (
-              <span
-                data-testid={`world-power-system-${idx}-source-badge`}
-                className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container"
-              >
-                主角能力
-              </span>
-            )}
-            <SectionRegenerateButton
-              target={`力量体系: ${ps.name || `#${idx + 1}`}`}
-              onRegenerate={onRegenerateItem(idx)}
-              testId={`world-power-system-${idx}-regenerate`}
-            />
-            <button
-              type="button"
-              data-testid={`world-power-system-${idx}-remove`}
-              onClick={() => onRemove(idx)}
-              disabled={busy}
-              aria-label="删除力量体系"
-              className="text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
-            >
-              <span className="material-symbols-outlined text-sm">close</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            data-testid={`world-power-system-${idx}-remove`}
+            onClick={() => onRemove(idx)}
+            disabled={busy}
+            aria-label="删除力量体系"
+            className="absolute top-2 right-2 text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
+          >
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
           <div className="pr-6">
             <label className="block font-mono text-primary-container mb-1 text-[10px]">体系名称</label>
             <input
@@ -1011,26 +1016,35 @@ function CoreRulesPanel({
         tabs={subTabs}
         active={cat}
         onChange={onSubTabChange}
-        onRegenerate={(k) => {
-          api
-            .regenerateWorldSection(projectId, "core_rules", "", { category: k as any })
-            .then((result) => {
-              setWorld(normalizeLegacyWorld(result));
-              wizard.markStepGenerated(wizard.currentStep, {
-                world: normalizeLegacyWorld(result),
-              });
-            })
-            .catch((e) =>
-              wizard.setStatus(
-                "error",
-                e instanceof Error ? e.message : "核心规则重生成失败",
-              ),
-            );
-        }}
         testidPrefix="world-tab-core-rules-subtab"
-        disabled={busy}
       />
       <div data-testid={`world-tab-core-rules-subtab-panel-${cat}`} className="mt-3 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-display text-sm text-primary pt-1">
+            {CORE_RULE_CATEGORIES.find((c) => c.key === cat)!.label}
+          </h3>
+          <SubPanelRegenerateButton
+            testId={`world-tab-core-rules-subtab-panel-${cat}-regenerate`}
+            disabled={busy}
+            label={`重新生成 — ${CORE_RULE_CATEGORIES.find((c) => c.key === cat)!.label}`}
+            onClick={() => {
+              api
+                .regenerateWorldSection(projectId, "core_rules", "", { category: cat as any })
+                .then((result) => {
+                  setWorld(normalizeLegacyWorld(result));
+                  wizard.markStepGenerated(wizard.currentStep, {
+                    world: normalizeLegacyWorld(result),
+                  });
+                })
+                .catch((e) =>
+                  wizard.setStatus(
+                    "error",
+                    e instanceof Error ? e.message : "核心规则重生成失败",
+                  ),
+                );
+            }}
+          />
+        </div>
         <CategoryGroup
           category={cat}
           label={CORE_RULE_CATEGORIES.find((c) => c.key === cat)!.label}
@@ -1138,27 +1152,34 @@ function FactionsPanel({
         tabs={subTabs}
         active={activeSubTab || "0"}
         onChange={onSubTabChange}
-        onRegenerate={(k) => {
-          const i = Number.parseInt(k, 10);
-          if (Number.isNaN(i)) return;
-          api
-            .regenerateFaction(projectId, i, "")
-            .then((result) => {
-              const merged = normalizeLegacyWorld(result);
-              setWorld(merged);
-              wizard.markStepGenerated(wizard.currentStep, { world: merged });
-            })
-            .catch((e) =>
-              wizard.setStatus(
-                "error",
-                e instanceof Error ? e.message : "势力重生成失败",
-              ),
-            );
-        }}
         testidPrefix="world-tab-factions-subtab"
-        disabled={busy}
       />
       <div data-testid={`world-tab-factions-subtab-panel-${activeSubTab || "0"}`}>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-display text-sm text-primary pt-1">
+            {stripParenthetical(f.name) || `势力 ${idx + 1}`}
+          </h3>
+          <SubPanelRegenerateButton
+            testId={`world-faction-${idx}-regenerate`}
+            disabled={busy}
+            label={`重新生成 — 势力: ${f.name || `#${idx + 1}`}`}
+            onClick={() => {
+              api
+                .regenerateFaction(projectId, idx, "")
+                .then((result) => {
+                  const merged = normalizeLegacyWorld(result);
+                  setWorld(merged);
+                  wizard.markStepGenerated(wizard.currentStep, { world: merged });
+                })
+                .catch((e) =>
+                  wizard.setStatus(
+                    "error",
+                    e instanceof Error ? e.message : "势力重生成失败",
+                  ),
+                );
+            }}
+          />
+        </div>
         <div
           data-testid={`world-faction-${idx}`}
           className="border border-outline-variant rounded p-3 space-y-2 relative"
@@ -1230,20 +1251,20 @@ function FactionsPanel({
   );
 }
 
+// 2026-09-20 调整: ↻ 从 strip 上每个 tab label 后面的小图标,改成在
+// sub-panel 内容顶部右侧。strip 只负责切换,不带 trigger;调用方
+// (EraPanel/CoreRulesPanel/PowerSystemsPanel/FactionsPanel) 在自己的
+// sub-panel 头部右侧画 ↻,testid 用 `{prefix}-panel-{suffix}-regenerate`。
 function SubTabStrip({
   tabs,
   active,
   onChange,
-  onRegenerate,
   testidPrefix,
-  disabled,
 }: {
   tabs: { key: string; label: string; testidSuffix?: string }[];
   active: string;
   onChange: (key: string) => void;
-  onRegenerate?: (key: string) => void;
   testidPrefix: string;
-  disabled?: boolean;
 }) {
   return (
     <div
@@ -1254,7 +1275,6 @@ function SubTabStrip({
       {tabs.map((t) => {
         const isActive = t.key === active;
         const tid = `${testidPrefix}-${t.testidSuffix ?? t.key}`;
-        const isDisabled = !!disabled;
         return (
           <button
             key={t.key}
@@ -1272,32 +1292,6 @@ function SubTabStrip({
             }
           >
             <span>{t.label}</span>
-            {onRegenerate && (
-              <span
-                role="button"
-                aria-label={`重新生成 ${t.label}`}
-                aria-disabled={isDisabled}
-                tabIndex={isDisabled ? -1 : 0}
-                data-testid={`${tid}-regenerate`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!isDisabled) onRegenerate(t.key);
-                }}
-                onKeyDown={(e) => {
-                  if ((e.key === "Enter" || e.key === " ") && !isDisabled) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onRegenerate(t.key);
-                  }
-                }}
-                className={
-                  "ml-1 inline-flex items-center justify-center w-4 h-4 rounded text-on-surface-variant hover:text-primary hover:bg-primary-container/15 " +
-                  (isDisabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer")
-                }
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[12px] leading-none">refresh</span>
-              </span>
-            )}
           </button>
         );
       })}
@@ -1309,3 +1303,33 @@ function SubTabStrip({
 export const __testing__ = {
   SubTabStrip,
 };
+
+// 2026-09-20 调整: sub-panel 顶部右侧的 ↻ 按钮 (instant API call, 走
+// wizard.setStatus 报错误, 不开 RegenerateModal — 与 strip 上旧位置行为一致)。
+// 视觉风格参考 PowerSystemsPanel card 顶部的 SectionRegenerateButton
+// (6x6 rounded, primary-container hover), 但不带 modal。
+function SubPanelRegenerateButton({
+  testId,
+  onClick,
+  disabled,
+  label,
+}: {
+  testId: string;
+  onClick: () => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="inline-flex items-center justify-center h-6 w-6 rounded text-system-log/50 hover:text-primary-container hover:bg-surface-container transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <span aria-hidden="true" className="material-symbols-outlined text-[14px]">refresh</span>
+    </button>
+  );
+}

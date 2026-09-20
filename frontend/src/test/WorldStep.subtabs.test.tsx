@@ -127,7 +127,7 @@ describe("WorldStep EraPanel sub-tabs", () => {
       core_rules: [],
     });
 
-    fireEvent.click(screen.getByTestId("world-tab-era-subtab-era-regenerate"));
+    fireEvent.click(screen.getByTestId("world-tab-era-subtab-panel-era-regenerate"));
     await vi.waitFor(() => {
       expect(api.regenerateWorldSection).toHaveBeenCalledWith(
         expect.any(String),
@@ -195,7 +195,8 @@ describe("WorldStep PowerSystemsPanel sub-tabs", () => {
       },
     });
     fireEvent.click(screen.getByTestId("world-tab-power_system"));
-    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1-regenerate"));
+    fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
+    fireEvent.click(screen.getByTestId("world-power-system-1-regenerate"));
     await vi.waitFor(() => {
       expect(api.regeneratePowerSystemItem).toHaveBeenCalledWith(
         expect.any(String),
@@ -274,7 +275,8 @@ describe("WorldStep FactionsPanel sub-tabs", () => {
       ],
     });
     fireEvent.click(screen.getByTestId("world-tab-factions"));
-    fireEvent.click(screen.getByTestId("world-tab-factions-subtab-1-regenerate"));
+    fireEvent.click(screen.getByTestId("world-tab-factions-subtab-1"));
+    fireEvent.click(screen.getByTestId("world-faction-1-regenerate"));
     await vi.waitFor(() => {
       expect(api.regenerateFaction).toHaveBeenCalledWith(
         expect.any(String),
@@ -338,7 +340,7 @@ describe("WorldStep CoreRulesPanel sub-tabs", () => {
       power_systems: [], factions: [],
       core_rules: [{ category: "physical", text: "new" }],
     });
-    fireEvent.click(screen.getByTestId("world-tab-core-rules-subtab-physical-regenerate"));
+    fireEvent.click(screen.getByTestId("world-tab-core-rules-subtab-panel-physical-regenerate"));
     await vi.waitFor(() => {
       expect(api.regenerateWorldSection).toHaveBeenCalledWith(
         expect.any(String),

@@ -38,49 +38,22 @@ describe("SubTabStrip", () => {
     expect(onChange).toHaveBeenCalledWith("y");
   });
 
-  it("renders ↻ button per tab when onRegenerate is provided", () => {
-    const onRegen = vi.fn();
+  // 2026-09-20 调整: ↻ 从 strip 上每个 tab label 后面的小图标,改到 sub-panel
+  // 顶部右侧。SubTabStrip 自身不再 render ↻ 也不接收 onRegenerate。
+  it("does not render ↻ inside any tab (moved to sub-panel header)", () => {
     render(
       <__testing__.SubTabStrip
-        tabs={[{ key: "1", label: "Item 1" }]}
-        active="1"
-        onChange={() => {}}
-        onRegenerate={onRegen}
-        testidPrefix="r"
-      />,
-    );
-    const regen = screen.getByTestId("r-1-regenerate");
-    expect(regen).toBeInTheDocument();
-    fireEvent.click(regen);
-    expect(onRegen).toHaveBeenCalledWith("1");
-  });
-
-  it("does not render ↻ when onRegenerate is undefined", () => {
-    render(
-      <__testing__.SubTabStrip
-        tabs={[{ key: "1", label: "Item 1" }]}
+        tabs={[
+          { key: "1", label: "Item 1" },
+          { key: "2", label: "Item 2" },
+        ]}
         active="1"
         onChange={() => {}}
         testidPrefix="r"
       />,
     );
     expect(screen.queryByTestId("r-1-regenerate")).not.toBeInTheDocument();
-  });
-
-  it("disables ↻ when disabled=true", () => {
-    render(
-      <__testing__.SubTabStrip
-        tabs={[{ key: "1", label: "Item 1" }]}
-        active="1"
-        onChange={() => {}}
-        onRegenerate={() => {}}
-        testidPrefix="r"
-        disabled
-      />,
-    );
-    const regen = screen.getByTestId("r-1-regenerate");
-    expect(regen.getAttribute("aria-disabled")).toBe("true");
-    expect(regen.getAttribute("tabindex")).toBe("-1");
+    expect(screen.queryByTestId("r-2-regenerate")).not.toBeInTheDocument();
   });
 
   it("uses testidSuffix when provided", () => {
@@ -93,22 +66,5 @@ describe("SubTabStrip", () => {
       />,
     );
     expect(screen.getByTestId("era-social-structure")).toBeInTheDocument();
-  });
-
-  it("does not call onRegenerate when disabled and ↻ is clicked", () => {
-    const onRegen = vi.fn();
-    render(
-      <__testing__.SubTabStrip
-        tabs={[{ key: "1", label: "Item 1" }]}
-        active="1"
-        onChange={() => {}}
-        onRegenerate={onRegen}
-        testidPrefix="r"
-        disabled
-      />,
-    );
-    const regen = screen.getByTestId("r-1-regenerate");
-    fireEvent.click(regen);
-    expect(onRegen).not.toHaveBeenCalled();
   });
 });

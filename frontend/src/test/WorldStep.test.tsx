@@ -558,7 +558,7 @@ describe("WorldStep", () => {
     expect(screen.getByTestId("world-tab-power_system-regenerate")).toBeInTheDocument();
   });
 
-  it("per-card regenerate calls regeneratePowerSystemItem with the right index and mods", async () => {
+  it("per-card regenerate calls regeneratePowerSystemItem with the right index", async () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
@@ -594,17 +594,13 @@ describe("WorldStep", () => {
     await act(async () => {
       screen.getByTestId("world-power-system-1-regenerate").click();
     });
-    // Modal opened by SectionRegenerateButton — type mods and confirm.
-    const textarea = await screen.findByTestId("regenerate-modal") && screen.getByLabelText("修改意见");
-    await act(async () => {
-      fireEvent.change(textarea, { target: { value: "强调肉身极限" } });
-      screen.getByTestId("regenerate-modal-confirm").click();
-    });
+    // 2026-09-20 调整: sub-panel 顶部右侧的 ↻ 是 instant 调用 (与 strip 上旧
+    // 位置行为一致),不带 RegenerateModal,直接调 API with empty mods。
     await waitFor(() =>
       expect(api.regeneratePowerSystemItem).toHaveBeenCalledWith(
         PROJECT,
         1,
-        "强调肉身极限",
+        "",
       ),
     );
   });
@@ -643,9 +639,6 @@ describe("WorldStep", () => {
     fireEvent.click(screen.getByTestId("world-tab-power_system"));
     await act(async () => {
       screen.getByTestId("world-power-system-0-regenerate").click();
-    });
-    await act(async () => {
-      screen.getByTestId("regenerate-modal-confirm").click();
     });
     await waitFor(() => expect(api.regeneratePowerSystemItem).toHaveBeenCalledTimes(1));
     expect((screen.getByTestId("world-power-system-0-name") as HTMLInputElement).value).toBe("灵力（新）");

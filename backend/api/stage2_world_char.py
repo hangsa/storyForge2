@@ -291,6 +291,7 @@ async def generate_character(data: dict):
     )
     try:
         user_modifications = str(data.get("user_modifications", ""))[:1700]
+        decompose_data = _load_decompose_data(project_id)
         result, response = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),
             world=world,
@@ -298,6 +299,7 @@ async def generate_character(data: dict):
             existing_characters=existing_characters,
             genre=genre,
             user_modifications=user_modifications,
+            decompose_data=decompose_data,
         )
     except ValueError as e:
         raise HTTPException(
@@ -521,6 +523,7 @@ async def regenerate_character_examples(
     )
     try:
         user_modifications = str(payload.get("user_modifications", ""))[:1700]
+        decompose_data = _load_decompose_data(project_id)
         result, _resp = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),
             world=world,
@@ -528,6 +531,7 @@ async def regenerate_character_examples(
             existing_characters=[target],
             genre=genre,
             user_modifications=user_modifications,
+            decompose_data=decompose_data,
         )
     except ValueError as e:
         raise http_error(503, "LLM_GENERATION_FAILED", str(e))
@@ -853,6 +857,7 @@ async def regenerate_character_section(
         genre=genre,
     )
     try:
+        decompose_data = _load_decompose_data(project_id)
         result, _resp = await agent.generate_character(
             concept=concept_and_dna.get("concept", {}),
             world=world,
@@ -860,6 +865,7 @@ async def regenerate_character_section(
             existing_characters=[target],
             genre=genre,
             user_modifications=payload.user_modifications,
+            decompose_data=decompose_data,
         )
     except ValueError as e:
         raise http_error(503, "LLM_GENERATION_FAILED", str(e))

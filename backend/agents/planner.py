@@ -449,6 +449,7 @@ class PlannerAgent(BaseAgent):
         existing_characters: Optional[list[dict]] = None,
         genre: str = "cool_novel",
         user_modifications: str = "",
+        decompose_data: Optional[dict] = None,
     ) -> tuple[dict, LLMResponse]:
         concept_context = json.dumps(concept, ensure_ascii=False, indent=2)
 
@@ -491,7 +492,11 @@ class PlannerAgent(BaseAgent):
             existing_section = ""
 
         extras = _resolve_genre_extras(genre)
-        from backend.agents._injection_helpers import _build_user_modifications_block
+        from backend.agents._injection_helpers import (
+            _build_user_modifications_block,
+            _format_dimension_units,
+        )
+        dd = decompose_data or {}
         result, response = await self.generate_from_template(
             "character_generation",
             concept_context=concept_context,
@@ -507,6 +512,11 @@ class PlannerAgent(BaseAgent):
             genre_style_rules=extras["style_rules"],
             genre_trope_patterns=extras["trope_patterns"],
             user_modifications=_build_user_modifications_block(user_modifications),
+            # 2026-09-20: character_generation prompt 引用 protagonist_engine 单元,
+            # 避免与世界观重复生成能力机制。decompose_data 缺省时回退 "（无）"。
+            protagonist_engine_units=_format_dimension_units(
+                dd.get("protagonist_engine", [])
+            ),
         )
         self.log_usage("character_generation", response)
         return result, response

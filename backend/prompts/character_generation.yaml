@@ -37,6 +37,18 @@ system_prompt: |
 
   {negative_constraints}
 
+  【protagonist_engine 单元参考】（避免与世界观重复生成能力机制）:
+  {protagonist_engine_units}
+
+  角色卡的"能力机制"应只描述:
+  1. 主角对外伪装/限制机制（不在世界层）
+  2. 输出表象（如何使用能力，不在世界层）
+  3. 能力的输入触发条件在主角身上的具体表现（可与世界观规则一致，作为引用）
+
+  不得重新定义:
+  - 世界观层已经记录的 power_systems[] 体系内部规则
+  - core_rules[].protagonist category 中已经存在的硬约束
+
 user_prompt_template: |
   故事概念：
   {concept_context}

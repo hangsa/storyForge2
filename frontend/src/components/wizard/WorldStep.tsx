@@ -88,11 +88,30 @@ const EMPTY_POWER_SYSTEM: PowerSystem = {
 
 type FactionField = "name" | "type" | "goal" | "relations";
 
+// 2026-09-20: WorldStep 改为 sticky 横条 tab + 4 个 panel 的布局(对齐 S2 的
+// dimension-tabs 模式)。activeKey 决定哪个 panel 真正可见,非激活 panel 用
+// `hidden` 隐藏(保留 DOM + 所有 testid,便于单测零侵入)。
+const WORLD_TABS = [
+  { key: "era", label: "时代与地理", icon: "landscape" },
+  { key: "power_system", label: "力量体系", icon: "bolt" },
+  { key: "core_rules", label: "世界规则", icon: "rule" },
+  { key: "factions", label: "势力分布", icon: "groups" },
+] as const;
+type WorldTabKey = (typeof WORLD_TABS)[number]["key"];
+
+const TAB_COUNT: Record<WorldTabKey, (w: World) => number> = {
+  era: () => 4,
+  power_system: (w) => w.power_systems.length,
+  core_rules: (w) => w.core_rules.length,
+  factions: (w) => w.factions.length,
+};
+
 export default function WorldStep({ projectId }: WorldStepProps) {
   const wizard = useWizard();
   const [world, setWorld] = useState<World>(normalizeLegacyWorld(wizard.data.world));
   const [busy, setBusy] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [activeKey, setActiveKey] = useState<WorldTabKey>("era");
   // Mirror the latest `world` and `busy` so handlers registered in the
   // modal footer (with limited deps) always read fresh values, not the
   // snapshot from when the useEffect last ran.
@@ -100,6 +119,17 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   worldRef.current = world;
   const busyRef = useRef(busy);
   busyRef.current = busy;
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    // Task 2 补充完整焦点管理;此处先实现最基本的 ← / → 切换。
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const idx = WORLD_TABS.findIndex((t) => t.key === activeKey);
+    const nextIdx = e.key === "ArrowRight"
+      ? (idx + 1) % WORLD_TABS.length
+      : (idx - 1 + WORLD_TABS.length) % WORLD_TABS.length;
+    setActiveKey(WORLD_TABS[nextIdx].key);
+  };
 
   const handleStart = async (userModifications: string = "") => {
     wizard.startStep(wizard.currentStep);
@@ -303,286 +333,44 @@ export default function WorldStep({ projectId }: WorldStepProps) {
 
       {(wizard.status === "completed" || wizard.data.world) && (
         <div data-testid="world-form" className="space-y-4">
-          {/* 时代与地理 */}
-          <div className="border border-outline-variant rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">时代与地理</div>
-              <SectionRegenerateButton
-                target="时代与地理"
-                onRegenerate={handleSectionRegenerate("era")}
-                testId="world-era-regenerate"
-              />
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block font-mono text-primary-container mb-1 text-xs">时代背景</label>
-                <AutoTextarea
-                  value={world.era}
-                  onChange={(e) => setWorld({ ...world, era: e.target.value })}
-                  rows={2}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-                />
-              </div>
-              <div>
-                <label className="block font-mono text-primary-container mb-1 text-xs">地理环境</label>
-                <AutoTextarea
-                  value={world.geography}
-                  onChange={(e) => setWorld({ ...world, geography: e.target.value })}
-                  rows={2}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-                />
-              </div>
-              <div>
-                <label className="block font-mono text-primary-container mb-1 text-xs">
-                  社会结构 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
-                </label>
-                <AutoTextarea
-                  data-testid="world-era-social-structure"
-                  value={world.era_social_structure ?? ""}
-                  onChange={(e) => setWorld({ ...world, era_social_structure: e.target.value })}
-                  rows={2}
-                  className="w-full bg-surface-container border border-primary-container/40 rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-                />
-              </div>
-              <div>
-                <label className="block font-mono text-primary-container mb-1 text-xs">
-                  历史文化 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
-                </label>
-                <AutoTextarea
-                  data-testid="world-era-cultural-history"
-                  value={world.era_cultural_history ?? ""}
-                  onChange={(e) => setWorld({ ...world, era_cultural_history: e.target.value })}
-                  rows={2}
-                  className="w-full bg-surface-container border border-primary-container/40 rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-                />
-              </div>
-            </div>
-          </div>
+          <WorldTabs
+            activeKey={activeKey}
+            counts={{
+              era: TAB_COUNT.era(world),
+              power_system: TAB_COUNT.power_system(world),
+              core_rules: TAB_COUNT.core_rules(world),
+              factions: TAB_COUNT.factions(world),
+            }}
+            regenerateDisabled={busy}
+            onTabChange={setActiveKey}
+            onRegenerateEra={handleSectionRegenerate("era")}
+            onRegeneratePowerSystem={handleSectionRegenerate("power_system")}
+            onRegenerateCoreRules={handleSectionRegenerate("core_rules")}
+            onRegenerateFactions={handleSectionRegenerate("factions")}
+            onTabKeyDown={handleTabKeyDown}
+          />
 
-          {/* 力量体系 */}
-          <div className="border border-outline-variant rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">力量体系</div>
-              <div className="flex items-center gap-1">
-                <SectionRegenerateButton
-                  target="力量体系"
-                  onRegenerate={handleSectionRegenerate("power_system")}
-                  testId="world-power-system-regenerate"
-                />
-                <button
-                  type="button"
-                  data-testid="world-power-system-add"
-                  onClick={addPowerSystem}
-                  disabled={busy}
-                  className="flex items-center gap-1 px-2 py-1 text-xs border border-dashed
-                             border-system-log/30 rounded text-primary-container/60
-                             hover:text-primary-container hover:border-primary-container/50
-                             transition-colors disabled:opacity-30"
-                >
-                  <span className="material-symbols-outlined text-xs">add</span>
-                  添加体系
-                </button>
-              </div>
-            </div>
-            <div data-testid="world-power-systems" className="space-y-3">
-              {world.power_systems.length === 0 && (
-                <p className="font-body text-body-md text-primary-container/40 text-xs text-center py-3">暂无力量体系</p>
-              )}
-              {world.power_systems.map((ps, i) => (
-                <div
-                  key={i}
-                  data-testid={`world-power-system-${i}`}
-                  className="border border-outline-variant rounded p-3 space-y-2 relative"
-                >
-                  <div className="absolute top-2 right-2 flex items-center gap-1">
-                    <SectionRegenerateButton
-                      target={`力量体系: ${ps.name || `#${i + 1}`}`}
-                      onRegenerate={handleItemRegenerate(i)}
-                      testId={`world-power-system-${i}-regenerate`}
-                    />
-                    <button
-                      type="button"
-                      data-testid={`world-power-system-${i}-remove`}
-                      onClick={() => removePowerSystem(i)}
-                      disabled={busy}
-                      aria-label="删除力量体系"
-                      className="text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
-                    >
-                      <span className="material-symbols-outlined text-sm">close</span>
-                    </button>
-                  </div>
-                  <div className="pr-6">
-                    <label className="block font-mono text-primary-container mb-1 text-[10px]">体系名称</label>
-                    <input
-                      data-testid={`world-power-system-${i}-name`}
-                      value={ps.name}
-                      onChange={(e) => updatePowerSystem(i, "name", e.target.value)}
-                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-mono text-primary-container mb-1 text-[10px]">描述</label>
-                    <AutoTextarea
-                      data-testid={`world-power-system-${i}-description`}
-                      value={ps.description}
-                      onChange={(e) => updatePowerSystem(i, "description", e.target.value)}
-                      rows={2}
-                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-mono text-primary-container mb-1 text-[10px]">阶段划分</label>
-                    <div data-testid={`world-power-system-${i}-stages`}>
-                      <TagEditor
-                        items={ps.stages ?? []}
-                        onItemsChange={(items) => updatePowerSystem(i, "stages", items)}
-                        saving={busy}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-mono text-primary-container mb-1 text-[10px]">体系规则</label>
-                    <div data-testid={`world-power-system-${i}-rules`}>
-                      <TagEditor
-                        items={ps.core_rules ?? []}
-                        onItemsChange={(items) => updatePowerSystem(i, "core_rules", items)}
-                        saving={busy}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-mono text-primary-container mb-1 text-[10px]">力量上限</label>
-                    <div data-testid={`world-power-system-${i}-ceilings`}>
-                      <TagEditor
-                        items={ps.ceilings ?? []}
-                        onItemsChange={(items) => updatePowerSystem(i, "ceilings", items)}
-                        saving={busy}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-mono text-primary-container mb-1 text-[10px]">代价系统</label>
-                    <input
-                      data-testid={`world-power-system-${i}-cost`}
-                      value={ps.cost_system ?? ""}
-                      onChange={(e) => updatePowerSystem(i, "cost_system", e.target.value)}
-                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 世界规则 */}
-          <div className="border border-outline-variant rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">世界规则</div>
-              <SectionRegenerateButton
-                target="世界规则"
-                onRegenerate={handleSectionRegenerate("core_rules")}
-                testId="world-core-rules-regenerate"
-              />
-            </div>
-            <div data-testid="world-core-rules">
-              <TagEditor
-                items={world.core_rules ?? []}
-                onItemsChange={(items) => setWorld({ ...world, core_rules: items })}
-                saving={busy}
-              />
-            </div>
-          </div>
-
-          {/* 势力分布 */}
-          <div className="border border-outline-variant rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">势力分布</div>
-              <div className="flex items-center gap-1">
-                <SectionRegenerateButton
-                  target="势力分布"
-                  onRegenerate={handleSectionRegenerate("factions")}
-                  testId="world-factions-regenerate"
-                />
-                <button
-                  type="button"
-                  data-testid="world-faction-add"
-                  onClick={addFaction}
-                  disabled={busy}
-                  className="flex items-center gap-1 px-2 py-1 text-xs border border-dashed
-                             border-system-log/30 rounded text-primary-container/60
-                             hover:text-primary-container hover:border-primary-container/50
-                             transition-colors disabled:opacity-30"
-                >
-                  <span className="material-symbols-outlined text-xs">add</span>
-                  添加势力
-                </button>
-              </div>
-            </div>
-            <div data-testid="world-factions" className="space-y-3">
-              {world.factions.length === 0 && (
-                <p className="font-body text-body-md text-primary-container/40 text-xs text-center py-3">暂无势力</p>
-              )}
-              {world.factions.map((f, i) => (
-                <div
-                  key={i}
-                  data-testid={`world-faction-${i}`}
-                  className="border border-outline-variant rounded p-3 space-y-2 relative"
-                >
-                  <button
-                    type="button"
-                    data-testid={`world-faction-${i}-remove`}
-                    onClick={() => removeFaction(i)}
-                    disabled={busy}
-                    aria-label="删除势力"
-                    className="absolute top-2 right-2 text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                  <div className="grid grid-cols-2 gap-2 pr-6">
-                    <div>
-                      <label className="block font-mono text-primary-container mb-1 text-[10px]">名称</label>
-                      <input
-                        data-testid={`world-faction-${i}-name`}
-                        value={f.name}
-                        onChange={(e) => updateFaction(i, "name", e.target.value)}
-                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-mono text-primary-container mb-1 text-[10px]">类型</label>
-                      <input
-                        data-testid={`world-faction-${i}-type`}
-                        value={f.type}
-                        onChange={(e) => updateFaction(i, "type", e.target.value)}
-                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-mono text-primary-container mb-1 text-[10px]">目标</label>
-                    <AutoTextarea
-                      data-testid={`world-faction-${i}-goal`}
-                      value={f.goal}
-                      onChange={(e) => updateFaction(i, "goal", e.target.value)}
-                      rows={2}
-                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-mono text-primary-container mb-1 text-[10px]">关系</label>
-                    <input
-                      data-testid={`world-faction-${i}-relations`}
-                      value={f.relations}
-                      onChange={(e) => updateFaction(i, "relations", e.target.value)}
-                      className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 重新生成 / 确认修改并继续 buttons moved to modal footer (see useEffect above). */}
+          <EraPanel active={activeKey === "era"} world={world} setWorld={setWorld} busy={busy} />
+          <PowerSystemsPanel
+            active={activeKey === "power_system"}
+            world={world}
+            setWorld={setWorld}
+            busy={busy}
+            onAdd={addPowerSystem}
+            onUpdateField={updatePowerSystem}
+            onRemove={removePowerSystem}
+            onRegenerateItem={(i) => handleItemRegenerate(i)}
+          />
+          <CoreRulesPanel active={activeKey === "core_rules"} world={world} setWorld={setWorld} busy={busy} />
+          <FactionsPanel
+            active={activeKey === "factions"}
+            world={world}
+            setWorld={setWorld}
+            busy={busy}
+            onAdd={addFaction}
+            onUpdateField={updateFaction}
+            onRemove={removeFaction}
+          />
         </div>
       )}
 
@@ -595,6 +383,398 @@ export default function WorldStep({ projectId }: WorldStepProps) {
         }}
         onCancel={() => setShowRegenerateModal(false)}
       />
+    </div>
+  );
+}
+
+// ===========================================================================
+// 2026-09-20: tab + panel 子组件。
+// - WorldTabs    sticky 横条,4 个 tab + 各自的 SectionRegenerateButton
+// - EraPanel     时代 + 地理 + 2 个新增字段 (固定 4 个)
+// - PowerSystemsPanel  力量体系卡片数组 + 添加按钮
+// - CoreRulesPanel     世界规则 TagEditor
+// - FactionsPanel      势力卡片数组 + 添加按钮
+// 五个组件都是 file-internal,只给 WorldStep 主组件使用。
+// ===========================================================================
+
+function WorldTabs({
+  activeKey, counts, regenerateDisabled, onTabChange,
+  onRegenerateEra, onRegeneratePowerSystem, onRegenerateCoreRules, onRegenerateFactions,
+  onTabKeyDown,
+}: {
+  activeKey: WorldTabKey;
+  counts: Record<WorldTabKey, number>;
+  regenerateDisabled: boolean;
+  onTabChange: (key: WorldTabKey) => void;
+  onRegenerateEra: (mods: string) => Promise<void>;
+  onRegeneratePowerSystem: (mods: string) => Promise<void>;
+  onRegenerateCoreRules: (mods: string) => Promise<void>;
+  onRegenerateFactions: (mods: string) => Promise<void>;
+  onTabKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
+}) {
+  // 每个 tab 都内嵌一个 SectionRegenerateButton — 它自己管理 RegenerateModal
+  // + wizard footer status badge 的报告,跟原先 section header 行为一致。
+  // 之所以不用 `span role="button"` 是因为还要走 modal → confirm 流程,SectionRegenerateButton
+  // 已经封装好了。tab 按钮本身是单 <button>,SectionRegenerateButton 是它的兄弟节点
+  // (而不是子节点),保持语义化 HTML。
+  const regenFor: Record<WorldTabKey, { label: string; handler: (mods: string) => Promise<void>; testId: string }> = {
+    era: { label: "时代与地理", handler: onRegenerateEra, testId: "world-tab-era-regenerate" },
+    power_system: { label: "力量体系", handler: onRegeneratePowerSystem, testId: "world-tab-power_system-regenerate" },
+    core_rules: { label: "世界规则", handler: onRegenerateCoreRules, testId: "world-tab-core_rules-regenerate" },
+    factions: { label: "势力分布", handler: onRegenerateFactions, testId: "world-tab-factions-regenerate" },
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label="世界观分区"
+      data-testid="world-tabs"
+      className="sticky top-0 z-10 -mx-6 px-6 bg-surface-container-low/95 backdrop-blur-sm flex gap-1 border-b border-outline-variant overflow-x-auto"
+    >
+      {WORLD_TABS.map(({ key, label, icon }) => {
+        const isActive = activeKey === key;
+        const regen = regenFor[key];
+        return (
+          <span
+            key={key}
+            className={
+              "shrink-0 inline-flex items-center border-b-2 -mb-px " +
+              (isActive
+                ? "border-primary"
+                : "border-transparent")
+            }
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`world-panel-${key}`}
+              data-testid={`world-tab-${key}`}
+              onClick={() => onTabChange(key)}
+              onKeyDown={onTabKeyDown}
+              className={
+                "px-3 py-2 text-sm font-display font-medium flex items-center gap-2 transition-colors outline-none focus-visible:ring-2 ring-primary-container " +
+                (isActive
+                  ? "text-primary"
+                  : "text-on-surface-variant hover:text-primary")
+              }
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-base leading-none">{icon}</span>
+              <span>{label}</span>
+              <span className="font-mono text-[10px] opacity-70" aria-label={`${counts[key]} 个`}>
+                {counts[key]}
+              </span>
+            </button>
+            <SectionRegenerateButton
+              target={regen.label}
+              onRegenerate={regen.handler}
+              disabled={regenerateDisabled}
+              testId={regen.testId}
+            />
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function EraPanel({
+  active, world, setWorld, busy,
+}: {
+  active: boolean;
+  world: World;
+  setWorld: (w: World) => void;
+  busy: boolean;
+}) {
+  return (
+    <div
+      role="tabpanel"
+      id="world-panel-era"
+      aria-labelledby="world-tab-era"
+      hidden={!active}
+      data-testid="world-panel-era"
+      className="space-y-3"
+    >
+      <div>
+        <label className="block font-mono text-primary-container mb-1 text-xs">时代背景</label>
+        <AutoTextarea
+          value={world.era}
+          onChange={(e) => setWorld({ ...world, era: e.target.value })}
+          rows={2}
+          disabled={busy}
+          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+        />
+      </div>
+      <div>
+        <label className="block font-mono text-primary-container mb-1 text-xs">地理环境</label>
+        <AutoTextarea
+          value={world.geography}
+          onChange={(e) => setWorld({ ...world, geography: e.target.value })}
+          rows={2}
+          disabled={busy}
+          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+        />
+      </div>
+      <div>
+        <label className="block font-mono text-primary-container mb-1 text-xs">
+          社会结构 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
+        </label>
+        <AutoTextarea
+          data-testid="world-era-social-structure"
+          value={world.era_social_structure ?? ""}
+          onChange={(e) => setWorld({ ...world, era_social_structure: e.target.value })}
+          rows={2}
+          disabled={busy}
+          className="w-full bg-surface-container border border-primary-container/40 rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+        />
+      </div>
+      <div>
+        <label className="block font-mono text-primary-container mb-1 text-xs">
+          历史文化 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
+        </label>
+        <AutoTextarea
+          data-testid="world-era-cultural-history"
+          value={world.era_cultural_history ?? ""}
+          onChange={(e) => setWorld({ ...world, era_cultural_history: e.target.value })}
+          rows={2}
+          disabled={busy}
+          className="w-full bg-surface-container border border-primary-container/40 rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+        />
+      </div>
+    </div>
+  );
+}
+
+function PowerSystemsPanel({
+  active, world, setWorld, busy, onAdd, onUpdateField, onRemove, onRegenerateItem,
+}: {
+  active: boolean;
+  world: World;
+  setWorld: (w: World) => void;
+  busy: boolean;
+  onAdd: () => void;
+  onUpdateField: <K extends keyof PowerSystem>(index: number, key: K, value: PowerSystem[K]) => void;
+  onRemove: (index: number) => void;
+  onRegenerateItem: (index: number) => (mods: string) => Promise<void>;
+}) {
+  return (
+    <div
+      role="tabpanel"
+      id="world-panel-power_system"
+      aria-labelledby="world-tab-power_system"
+      hidden={!active}
+      data-testid="world-panel-power_system"
+      className="space-y-3"
+    >
+      <div data-testid="world-power-systems" className="space-y-3">
+        {world.power_systems.length === 0 && (
+          <p className="font-body text-body-md text-primary-container/40 text-xs text-center py-3">暂无力量体系</p>
+        )}
+        {world.power_systems.map((ps, i) => (
+          <div
+            key={i}
+            data-testid={`world-power-system-${i}`}
+            className="border border-outline-variant rounded p-3 space-y-2 relative"
+          >
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+              <SectionRegenerateButton
+                target={`力量体系: ${ps.name || `#${i + 1}`}`}
+                onRegenerate={onRegenerateItem(i)}
+                testId={`world-power-system-${i}-regenerate`}
+              />
+              <button
+                type="button"
+                data-testid={`world-power-system-${i}-remove`}
+                onClick={() => onRemove(i)}
+                disabled={busy}
+                aria-label="删除力量体系"
+                className="text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
+              >
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+            <div className="pr-6">
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">体系名称</label>
+              <input
+                data-testid={`world-power-system-${i}-name`}
+                value={ps.name}
+                onChange={(e) => onUpdateField(i, "name", e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+            <div>
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">描述</label>
+              <AutoTextarea
+                data-testid={`world-power-system-${i}-description`}
+                value={ps.description}
+                onChange={(e) => onUpdateField(i, "description", e.target.value)}
+                rows={2}
+                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
+              />
+            </div>
+            <div>
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">阶段划分</label>
+              <div data-testid={`world-power-system-${i}-stages`}>
+                <TagEditor items={ps.stages ?? []} onItemsChange={(items) => onUpdateField(i, "stages", items)} saving={busy} />
+              </div>
+            </div>
+            <div>
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">体系规则</label>
+              <div data-testid={`world-power-system-${i}-rules`}>
+                <TagEditor items={ps.core_rules ?? []} onItemsChange={(items) => onUpdateField(i, "core_rules", items)} saving={busy} />
+              </div>
+            </div>
+            <div>
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">力量上限</label>
+              <div data-testid={`world-power-system-${i}-ceilings`}>
+                <TagEditor items={ps.ceilings ?? []} onItemsChange={(items) => onUpdateField(i, "ceilings", items)} saving={busy} />
+              </div>
+            </div>
+            <div>
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">代价系统</label>
+              <input
+                data-testid={`world-power-system-${i}-cost`}
+                value={ps.cost_system ?? ""}
+                onChange={(e) => onUpdateField(i, "cost_system", e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-center pt-2">
+        <button
+          type="button"
+          data-testid="world-power-system-add"
+          onClick={onAdd}
+          disabled={busy}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs border border-dashed border-system-log/30 rounded text-primary-container/60 hover:text-primary-container hover:border-primary-container/50 transition-colors disabled:opacity-30"
+        >
+          <span className="material-symbols-outlined text-xs">add</span>
+          添加体系
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CoreRulesPanel({
+  active, world, setWorld, busy,
+}: {
+  active: boolean;
+  world: World;
+  setWorld: (w: World) => void;
+  busy: boolean;
+}) {
+  return (
+    <div
+      role="tabpanel"
+      id="world-panel-core_rules"
+      aria-labelledby="world-tab-core_rules"
+      hidden={!active}
+      data-testid="world-panel-core_rules"
+    >
+      <div data-testid="world-core-rules">
+        <TagEditor items={world.core_rules ?? []} onItemsChange={(items) => setWorld({ ...world, core_rules: items })} saving={busy} />
+      </div>
+    </div>
+  );
+}
+
+function FactionsPanel({
+  active, world, setWorld, busy, onAdd, onUpdateField, onRemove,
+}: {
+  active: boolean;
+  world: World;
+  setWorld: (w: World) => void;
+  busy: boolean;
+  onAdd: () => void;
+  onUpdateField: (index: number, field: FactionField, value: string) => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div
+      role="tabpanel"
+      id="world-panel-factions"
+      aria-labelledby="world-tab-factions"
+      hidden={!active}
+      data-testid="world-panel-factions"
+      className="space-y-3"
+    >
+      <div data-testid="world-factions" className="space-y-3">
+        {world.factions.length === 0 && (
+          <p className="font-body text-body-md text-primary-container/40 text-xs text-center py-3">暂无势力</p>
+        )}
+        {world.factions.map((f, i) => (
+          <div
+            key={i}
+            data-testid={`world-faction-${i}`}
+            className="border border-outline-variant rounded p-3 space-y-2 relative"
+          >
+            <button
+              type="button"
+              data-testid={`world-faction-${i}-remove`}
+              onClick={() => onRemove(i)}
+              disabled={busy}
+              aria-label="删除势力"
+              className="absolute top-2 right-2 text-primary-container/40 hover:text-error transition-colors disabled:opacity-30"
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+            </button>
+            <div className="grid grid-cols-2 gap-2 pr-6">
+              <div>
+                <label className="block font-mono text-primary-container mb-1 text-[10px]">名称</label>
+                <input
+                  data-testid={`world-faction-${i}-name`}
+                  value={f.name}
+                  onChange={(e) => onUpdateField(i, "name", e.target.value)}
+                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-primary-container mb-1 text-[10px]">类型</label>
+                <input
+                  data-testid={`world-faction-${i}-type`}
+                  value={f.type}
+                  onChange={(e) => onUpdateField(i, "type", e.target.value)}
+                  className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">目标</label>
+              <AutoTextarea
+                data-testid={`world-faction-${i}-goal`}
+                value={f.goal}
+                onChange={(e) => onUpdateField(i, "goal", e.target.value)}
+                rows={2}
+                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container resize-y"
+              />
+            </div>
+            <div>
+              <label className="block font-mono text-primary-container mb-1 text-[10px]">关系</label>
+              <input
+                data-testid={`world-faction-${i}-relations`}
+                value={f.relations}
+                onChange={(e) => onUpdateField(i, "relations", e.target.value)}
+                className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-primary-container"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-center pt-2">
+        <button
+          type="button"
+          data-testid="world-faction-add"
+          onClick={onAdd}
+          disabled={busy}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs border border-dashed border-system-log/30 rounded text-primary-container/60 hover:text-primary-container hover:border-primary-container/50 transition-colors disabled:opacity-30"
+        >
+          <span className="material-symbols-outlined text-xs">add</span>
+          添加势力
+        </button>
+      </div>
     </div>
   );
 }

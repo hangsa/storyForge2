@@ -515,24 +515,24 @@ describe("InitWizardModal", () => {
   // 图标行为不变。
   // ===========================================================================
 
-  it("world-step renders 4 section regenerate icons (era, power_system, core_rules, factions)", async () => {
+  it("world-step renders 4 tab regenerate icons (era, power_system, core_rules, factions)", async () => {
     seedFiles({ world: WORLD_FIXTURE });
     seedStep(2, [1]);
 
     renderModal();
     await waitFor(() => screen.getByTestId("world-form"));
-    expect(screen.getByTestId("world-era-regenerate")).toBeInTheDocument();
-    expect(screen.getByTestId("world-power-system-regenerate")).toBeInTheDocument();
-    expect(screen.getByTestId("world-core-rules-regenerate")).toBeInTheDocument();
-    expect(screen.getByTestId("world-factions-regenerate")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-era-regenerate")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-power_system-regenerate")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-core_rules-regenerate")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-factions-regenerate")).toBeInTheDocument();
   });
 
-  it("clicking world-power-system-regenerate + confirm calls regenerateWorldSection", async () => {
+  it("clicking world-tab-power_system-regenerate + confirm calls regenerateWorldSection", async () => {
     seedFiles({ world: WORLD_FIXTURE });
     seedStep(2, [1]);
 
     renderModal();
-    const psBtn = await screen.findByTestId("world-power-system-regenerate");
+    const psBtn = await screen.findByTestId("world-tab-power_system-regenerate");
     await act(async () => {
       psBtn.click();
     });
@@ -749,7 +749,7 @@ describe("InitWizardModal footer 保存修改 button", () => {
       renderOnWorld();
       await screen.findByTestId("world-form");
       await act(async () => {
-        screen.getByTestId("world-era-regenerate").click();
+        screen.getByTestId("world-tab-era-regenerate").click();
       });
       await screen.findByTestId("regenerate-modal");
       await act(async () => {
@@ -771,7 +771,7 @@ describe("InitWizardModal footer 保存修改 button", () => {
       renderOnWorld();
       await screen.findByTestId("world-form");
       await act(async () => {
-        screen.getByTestId("world-era-regenerate").click();
+        screen.getByTestId("world-tab-era-regenerate").click();
       });
       await screen.findByTestId("regenerate-modal");
       await act(async () => {
@@ -790,7 +790,7 @@ describe("InitWizardModal footer 保存修改 button", () => {
       renderOnWorld();
       await screen.findByTestId("world-form");
       await act(async () => {
-        screen.getByTestId("world-era-regenerate").click();
+        screen.getByTestId("world-tab-era-regenerate").click();
       });
       await screen.findByTestId("regenerate-modal");
       await act(async () => {

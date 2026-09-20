@@ -469,8 +469,8 @@ describe("WorldStep", () => {
     await screen.findByTestId("world-form");
     expect(screen.getByTestId("world-power-system-0-regenerate")).toBeInTheDocument();
     expect(screen.getByTestId("world-power-system-0-remove")).toBeInTheDocument();
-    // The section-level regenerate button still exists for full-array regen.
-    expect(screen.getByTestId("world-power-system-regenerate")).toBeInTheDocument();
+    // The section-level regenerate button now lives in the tab strip.
+    expect(screen.getByTestId("world-tab-power_system-regenerate")).toBeInTheDocument();
   });
 
   it("per-card regenerate calls regeneratePowerSystemItem with the right index and mods", async () => {

@@ -9,7 +9,12 @@ from backend.utils.file_manager import FileManager
 from backend.conductor.state_machine import StageStateMachine, Stage, STAGE_ORDER
 from backend.agents.planner import PlannerAgent
 from backend.models.character import BehaviorExample, Character as CharacterModel, CharacterPatch
-from backend.models.world import World, iter_power_systems, _raw_power_systems_list
+from backend.models.world import (
+    CoreRuleCategory,
+    World,
+    iter_power_systems,
+    _raw_power_systems_list,
+)
 from backend.services.agent_prompt_stores import (
     project_override_store,
     global_override_store,
@@ -560,7 +565,7 @@ class RegenerateWorldSectionPayload(BaseModel):
     # 把"仅替换某一 category 的规则、保留其他 category" 拆成细粒度,
     # 取代旧的整组替换。Allowed: physical/social/narrative/protagonist。
     # None = 旧行为(整组重生成)。
-    category: Optional[str] = None
+    category: Optional[CoreRuleCategory] = None  # 仅 section="core_rules" 时生效; Allowed: physical/social/narrative/protagonist
     user_modifications: str = Field(default="", max_length=1700)
 
 
@@ -633,17 +638,31 @@ async def regenerate_world_section(
             # 新行为: 仅替换目标 category,其他 3 类 byte-preserve。
             # 防御性过滤: 即使 LLM 错误地在 result 里混入其他 category,
             # 也只接受 target_cat 的条目,避免污染。
-            target_cat = payload.category
+            target_cat = payload.category.value
+            # Migrate legacy list[str] → list[{category,text}] before filtering,
+            # so projects that haven't been round-tripped through the API yet
+            # don't silently lose social/narrative/protagonist rules on first call.
+            existing_rules_raw = existing.get("core_rules", [])
+            if isinstance(existing_rules_raw, list):
+                migrated_existing = []
+                for r in existing_rules_raw:
+                    if isinstance(r, str):
+                        migrated_existing.append({"category": CoreRuleCategory.PHYSICAL.value, "text": r})
+                    elif isinstance(r, dict):
+                        migrated_existing.append(r)
+                existing_rules = migrated_existing
+            else:
+                existing_rules = []
             new_rules = result.get("core_rules", [])
-            preserved = [
-                r for r in existing.get("core_rules", [])
+            merged_rules = [
+                r for r in existing_rules
                 if isinstance(r, dict) and r.get("category") != target_cat
             ]
-            replaced = [
+            merged_rules.extend(
                 r for r in new_rules
                 if isinstance(r, dict) and r.get("category") == target_cat
-            ]
-            merged["core_rules"] = preserved + replaced
+            )
+            merged["core_rules"] = merged_rules
     else:  # "factions"
         merged["factions"] = result.get("factions", existing.get("factions", []))
 

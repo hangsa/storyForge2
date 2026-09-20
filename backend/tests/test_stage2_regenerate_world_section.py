@@ -380,3 +380,75 @@ def test_regenerate_core_rules_without_category_replaces_all(tmp_path):
     # Legacy full-array path: 旧 rules all gone, only new ones remain
     assert detail["core_rules"] == mixed_payload["core_rules"]
     assert not any(r["text"].startswith("旧 ") for r in detail["core_rules"])
+
+
+def test_regenerate_core_rules_with_invalid_category_rejected(tmp_path):
+    """An unknown category string must be rejected at the pydantic boundary
+    (typo would otherwise silently return core_rules:[] via the category filter)."""
+    _seed_project(tmp_path)
+    _write(tmp_path, "world.json", _seed_old_world_with_all_categories())
+    resp = client.post(
+        f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+        json={"section": "core_rules", "category": "physcial"},
+    )
+    assert resp.status_code == 422
+
+
+def test_regenerate_core_rules_by_category_migrates_legacy_string_list(tmp_path):
+    """A legacy core_rules: ['str1', 'str2', 'str3'] world.json must migrate
+    to list[{category:physical,text:str}] before the category filter runs, so
+    legacy rules are not silently dropped on first category-scoped call.
+
+    We use category='social' so the migrated PHYSICAL legacy rules survive
+    the filter (which keeps non-target categories). With category='physical'
+    the legacy rules would intentionally be replaced — that's the normal
+    regeneration semantic, not a bug.
+    """
+    _seed_project(tmp_path)
+    legacy_world = {
+        "era": "旧时代",
+        "geography": "旧地理",
+        "era_social_structure": "旧社会",
+        "era_cultural_history": "旧历史",
+        "power_systems": [
+            {
+                "name": "旧体系",
+                "description": "旧描述",
+                "stages": ["旧一阶"],
+                "core_rules": ["旧规则"],
+                "ceilings": ["旧上限"],
+                "cost_system": "旧代价",
+            }
+        ],
+        "factions": [
+            {"name": "旧势力A", "type": "国家", "goal": "旧目标A", "relations": "旧关系A"},
+        ],
+        # legacy flat list[str]
+        "core_rules": ["旧规则A", "旧规则B", "旧规则C"],
+    }
+    _write(tmp_path, "world.json", legacy_world)
+    with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
+        instance = MockPlanner.return_value
+        instance.generate_world = AsyncMock(return_value=(
+            _mock_physical_only_payload(),
+            None,
+        ))
+        resp = client.post(
+            f"/api/stage2/regenerate-world-section?project_id={PROJ}",
+            json={"section": "core_rules", "category": "social"},
+        )
+    assert resp.status_code == 200
+    detail = resp.json()["detail"]
+    merged_rules = detail["core_rules"]
+    # All 3 legacy strings migrated to category=physical and preserved (target_cat=social)
+    texts = {r["text"] for r in merged_rules}
+    assert "旧规则A" in texts
+    assert "旧规则B" in texts
+    assert "旧规则C" in texts
+    legacy_entries = [r for r in merged_rules if r["text"] in {"旧规则A", "旧规则B", "旧规则C"}]
+    assert {r["category"] for r in legacy_entries} == {"physical"}
+    # The LLM mock only returned physical rules — none match target_cat=social,
+    # so no new rules get appended. (The new physical rules were correctly
+    # rejected by the LLM-side filter to avoid polluting the social category.)
+    assert not any(r["text"].startswith("新 physical") for r in merged_rules)
+    assert len(merged_rules) == 3

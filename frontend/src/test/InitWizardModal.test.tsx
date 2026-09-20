@@ -1,3 +1,9 @@
+// 2026-09-19:本测试文件对应"DEPRECATED"的 InitWizardModal(原 /project/:id/wizard
+// deep-link 入口)。ConceptStep / Concept DNA 步骤都已删除;step 1 现在是
+// CreativeDivergenceStep。本文件保留 step 2-6 的现有 wizard 行为测试,并
+// 把 step 1 的旧 concept-form / concept-info-regenerate 等用例删除(因为
+// 没有 ConceptStep 也就没有这些 testid)。
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -19,7 +25,28 @@ vi.mock("../api/client", () => ({
     getCharacter: vi.fn(),
     getNovelOutline: vi.fn(),
     getOutline: vi.fn(),
-    // Per-section regenerate API wrappers (Task 6 of v2.1 wizard plan)
+    // 2026-09-19:CreativeDivergenceStep 引入了 B3 系列端点。
+    postB3Decompose: vi.fn(),
+    postB3MetaDecompose: vi.fn(),
+    postB3FollowUp: vi.fn(),
+    postB3Commit: vi.fn(),
+    getB3State: vi.fn(),
+    deleteB3State: vi.fn(),
+    getProjectStatus: vi.fn(),
+    listGenres: vi.fn(),
+    getPlazaPrompt: vi.fn(),
+    putPlazaPrompt: vi.fn(),
+    listActiveCreativeDimensions: vi.fn().mockResolvedValue({
+      subject: [{ id: "cool_novel", name: "网文快读", description: "", status: "active", order: 0, created_at: "a", updated_at: "a" }],
+      tone: [
+        { id: "rexue", name: "热血", description: "", status: "active", order: 0, created_at: "a", updated_at: "a" },
+        { id: "heian", name: "黑暗", description: "", status: "active", order: 1, created_at: "a", updated_at: "a" },
+      ],
+      style: [
+        { id: "shuangwen", name: "爽文", description: "", status: "active", order: 0, created_at: "a", updated_at: "a" },
+        { id: "duoxian", name: "多线", description: "", status: "active", order: 1, created_at: "a", updated_at: "a" },
+      ],
+    }),
     regenerateConceptSection: vi.fn(),
     regenerateWorldSection: vi.fn(),
     regenerateCharacterSection: vi.fn(),
@@ -65,9 +92,6 @@ beforeEach(() => {
   (api.getCharacter as ReturnType<typeof vi.fn>).mockReset();
   (api.getNovelOutline as ReturnType<typeof vi.fn>).mockReset();
   (api.getOutline as ReturnType<typeof vi.fn>).mockReset();
-  // Per-section regenerate API wrappers: default to a successful resolution
-  // that returns a payload matching the step component's expected shape.
-  // Individual tests override these mocks as needed.
   (api.regenerateConceptSection as ReturnType<typeof vi.fn>).mockReset();
   (api.regenerateConceptSection as ReturnType<typeof vi.fn>).mockResolvedValue({
     concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
@@ -101,6 +125,33 @@ beforeEach(() => {
     generated_at: "",
     updated_at: "",
   });
+  // B3 series defaults
+  (api.getB3State as ReturnType<typeof vi.fn>).mockReset();
+  (api.getB3State as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+  (api.postB3Decompose as ReturnType<typeof vi.fn>).mockReset();
+  (api.postB3Decompose as ReturnType<typeof vi.fn>).mockResolvedValue({
+    dimensions: [], causal_map: "", top_level_summary: "",
+  });
+  (api.postB3MetaDecompose as ReturnType<typeof vi.fn>).mockReset();
+  (api.postB3MetaDecompose as ReturnType<typeof vi.fn>).mockResolvedValue({
+    generated_prompt: "## META ##", written_to_override: true,
+  });
+  (api.postB3FollowUp as ReturnType<typeof vi.fn>).mockReset();
+  (api.postB3Commit as ReturnType<typeof vi.fn>).mockReset();
+  (api.postB3Commit as ReturnType<typeof vi.fn>).mockResolvedValue({
+    concept_and_dna: {},
+    creative_divergence: {},
+    b3_state: {},
+    committed_at: "2026-09-19T00:00:00Z",
+  });
+  (api.getPlazaPrompt as ReturnType<typeof vi.fn>).mockReset();
+  (api.getPlazaPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({ effective: null });
+  (api.putPlazaPrompt as ReturnType<typeof vi.fn>).mockReset();
+  (api.putPlazaPrompt as ReturnType<typeof vi.fn>).mockResolvedValue({
+    name: "firstness_decompose", override: null, modified_at: null,
+  });
+  (api.getProjectStatus as ReturnType<typeof vi.fn>).mockReset();
+  (api.getProjectStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ title: "T", genre: "" });
   mockNavigate.mockReset();
   sessionStorage.clear();
 });
@@ -117,19 +168,12 @@ function renderModal(projectId = PROJECT, onDismiss = vi.fn()) {
 
 function buildData() {
   return {
-    concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-    story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
     world: null,
     characters: null,
     novel_outline: null,
     chapter1_outline: null,
   };
 }
-
-const CONCEPT_FIXTURE = {
-  concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-  story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
-};
 
 const WORLD_FIXTURE = {
   era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
@@ -161,26 +205,21 @@ const NOVEL_OUTLINE_FIXTURE = {
   updated_at: "",
 };
 
-// Wire `api.get*` mocks for the 5 wizard data files. Each field defaults to
-// `null`. Returns the merged object so callers can reference seeded shapes.
 const seedFiles = (files: {
-  concept?: typeof CONCEPT_FIXTURE | null;
   world?: typeof WORLD_FIXTURE | null;
   character?: ReturnType<typeof buildCharacter> | { characters: unknown[]; current: unknown } | null;
   novelOutline?: typeof NOVEL_OUTLINE_FIXTURE | null;
   outline?: unknown | null;
 } = {}) => {
-  const concept = files.concept === undefined ? null : files.concept;
   const world = files.world === undefined ? null : files.world;
   const character = files.character === undefined ? null : files.character;
   const novelOutline = files.novelOutline === undefined ? null : files.novelOutline;
   const outline = files.outline === undefined ? null : files.outline;
-  (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue(concept);
   (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue(world);
   (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(character);
   (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(novelOutline);
   (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(outline);
-  return { concept, world, character, novelOutline, outline };
+  return { world, character, novelOutline, outline };
 };
 
 const seedStep = (currentStep: number, completedSteps: number[], data = buildData()) => {
@@ -214,26 +253,22 @@ describe("InitWizardModal", () => {
       closeBtn.click();
     });
     expect(onDismiss).toHaveBeenCalledTimes(1);
-    // sessionStorage must be preserved so the user can resume later
     expect(sessionStorage.getItem(KEY)).not.toBeNull();
   });
 
-  it("renders ConceptStep on mount (step 1)", () => {
+  it("renders CreativeDivergenceStep on step 1 (ConceptStep 已删除)", () => {
     renderModal();
-    expect(screen.getByTestId("concept-step")).toBeInTheDocument();
+    expect(screen.getByTestId("creative-divergence-step")).toBeInTheDocument();
+    expect(screen.queryByTestId("concept-step")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("concept-form")).not.toBeInTheDocument();
   });
 
   it("resume mode: hydrates from files and lands on the latest SAVED step (step 2 = WorldStep)", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
-    });
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
       power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     });
-    // No character/novel/outline files → steps 1, 2 completed; latest saved = 2.
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
@@ -246,25 +281,23 @@ describe("InitWizardModal", () => {
       </MemoryRouter></ToastProvider>
     );
 
-    // Should land on WorldStep (latest saved = 2), NOT CharacterStep.
-    // The old buggy behavior jumped to step 3 (= max + 1).
     await waitFor(() => expect(screen.getByTestId("world-step")).toBeInTheDocument());
     expect(screen.queryByTestId("character-step")).not.toBeInTheDocument();
   });
 
   it("resume=false (default): hydrates from files but stays on step 1", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "T", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "x", side_a: "", side_b: "" }, value_stack: [] },
+    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "e", geography: "g", era_social_structure: "", era_cultural_history: "",
+      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [], core_rules: [],
     });
-    (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
-    renderModal(); // default resume=false
-    // ConceptStep stays mounted (step 1) even though the concept file exists.
-    expect(screen.getByTestId("concept-step")).toBeInTheDocument();
+    renderModal();
+    // 2026-09-19:step 1 现在是 CreativeDivergenceStep(不是 ConceptStep)。
+    expect(screen.getByTestId("creative-divergence-step")).toBeInTheDocument();
   });
 
   it("'上一步' is disabled on step 1", () => {
@@ -288,7 +321,8 @@ describe("InitWizardModal", () => {
     await act(async () => {
       screen.getByTestId("wizard-step-1").click();
     });
-    expect(screen.getByTestId("concept-step")).toBeInTheDocument();
+    // 2026-09-19:step 1 = CreativeDivergenceStep。
+    expect(screen.getByTestId("creative-divergence-step")).toBeInTheDocument();
   });
 
   it("modal footer has NO forward navigation button (prevents duplicate '完成')", () => {
@@ -328,7 +362,6 @@ describe("InitWizardModal", () => {
     const onDismiss = vi.fn();
     renderModal(PROJECT, onDismiss);
     expect(screen.getByTestId("chapter-outline-step")).toBeInTheDocument();
-    // Auto-trigger fires on mount; wait for the form to appear.
     await screen.findByTestId("chapter-outline-form");
     await act(async () => {
       screen.getByTestId("chapter-outline-finish").click();
@@ -339,42 +372,27 @@ describe("InitWizardModal", () => {
       expect(mockNavigate).toHaveBeenCalledWith(`/project/${encodeURIComponent(PROJECT)}/workspace`),
     );
     expect(onDismiss).toHaveBeenCalled();
-    // Regression v1.9: navigate MUST be called before onDismiss, so any
-    // future onDismiss implementation that does more than setState (e.g.
-    // window.location.assign) can't beat the workspace navigation.
     expect(mockNavigate.mock.invocationCallOrder[0]).toBeLessThan(
       onDismiss.mock.invocationCallOrder[0],
     );
-    // wizard.reset() clears sessionStorage, but currentStep=1 immediately
-    // re-renders ConceptStep, whose auto-trigger (added in v1.8 Task 2) writes
-    // sessionStorage again. Asserting null here would test the wrong thing:
-    // the auto-trigger is intentional v1.8 behavior. In production, onDismiss
-    // unmounts the modal before ConceptStep can render; only the test, where
-    // onDismiss is a vi.fn(), lets it mount and repopulate.
   });
 
-  // v1.9 fix: prefill must treat empty arrays/objects as "no content".
-  // The backend returns {"characters": [], "current": {}} for a fresh
-  // project's character set and {"chapters": []} for a fresh chapter outline.
-  // A naive truthy check (`[] !== ""`) marked 角色设计 (step 3) and
-  // 全书大纲 (step 5) as ✓ on first open — visibly wrong since the user
-  // hadn't filled either in.
+  // 2026-09-19:concept 数据从 WizardData 中移除(Concept DNA 步骤砍掉);
+  // 不再 prefill concept file。剩下的 prefill 行为涉及 world / characters /
+  // novel_outline / outline — 见现有 step 3/5/6 断言。
   it("prefill: empty {characters:[], current:{}} does NOT mark 角色设计 completed", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({ characters: [], current: {} });
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
     renderModal();
-    // Let the prefill useEffect run.
     await waitFor(() => expect(api.getCharacter).toHaveBeenCalled());
 
     expect(screen.getByTestId("wizard-step-3").getAttribute("data-state")).not.toBe("completed");
   });
 
   it("prefill: empty {chapters:[]} does NOT mark 章节大纲 completed", async () => {
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
@@ -386,12 +404,7 @@ describe("InitWizardModal", () => {
     expect(screen.getByTestId("wizard-step-6").getAttribute("data-state")).not.toBe("completed");
   });
 
-  it("prefill: populated character/novel/outline mark the correct steps completed", async () => {
-    // getNovelOutline → step 5 (全书大纲); getOutline → step 6 (章节大纲).
-    // The earlier version of this test asserted step 5 was completed when
-    // getOutline returned chapters, which only "passed" because the prefill
-    // was pushing outline → step 5 instead of step 6 (off-by-one bug).
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({});
+  it("prefill: populated world/character/novel/outline mark the correct steps completed", async () => {
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({
       characters: [{ name: "林峰" }],
@@ -417,15 +430,6 @@ describe("InitWizardModal", () => {
     expect(screen.getByTestId("wizard-step-6").getAttribute("data-state")).toBe("completed");
   });
 
-  // v1.8.2 regression for proj_cc4ca4ae: user closes the wizard on step 5
-  // BEFORE clicking "确认修改并继续". sessionStorage persists currentStep=5
-  // and completedSteps=[1..4], but data.novel_outline is null (only the
-  // local component state held the generated outline). On re-entry via the
-  // /project/:id/wizard deep-link, the modal mounts with stale wizard state.
-  // OutlineStep's auto-trigger fires synchronously and POSTs
-  // /generate-novel-outline, regenerating content the user already paid for.
-  // The fix: prefill must ALWAYS run on mount (not skip when completedSteps
-  // has any items), and auto-trigger must wait for prefill to complete.
   it("regression proj_cc4ca4ae: re-entering wizard with stale sessionStorage loads existing outline, does NOT regenerate", async () => {
     const existingOutline = {
       core_conflict_theme: "已生成的核心冲突描述",
@@ -437,38 +441,22 @@ describe("InitWizardModal", () => {
       generated_at: "2026-07-12T19:00:00",
       updated_at: "2026-07-12T19:00:00",
     };
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue({
-      concept: { title: "诡眼少年", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
-    });
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(existingOutline);
     (api.getOutline as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
-    // Simulate: user previously closed on step 5 without saving. The
-    // sessionStorage holds the wizard's completedSteps but NOT the
-    // generated outline (it lived only in OutlineStep's local state).
     sessionStorage.setItem(
       KEY,
       JSON.stringify({
         currentStep: 5,
         completedSteps: [1, 2, 3, 4],
         status: "completed",
-        data: {
-          concept: { title: "诡眼少年", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-          story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
-          world: null,
-          characters: null,
-          novel_outline: null,
-          chapter1_outline: null,
-        },
+        data: buildData(),
         errorMessage: null,
       }),
     );
 
-    // Mount via the deep-link path with resume=true so the modal jumps to
-    // the current step (5) once prefill lands.
     render(
       <ToastProvider><MemoryRouter>
         <WizardProvider projectId={PROJECT}>
@@ -477,30 +465,17 @@ describe("InitWizardModal", () => {
       </MemoryRouter></ToastProvider>
     );
 
-    // Wait for prefill to land.
     await waitFor(() => expect(api.getNovelOutline).toHaveBeenCalled());
 
-    // Allow any async auto-trigger to fire (it shouldn't).
     await new Promise((r) => setTimeout(r, 100));
 
-    // CRITICAL: regenerate must NOT have been called.
     expect(api.generateNovelOutline).not.toHaveBeenCalled();
 
-    // The wizard should be on step 5 with the existing outline loaded.
     const step5 = screen.getByTestId("wizard-step-5");
     expect(step5.getAttribute("data-state")).toBe("completed");
   });
 
-  // Bug report (2026-08-09): entering the wizard from the bookshelf
-  // deep-link (resume=true) used to advance to max(completed) + 1 instead
-  // of the latest saved step. For a project that saved step 5
-  // (novel_outline.json), the modal landed on step 6 (ChapterOutlineStep)
-  // and auto-triggered chapter-outline generation, burning tokens the user
-  // had not asked for. The fix: land on Math.max(...completed) (the latest
-  // SAVED step), not + 1.
   it("resume mode: lands on the latest SAVED step, not the next one (no auto-trigger of next stage)", async () => {
-    // Set up: only novel_outline.json exists. Concept / world / characters /
-    // outline.json are missing → prefill will produce completed = [5].
     const existingOutline = {
       core_conflict_theme: "已生成的核心冲突描述",
       volumes: [{ name: "第一卷", chapter_range: "1-50", summary: "阴阳眼觉醒", key_events: ["事件A"] }],
@@ -509,7 +484,6 @@ describe("InitWizardModal", () => {
       generated_at: "2026-07-12T19:00:00",
       updated_at: "2026-07-12T19:00:00",
     };
-    (api.getConcept as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getWorld as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (api.getNovelOutline as ReturnType<typeof vi.fn>).mockResolvedValue(existingOutline);
@@ -525,74 +499,24 @@ describe("InitWizardModal", () => {
       </MemoryRouter></ToastProvider>
     );
 
-    // Wait for prefill to land.
     await waitFor(() => expect(api.getNovelOutline).toHaveBeenCalled());
 
-    // The wizard should land on step 5 (OutlineStep) with the existing
-    // outline loaded — NOT advance to step 6 (ChapterOutlineStep), which
-    // would auto-trigger chapter-outline generation.
     await waitFor(() => expect(screen.getByTestId("outline-step")).toBeInTheDocument());
     expect(screen.queryByTestId("chapter-outline-step")).not.toBeInTheDocument();
 
-    // Allow any async auto-trigger to fire (it shouldn't).
     await new Promise((r) => setTimeout(r, 100));
 
-    // Neither novel-outline regeneration nor chapter-outline generation
-    // should fire. The novel_outline.json already on disk is the truth;
-    // we must not throw it away by triggering a fresh LLM call.
     expect(api.generateNovelOutline).not.toHaveBeenCalled();
     expect(api.generateOutline).not.toHaveBeenCalled();
   });
 
   // ===========================================================================
-  // Task 11: per-section regenerate icons + click handlers (v2.1 wizard plan).
-  // Each step has 2 tests: (A) icons render, (B) clicking an icon + confirming
-  // the modal calls the right `regenerate*Section` API wrapper. Mock fixtures
-  // seed the relevant file(s) so the form is mounted deterministically, and
-  // sessionStorage sets `currentStep` for steps 2/3/5 since the wizard
-  // defaults to step 1 on mount.
+  // Step 2 — WorldStep. 2026-09-19 后 WorldStep 的 4 个 section regenerate
+  // 图标行为不变。
   // ===========================================================================
 
-  // Step 1 — ConceptStep. Default mount lands on step 1. Seed getConcept so
-  // the auto-trigger (ConceptStep line 113) sees wizard.data.concept and
-  // skips; the form renders immediately from the hydrated state.
-  it("concept-step renders section regenerate icons for 概念信息 and 核心矛盾", async () => {
-    seedFiles({ concept: CONCEPT_FIXTURE });
-
-    renderModal();
-    await waitFor(() => screen.getByTestId("concept-form"));
-    expect(screen.getByTestId("concept-info-regenerate")).toBeInTheDocument();
-    expect(screen.getByTestId("concept-dna-regenerate")).toBeInTheDocument();
-  });
-
-  it("clicking concept-info-regenerate + confirm calls regenerateConceptSection with the typed text", async () => {
-    seedFiles({ concept: CONCEPT_FIXTURE });
-
-    renderModal();
-    const infoBtn = await screen.findByTestId("concept-info-regenerate");
-    await act(async () => {
-      infoBtn.click();
-    });
-    fireEvent.change(screen.getByLabelText("修改意见"), {
-      target: { value: "更强调赛博朋克" },
-    });
-    const confirmBtn = screen.getByTestId("regenerate-modal-confirm");
-    await act(async () => {
-      confirmBtn.click();
-    });
-    await waitFor(() =>
-      expect(api.regenerateConceptSection).toHaveBeenCalledWith(
-        PROJECT,
-        "concept",
-        "更强调赛博朋克",
-      ),
-    );
-  });
-
-  // Step 2 — WorldStep. Land on step 2 via sessionStorage. Seed getWorld so
-  // the form has data to render (otherwise the section buttons wouldn't show).
   it("world-step renders 4 section regenerate icons (era, power_system, core_rules, factions)", async () => {
-    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE });
+    seedFiles({ world: WORLD_FIXTURE });
     seedStep(2, [1]);
 
     renderModal();
@@ -604,7 +528,7 @@ describe("InitWizardModal", () => {
   });
 
   it("clicking world-power-system-regenerate + confirm calls regenerateWorldSection", async () => {
-    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE });
+    seedFiles({ world: WORLD_FIXTURE });
     seedStep(2, [1]);
 
     renderModal();
@@ -625,15 +549,10 @@ describe("InitWizardModal", () => {
     );
   });
 
-  // Step 3 — CharacterStep. Land on step 3 via sessionStorage. Seed
-  // getCharacter with 1 card so the form renders and the per-card icons show.
-  // Per CharacterStep, the 5 per-card icons are: personality, voice,
-  // current_state, unknown, relations. Their testIds are constructed in
-  // CharacterStep.tsx as `character-${c.id}-<section>-regenerate`.
   it("character-step renders 5 section regenerate icons per card", async () => {
     const cardId = "c1";
     const card = buildCharacter(cardId);
-    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE, character: { characters: [card], current: card } });
+    seedFiles({ world: WORLD_FIXTURE, character: { characters: [card], current: card } });
     seedStep(3, [1, 2]);
 
     renderModal();
@@ -648,7 +567,7 @@ describe("InitWizardModal", () => {
   it("clicking character personality regenerate + confirm calls regenerateCharacterSection", async () => {
     const cardId = "c1";
     const card = buildCharacter(cardId);
-    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE, character: { characters: [card], current: card } });
+    seedFiles({ world: WORLD_FIXTURE, character: { characters: [card], current: card } });
     seedStep(3, [1, 2]);
 
     renderModal();
@@ -670,12 +589,8 @@ describe("InitWizardModal", () => {
     );
   });
 
-  // Step 5 — OutlineStep. The wizard indicator shows step 5 for novel_outline.
-  // The volumes section button only renders when `outline.volumes.length > 0`
-  // (OutlineStep line 162), so the fixture must include at least one volume.
   it("outline-step renders 4 section regenerate icons (core_conflict, volumes, mc_growth, key_plot)", async () => {
     seedFiles({
-      concept: CONCEPT_FIXTURE,
       world: WORLD_FIXTURE,
       character: { characters: [{ name: "林峰" }], current: { 林峰: { role: "protagonist" } } },
       novelOutline: NOVEL_OUTLINE_FIXTURE,
@@ -692,7 +607,6 @@ describe("InitWizardModal", () => {
 
   it("clicking outline-volumes-regenerate + confirm calls regenerateNovelOutlineSection", async () => {
     seedFiles({
-      concept: CONCEPT_FIXTURE,
       world: WORLD_FIXTURE,
       character: { characters: [{ name: "林峰" }], current: { 林峰: { role: "protagonist" } } },
       novelOutline: NOVEL_OUTLINE_FIXTURE,
@@ -718,38 +632,7 @@ describe("InitWizardModal", () => {
   });
 });
 
-// ===========================================================================
-// "保存修改" button (footer between 重新生成 and 确认修改并继续). Persists
-// the current page content to disk WITHOUT advancing the wizard. Each step
-// that has data registers a saveHandler; MapStep (step 4) does not.
-//
-// Tests below verify:
-//   1. The button renders for steps with data, in the correct DOM order.
-//   2. The button does NOT render for MapStep (no data to save).
-//   3. Clicking it calls the right api.update* wrapper and stays on the
-//      current step (no advance, no currentStep change).
-// ===========================================================================
-
 describe("InitWizardModal footer 保存修改 button", () => {
-  it("renders the button between 重新生成 and 确认修改并继续 in DOM order (step 1)", async () => {
-    seedFiles({ concept: CONCEPT_FIXTURE });
-    renderModal();
-    await waitFor(() => screen.getByTestId("concept-form"));
-    expect(screen.getByTestId("wizard-regenerate")).toBeInTheDocument();
-    expect(screen.getByTestId("wizard-save")).toBeInTheDocument();
-    expect(screen.getByTestId("wizard-next")).toBeInTheDocument();
-    // DOM order: regenerate precedes save, save precedes next.
-    const regen = screen.getByTestId("wizard-regenerate");
-    const save = screen.getByTestId("wizard-save");
-    const next = screen.getByTestId("wizard-next");
-    expect(
-      regen.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      save.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
   it("does NOT render 保存修改 on step 4 (MapStep — no data to save)", () => {
     seedStep(4, [1, 2, 3]);
     renderModal();
@@ -759,25 +642,8 @@ describe("InitWizardModal footer 保存修改 button", () => {
     expect(screen.queryByTestId("wizard-next")).not.toBeInTheDocument();
   });
 
-  // --- step 1: ConceptStep ---
-  it("step 1: clicking 保存修改 calls updateConcept + markStepGenerated, no advance", async () => {
-    seedFiles({ concept: CONCEPT_FIXTURE });
-    renderModal();
-    await waitFor(() => screen.getByTestId("concept-form"));
-    const saveBtn = await screen.findByTestId("wizard-save");
-    await act(async () => {
-      saveBtn.click();
-    });
-    await waitFor(() => expect(api.updateConcept).toHaveBeenCalled());
-    // No advance call — 保存修改 stays on the current step.
-    expect(api.advance).not.toHaveBeenCalled();
-    // Still on step 1: ConceptStep remains mounted.
-    expect(screen.getByTestId("concept-step")).toBeInTheDocument();
-  });
-
-  // --- step 2: WorldStep ---
   it("step 2: clicking 保存修改 calls updateWorld + markStepGenerated, no advance", async () => {
-    seedFiles({ concept: CONCEPT_FIXTURE, world: WORLD_FIXTURE });
+    seedFiles({ world: WORLD_FIXTURE });
     seedStep(2, [1]);
     renderModal();
     await waitFor(() => screen.getByTestId("world-form"));
@@ -790,12 +656,10 @@ describe("InitWizardModal footer 保存修改 button", () => {
     expect(screen.getByTestId("world-step")).toBeInTheDocument();
   });
 
-  // --- step 3: CharacterStep ---
   it("step 3: clicking 保存修改 calls updateCharacter + markStepGenerated, no advance", async () => {
     const cardId = "c1";
     const card = buildCharacter(cardId);
     seedFiles({
-      concept: CONCEPT_FIXTURE,
       world: WORLD_FIXTURE,
       character: { characters: [card], current: card },
     });
@@ -807,15 +671,12 @@ describe("InitWizardModal footer 保存修改 button", () => {
       saveBtn.click();
     });
     await waitFor(() => expect(api.updateCharacter).toHaveBeenCalled());
-    // CharacterStep's handleNext calls advance(STAGE3); handleSave must NOT.
     expect(api.advance).not.toHaveBeenCalled();
     expect(screen.getByTestId("character-step")).toBeInTheDocument();
   });
 
-  // --- step 5: OutlineStep ---
   it("step 5: clicking 保存修改 calls updateNovelOutline + markStepGenerated, no advance", async () => {
     seedFiles({
-      concept: CONCEPT_FIXTURE,
       world: WORLD_FIXTURE,
       character: { characters: [{ name: "林峰" }], current: { 林峰: { role: "protagonist" } } },
       novelOutline: NOVEL_OUTLINE_FIXTURE,
@@ -832,7 +693,6 @@ describe("InitWizardModal footer 保存修改 button", () => {
     expect(screen.getByTestId("outline-step")).toBeInTheDocument();
   });
 
-  // --- step 6: ChapterOutlineStep ---
   it("step 6: clicking 保存修改 calls updateOutline + markStepGenerated, no advance", async () => {
     (api.generateOutline as ReturnType<typeof vi.fn>).mockResolvedValue({
       chapters: [{ chapter_number: 1, title: "第一章", summary: "x", scene_plan: [] }],
@@ -845,15 +705,12 @@ describe("InitWizardModal footer 保存修改 button", () => {
       saveBtn.click();
     });
     await waitFor(() => expect(api.updateOutline).toHaveBeenCalled());
-    // handleFinish navigates to /workspace — 保存修改 must NOT.
     expect(api.advance).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(screen.getByTestId("chapter-outline-step")).toBeInTheDocument();
   });
 
   describe("section regenerate footer status badge", () => {
-    // Helper: hop the modal onto WorldStep (step 2) with concept + world
-    // already populated, so the 时代与地理 card renders with a ↻ button.
     function renderOnWorld() {
       sessionStorage.setItem(
         KEY,
@@ -890,8 +747,6 @@ describe("InitWizardModal footer 保存修改 button", () => {
         () => new Promise((r) => { resolveFn = r as () => void; }),
       );
       renderOnWorld();
-      // The 时代与地理 card ↻ button (id "world-era-regenerate") opens the
-      // modal; click it then confirm to drive onRegenerate into the busy state.
       await screen.findByTestId("world-form");
       await act(async () => {
         screen.getByTestId("world-era-regenerate").click();
@@ -900,19 +755,13 @@ describe("InitWizardModal footer 保存修改 button", () => {
       await act(async () => {
         fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
       });
-      // The badge appears in the footer area, in DOM order BEFORE the
-      // wizard-regenerate footer button. Verify ordering directly.
       const badge = await screen.findByTestId("wizard-regenerate-status");
       expect(badge).toHaveAttribute("data-status", "busy");
       expect(badge.textContent).toContain("正在重新生成 时代与地理");
       const regen = screen.getByTestId("wizard-regenerate");
-      // DOM order: badge appears before the regen button so the user always
-      // sees the status immediately to the left of the action button it
-      // describes.
       expect(
         badge.compareDocumentPosition(regen) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      // Cleanup so the test doesn't hang on the unresolved promise.
       await act(async () => {
         resolveFn();
       });

@@ -298,9 +298,7 @@ function UnitCard({
     ? "核心矛盾"
     : unit.is_irreducible
       ? "已不可再分"
-      : unit.follow_up_count > 0
-        ? `已追问 ${unit.follow_up_count} 次`
-        : "追问";
+      : "追问";
   return (
     <div
       className={
@@ -321,6 +319,15 @@ function UnitCard({
               >
                 · {OPERATOR_LABELS[unit.main_operator]}
                 {unit.aux_operator ? ` + ${OPERATOR_LABELS[unit.aux_operator]}` : ""}
+              </span>
+            )}
+            {/* 2026-09-19: 把"已追问 N 次"从按钮文案移到此处,与算子同字号同行展示;无追问历史的单元保持不渲染,避免视觉噪音。 */}
+            {!isVirtualCore && !unit.is_irreducible && unit.follow_up_count > 0 && (
+              <span
+                className="font-mono text-[10px] text-on-surface-variant"
+                data-testid={`unit-followup-count-${unit.id}`}
+              >
+                · 已追问 {unit.follow_up_count} 次
               </span>
             )}
             {isVirtualCore && (

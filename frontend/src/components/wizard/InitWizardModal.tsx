@@ -1,28 +1,24 @@
 // DEPRECATED — replaced by <WorkspaceWizardPanel> in 2026-08-30 (spec §3.3).
 // The init wizard now lives inside /project/:id/workspace?tab=settings; this
-// file is kept only so legacy test files (ConceptStep.test.tsx,
-// InitWizardModal.test.tsx, ChapterOutlineStep.test.tsx,
+// file is kept only so legacy test files (ChapterOutlineStep.test.tsx,
 // CharacterStep.behavior_examples.test.tsx) keep compiling. Do NOT mount
 // this component from any active route.
+//
+// 2026-09-19 砍掉概念DNA 步骤(原 step 2)后,本 modal 的 step 1 改为渲染
+// CreativeDivergenceStep(原 ConceptStep 已删除)。Step 编号统一 -1。
 
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
+import api, { World, CharacterSet, NovelOutline, Outline } from "../../api/client";
 import { useWizard, WizardProvider, type WizardData } from "./WizardContext";
 import WizardSteps from "./WizardSteps";
-import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
 import CharacterStep from "./CharacterStep";
 import MapStep from "./MapStep";
 import OutlineStep from "./OutlineStep";
 import ChapterOutlineStep from "./ChapterOutlineStep";
+import CreativeDivergenceStep from "./CreativeDivergenceStep";
 import RegenerateStatusBadge from "./RegenerateStatusBadge";
-
-// DEPRECATED — replaced by <WorkspaceWizardPanel>. Kept for backward-compatible
-// imports in legacy code (frontend/src/components/layout/HomeLayout.tsx still
-// references this for the homepage's new-project flow); no active route
-// renders this modal as of v2.x.
-// See docs/superpowers/specs/2026-08-30-workspace-wizard-design.md §3.3.
 
 interface InitWizardModalProps {
   projectId: string;
@@ -38,8 +34,10 @@ interface InitWizardModalProps {
   resume?: boolean;
 }
 
+// 2026-09-19:step 1 改回"创意发散"(原 ConceptStep 已删除,改用 CreativeDivergenceStep)。
+// 下游步骤 -1:世界观 2 / 角色 3 / 地图 4 / 全书大纲 5 / 章节大纲 6。
 const STEP_TITLES: Record<number, string> = {
-  1: "概念讨论",
+  1: "创意发散",
   2: "世界观",
   3: "角色设计",
   4: "地图系统",
@@ -86,12 +84,13 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
   // "确认修改并继续", so data.novel_outline was null even though the file
   // existed on disk). Skipping prefill in that case caused OutlineStep's
   // auto-trigger to fire and regenerate content the user already paid for.
+  //
+  // 2026-09-19:不再拉 /concept-and-dna — 概念DNA 步骤已砍。
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [concept, world, chars, novel, outline] = await Promise.allSettled([
-          api.getConcept(projectId),
+        const [world, chars, novel, outline] = await Promise.allSettled([
           api.getWorld(projectId),
           api.getCharacter(projectId),
           api.getNovelOutline(projectId),
@@ -100,14 +99,6 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
         if (cancelled) return;
         const completed: number[] = [];
         const data: Partial<WizardData> = {};
-        const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
-        if (conceptPayload && hasContent(conceptPayload)) {
-          completed.push(1);
-          const c = (conceptPayload as { concept?: unknown }).concept as Concept | undefined;
-          const dna = (conceptPayload as { story_dna?: unknown }).story_dna as StoryDNA | undefined;
-          if (c) data.concept = c;
-          if (dna) data.story_dna = dna;
-        }
         if (world.status === "fulfilled" && hasContent(world.value)) {
           completed.push(2);
           data.world = world.value as World;
@@ -129,25 +120,15 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
         }
         if (completed.length > 0) {
           if (resume) {
-            // Land on the latest SAVED step, NOT the next one. Advancing
-            // past the saved step put the user on a step whose data is
-            // missing, which made that step's auto-trigger fire (e.g. saved
-            // up to novel_outline → landed on ChapterOutlineStep → LLM call
-            // to regenerate chapters the user had not asked for, 2026-08-09
-            // bug report).
             const targetStep = Math.max(...completed);
             wizard.hydrateFromFilesAndAdvance(completed, data, targetStep);
           } else {
             wizard.hydrateFromFiles(completed, data);
           }
         } else {
-          // No files to hydrate — still mark prefill complete so steps with
-          // auto-triggers (OutlineStep etc.) can run their generation logic.
           wizard.markPrefillComplete();
         }
       } catch {
-        // ignore prefill failures (e.g., 404 on first ever entry) but still
-        // unblock auto-triggers so the user can proceed with a fresh project.
         if (!cancelled) wizard.markPrefillComplete();
       }
     })();
@@ -164,11 +145,6 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
       // proceed even if advance fails (mirrors HomePage create behavior)
     }
     wizard.reset();
-    // Navigate BEFORE onDismiss: if onDismiss ever does anything other than
-    // `setState(null)` (e.g. window.location.assign, which fires a hard
-    // reload), calling navigate first ensures the workspace URL wins.
-    // WizardDeepLinkPage's previous window.location.assign("/") bug
-    // manifested as "complete wizard → land on / instead of /workspace".
     navigate(`/project/${encodeURIComponent(projectId)}/workspace`);
     onDismiss();
   };
@@ -202,7 +178,12 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
         />
 
         <main className="flex-1 overflow-y-auto px-6 py-4">
-          {wizard.currentStep === 1 && <ConceptStep projectId={projectId} />}
+          {wizard.currentStep === 1 && (
+            <CreativeDivergenceStep
+              projectId={projectId}
+              onAdvanceSuccess={() => wizard.markStepGenerated(1, {})}
+            />
+          )}
           {wizard.currentStep === 2 && <WorldStep projectId={projectId} />}
           {wizard.currentStep === 3 && <CharacterStep projectId={projectId} />}
           {wizard.currentStep === 4 && <MapStep />}
@@ -212,13 +193,6 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           )}
         </main>
 
-        {/* Footer: 上一步 on the left + the section-regenerate status badge
-            (before 重新生成 in visual order); the current step's 重新生成 /
-            保存修改 / 确认修改并继续 (registered via setRegenerateHandler /
-            setSaveHandler / setNextHandler in WizardContext) on the right.
-            保存修改 persists the current page content without advancing;
-            确认修改并继续 persists AND advances. ChapterOutlineStep keeps
-            its own "完成 → 进入工作台" inside the form for now. */}
         <footer className="flex items-center justify-between px-6 py-4 border-t border-outline-variant gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <button

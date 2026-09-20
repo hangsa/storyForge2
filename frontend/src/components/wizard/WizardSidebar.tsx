@@ -5,15 +5,22 @@ export interface SidebarItem {
   position: number;
 }
 
+// 2026-09-19 砍掉「概念 DNA」步骤(原 step 2)后,步骤编号统一 -1:
+//   - world     3 → 2
+//   - character 4 → 3
+//   - map       5 → 4(占位,无数据)
+//   - plot      6 → 5(剧情画布)
+//   - outline   7 → 6(全文大纲)
+//   - chapter   8 → 7(章节大纲)
+// step 1 创意发散仍是起点,直接 → step 2 世界观。
 const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: "divergence", label: "创意发散", icon: "psychology",          position: 1 },
-  { id: "concept",    label: "概念 DNA", icon: "biotech",             position: 2 },
-  { id: "world",      label: "世界观",   icon: "public",               position: 3 },
-  { id: "character",  label: "角色设计", icon: "groups",               position: 4 },
-  { id: "map",        label: "地图系统", icon: "map",                  position: 5 },
-  { id: "plot",       label: "剧情画布", icon: "account_tree",         position: 6 },
-  { id: "outline",    label: "全文大纲", icon: "format_list_numbered", position: 7 },
-  { id: "chapter",    label: "章节大纲", icon: "auto_stories",         position: 8 },
+  { id: "world",      label: "世界观",   icon: "public",               position: 2 },
+  { id: "character",  label: "角色设计", icon: "groups",               position: 3 },
+  { id: "map",        label: "地图系统", icon: "map",                  position: 4 },
+  { id: "plot",       label: "剧情画布", icon: "account_tree",         position: 5 },
+  { id: "outline",    label: "全文大纲", icon: "format_list_numbered", position: 6 },
+  { id: "chapter",    label: "章节大纲", icon: "auto_stories",         position: 7 },
 ];
 
 interface WizardSidebarProps {

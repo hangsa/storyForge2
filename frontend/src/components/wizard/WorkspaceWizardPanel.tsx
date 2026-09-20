@@ -1,8 +1,7 @@
 import { useEffect } from "react";
-import api, { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
+import api, { World, CharacterSet, NovelOutline, Outline } from "../../api/client";
 import { WizardProvider, useWizard, type WizardData } from "./WizardContext";
 import WizardSidebar from "./WizardSidebar";
-import ConceptStep from "./ConceptStep";
 import WorldStep from "./WorldStep";
 import CharacterStep from "./CharacterStep";
 import MapStep from "./MapStep";
@@ -39,10 +38,11 @@ function Inner({ projectId }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const [cd, canvasState, concept, world, chars, novel, outline] = await Promise.allSettled([
+        // 2026-09-19 砍概念DNA 步骤后,prefill 不再拉 /concept-and-dna。S2 世界观
+        // 会在自身的 prefill 中按 b3_state + concept_and_dna.json 自取。
+        const [cd, canvasState, world, chars, novel, outline] = await Promise.allSettled([
           api.getCreativeDivergence(projectId),
           api.getCanvasV2State(projectId),
-          api.getConcept(projectId),
           api.getWorld(projectId),
           api.getCharacter(projectId),
           api.getNovelOutline(projectId),
@@ -64,29 +64,19 @@ function Inner({ projectId }: Props) {
         // committed_at !== null is a defensive backstop ensuring both
         // flags agree on read (the backend stamps both atomically today,
         // but defense-in-depth for disk-derived signals). Marks step 6
-        // (剧情画布) as completed; divergence and canvas are now
-        // independent steps.
+        // (剧情画布) as completed; divergence and canvas are independent steps.
         const canvasPayload = canvasState.status === "fulfilled" ? canvasState.value : null;
         if (canvasPayload?.committed === true && canvasPayload.committed_at !== null) {
           completed.push(6);
         }
 
-        // Existing prefill for steps 2..8 — unchanged.
-        const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
-        if (conceptPayload && hasContent(conceptPayload)) {
-          completed.push(2);
-          const c = (conceptPayload as { concept?: Concept }).concept;
-          const dna = (conceptPayload as { story_dna?: StoryDNA }).story_dna;
-          if (c) data.concept = c;
-          if (dna) data.story_dna = dna;
-        }
-        if (world.status === "fulfilled" && hasContent(world.value)) { completed.push(3); data.world = world.value as World; }
-        if (chars.status === "fulfilled" && hasContent(chars.value)) { completed.push(4); data.characters = chars.value as CharacterSet; }
-        // Step mappings — must stay in sync with SIDEBAR_ITEMS in WizardSidebar:
-        //   7 = novel_outline.json (全文大纲)
-        //   8 = outline.json     (章节大纲 / chapter1_outline)
-        if (novel.status === "fulfilled" && hasContent(novel.value)) { completed.push(7); data.novel_outline = novel.value as NovelOutline; }
-        if (outline.status === "fulfilled" && hasContent(outline.value)) { completed.push(8); data.chapter1_outline = outline.value as Outline; }
+        // 2026-09-19 步骤编号统一 -1(world 3→2 / chars 4→3 / novel 7→6 /
+        // outline 8→7),与 WizardSidebar SIDEBAR_ITEMS 同步。Step 5 仍是 MapStep
+        // 占位(无数据)。
+        if (world.status === "fulfilled" && hasContent(world.value)) { completed.push(2); data.world = world.value as World; }
+        if (chars.status === "fulfilled" && hasContent(chars.value)) { completed.push(3); data.characters = chars.value as CharacterSet; }
+        if (novel.status === "fulfilled" && hasContent(novel.value)) { completed.push(6); data.novel_outline = novel.value as NovelOutline; }
+        if (outline.status === "fulfilled" && hasContent(outline.value)) { completed.push(7); data.chapter1_outline = outline.value as Outline; }
 
         if (completed.length > 0) {
           wizard.hydrateFromFiles(completed, data);
@@ -117,16 +107,18 @@ function Inner({ projectId }: Props) {
             {wizard.currentStep === 1 && (
               <CreativeDivergenceStep
                 projectId={projectId}
-                onAdvanceSuccess={() => wizard.markStepGenerated(1, {})}
+                onAdvanceSuccess={() => {
+                  wizard.markStepGenerated(1, {});
+                  wizard.jumpToStep(2);
+                }}
               />
             )}
-            {wizard.currentStep === 2 && <ConceptStep projectId={projectId} />}
-            {wizard.currentStep === 3 && <WorldStep projectId={projectId} />}
-            {wizard.currentStep === 4 && <CharacterStep projectId={projectId} />}
-            {wizard.currentStep === 5 && <MapStep />}
-            {wizard.currentStep === 6 && <PlotCanvasMountPoint projectId={projectId} />}
-            {wizard.currentStep === 7 && <OutlineStep projectId={projectId} />}
-            {wizard.currentStep === 8 && (
+            {wizard.currentStep === 2 && <WorldStep projectId={projectId} />}
+            {wizard.currentStep === 3 && <CharacterStep projectId={projectId} />}
+            {wizard.currentStep === 4 && <MapStep />}
+            {wizard.currentStep === 5 && <PlotCanvasMountPoint projectId={projectId} />}
+            {wizard.currentStep === 6 && <OutlineStep projectId={projectId} />}
+            {wizard.currentStep === 7 && (
               <ChapterOutlineStep projectId={projectId} onFinish={() => { /* WorkspacePage handles tab switch */ }} />
             )}
           </div>
@@ -136,13 +128,13 @@ function Inner({ projectId }: Props) {
           <div className="flex items-center gap-3 min-w-0">
             <button data-testid="wizard-prev" type="button"
                     onClick={() => {
-                      // Sub-stage back-nav (S2/S3/S4 inside wizard step 1) takes
+                      // Sub-stage back-nav (S2 inside wizard step 1) takes
                       // precedence over step-level back-nav. The divergence
-                      // wizard registers `prevHandler` for each non-first
-                      // sub-stage; on S1 / when no handler is registered we
-                      // fall back to the wizard-step level jump. S1 itself
-                      // never registers a prevHandler, so this falls through
-                      // and the button disables (currentStep === 1).
+                      // wizard registers `prevHandler` for the S2 sub-stage;
+                      // on S1 / when no handler is registered we fall back
+                      // to the wizard-step level jump. S1 itself never
+                      // registers a prevHandler, so this falls through and
+                      // the button disables (currentStep === 1).
                       if (wizard.prevHandler) {
                         wizard.prevHandler();
                         return;
@@ -182,7 +174,7 @@ function Inner({ projectId }: Props) {
                     ? wizard.nextLabel
                     : wizard.currentStep === 1
                       ? "下一步:拆解 →"
-                      : "确认修改并继续"}
+                      : "下一步:世界观 →"}
                 {wizard.nextDisabled && wizard.nextLoadingLabel && !wizard.nextLoadingClickHandler && (
                   <span className="material-symbols-outlined text-base leading-none animate-spin">progress_activity</span>
                 )}

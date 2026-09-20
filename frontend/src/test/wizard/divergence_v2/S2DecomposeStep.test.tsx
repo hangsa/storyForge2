@@ -94,7 +94,7 @@ describe("S2DecomposeStep", () => {
     expect(screen.queryByTestId("follow-up-__core_contradiction__")).toBeNull();
   });
 
-  it("labels 追问 buttons by follow_up_count and is_irreducible", () => {
+  it("labels 追问 buttons by is_irreducible (follow_up_count moved to inline header on 2026-09-19)", () => {
     renderS2();
     expect(screen.getByTestId("follow-up-u1")).toHaveTextContent("追问");
     expect(screen.getByTestId("follow-up-u2")).toHaveTextContent("已不可再分");
@@ -561,6 +561,82 @@ describe("S2DecomposeStep", () => {
       expect(tag).toHaveTextContent("融合");
       expect(tag).not.toHaveTextContent("打破");
       expect(tag).not.toHaveTextContent("+");
+    });
+  });
+
+  // ── 2026-09-19: follow-up count moved from button label to inline header ──
+
+  describe("S2DecomposeStep inline follow-up count badge", () => {
+    it("renders the inline badge after unit_name when follow_up_count > 0", () => {
+      // 2026-09-19: the "已追问 N 次" label was moved out of the button
+      // (where it hijacked the button text on every additional click)
+      // into a small header badge next to the operator tag. Same font
+      // size as the operator (font-mono text-[10px]).
+      const dims: DimensionDecomposition[] = [
+        {
+          dimension: "ontology",
+          insight: "",
+          units: [
+            {
+              id: "u_fup",
+              dimension: "ontology",
+              unit_name: "灵窍",
+              description: "d",
+              follow_up_count: 3,
+              is_irreducible: false,
+            },
+          ],
+          candidates: [],
+          dimension_status: "decomposed",
+        },
+      ];
+      renderS2({ dimensions: dims });
+      const badge = screen.getByTestId("unit-followup-count-u_fup");
+      expect(badge).toHaveTextContent("已追问 3 次");
+      // Same mono/size as the operator badge — they share the header line.
+      expect(badge.className).toContain("font-mono");
+      expect(badge.className).toContain("text-[10px]");
+    });
+
+    it("does NOT render the inline badge when follow_up_count === 0", () => {
+      // Fresh units show nothing extra in the header — avoid visual noise.
+      renderS2();
+      expect(screen.queryByTestId("unit-followup-count-u1")).toBeNull();
+      expect(screen.queryByTestId("unit-followup-count-u4")).toBeNull();
+    });
+
+    it("does NOT render the inline badge on irreducible units even if follow_up_count > 0", () => {
+      // u2 in MOCK_DIMENSIONS has follow_up_count=1 + is_irreducible=true.
+      // The badge's purpose is to invite further追问; irreducible units
+      // can't be追问ed, so the badge would mislead.
+      renderS2();
+      expect(screen.queryByTestId("unit-followup-count-u2")).toBeNull();
+    });
+
+    it("the 追问 button no longer reads 「已追问 N 次」 — that label moved to the inline badge", () => {
+      // Regression guard: this used to be the button label, but on every
+      // additional click the button text grew longer and pushed the layout.
+      const dims: DimensionDecomposition[] = [
+        {
+          dimension: "ontology",
+          insight: "",
+          units: [
+            {
+              id: "u_long",
+              dimension: "ontology",
+              unit_name: "灵窍",
+              description: "d",
+              follow_up_count: 5,
+              is_irreducible: false,
+            },
+          ],
+          candidates: [],
+          dimension_status: "decomposed",
+        },
+      ];
+      renderS2({ dimensions: dims });
+      expect(screen.getByTestId("follow-up-u_long")).toHaveTextContent("追问");
+      expect(screen.getByTestId("follow-up-u_long")).not.toHaveTextContent("已追问");
     });
   });
 });

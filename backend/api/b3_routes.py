@@ -1,18 +1,23 @@
-"""4 阶段创意发散 API 路由。
+"""2 阶段创意发散 API 路由(S1 拆解 + 追问 + 合成提交)。
 
 Mounted at /api/v1/projects/{project_id}/creative/diverge/b3/*.
 
-端点(共 10):
-- GET    /state              — 读 state(走 migrate)
-- DELETE /state              — 删 state
-- POST   /decompose          — Stage 2 拆解
-- POST   /follow-up          — Stage 2 追问单 unit
-- POST   /diverge            — Stage 3 per-unit 自适应发散
-- POST   /regenerate-unit    — Stage 3 单 unit 重生
-- POST   /select-unit        — Stage 3 切换候选
-- POST   /commit             — Stage 4 LLM 合成 5 字段
-- POST   /edit-concept       — Stage 4 用户编辑
-- POST   /advance            — Stage 4 写盘(commit-and-advance)
+2026-09-19 简化:砍掉 S3 自适应发散 + S4 LLM 合成两阶段,原 4 阶段流程
+(S1 输入 → S2 拆解 → S3 发散 → S4 提交)现缩为 2 阶段(S1 输入 →
+S2 拆解 → /commit 合成落盘)。前端 wizard 从 4 子阶段改为 2 子阶段。
+
+端点(共 7):
+- GET    /state               — 读 state(走 migrate)
+- DELETE /state               — 删 state
+- POST   /decompose           — Stage 2 拆解
+- POST   /meta-decompose      — Stage 1→2 元提示词生成
+- POST   /follow-up           — Stage 2 追问单 unit
+- POST   /commit              — 提交合成:零 LLM,落盘 concept_and_dna.json
+- POST   /reset-and-restart   — 强制清 state(幂等)
+
+`/commit` 路由调用 `engine.synthesize_concept_and_dna`,返回
+`{concept_and_dna, creative_divergence, b3_state, committed_at}` — 前端
+拿到后无需再 GET,直接更新内存。
 """
 
 from __future__ import annotations
@@ -128,23 +133,6 @@ class FollowUpRequest(BaseModel):
     operator: Optional[str] = None
 
 
-class RegenerateUnitRequest(BaseModel):
-    unit_id: str
-
-
-class SelectUnitRequest(BaseModel):
-    unit_id: str
-    candidate_index: int = Field(..., ge=0)
-
-
-class EditConceptRequest(BaseModel):
-    one_line: Optional[str] = None
-    expanded: Optional[str] = None
-    core_tension: Optional[str] = None
-    tone: Optional[str] = None
-    logline: Optional[str] = None
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -245,83 +233,21 @@ async def follow_up(project_id: str, body: FollowUpRequest, request: Request) ->
     return {"unit": asdict(unit)}
 
 
-@router.post("/diverge")
-async def diverge(project_id: str, request: Request) -> dict:
-    engine = _get_engine(request)
-    try:
-        dims = await engine.diverge(project_id)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.exception("diverge failed")
-        raise HTTPException(status_code=503, detail=f"DIVERGE_FAILED: {e}")
-    return {"dimensions": _serialize_dimensions(dims)}
-
-
-@router.post("/regenerate-unit")
-async def regenerate_unit(project_id: str, body: RegenerateUnitRequest, request: Request) -> dict:
-    engine = _get_engine(request)
-    try:
-        cands = await engine.regenerate_unit(project_id, body.unit_id)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.exception("regenerate_unit failed")
-        raise HTTPException(status_code=503, detail=f"REGENERATE_FAILED: {e}")
-    return {"candidates": [asdict(c) for c in cands]}
-
-
-@router.post("/select-unit")
-async def select_unit(project_id: str, body: SelectUnitRequest, request: Request) -> dict:
-    engine = _get_engine(request)
-    try:
-        dim = engine.select_unit_candidate(project_id, body.unit_id, body.candidate_index)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    return {"dimension": asdict(dim)}
-
-
 @router.post("/commit")
 async def commit(project_id: str, request: Request) -> dict:
+    """提交拆解 → 写入 concept_and_dna.json + creative_divergence.json。
+
+    原 4 阶段 S4 LLM 合成已被 deterministic 拼装取代 — 引擎直接读 b3_state
+    的 raw_intent + top_level_summary 写入下游消费文件,零 LLM 调用。
+    """
     engine = _get_engine(request)
     try:
-        result = await engine.commit(project_id)
+        result = await engine.synthesize_concept_and_dna(project_id)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.exception("commit failed")
         raise HTTPException(status_code=503, detail=f"COMMIT_FAILED: {e}")
-    return result
-
-
-@router.post("/edit-concept")
-async def edit_concept(project_id: str, body: EditConceptRequest, request: Request) -> dict:
-    engine = _get_engine(request)
-    edited = {
-        k: v
-        for k, v in body.model_dump(exclude_none=True).items()
-        if v is not None
-    }
-    try:
-        result = await engine.edit_committed_concept(project_id, edited)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.exception("edit_concept failed")
-        raise HTTPException(status_code=503, detail=f"EDIT_CONCEPT_FAILED: {e}")
-    return result
-
-
-@router.post("/advance")
-async def advance(project_id: str, request: Request) -> dict:
-    engine = _get_engine(request)
-    try:
-        result = await engine.advance(project_id)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.exception("advance failed")
-        raise HTTPException(status_code=503, detail=f"ADVANCE_FAILED: {e}")
     return result
 
 
@@ -331,7 +257,7 @@ async def reset_and_restart(project_id: str) -> dict:
 
     Unlike DELETE /state, this returns {"deleted": True} regardless of whether
     a file existed, so the frontend can call it unconditionally when starting
-    a fresh 4-stage flow.
+    a fresh 2-stage flow.
     """
     p = _state_path(project_id)
     if p.exists():

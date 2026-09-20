@@ -44,7 +44,6 @@ const fakePrompt = (name: string): PromptSummary => ({
 describe("stageOf", () => {
   it("maps known prompts to their workspace stage", () => {
     expect(stageOf("firstness_decompose")).toBe("divergence");
-    expect(stageOf("adaptive_diverge")).toBe("divergence");
     expect(stageOf("outline_generation")).toBe("chapter");
     expect(stageOf("scene_writing")).toBe("chapter_writing");
     expect(stageOf("narrative_guard")).toBe("review");
@@ -61,7 +60,7 @@ describe("groupByStage", () => {
   it("returns groups in PROMPT_STAGE_ORDER regardless of input order", () => {
     const prompts = [
       fakePrompt("narrative_guard"),
-      fakePrompt("adaptive_diverge"),
+      fakePrompt("firstness_decompose"),
       fakePrompt("outline_generation"),
     ];
     const groups = groupByStage(prompts);
@@ -76,7 +75,7 @@ describe("groupByStage", () => {
   it("drops empty groups", () => {
     // SAMPLE 全是 divergence/chapter_writing/review,其它组应被过滤
     const prompts = [
-      fakePrompt("adaptive_diverge"),
+      fakePrompt("firstness_decompose"),
       fakePrompt("scene_writing"),
       fakePrompt("narrative_guard"),
     ];
@@ -90,17 +89,19 @@ describe("groupByStage", () => {
   it("preserves input order within a group (API sort is the source of truth)", () => {
     // groupByStage 只负责按 stage 分桶,不重排组内顺序 — 后端 API 已按
     // canonical usage order 返回 prompts,这里只要确认顺序不被破坏。
-    const prompts = [fakePrompt("adaptive_diverge")];
+    const prompts = [fakePrompt("firstness_decompose")];
     const [, items] = groupByStage(prompts)[0];
-    expect(items.map((p) => p.name)).toEqual(["adaptive_diverge"]);
+    expect(items.map((p) => p.name)).toEqual(["firstness_decompose"]);
 
     // 反向输入也按输入顺序输出
-    const reversed = [fakePrompt("adaptive_diverge")];
+    const reversed = [fakePrompt("firstness_decompose")];
     const [, items2] = groupByStage(reversed)[0];
-    expect(items2.map((p) => p.name)).toEqual(["adaptive_diverge"]);
+    expect(items2.map((p) => p.name)).toEqual(["firstness_decompose"]);
   });
 
   it("sends unmapped prompts to the 'other' bucket", () => {
+    // 2026-09-20:`adaptive_diverge` 不再属于「创意发散」主流程,落在「其他」
+    // 兜底组 — 与未映射的 future prompt 走同一条路径。
     const prompts = [
       fakePrompt("adaptive_diverge"),
       fakePrompt("future_prompt_we_havent_added_yet"),
@@ -108,7 +109,9 @@ describe("groupByStage", () => {
     const groups = groupByStage(prompts);
     const other = groups.find(([k]) => k === "other");
     expect(other).toBeDefined();
-    expect(other![1].map((p) => p.name)).toContain("future_prompt_we_havent_added_yet");
+    expect(other![1].map((p) => p.name).sort()).toEqual(
+      ["adaptive_diverge", "future_prompt_we_havent_added_yet"].sort(),
+    );
   });
 });
 

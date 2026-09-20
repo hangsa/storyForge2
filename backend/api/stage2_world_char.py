@@ -24,6 +24,54 @@ def _file_manager() -> FileManager:
     return FileManager(settings.projects_dir)
 
 
+def _load_decompose_data(project_id: str) -> dict:
+    """从 b3_state.json 提取 5 维度单元信息 + 因果链,供 world_generation 用。
+
+    2026-09-19 砍概念DNA + 砍 S3/S4 后,S2 拆解产生的 5 维度单元信息
+    直接作为 world_generation prompt 的输入,影响 power_systems / factions /
+    core_rules / era 的产出。
+
+    输出 shape:
+      - ontology / energetics / power_structure / protagonist_engine /
+        narrative_physics: list[{unit_name, description, ...}]
+      - causal_map: str
+
+    b3_state.json 缺失或读取失败 → 返回空 dict(此时 prompt 中的占位符
+    全部用 fallback 串 "（无）",LLM 端自然处理)。
+    """
+    b3_state = _file_manager().read_json(
+        project_id, "creative_os/b3_state.json"
+    ) or {}
+    dimensions = b3_state.get("dimensions") or []
+    if not isinstance(dimensions, list):
+        return {}
+    by_dim: dict[str, list[dict]] = {}
+    for d in dimensions:
+        if not isinstance(d, dict):
+            continue
+        key = d.get("dimension", "")
+        if not key:
+            continue
+        units_raw = d.get("units") or []
+        if not isinstance(units_raw, list):
+            units_raw = []
+        # 只透传 unit_name + description (后续 LLM 端不需要 is_irreducible /
+        # follow_up_count 等元信息)。is_irreducible=True 的单元仍传递 —
+        # prompt 模板会特别指示 LLM 把核心约束写到 core_rules[]。
+        by_dim[key] = [
+            {
+                "unit_name": (u.get("unit_name") or "") if isinstance(u, dict) else "",
+                "description": (u.get("description") or "") if isinstance(u, dict) else "",
+            }
+            for u in units_raw
+            if isinstance(u, dict)
+        ]
+    return {
+        **by_dim,
+        "causal_map": b3_state.get("causal_map") or "",
+    }
+
+
 @router.get("/world")
 async def get_world(project_id: str = Query(...)):
     if not project_id:
@@ -136,11 +184,17 @@ async def generate_world(data: dict):
     )
     try:
         user_modifications = str(data.get("user_modifications", ""))[:1700]
+        # 2026-09-19:S2 拆解的 5 维度单元信息作为 world_generation 的输入。
+        # 缺失 b3_state.json 时返回空 dict,prompt 端用 "（无）" 占位 — LLM
+        # 不会因为维度数据缺失而炸,只是 power_systems / factions 等字段会
+        # 按题材惯例兜底生成。
+        decompose_data = _load_decompose_data(project_id)
         result, response = await agent.generate_world(
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
             genre=project.get("genre", "cool_novel") if project else "cool_novel",
             user_modifications=user_modifications,
+            decompose_data=decompose_data,
         )
     except ValueError as e:
         raise HTTPException(
@@ -538,11 +592,16 @@ async def regenerate_world_section(
         genre=genre,
     )
     try:
+        # 2026-09-19:regenerate 同样传 5 维度单元(用户改 power_system 时,
+        # LLM 端也应知道 ontology / narrative_physics 的硬约束,以免
+        # 与原核心约束冲突)。
+        decompose_data = _load_decompose_data(project_id)
         result, _resp = await agent.generate_world(
             concept=concept_and_dna.get("concept", {}),
             story_dna=concept_and_dna.get("story_dna", {}),
             genre=genre,
             user_modifications=payload.user_modifications,
+            decompose_data=decompose_data,
         )
     except ValueError as e:
         raise http_error(503, "LLM_GENERATION_FAILED", str(e))

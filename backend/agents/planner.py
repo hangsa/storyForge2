@@ -347,9 +347,23 @@ class PlannerAgent(BaseAgent):
         story_dna: dict,
         genre: str = "cool_novel",
         user_modifications: str = "",
+        decompose_data: Optional[dict] = None,
     ) -> tuple[dict, LLMResponse]:
-        from backend.agents._injection_helpers import _build_user_modifications_block
+        """Generate world.json from concept + story_dna + (optional) 5-dimension
+        decompose data.
+
+        decompose_data shape (2026-09-19 砍掉概念DNA + 砍 S3/S4 后引入):
+          - ontology / energetics / power_structure / protagonist_engine /
+            narrative_physics: list[{unit_name, description}]
+          - causal_map: str(整段 5 维度因果链,作整体上下文)
+        缺省时全部用 "（无）" 占位 — 兼容未走 S2 拆解的老项目。
+        """
+        from backend.agents._injection_helpers import (
+            _build_user_modifications_block,
+            _format_dimension_units,
+        )
         extras = _resolve_genre_extras(genre)
+        dd = decompose_data or {}
         result, response = await self.generate_from_template(
             "world_generation",
             concept_title=concept.get("title", ""),
@@ -364,6 +378,12 @@ class PlannerAgent(BaseAgent):
             genre_style_rules=extras["style_rules"],
             genre_trope_patterns=extras["trope_patterns"],
             user_modifications=_build_user_modifications_block(user_modifications),
+            ontology_units=_format_dimension_units(dd.get("ontology", [])),
+            energetics_units=_format_dimension_units(dd.get("energetics", [])),
+            power_structure_units=_format_dimension_units(dd.get("power_structure", [])),
+            protagonist_engine_units=_format_dimension_units(dd.get("protagonist_engine", [])),
+            narrative_physics_units=_format_dimension_units(dd.get("narrative_physics", [])),
+            causal_map=dd.get("causal_map") or "（无）",
         )
         self.log_usage("world_generation", response)
         return result, response
@@ -376,9 +396,14 @@ class PlannerAgent(BaseAgent):
         user_modifications: str = "",
         existing_systems: Optional[list[dict]] = None,
         target_index: int = 0,
+        decompose_data: Optional[dict] = None,
     ) -> tuple[dict, LLMResponse]:
         """Rewrite a single power system in isolation. Other systems are passed
         to the prompt as context so the rewrite doesn't duplicate them.
+
+        2026-09-19:加 decompose_data kwarg 透传,但本 prompt (world_power_system_rewrite)
+        暂不消费 5 维度单元 — 单体系 regen 通常是对已生成体系的微调,不再喂全景。
+        保留 kwarg 以便未来扩展 + 与 generate_world 签名一致。
         """
         from backend.agents._injection_helpers import _build_user_modifications_block
         systems = list(existing_systems or [])

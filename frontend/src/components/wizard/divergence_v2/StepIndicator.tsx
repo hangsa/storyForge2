@@ -1,11 +1,13 @@
 import React from "react";
 import type { SubStage } from "./types";
 
+// 2026-09-19 砍掉 S3 自适应发散 + S4 合成提交两阶段后,4 → 2 子阶段:
+// S1 灵感(S1InputStep)→ S2 拆解(S2DecomposeStep)。点 S2 完成后,用户
+// 通过 page-level wizard footer 的「下一步」直接进 wizard step 2 世界观,
+// 不再在子阶段之间切换。StepIndicator 仅作 step 1 子阶段进度展示。
 const STAGES: Array<{ key: SubStage; label: string; icon: string }> = [
   { key: "1", label: "灵感", icon: "edit_note" },
   { key: "2", label: "拆解", icon: "account_tree" },
-  { key: "3", label: "发散", icon: "call_split" },
-  { key: "4", label: "提交", icon: "task_alt" },
 ];
 
 interface Props {

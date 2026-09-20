@@ -1,12 +1,9 @@
 import type { Genre } from "../hooks/useGenres";
 import type {
-  CommittedConcept,
   DimensionDecomposition,
-  NoveltyScores as B3NoveltyScores,
   RawIntent as B3RawIntent,
   B3State as B3StatePayload,
   Unit,
-  UnitCandidate,
 } from "../components/wizard/divergence_v2/types";
 import type { ActiveDimensions, DimensionEntry, DimensionEntryPayload, DimensionKind } from "./types";
 
@@ -1896,10 +1893,10 @@ export const api = {
   getLLMUsage: (limit: number = 100) =>
     request<LLMUsageEntry[]>("GET", `/settings/llm-usage?limit=${limit}`),
 
-  // --- 3B Four-stage divergence (creative decomposition + adaptive diverge) ---
+  // --- 3B Two-stage divergence (creative decomposition + submit → world) ---
   // Router prefix: /api/v1/projects/{project_id}/creative/diverge/b3/*.
-  // See backend/api/b3_routes.py. 4 stages: decompose (S2) → follow_up /
-  // diverge (S3) → commit (S4) → advance.
+  // See backend/api/b3_routes.py. 2026-09-19: S3 diverge / S4 commit cut —
+  // 4 stages → 2 stages (S1 input → S2 decompose → /commit synthesize-and-write).
 
   postB3Decompose: (
     projectId: string,
@@ -1933,62 +1930,17 @@ export const api = {
   ) =>
     request<{ unit: Unit }>(
       "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/follow-up-unit`,
+      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/follow-up`,
       body,
     ),
 
-  postB3Diverge: (projectId: string, options?: { signal?: AbortSignal }) =>
-    request<DivergeResponse>(
-      "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/diverge`,
-      {},
-      undefined,
-      options?.signal,
-    ),
-
-  postB3RegenerateUnit: (
-    projectId: string,
-    body: { unit_id: string },
-  ) =>
-    request<RegenerateUnitResponse>(
-      "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/regenerate-unit`,
-      body,
-    ),
-
-  postB3SelectUnit: (
-    projectId: string,
-    body: { unit_id: string; candidate_index: number },
-  ) =>
-    request<{ dimension: DimensionDecomposition }>(
-      "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/select-unit`,
-      body,
-    ),
-
+  // /commit 现在是「提交拆解 → 写入 concept_and_dna.json」零 LLM 合成端点。
+  // 返回 {concept_and_dna, creative_divergence, b3_state, committed_at} —
+  // 前端拿到后无需再 GET,直接更新内存即可。
   postB3Commit: (projectId: string, options?: { signal?: AbortSignal }) =>
     request<CommitResponse>(
       "POST",
       `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/commit`,
-      {},
-      undefined,
-      options?.signal,
-    ),
-
-  postB3EditConcept: (
-    projectId: string,
-    body: Partial<CommittedConcept>,
-  ) =>
-    request<{ committed_concept: CommittedConcept }>(
-      "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/edit-concept`,
-      body,
-    ),
-
-  postB3Advance: (projectId: string, options?: { signal?: AbortSignal }) =>
-    request<AdvanceResponse>(
-      "POST",
-      `/v1/projects/${encodeURIComponent(projectId)}/creative/diverge/b3/advance`,
       {},
       undefined,
       options?.signal,
@@ -2033,20 +1985,29 @@ export interface DecomposeResponse {
   top_level_summary: string;
 }
 
-export interface DivergeResponse {
-  dimensions: DimensionDecomposition[];
-}
-
-export interface RegenerateUnitResponse {
-  candidates: UnitCandidate[];
-}
-
+// /commit 后端返回 shape:与 synthesize_concept_and_dna() 返回 dict 对齐。
+// concept_and_dna / creative_divergence 字段保留旧 schema 以便下游 STAGE2~4
+// 继续消费;b3_state 是 schema_version=3 状态机。
 export interface CommitResponse {
-  committed_concept: CommittedConcept;
-  novelty_scores: B3NoveltyScores;
-}
-
-export interface AdvanceResponse {
+  concept_and_dna: {
+    concept: { title: string; premise: string; tone: string; theme: string };
+    story_dna: {
+      core_contradiction: { statement: string; side_a: string; side_b: string };
+      value_stack: unknown[];
+      tone: string;
+    };
+    novelty_scores: unknown;
+    source: string;
+    b3_snapshot: { schema_version: number; committed_at: string };
+  };
+  creative_divergence: {
+    prompt: string;
+    variants: unknown[];
+    selected_id: string | null;
+    selected_at: string;
+    source: string;
+  };
+  b3_state: B3StatePayload;
   committed_at: string;
 }
 

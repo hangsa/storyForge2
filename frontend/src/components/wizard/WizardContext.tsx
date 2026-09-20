@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect, useRef, ReactNode } from "react";
-import type { Concept, StoryDNA, World, CharacterSet, NovelOutline, Outline } from "../../api/client";
+import type { World, CharacterSet, NovelOutline, Outline } from "../../api/client";
 
 export function getSessionKey(projectId: string): string {
   return `storyforge.wizard.state.${projectId}`;
@@ -41,8 +41,6 @@ export interface WizardData {
     variants: Array<{ id: string; label: string; title: string; description: string; tags: string[]; created_at: string }>;
     selected_id: string | null;
   } | null;
-  concept: Concept | null;
-  story_dna: StoryDNA | null;
   world: World | null;
   characters: CharacterSet | null;
   novel_outline: NovelOutline | null;
@@ -69,8 +67,6 @@ export const TOTAL_STEPS = 7;
 
 const EMPTY_DATA: WizardData = {
   creative_divergence: null,
-  concept: null,
-  story_dna: null,
   world: null,
   characters: null,
   novel_outline: null,
@@ -78,14 +74,20 @@ const EMPTY_DATA: WizardData = {
   chapter_outline_progress: null,
 };
 
-// Maps each wizard data key to the step that owns it. step 4 (Map) owns no
+// Maps each wizard data key to the step that owns it. step 5 (Map) owns no
 // data. Used by the STEP_COMPLETED reducer to clear downstream keys on resave.
+//
+// 2026-09-19 砍掉概念DNA 步骤(原 step 2)— concept / story_dna 字段被移除,
+// 下游步骤编号统一 -1:
+//   - world:    3 → 2
+//   - characters: 4 → 3
+//   - novel_outline:   7 → 6
+//   - chapter1_outline: 8 → 7
+//   - chapter_outline_progress: 8 → 7
 const STEP_DATA_KEY_TO_STEP: Partial<Record<keyof WizardData, number>> = {
   creative_divergence: 1,
-  concept: 2,
-  story_dna: 2,
-  world: 3,
-  characters: 4,
+  world: 2,
+  characters: 3,
   novel_outline: 6,
   chapter1_outline: 7,
   // Mid-batch progress for step 7's chapter-outline generation. Lives in

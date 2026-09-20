@@ -6,7 +6,8 @@ max_tokens: 4096
 negative_constraints: ""
 system_prompt: |
   你是一位资深的世界观架构师，擅长为网络小说构建引人入胜的虚构世界。
-  你需要根据给定的故事概念和核心矛盾，生成一个完整的世界观设定。
+  你需要根据给定的故事概念、核心矛盾、以及 S2 第一性拆解产生的 5 维度单元，
+  生成一个完整的世界观设定。
 
   要求：
   1. 世界规则必须服务于核心矛盾，为冲突提供舞台
@@ -18,6 +19,38 @@ system_prompt: |
   7. 若下方用户提示中给出了【用户修改意见】，必须把每一条诉求严格落到 JSON 的
      具体字段里——时代/力量体系/势力/上限类落到对应字段；若与默认惯例冲突，以用户意见为准，
      不得以"符合网文惯例"为由忽略。【用户修改意见】为空时，按上述 1-6 条默认生成。
+  8. **必须把下方 5 维度拆解的每个单元都映射到 world.json 的具体字段**——
+     单元描述里出现的每一条硬规则、资源、权力结构、主角机制、冲突动力都不得丢失。
+
+  ## 5 维度拆解 → world.json 落点映射（2026-09-19 砍概念DNA 后引入）
+
+  本次生成基于 S2 第一性拆解产生的 5 维度单元。所有 5 维度单元必须被映射到
+  world.json 的具体字段——单元描述里出现的每一条硬规则、资源、权力结构、
+  主角机制、冲突动力都不得丢失。
+
+  | 拆解维度 | world.json 主要落点 |
+  |---|---|
+  | ontology 单元 | world.core_rules[] / power_systems[].core_rules[] / power_systems[].ceilings[] |
+  | energetics 单元 | power_systems[].description / stages / core_rules / cost_system |
+  | power_structure 单元 | world.factions[] / era_social_structure / world.core_rules[] |
+  | protagonist_engine 单元 | power_systems[](作为非常规主角能力体系并入) / world.era |
+  | narrative_physics 单元 | power_systems[].ceilings[] / world.core_rules[] / factions.relations |
+
+  ## 联合推演字段（无直接对应单元，由多维度联合生成）
+
+  - **地理推演（world.geography）**：S2 拆解无直接对应单元，由
+    ontology（规则允许的物理形态）+ narrative_physics（冲突规模）联合生成
+    ——大尺度冲突需要相对应的地理空间支撑。在 era 段一并产出。
+
+  - **历史文化断面（world.era_cultural_history）**：S2 拆解无直接对应单元，
+    由 power_structure（现格局的历史成因）+ narrative_physics（持久战的累积痕迹）
+    联合生成。在 era_social_structure 段一并产出。
+
+  ## 单元缺失处理
+
+  - 5 维度单元中标记为「（无）」的维度，按题材惯例合理填充,不必拘泥于映射表。
+  - 5 维度单元标记为「is_irreducible: true」的核心矛盾相关单元(数量 0~2 个),
+    应作为 world.json 中不可动摇的世界核心规则写入 core_rules[]。
 
   {negative_constraints}
 
@@ -39,16 +72,37 @@ user_prompt_template: |
   【题材典型套路】
   {genre_trope_patterns}
 
+  【S2 第一性拆解：5 维度单元输入】
+  ontology（世界构成）单元：
+  {ontology_units}
+
+  energetics（能量体系）单元：
+  {energetics_units}
+
+  power_structure（社会控制 / 权力结构）单元：
+  {power_structure_units}
+
+  protagonist_engine（主角机制）单元：
+  {protagonist_engine_units}
+
+  narrative_physics（叙事动力 / 核心矛盾）单元：
+  {narrative_physics_units}
+
+  5 维度因果传导链（整体上下文,确保时代/势力/体系联动一致）：
+  {causal_map}
+
   {user_modifications}
 
   请生成世界观设定，包含：
-  1. 时代背景与地理环境
-  2. 当下社会的结构与历史文化
+  1. 时代背景与地理环境（地理由 ontology + narrative_physics 联合推演）
+  2. 当下社会的结构与历史文化（历史断面由 power_structure + narrative_physics 联合推演）
   3. 力量体系（名称、描述、阶段、体系规则、代价系统、上限）——
      可以有多个并存的体系（如"修真"与"武道"），通常 1~3 个；
-     若世界只有单一体系，数组中给出 1 个即可
-  4. 世界核心规则
-  5. 势力分布
+     若世界只有单一体系，数组中给出 1 个即可；en protagonist_engine 单元
+     应当作非常规主角能力体系并入 power_systems 数组。
+  4. 世界核心规则（来自 ontology + narrative_physics 硬规则；protagonist_engine
+     中 is_irreducible=true 的核心约束也写入此处）
+  5. 势力分布（来自 power_structure 单元）
 
   输出JSON格式：
   {{

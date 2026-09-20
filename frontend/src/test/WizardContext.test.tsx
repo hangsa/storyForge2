@@ -18,8 +18,6 @@ beforeEach(() => {
 function makeData(overrides: Partial<WizardData> = {}): WizardData {
   return {
     creative_divergence: null,
-    concept: null,
-    story_dna: null,
     world: null,
     characters: null,
     novel_outline: null,
@@ -49,29 +47,27 @@ describe("WizardContext", () => {
     expect(result.current.currentStep).toBe(1);
   });
 
-  it("records completed steps and stores data on saveStep", () => {
+  // 2026-09-19 砍掉 Concept DNA 步骤(step 2)后,step 1 (创意发散)保存的不再是
+  // concept/story_dna,而是 wizard 自带的 creative_divergence 字段(由
+  // InitWizardModal 的 prefill 直接覆盖)。这里验证 saveStep(1, ...) 仍然记录
+  // completedSteps[1] = true 并把 data.creative_divergence 写入。
+  it("records completed steps and stores data on saveStep(1)", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     act(() => result.current.startStep(1));
     act(() =>
       result.current.saveStep(1, {
-        concept: {
-          title: "X",
-          genre: "cool_novel",
-          premise: "",
-          tone: "",
-          theme: "",
-          target_audience: "",
-          style_template: "",
-        },
-        story_dna: {
-          core_contradiction: { statement: "", side_a: "", side_b: "" },
-          value_stack: [],
+        creative_divergence: {
+          variants: [],
+          selected_id: null,
         },
       })
     );
     expect(result.current.status).toBe("completed");
     expect(result.current.completedSteps).toContain(1);
-    expect(result.current.data.concept?.title).toBe("X");
+    expect(result.current.data.creative_divergence).toEqual({
+      variants: [],
+      selected_id: null,
+    });
     expect(result.current.currentStep).toBe(2);
   });
 
@@ -80,19 +76,7 @@ describe("WizardContext", () => {
     act(() => result.current.startStep(1));
     act(() =>
       result.current.saveStep(1, {
-        concept: {
-          title: "X",
-          genre: "cool_novel",
-          premise: "",
-          tone: "",
-          theme: "",
-          target_audience: "",
-          style_template: "",
-        },
-        story_dna: {
-          core_contradiction: { statement: "", side_a: "", side_b: "" },
-          value_stack: [],
-        },
+        creative_divergence: { variants: [], selected_id: null },
       })
     );
     act(() => result.current.jumpToStep(1));
@@ -113,25 +97,13 @@ describe("WizardContext", () => {
     act(() => result.current.startStep(1));
     act(() =>
       result.current.saveStep(1, {
-        concept: {
-          title: "Persisted",
-          genre: "cool_novel",
-          premise: "",
-          tone: "",
-          theme: "",
-          target_audience: "",
-          style_template: "",
-        },
-        story_dna: {
-          core_contradiction: { statement: "", side_a: "", side_b: "" },
-          value_stack: [],
-        },
+        creative_divergence: { variants: [], selected_id: "v1" },
       })
     );
     const stored = JSON.parse(sessionStorage.getItem(KEY)!);
     expect(stored.currentStep).toBe(2);
     expect(stored.completedSteps).toContain(1);
-    expect(stored.data.concept.title).toBe("Persisted");
+    expect(stored.data.creative_divergence.selected_id).toBe("v1");
   });
 
   it("does not leak state between different projects", () => {
@@ -161,19 +133,7 @@ describe("WizardContext", () => {
         completedSteps: [1, 2],
         status: "completed",
         data: makeData({
-          concept: {
-            title: "Hydrated",
-            genre: "cool_novel",
-            premise: "",
-            tone: "",
-            theme: "",
-            target_audience: "",
-            style_template: "",
-          },
-          story_dna: {
-            core_contradiction: { statement: "", side_a: "", side_b: "" },
-            value_stack: [],
-          },
+          creative_divergence: { variants: [{ id: "v1" }], selected_id: "v1" },
         }),
         errorMessage: null,
       })
@@ -181,50 +141,26 @@ describe("WizardContext", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     expect(result.current.currentStep).toBe(3);
     expect(result.current.completedSteps).toEqual([1, 2]);
-    expect(result.current.data.concept?.title).toBe("Hydrated");
+    expect(result.current.data.creative_divergence?.selected_id).toBe("v1");
   });
 
   it("hydrateFromFiles merges completedSteps + data without changing currentStep backwards", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     act(() =>
       result.current.hydrateFromFiles([1, 2, 3], {
-        concept: {
-          title: "From File",
-          genre: "cool_novel",
-          premise: "",
-          tone: "",
-          theme: "",
-          target_audience: "",
-          style_template: "",
-        },
-        story_dna: {
-          core_contradiction: { statement: "", side_a: "", side_b: "" },
-          value_stack: [],
-        },
+        creative_divergence: { variants: [], selected_id: null },
       })
     );
     expect(result.current.completedSteps).toEqual([1, 2, 3]);
-    expect(result.current.currentStep).toBe(1); // prefill marks steps completed but does not advance — resume uses sessionStorage's currentStep
-    expect(result.current.data.concept?.title).toBe("From File");
+    expect(result.current.currentStep).toBe(1);
+    expect(result.current.data.creative_divergence?.selected_id).toBeNull();
   });
 
   it("hydrateFromFiles is additive (does not overwrite a step the user just completed)", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     act(() =>
       result.current.saveStep(1, {
-        concept: {
-          title: "Just Done",
-          genre: "cool_novel",
-          premise: "",
-          tone: "",
-          theme: "",
-          target_audience: "",
-          style_template: "",
-        },
-        story_dna: {
-          core_contradiction: { statement: "", side_a: "", side_b: "" },
-          value_stack: [],
-        },
+        creative_divergence: { variants: [], selected_id: "v_just_done" },
       })
     );
     act(() =>
@@ -238,8 +174,8 @@ describe("WizardContext", () => {
         },
       })
     );
-    expect(result.current.completedSteps).toEqual([1, 2, 3]); // 1 stays
-    expect(result.current.data.concept?.title).toBe("Just Done");
+    expect(result.current.completedSteps).toEqual([1, 2, 3]);
+    expect(result.current.data.creative_divergence?.selected_id).toBe("v_just_done");
     expect(result.current.data.world?.era).toBe("X");
   });
 
@@ -253,38 +189,39 @@ describe("WizardContext", () => {
     expect(sessionStorage.getItem(KEY)).toBeNull();
   });
 
+  // 2026-09-19:resave of step 2 (世界) 现在清除 steps 3-7 数据(world /
+  // characters / novel_outline / chapter1_outline / chapter_outline_progress)。
+  // step 1 (creative_divergence) 数据不再因 resave step 2 触发清理。
   it("resave (step already in completedSteps) keeps completedSteps ≤ saved step and clears data keys for steps > saved step", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    // First-time saves for 2..7, then a resave of step 4.
-    act(() => result.current.saveStep(2, {
-      concept: { title: "C", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+    // First-time saves for 1, 2, 3, then skip 4, save 5, save 6.
+    act(() => result.current.saveStep(1, {
+      creative_divergence: { variants: [], selected_id: null },
     }));
-    act(() => result.current.saveStep(3, { world: {
+    act(() => result.current.saveStep(2, { world: {
       era: "W", geography: "G",
       power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     }}));
-    act(() => result.current.saveStep(4, { characters: { characters: [{ id: "x" }], current: null } }));
-    act(() => result.current.skipStep(5));
-    act(() => result.current.saveStep(6, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
-    act(() => result.current.saveStep(7, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
-    // Resave step 4 with new patch data.
-    act(() => result.current.saveStep(4, { characters: { characters: [{ id: "y" }], current: null } }));
-    expect(result.current.completedSteps).toEqual([2, 3, 4]);
-    expect(result.current.data.world?.era).toBe("W");                  // step 3 preserved
-    expect(result.current.data.characters?.characters?.[0]?.id).toBe("y"); // step 4 patch applied
-    expect(result.current.data.novel_outline).toBeNull();              // step 6 cleared
-    expect(result.current.data.chapter1_outline).toBeNull();           // step 7 cleared
-    expect(result.current.data.chapter_outline_progress).toBeNull();   // step 7 cleared
-    expect(result.current.currentStep).toBe(5);
+    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
+    act(() => result.current.skipStep(4));
+    act(() => result.current.saveStep(5, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
+    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
+    // Resave step 3 with new patch data.
+    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "y" }], current: null } }));
+    expect(result.current.completedSteps).toEqual([1, 2, 3]);
+    expect(result.current.data.world?.era).toBe("W");                  // step 2 preserved
+    expect(result.current.data.characters?.characters?.[0]?.id).toBe("y"); // step 3 patch applied
+    expect(result.current.data.novel_outline).toBeNull();              // step 5 cleared
+    expect(result.current.data.chapter1_outline).toBeNull();           // step 6 cleared
+    expect(result.current.data.chapter_outline_progress).toBeNull();   // step 6 cleared
+    expect(result.current.currentStep).toBe(4);
   });
 
-  it("resave of step 5 clears step 6 chapter_outline_progress (regression: missing from STEP_DATA_KEY_TO_STEP)", () => {
+  it("resave of step 5 clears step 6 chapter_outline_progress", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     act(() => result.current.saveStep(1, {
-      concept: { title: "C", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+      creative_divergence: { variants: [], selected_id: null },
     }));
     act(() => result.current.saveStep(2, { world: {
       era: "W", geography: "G",
@@ -294,14 +231,10 @@ describe("WizardContext", () => {
     act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
     act(() => result.current.saveStep(5, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
     act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
-    // Simulate a partially-completed chapter-outline batch from a prior run.
     act(() => result.current.updateData({
       chapter_outline_progress: { done: 3, total: 10, last_user_modifications: "" },
     }));
     expect(result.current.data.chapter_outline_progress?.done).toBe(3);
-    // Resaving step 5 should clear step 6's chapter_outline_progress so the
-    // user doesn't see stale mid-batch progress when the next step 6 attempt
-    // starts fresh.
     act(() => result.current.saveStep(5, {
       novel_outline: { core_conflict_theme: "t2", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" },
     }));
@@ -309,88 +242,50 @@ describe("WizardContext", () => {
     expect(result.current.data.chapter1_outline).toBeNull();
   });
 
-  it("resave of step 2 clears data for steps 3..7 and keeps only concept/story_dna", () => {
+  it("resave of step 2 clears data for steps 3..6 and keeps creative_divergence", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.saveStep(2, {
-      concept: { title: "C", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+    act(() => result.current.saveStep(1, {
+      creative_divergence: { variants: [], selected_id: "v1" },
     }));
-    act(() => result.current.saveStep(3, { world: {
+    act(() => result.current.saveStep(2, { world: {
       era: "W", geography: "G",
       power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
       factions: [], core_rules: [],
     }}));
-    act(() => result.current.saveStep(4, { characters: { characters: [{ id: "x" }], current: null } }));
-    act(() => result.current.saveStep(6, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
-    act(() => result.current.saveStep(7, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
-    act(() => result.current.saveStep(2, {
-      concept: { title: "C2", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
-    }));
-    expect(result.current.completedSteps).toEqual([2]);
-    expect(result.current.data.concept?.title).toBe("C2");
-    expect(result.current.data.world).toBeNull();
+    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
+    act(() => result.current.saveStep(5, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
+    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
+    act(() => result.current.saveStep(2, { world: {
+      era: "W2", geography: "G2",
+      power_systems: [], factions: [], core_rules: [],
+    }}));
+    expect(result.current.completedSteps).toEqual([1, 2]);
+    expect(result.current.data.creative_divergence?.selected_id).toBe("v1");
+    expect(result.current.data.world?.era).toBe("W2");
     expect(result.current.data.characters).toBeNull();
     expect(result.current.data.novel_outline).toBeNull();
     expect(result.current.data.chapter1_outline).toBeNull();
     expect(result.current.data.chapter_outline_progress).toBeNull();
   });
 
-  it("resave of the last step (7) is benign — no subsequent steps to clear", () => {
+  it("resave of the last step (6) is benign — no subsequent steps to clear", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() => result.current.saveStep(2, {
-      concept: { title: "C", genre: "cool_novel", premise: "", tone: "", theme: "", target_audience: "", style_template: "" },
-      story_dna: { core_contradiction: { statement: "", side_a: "", side_b: "" }, value_stack: [] },
+    act(() => result.current.saveStep(1, {
+      creative_divergence: { variants: [], selected_id: null },
     }));
-    act(() => result.current.saveStep(3, { world: {
+    act(() => result.current.saveStep(2, { world: {
       era: "W", geography: "G",
-      power_systems: [{ name: "", description: "", stages: [], core_rules: [], ceilings: [] }],
-      factions: [], core_rules: [],
+      power_systems: [], factions: [], core_rules: [],
     }}));
-    act(() => result.current.saveStep(4, { characters: { characters: [{ id: "x" }], current: null } }));
-    act(() => result.current.skipStep(5));
-    act(() => result.current.saveStep(6, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
-    act(() => result.current.saveStep(7, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
-    act(() => result.current.saveStep(7, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T2", scene_plan: [] }] } }));
-    expect(result.current.completedSteps).toEqual([2, 3, 4, 5, 6, 7]);
+    act(() => result.current.saveStep(3, { characters: { characters: [{ id: "x" }], current: null } }));
+    act(() => result.current.skipStep(4));
+    act(() => result.current.saveStep(5, { novel_outline: { core_conflict_theme: "t", volumes: [], mc_growth_arc: [], key_plot_points: [], generated_at: "", updated_at: "" } }));
+    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T", scene_plan: [] }] } }));
+    act(() => result.current.saveStep(6, { chapter1_outline: { chapters: [{ chapter_number: 1, title: "T2", scene_plan: [] }] } }));
+    expect(result.current.completedSteps).toEqual([1, 2, 3, 4, 5, 6]);
     expect(result.current.data.chapter1_outline?.chapters?.[0]?.title).toBe("T2");
   });
 
-  // v1.8.1: regression for design-doc F1.8.1.2 — lock independent
-  // preservation of story_dna vs concept across hydrate and partial save.
-  it("hydrateFromFiles preserves top-level story_dna independent of concept", () => {
-    const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    act(() =>
-      result.current.hydrateFromFiles([2], {
-        concept: {
-          title: "X",
-          genre: "cool_novel",
-          premise: "",
-          tone: "",
-          theme: "",
-          target_audience: "",
-          style_template: "",
-        },
-        story_dna: {
-          core_contradiction: { statement: "灭世与守护", side_a: "灭世者", side_b: "守护者" },
-          value_stack: [],
-        },
-      })
-    );
-    // Both fields must reach display intact — never merge one into the other.
-    expect(result.current.data.concept?.title).toBe("X");
-    expect(result.current.data.story_dna?.core_contradiction.statement).toBe("灭世与守护");
-    expect(result.current.data.story_dna?.core_contradiction.side_a).toBe("灭世者");
-    expect(result.current.data.story_dna?.core_contradiction.side_b).toBe("守护者");
-  });
-
-  // v1.8.4: handleStart() in each step component generates content (LLM
-  // call) and writes it directly to backend, but does NOT advance the
-  // user's wizard position — the user clicks "下一步" to confirm. Without
-  // markStepGenerated, the generated content reaches `data` (via the
-  // component's local state) but `completedSteps` is never updated, so
-  // when the user navigates away and back, the step is unreachable
-  // (PROJ_proj_cc4ca4ae_report: step 6 became grayed out).
   it("markStepGenerated adds step to completedSteps and writes data, without advancing currentStep", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
     act(() => result.current.startStep(2));
@@ -407,7 +302,7 @@ describe("WizardContext", () => {
     );
     expect(result.current.completedSteps).toContain(2);
     expect(result.current.data.world?.era).toBe("Generated");
-    expect(result.current.currentStep).toBe(2); // NOT advanced — user must click "下一步"
+    expect(result.current.currentStep).toBe(2);
     expect(result.current.status).toBe("completed");
   });
 
@@ -442,37 +337,30 @@ describe("WizardContext", () => {
     expect(result.current.data.novel_outline?.core_conflict_theme).toBe("second");
   });
 
-  it("saveStep with only concept patch leaves story_dna intact", () => {
+  it("saveStep with only world patch leaves characters intact", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    // Seed story_dna first via hydrate (covers the realistic path: user
-    // resumes from saved files, then edits concept only).
     act(() =>
-      result.current.hydrateFromFiles([2], {
-        story_dna: {
-          core_contradiction: { statement: "旧矛盾", side_a: "A", side_b: "B" },
-          value_stack: [],
+      result.current.hydrateFromFiles([3], {
+        characters: {
+          characters: [{ id: "c1", name: "x" }],
+          current: null,
         },
       })
     );
     act(() => result.current.startStep(2));
     act(() =>
       result.current.saveStep(2, {
-        concept: {
-          title: "新标题",
-          genre: "cool_novel",
-          premise: "",
-          tone: "",
-          theme: "",
-          target_audience: "",
-          style_template: "",
+        world: {
+          era: "新纪元",
+          geography: "G",
+          power_systems: [],
+          factions: [],
+          core_rules: [],
         },
       })
     );
-    expect(result.current.data.concept?.title).toBe("新标题");
-    // story_dna must be untouched by the partial patch.
-    expect(result.current.data.story_dna?.core_contradiction.statement).toBe("旧矛盾");
-    expect(result.current.data.story_dna?.core_contradiction.side_a).toBe("A");
-    expect(result.current.data.story_dna?.core_contradiction.side_b).toBe("B");
+    expect(result.current.data.world?.era).toBe("新纪元");
+    expect(result.current.data.characters?.characters?.[0]?.id).toBe("c1");
   });
 
   // v1.2 (creative-divergence refactor): step 1 (Creative Divergence) is
@@ -490,16 +378,13 @@ describe("WizardContext", () => {
     act(() => result.current.setCreativeDivergenceSubStage("B"));
     expect(result.current.creativeDivergenceSubStage).toBe("B");
     expect(result.current.currentStep).toBe(1);
-    // Sanity: status is "generating" from startStep, not reset.
     expect(result.current.status).toBe("generating");
   });
 
   it("jumpToCreativeDivergence atomically sets currentStep=1 and the sub-stage", () => {
     const { result } = renderHook(() => useWizard(), { wrapper: wrap });
-    // Move away from step 1 first.
     act(() => result.current.startStep(3));
     expect(result.current.currentStep).toBe(3);
-    // Jump back to step 1 at sub-stage D.
     act(() => result.current.jumpToCreativeDivergence("D"));
     expect(result.current.currentStep).toBe(1);
     expect(result.current.creativeDivergenceSubStage).toBe("D");

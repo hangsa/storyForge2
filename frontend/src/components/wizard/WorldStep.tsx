@@ -746,7 +746,8 @@ function PowerSystemsPanel({
         active={activeSubTab || "0"}
         onChange={onSubTabChange}
         onRegenerate={(k) => {
-          const i = parseInt(k, 10);
+          const i = Number.parseInt(k, 10);
+          if (Number.isNaN(i)) return;
           api
             .regeneratePowerSystemItem(projectId, i, "")
             .then((result) => {

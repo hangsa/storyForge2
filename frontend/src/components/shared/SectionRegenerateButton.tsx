@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { RegenerateModal } from "./RegenerateModal";
-import { useWizard } from "../wizard/WizardContext";
+import { WizardContext } from "../wizard/WizardContext";
 
 /**
  * Reusable regenerate flow extracted from `SectionRegenerateButton`. Owns the
@@ -51,7 +51,21 @@ export interface SectionRegenerateTriggerProps {
   "data-testid": string;
   onClick: (e: React.MouseEvent) => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
-  disabled: boolean;
+  /**
+   * Spreads `disabled` only when truthy. The HTML `disabled` attribute is
+   * invalid on `<span>` (only valid on form elements), but the wizard path
+   * `<button>` consumers rely on it to gate form submission. Callers that
+   * render the trigger as `<span role="button">` (e.g., WorldStep's nested
+   * tab affordance) should use `aria-disabled` + `data-disabled` instead —
+   * both are exported below.
+   */
+  disabled?: boolean;
+  /** Always set; valid on any element. */
+  "aria-disabled"?: boolean;
+  /** CSS hook for `[data-disabled="true"]` opacity / cursor styling on non-button elements. */
+  "data-disabled"?: "true" | undefined;
+  /** Tab-reachable when truthy; spans need this because browsers don't auto-focus them. */
+  tabIndex?: number;
   "aria-label": string;
   title: string;
   className: string;
@@ -87,8 +101,15 @@ export function useSectionRegenerate(
   // inline status badge in the wizard footer (positioned before "重新生成"),
   // instead of the previous global toast at viewport bottom-right which
   // overlapped the footer buttons when the modal was short.
-  // 当 statusReporter 存在时跳过 wizard（向后兼容：wizard 路径不传 prop）。
-  const wizard = statusReporter ? null : useWizard();
+  //
+  // useWizard() is called UNCONDITIONALLY (Rules of Hooks). When a
+  // statusReporter is provided, the wizard context is ignored at the call
+  // sites below — `wizard` is just never read. `useOptionalWizard` would
+  // still throw if the provider is missing, so we deliberately use
+  // `useContext(WizardContext)` directly: returns null when no provider is
+  // mounted (workspace path renders outside the wizard), which is exactly
+  // what we want here.
+  const wizard = useContext(WizardContext);
 
   const reportBusy = (t: string) => {
     if (statusReporter?.onBusy) statusReporter.onBusy(t);
@@ -137,7 +158,18 @@ export function useSectionRegenerate(
         openModal(e);
       }
     },
+    // `disabled` is only valid on form elements (button/input/select). When
+    // spread onto a `<span role="button">` it does nothing visually AND it
+    // leaves the element keyboard-focusable, which contradicts the intent.
+    // We expose BOTH shapes — the wizard `<button>` consumer spreads
+    // `triggerProps` and gets `disabled`; the wizard span / workspace path
+    // can opt into `aria-disabled` + `data-disabled` for CSS-based styling.
     disabled: disabled || busy,
+    "aria-disabled": disabled || busy,
+    "data-disabled": disabled || busy ? "true" : undefined,
+    // Spans don't participate in Tab order by default — explicit tabIndex
+    // makes the affordance keyboard-reachable when rendered as a span.
+    tabIndex: disabled || busy ? -1 : 0,
     "aria-label": `重新生成 — ${target}`,
     title: `重新生成 — ${target}`,
     className:

@@ -484,10 +484,16 @@ function WorldTabs({
               {/* Inner ↻ affordance — `<span role="button">` lives inside the
                   outer `<button role="tab">`. triggerProps.onClick already
                   calls e.stopPropagation() so it doesn't bubble to onTabChange,
-                  and Enter/Space work via the hook's onKeyDown. */}
+                  and Enter/Space work via the hook's onKeyDown. We pass a
+                  custom className here because the trigger's default
+                  `disabled:cursor-not-allowed disabled:opacity-40` only works
+                  on form elements — `<span>` doesn't react to `disabled`. The
+                  trigger exposes `data-disabled="true"` and `aria-disabled`
+                  instead, which the Tailwind `data-[disabled=true]:` variant
+                  can target. */}
               <span
                 {...regen.triggerProps}
-                className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded text-system-log/50 hover:text-primary-container hover:bg-surface-container transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded text-system-log/50 hover:text-primary-container hover:bg-surface-container transition-colors data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-30"
               >
                 <span
                   className={`material-symbols-outlined text-[14px] leading-none${regen.busy ? " animate-spin text-primary-container" : ""}`}

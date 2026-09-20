@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ToastProvider } from "../hooks/useToast";
 
@@ -79,5 +79,99 @@ describe("WorldStep tab strip", () => {
     expect(screen.getByTestId("world-tab-power_system-regenerate")).toBeInTheDocument();
     expect(screen.getByTestId("world-tab-core_rules-regenerate")).toBeInTheDocument();
     expect(screen.getByTestId("world-tab-factions-regenerate")).toBeInTheDocument();
+  });
+
+  it("marks era tab as selected and others as unselected by default", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    expect(screen.getByTestId("world-tab-era").getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByTestId("world-tab-power_system").getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByTestId("world-tab-core_rules").getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByTestId("world-tab-factions").getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("hides non-active panels with hidden attribute", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    // Active panel: `hidden` attribute is absent (panel is visible).
+    expect(screen.getByTestId("world-panel-era").hasAttribute("hidden")).toBe(false);
+    // Inactive panels: `hidden=""` (HTML boolean attribute) is set.
+    expect(screen.getByTestId("world-panel-power_system").hasAttribute("hidden")).toBe(true);
+    expect(screen.getByTestId("world-panel-core_rules").hasAttribute("hidden")).toBe(true);
+    expect(screen.getByTestId("world-panel-factions").hasAttribute("hidden")).toBe(true);
+  });
+
+  it("clicking the regenerate span does NOT switch tabs (stopPropagation)", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [],
+      factions: [],
+      core_rules: [],
+    });
+    (api.regenerateWorldSection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "未来",
+      geography: "赛博",
+      power_systems: [],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+
+    // Sanity: era tab is the default active one.
+    expect(screen.getByTestId("world-tab-era").getAttribute("aria-selected")).toBe("true");
+
+    // Click the regenerate span (not the outer tab button).
+    fireEvent.click(screen.getByTestId("world-tab-era-regenerate"));
+
+    // The RegenerateModal opens; confirm it and verify the API was called.
+    await screen.findByTestId("regenerate-modal");
+    fireEvent.click(screen.getByTestId("regenerate-modal-confirm"));
+    await waitFor(() =>
+      expect(api.regenerateWorldSection).toHaveBeenCalledWith(PROJECT, "era", ""),
+    );
+
+    // Crucially: the era tab must STILL be the selected one — stopPropagation
+    // prevented the click from bubbling to the outer <button role="tab">,
+    // so onTabChange was never called. Without stopPropagation the active
+    // tab would have changed (the bug this test guards).
+    expect(screen.getByTestId("world-tab-era").getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByTestId("world-tab-power_system").getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("displays count values per tab", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      // 1 power_system, 2 core_rules, 0 factions — fixed "4" for era.
+      power_systems: [{ name: "灵力", description: "", stages: [], core_rules: [], ceilings: [] }],
+      core_rules: ["凡有灵根者", "逆天而行"],
+      factions: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+
+    // The count text lives in a `<span aria-label="${n} 个">` — query by the
+    // accessible label so we don't depend on text content (other elements
+    // could match the same digit string).
+    expect(screen.getByLabelText("4 个")).toBeInTheDocument(); // era
+    expect(screen.getByLabelText("1 个")).toBeInTheDocument(); // power_system
+    expect(screen.getByLabelText("2 个")).toBeInTheDocument(); // core_rules
+    expect(screen.getByLabelText("0 个")).toBeInTheDocument(); // factions
   });
 });

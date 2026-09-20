@@ -590,11 +590,22 @@ def test_commit_happy_path_writes_both_files(mock_router, tmp_path):
     — 零 LLM,直接 deterministic 拼装。响应 shape:
       {concept_and_dna, creative_divergence, b3_state, committed_at}
     """
-    _seed_basic_state(f"{PROJ_PREFIX}commit_ok", tmp_path)
+    proj_id = f"{PROJ_PREFIX}commit_ok"
+    _seed_basic_state(proj_id, tmp_path)
+    # seed project.json(current_stage=STAGE1) — commit 推进 STAGE1 → STAGE2。
+    # 真实 wizard 流在 STAGE1 概念生成后到这一步前已经把 stage 推到 STAGE1。
+    proj_dir = tmp_path / proj_id
+    (proj_dir / "project.json").write_text(
+        json.dumps({
+            "id": proj_id, "title": "测试书名", "genre": "cool_novel",
+            "current_stage": "STAGE1",
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
     engine = _make_engine(mock_router)
     _inject_engine(engine)
 
-    resp = client.post(_route("/commit", f"{PROJ_PREFIX}commit_ok"))
+    resp = client.post(_route("/commit", proj_id))
     assert resp.status_code == 200
     data = resp.json()
     assert "concept_and_dna" in data
@@ -605,7 +616,8 @@ def test_commit_happy_path_writes_both_files(mock_router, tmp_path):
     # concept_and_dna 字段对齐下游 STAGE2~4 消费者
     dna = data["concept_and_dna"]
     assert dna["concept"]["premise"] == "一个少年在废墟里觉醒"[:1700]
-    assert dna["concept"]["title"] == "一个少年在废墟里觉醒"[:80]
+    # 2026-09-20:title 取 project.json.title(用户书名),不再是 prompt[:80]。
+    assert dna["concept"]["title"] == "测试书名"
     assert dna["concept"]["tone"] == "热血"
     assert dna["concept"]["theme"] == ""
     assert dna["story_dna"]["core_contradiction"]["statement"] == "一句话"
@@ -630,7 +642,11 @@ def test_commit_happy_path_writes_both_files(mock_router, tmp_path):
 
 
 def test_commit_truncates_long_prompt(mock_router, tmp_path):
-    """prompt > 1700 → concept.premise 截断,concept.title 截断到 80。"""
+    """prompt > 1700 → concept.premise 截断到 1700。
+
+    2026-09-20:concept.title 现在取 project.json.title(测试中短于 80 时保留),
+    不再 prompt[:80];所以本测试不再断言 title == 80 字符。
+    """
     proj_id = f"{PROJ_PREFIX}commit_long"
     long_prompt = "x" * 3000
     state = B3State(
@@ -652,7 +668,16 @@ def test_commit_truncates_long_prompt(mock_router, tmp_path):
         _make_dim(DimLabel.NARRATIVE_PHYSICS, [_make_unit("u5", DimLabel.NARRATIVE_PHYSICS)]),
     ]
     atomic_write_state(proj_id, state)
-    (tmp_path / proj_id).mkdir(parents=True, exist_ok=True)
+    proj_dir = tmp_path / proj_id
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    # seed project.json + STAGE1,以满足 commit 推进 STAGE2 的前置
+    (proj_dir / "project.json").write_text(
+        json.dumps({
+            "id": proj_id, "title": "我的长书名", "genre": "cool_novel",
+            "current_stage": "STAGE1",
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
     engine = _make_engine(mock_router)
     _inject_engine(engine)
@@ -661,7 +686,86 @@ def test_commit_truncates_long_prompt(mock_router, tmp_path):
     assert resp.status_code == 200
     dna = resp.json()["concept_and_dna"]
     assert len(dna["concept"]["premise"]) == 1700
-    assert len(dna["concept"]["title"]) == 80
+    # title 现在是项目书名(短于 80,不截断)
+    assert dna["concept"]["title"] == "我的长书名"
+
+
+def test_commit_advances_project_to_STAGE2(mock_router, tmp_path):
+    """commit 成功后,project.json.current_stage 必须推进到 STAGE2。
+
+    否则下游 `/stage2/generate-world` 的前置检查
+    (STAGE_ORDER.index(current) < STAGE_ORDER.index(STAGE2)) 会拒绝,
+    WorldStep 自动调 generateWorld 直接 400。
+
+    旧 Stage1Page 通过独立的「enter world+character」按钮调
+    `api.advance(projectId, "STAGE2")` → /api/conductor/advance 推进;
+    S2→世界观的合并让 commit 端点接管这个职责,这里锁住该契约。
+    """
+    proj_id = f"{PROJ_PREFIX}commit_advance"
+    # seed state + project.json with explicit STAGE1 (or INIT) so the
+    # advance() precondition's transition_check has a real from-stage
+    proj_dir = tmp_path / proj_id
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    _seed_basic_state(proj_id, tmp_path)
+    (proj_dir / "project.json").write_text(
+        json.dumps({
+            "id": proj_id,
+            "title": "我的赛博朋克小说",
+            "genre": "cool_novel",
+            "current_stage": "STAGE1",
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    engine = _make_engine(mock_router)
+    _inject_engine(engine)
+
+    resp = client.post(_route("/commit", proj_id))
+    assert resp.status_code == 200, resp.text
+
+    # commit 成功后,project.json.current_stage 必须推进到 STAGE2
+    on_disk = json.loads((proj_dir / "project.json").read_text(encoding="utf-8"))
+    assert on_disk["current_stage"] == "STAGE2", (
+        f"commit 端点没推进 stage: current_stage={on_disk['current_stage']!r} "
+        f"(应是 'STAGE2')。这会导致 WorldStep 的 generate-world 400s。"
+    )
+
+
+def test_commit_preserves_user_project_title(mock_router, tmp_path):
+    """commit 合成的 concept.title 必须用用户创建项目时的标题(从 project.json 读),
+    NOT raw_intent.prompt 的前 80 字符。
+
+    旧 S4 由 LLM 生成 polished title;新确定性合成直接把 prompt 截断当 title,
+    导致 `_resolve_display_title`(project.py:16)用 prompt 覆盖了用户起的书名 —
+    书架上看到的是"一个赛博朋克 + 修仙的脑洞..."而非"我的赛博朋克小说"。
+    """
+    proj_id = f"{PROJ_PREFIX}commit_title"
+    proj_dir = tmp_path / proj_id
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    _seed_basic_state(proj_id, tmp_path)
+    # 用户的书名 vs 用户的 raw_intent.prompt(后者很长,前 80 字符作为 title 会很丑)
+    user_title = "我的赛博朋克小说"
+    (proj_dir / "project.json").write_text(
+        json.dumps({
+            "id": proj_id,
+            "title": user_title,
+            "genre": "cool_novel",
+            "current_stage": "STAGE1",
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    engine = _make_engine(mock_router)
+    _inject_engine(engine)
+
+    resp = client.post(_route("/commit", proj_id))
+    assert resp.status_code == 200, resp.text
+
+    dna = resp.json()["concept_and_dna"]
+    assert dna["concept"]["title"] == user_title, (
+        f"concept.title 被 raw prompt 覆盖了 — 用户的书名应被保留。"
+        f"got title={dna['concept']['title']!r}, expected {user_title!r}"
+    )
 
 
 def test_commit_422_when_no_state(mock_router):

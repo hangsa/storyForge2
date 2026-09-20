@@ -150,17 +150,17 @@ describe("PromptListPanel", () => {
     expect(screen.getByText("新颖度评分").closest('[data-testid="plaza-row"]')).toBeInTheDocument();
   });
 
-  it("divergence group contains meta_decompose and firstness_decompose (2026-09-20: adaptive_diverge moved to 其他)", () => {
+  it("divergence group contains meta_decompose + firstness_decompose + adaptive_diverge (2026-09-20: adaptive_diverge restored)", () => {
     // 2026-09-15 行为变更:第一性拆解 (firstness_decompose) 从 HIDDEN_BUILTIN_PROMPTS
     // 移除,以「兜底拆解提示词」label 暴露在 Plaza UI 创意发散分组下。后端 YAML 仍
     // 是 S1→S2 流程被破坏时的兜底;Plaza 编辑会写 global/project override,流程
     // 正常时仍以 meta_decompose 生成的 per-project prompt 为准。
     //
-    // 2026-09-20 行为变更:`adaptive_diverge` 不再属于「创意发散」主流程,落在「其他」
-    // 组(EXPECTED_ORPHAN_PROMPTS)。当前角色变更为 b3_follow_up.yaml 的
-    // {operator_instructions} 占位的方法论源(用户在追问 modal 选「自适应」operator
-    // 时,本 prompt 的 methodology_block 字段会被拼到 b3_follow_up 的 system_prompt
-    // 末尾)。Plaza 编辑本 prompt 可调整自适应追问方法论。
+    // 2026-09-20 行为变更:`adaptive_diverge` 重新进入「创意发散」主流程 — 它是
+    // follow_up.yaml 的 {operator_instructions} 占位方法论源(用户在追问 modal
+    // 选「自适应」operator 时,本 prompt 的 methodology_block 字段会被拼到
+    // follow_up 的 system_prompt 末尾)。Plaza 编辑本 prompt 可调整自适应追问
+    // 方法论。
     const fullBuiltin = [
       { name: "meta_decompose", category: "", label: "元提示词", has_override: false, modified_at: null, builtin: true },
       { name: "adaptive_diverge", category: "", label: "自适应追问方法论", has_override: false, modified_at: null, builtin: true },
@@ -174,15 +174,17 @@ describe("PromptListPanel", () => {
         "div.font-mono.text-\\[10px\\].text-on-surface-variant",
       ),
     ).map((el) => el.textContent);
-    // 「创意发散」只剩两个 prompt;「自适应追问方法论」已经移到「其他」组。
-    expect(headings.sort()).toEqual(["创意发散", "其他"].sort());
+    // 三个 prompt 全部归到「创意发散」,没有「其他」组渲染
+    expect(headings.sort()).toEqual(["创意发散"].sort());
     const rows = Array.from(container.querySelectorAll<HTMLElement>('[data-testid="plaza-row"]'));
     const rowLabels = rows.map((r) => r.textContent);
     // 用 Set 比较内容(避免 Unicode 排序把「自适」推到最前)
     expect(new Set(rowLabels)).toEqual(
       new Set(["自适应追问方法论", "兜底拆解提示词", "元提示词"]),
     );
-    // DOM 顺序上,「创意发散」组(元提示词 / 兜底拆解提示词)必须先于「其他」组(自适应追问方法论)
-    expect(rowLabels.indexOf("元提示词")).toBeLessThan(rowLabels.indexOf("自适应追问方法论"));
+    // 三个 prompt 都在「创意发散」组,没有任一被踢到「其他」兜底
+    for (const label of ["元提示词", "兜底拆解提示词", "自适应追问方法论"]) {
+      expect(rowLabels.filter((l) => l === label)).toHaveLength(1);
+    }
   });
 });

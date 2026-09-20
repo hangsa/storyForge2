@@ -4,7 +4,7 @@ The v2 rewrite replaces the four v1 operator prompts (breaking / bending /
 blending / commit) with four prompts that follow the new 4-stage pipeline:
 
   - firstness_decompose         (Stage 1 → 2: 5-dimension decomposition)
-  - b3_follow_up          (Stage 2: per-unit follow-up deepening)
+  - follow_up              (Stage 2: per-unit follow-up deepening)
   - adaptive_diverge           (Stage 2 → 3: adaptive divergence with chain reaction)
   - b3_commit             (Stage 3 → 4: synthesis using causal_map + summary)
 
@@ -20,6 +20,8 @@ These tests lock in:
 - `{negative_constraints}` placeholder in `system_prompt`
 - Plaza's `_iter_yaml_files()` discovers all four by stem
 - Per-prompt placeholder contracts (see individual tests below)
+
+2026-09-20:`b3_follow_up` 重命名为 `follow_up`。
 """
 from pathlib import Path
 
@@ -38,7 +40,7 @@ from backend.services.global_prompt_override_store import (
 
 EXPECTED_NAMES = (
     "firstness_decompose",
-    "b3_follow_up",
+    "follow_up",
     "adaptive_diverge",
     "b3_commit",
 )
@@ -252,15 +254,15 @@ def test_plaza_b3_get_effective_round_trip(reset_plaza_store):
 
 def test_load_prompt_effective_resolves_subdir_b3_by_bare_stem(reset_plaza_store):
     """Regression for 2026-09-06 Plaza bug: per-project Plaza's `get_prompt`
-    called `load_prompt_effective("b3_follow_up")` which routed through
+    called `load_prompt_effective("follow_up")` which routed through
     `_load_yaml_prompt` with direct-path-only matching. That raised
-    FileNotFoundError because `b3_follow_up.yaml` only exists under
+    FileNotFoundError because `follow_up.yaml` only exists under
     `creative/`, returning a 404 ("Prompt template not found") to the UI.
 
     After the fix `_load_yaml_prompt` falls back to a recursive walk when the
     direct path is absent, so bare-stem lookups resolve subdir files. The
-    engine itself was also switched to bare stems (`b3_follow_up` instead
-    of `creative/b3_follow_up`) so the override JSON key Plaza saves under
+    engine itself was also switched to bare stems (`follow_up` instead
+    of `creative/follow_up`) so the override JSON key Plaza saves under
     matches what the engine reads back — otherwise user edits silently had no
     effect at runtime.
     """
@@ -438,9 +440,9 @@ def test_adaptive_diverge_yaml_includes_4_operators_and_chain_reaction():
     assert "{unit_description}" in data["user_prompt_template"]
 
 
-# 2026-09-20:`methodology_block` 是被 b3_follow_up.yaml 的 {operator_instructions}
+# 2026-09-20:`methodology_block` 是被 follow_up.yaml 的 {operator_instructions}
 # 占位消费的字段(用户选「自适应」operator 时,b3_engine.follow_up_unit 通过
-# load_prompt_effective 读本字段拼到 b3_follow_up 的 system_prompt 末尾 — 不是独立
+# load_prompt_effective 读本字段拼到 follow_up 的 system_prompt 末尾 — 不是独立
 # 发起 LLM 调用)。Plaza 用户可编辑本字段来调整自适应追问方法论。
 def test_adaptive_diverge_yaml_has_methodology_block():
     import yaml
@@ -448,7 +450,7 @@ def test_adaptive_diverge_yaml_has_methodology_block():
     p = Path("backend/prompts/creative/adaptive_diverge.yaml")
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     assert "methodology_block" in data, (
-        "adaptive_diverge.yaml 必须含 methodology_block 字段(b3_follow_up 追问「自适应」模式依赖它)"
+        "adaptive_diverge.yaml 必须含 methodology_block 字段(follow_up 追问「自适应」模式依赖它)"
     )
     block = data["methodology_block"]
     # 关键方法论 marker — 任一缺失说明 prompt 被改坏了,follow_up 自适应模式会失去方法论指导
@@ -465,7 +467,7 @@ def test_adaptive_diverge_yaml_has_methodology_block():
 
 
 def test_adaptive_diverge_methodology_block_global_override_propagates(tmp_path):
-    """用户编辑 Plaza global override 后,b3_follow_up 拿到的 methodology_block 应改变。
+    """用户编辑 Plaza global override 后,follow_up 拿到的 methodology_block 应改变。
 
     这是 adaptive_diverge 作为「方法论源」的契约测试 — 改完 YAML 不应该让
     Plaza 编辑毫无效果。
@@ -515,7 +517,7 @@ def test_adaptive_diverge_methodology_block_global_override_propagates(tmp_path)
     )
 
 
-# --- b3_follow_up (Stage 2 per-unit follow-up, added in rewrite Task 12) -
+# --- follow_up (Stage 2 per-unit follow-up, added in rewrite Task 12) -
 
 
 def test_old_3b_yamls_deleted():
@@ -525,18 +527,18 @@ def test_old_3b_yamls_deleted():
         assert not p.exists(), f"旧 {name}.yaml 应已删除"
 
 
-def test_b3_follow_up_yaml_exists():
+def test_follow_up_yaml_exists():
     from pathlib import Path
-    p = Path("backend/prompts/creative/b3_follow_up.yaml")
+    p = Path("backend/prompts/creative/follow_up.yaml")
     assert p.exists()
 
 
-def test_b3_follow_up_yaml_schema():
+def test_follow_up_yaml_schema():
     import yaml
     from pathlib import Path
-    p = Path("backend/prompts/creative/b3_follow_up.yaml")
+    p = Path("backend/prompts/creative/follow_up.yaml")
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
-    assert data["name"] == "b3_follow_up"
+    assert data["name"] == "follow_up"
     assert "{unit_name}" in data["user_prompt_template"]
 
 
@@ -553,7 +555,7 @@ def test_b3_commit_yaml_uses_causal_map_and_summary():
 
 def test_all_v2_yamls_in_creative_dir():
     from pathlib import Path
-    expected = {"firstness_decompose", "b3_follow_up", "adaptive_diverge", "b3_commit"}
+    expected = {"firstness_decompose", "follow_up", "adaptive_diverge", "b3_commit"}
     found = {p.stem for p in Path("backend/prompts/creative/").glob("*.yaml")}
     assert expected.issubset(found)
 

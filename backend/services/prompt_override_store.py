@@ -49,10 +49,10 @@ PROMPT_LABEL_OVERRIDES: dict[str, str] = {
     "genre_fusion": "题材融合",
     "mutation_operation": "变异操作",
     "novelty_evaluation_llm": "新颖度评估",
-    "adaptive_diverge": "自适应追问方法论",   # 2026-09-20 角色变更:从 S3 死路径变 b3_follow_up {operator_instructions} 的方法论源
+    "adaptive_diverge": "自适应追问方法论",   # 2026-09-20 角色变更:从 S3 死路径变 follow_up {operator_instructions} 的方法论源
     "meta_decompose": "拆解元提示词",   # 2026-09-12 meta-decompose 引入
     "b3_commit": "三分支·确定",
-    "b3_follow_up": "三分支·追问",
+    "follow_up": "追问",
     "whatif_expand": "假设扩展",
     # character_designer/*
     "growth_discuss": "成长讨论",
@@ -68,7 +68,11 @@ PROMPT_LABEL_OVERRIDES: dict[str, str] = {
 # key and dropping the legacy key on the next save.
 _LEGACY_PROMPT_KEYS: dict[str, str] = {
     "b3_commit": "three_b_commit",
-    "b3_follow_up": "three_b_follow_up",
+    # 2026-09-20:`b3_follow_up` → `follow_up` 重命名。链长 1 — Sep 19 改名后
+    # 写下的 `b3_follow_up` 覆盖在下次保存时自动迁移到新 key 并丢掉旧 key
+    # (`set_override` 内 legacy_used 分支处理);之前的 `three_b_follow_up`
+    # 覆盖如果在 9/19 之后没保存,会断在这里 — 与上轮改名风险一致。
+    "follow_up": "b3_follow_up",
 }
 
 
@@ -292,9 +296,9 @@ _override_store_instance: Optional["PromptOverrideStore"] = None
 def _load_yaml_prompt(name: str, prompts_dir: Path) -> dict[str, Any]:
     """Load a YAML prompt file by base name (with or without .yaml).
 
-    Accepts both bare stems (`scene_writing`, `b3_follow_up`) and
+    Accepts both bare stems (`scene_writing`, `follow_up`) and
     subdir-qualified stems (`character_designer/growth_discuss`,
-    `creative/b3_follow_up`).
+    `creative/follow_up`).
 
     Lookup order:
     1. Direct path `<prompts_dir>/<name>.yaml` — fast path for root files
@@ -315,7 +319,7 @@ def _load_yaml_prompt(name: str, prompts_dir: Path) -> dict[str, Any]:
         with open(direct, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     # Fallback: walk the tree, matching by filename (handles bare stems that
-    # only exist in a subdir, like `b3_follow_up` -> `creative/b3_follow_up.yaml`).
+    # only exist in a subdir, like `follow_up` -> `creative/follow_up.yaml`).
     stem = Path(candidate).stem
     for path in sorted(prompts_dir.rglob("*.yaml")):
         rel = path.relative_to(prompts_dir)

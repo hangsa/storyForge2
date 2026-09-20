@@ -37,6 +37,7 @@ from backend.services.prompt_override_store import (
 )
 from backend.services.global_prompt_override_store import GlobalPromptOverrideStore
 from backend.agents._injection_helpers import _build_user_modifications_block
+from backend.conductor.state_machine import StageStateMachine, Stage
 
 
 def _file_manager() -> FileManager:
@@ -158,7 +159,7 @@ OPERATORS = ("distort", "break", "blend", "chain")
 ADAPTIVE_DIVERGE_PROMPT = "adaptive_diverge"
 DECOMPOSE_PROMPT = "firstness_decompose"
 META_DECOMPOSE_PROMPT = "meta_decompose"
-FOLLOW_UP_PROMPT = "b3_follow_up"
+FOLLOW_UP_PROMPT = "follow_up"
 
 # 自适应追问模式的方法论段由 adaptive_diverge.yaml 的 `methodology_block`
 # 字段提供(2026-09-20 改造:以前是下面的 ADAPTIVE_FOLLOW_UP_OPERATOR_INSTRUCTIONS
@@ -166,7 +167,7 @@ FOLLOW_UP_PROMPT = "b3_follow_up"
 # Prompt Plaza / global overrides 调整自适应追问方法论。
 #
 # 与 adaptive_diverge.yaml 自己的 system_prompt 区分:那是 S3 死路径的 spec 文档
-# (产出 2-3 个候选),不参与运行时调用;methodology_block 才是被注入到 b3_follow_up
+# (产出 2-3 个候选),不参与运行时调用;methodology_block 才是被注入到 follow_up
 # 的 {operator_instructions} 占位的实际片段。
 
 DimensionStatus = Literal["pending", "decomposed"]
@@ -701,7 +702,7 @@ class B3Engine:
         """Call the LLM with standard 3B envelope (json_mode, b3 agent).
 
         `system_fmt` is forwarded to `_build_prompt_messages` for system-level
-        placeholders (e.g. `{operator_instructions}` in b3_follow_up.yaml when
+        placeholders (e.g. `{operator_instructions}` in follow_up.yaml when
         operator=adaptive). All other `**fmt` are user-level substitutions.
 
         Returns the raw response dict from router.execute (caller is responsible
@@ -846,7 +847,8 @@ class B3Engine:
 
         字段映射(下游 STAGE2~4 消费者依赖以下 4 个扁平字段):
           - concept.premise     = raw_intent.prompt[:1700]   ← STAGE4 writer 主读
-          - concept.title       = prompt[:80]                ← UI / 项目列表展示
+          - concept.title       = project.json.title(用户创建项目时起的书名)
+                                    缺失时 fallback 到 prompt[:80]          ← UI / 项目列表展示
           - concept.tone        = raw_intent.tone
           - concept.theme       = ""                         ← STAGE4 不读,留空不报错
           - story_dna.core_contradiction.statement = top_level_summary
@@ -861,6 +863,11 @@ class B3Engine:
 
         返回 dict 包含 `{concept_and_dna, creative_divergence, b3_state}` —
         前端 commit 提交成功后无需再调 GET,直接拿来更新内存。
+
+        阶段推进:commit 成功后调用 StageStateMachine.advance(STAGE2),
+        否则 WorldStep 自动触发的 /stage2/generate-world 会因前置检查失败而 400。
+        旧 Stage1Page 通过独立「enter world+character」按钮调 api.advance("STAGE2")
+        完成这一步;合并到 /commit 后,这里把职责搬回来。
         """
         state = load_state(project_id)
         if state is None or state.raw_intent is None:
@@ -871,8 +878,21 @@ class B3Engine:
         prompt_text = state.raw_intent.prompt or ""
         committed_at = _now_iso()
 
+        # 读用户的书名 — 创建项目时 project.json.title 是显式身份,
+        # 不应该被 raw prompt 截断默默覆盖(bookshelf 展示契约)。
+        # 缺失(老项目没 title 字段)时 fallback 到 prompt[:80]。
+        project_path = Path(settings.projects_dir) / project_id / "project.json"
+        project_doc: dict = {}
+        if project_path.exists():
+            try:
+                project_doc = json.loads(project_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                project_doc = {}
+        user_title = (project_doc.get("title") or "").strip()
+        concept_title = user_title if user_title else prompt_text[:80]
+
         concept = {
-            "title": prompt_text[:80],
+            "title": concept_title,
             "premise": prompt_text[:1700],
             "tone": state.raw_intent.tone or "",
             "theme": "",
@@ -918,6 +938,18 @@ class B3Engine:
         # 标记 state.committed_at — 让前端 HYDRATE 时知道 step 1 已完成
         state.committed_at = committed_at
         atomic_write_state(project_id, state)
+
+        # 推进 STAGE1 → STAGE2 — WorldStep 的 /stage2/generate-world 会校验前置。
+        # synthesize 成功意味着 concept_and_dna 已落盘,STAGE2 precondition 满足,
+        # transition_check 必然 allowed,但保留结果以便调用方/测试断言。
+        advance_result = StageStateMachine(
+            Path(settings.projects_dir)
+        ).advance(project_id, Stage.STAGE2)
+        if not advance_result.allowed:
+            # 不让「阶段推进失败」静默吞掉 — 上层(/commit 路由)会拿到 503。
+            raise RuntimeError(
+                f"commit 阶段推进失败: {advance_result.message}"
+            )
 
         return {
             "concept_and_dna": dna_payload,

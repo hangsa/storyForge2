@@ -96,10 +96,6 @@ export const EXPECTED_ORPHAN_PROMPTS: ReadonlyArray<{
     name: "creative_director_path",
     reason: "CreativeDirector.evaluate_path 在 creative_diverge.py:1549 内联构造,从未 load YAML。",
   },
-  {
-    name: "adaptive_diverge",
-    reason: "2026-09-20:被 b3_follow_up.yaml 的 {operator_instructions} 占位消费的方法论源。当用户在追问 modal 选「自适应」operator 时,b3_engine.follow_up_unit 通过 load_prompt_effective 读本 YAML 的 methodology_block 字段,直接拼到 b3_follow_up 的 system_prompt 末尾(不是独立发起 LLM 调用)。Plaza 用户可编辑本 prompt 调整自适应追问方法论(扫描维度 / 路由规则 / 主辅算子优先级 / chain_reaction 措辞)。本 YAML 自己的 system_prompt 是 S3 死路径的 spec 文档(产出 2-3 个候选),不参与运行时调用;保留便于以后若重启 S3 时复用。",
-  },
 ];
 
 /** 提示词名 → 阶段 key。每个内置提示词必须命中,`other` 仅作未映射兜底。 */
@@ -107,7 +103,10 @@ export const PROMPT_NAME_TO_STAGE: Record<string, string> = {
   // 创意发散
   firstness_decompose: "divergence",
   meta_decompose: "divergence",
-  b3_follow_up: "divergence",
+  follow_up: "divergence",
+  // 2026-09-20 回到「创意发散」:被 follow_up.yaml 的 {operator_instructions}
+  // 占位消费的方法论源 — 不属于「其他」兜底组。
+  adaptive_diverge: "divergence",
   // 概念 DNA
   canvas_to_concept: "concept",
   concept_generation: "concept",

@@ -100,17 +100,16 @@ describe("groupByStage", () => {
   });
 
   it("sends unmapped prompts to the 'other' bucket", () => {
-    // 2026-09-20:`adaptive_diverge` 不再属于「创意发散」主流程,落在「其他」
-    // 兜底组 — 与未映射的 future prompt 走同一条路径。
+    // 2026-09-20:`adaptive_diverge` 已回到「创意发散」分组 —
+    // 真正的「其他」兜底只含未被映射的 prompt。
     const prompts = [
-      fakePrompt("adaptive_diverge"),
       fakePrompt("future_prompt_we_havent_added_yet"),
     ];
     const groups = groupByStage(prompts);
     const other = groups.find(([k]) => k === "other");
     expect(other).toBeDefined();
     expect(other![1].map((p) => p.name).sort()).toEqual(
-      ["adaptive_diverge", "future_prompt_we_havent_added_yet"].sort(),
+      ["future_prompt_we_havent_added_yet"].sort(),
     );
   });
 });
@@ -196,7 +195,7 @@ describe("backend/prompts/ canary", () => {
 });
 
 describe("firstness_decompose exposure (2026-09-15: removed from HIDDEN_BUILTIN_PROMPTS)", () => {
-  it("firstness_decompose now appears in groupByStage output (Plaza-visible fallback)", () => {
+  it("firstness_decompose + adaptive_diverge both land in divergence (2026-09-20)", () => {
     const prompts = [
       fakePrompt("firstness_decompose"),
       fakePrompt("adaptive_diverge"),
@@ -207,6 +206,12 @@ describe("firstness_decompose exposure (2026-09-15: removed from HIDDEN_BUILTIN_
     expect(allNames).toContain("firstness_decompose");
     expect(allNames).toContain("adaptive_diverge");
     expect(allNames).toContain("scene_writing");
+
+    // adaptive_diverge 重新映射到 divergence — 它必须落在「创意发散」组内
+    const divergence = groups.find(([k]) => k === "divergence");
+    expect(divergence).toBeDefined();
+    expect(divergence![1].map((p) => p.name)).toContain("adaptive_diverge");
+    expect(divergence![1].map((p) => p.name)).toContain("firstness_decompose");
   });
 
   it("stageOf still resolves firstness_decompose to divergence", () => {

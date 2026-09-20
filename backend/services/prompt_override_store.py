@@ -49,16 +49,52 @@ PROMPT_LABEL_OVERRIDES: dict[str, str] = {
     "genre_fusion": "题材融合",
     "mutation_operation": "变异操作",
     "novelty_evaluation_llm": "新颖度评估",
-    "adaptive_diverge": "三分支·自适应发散",
+    "adaptive_diverge": "自适应追问方法论",   # 2026-09-20 角色变更:从 S3 死路径变 b3_follow_up {operator_instructions} 的方法论源
     "meta_decompose": "拆解元提示词",   # 2026-09-12 meta-decompose 引入
-    "three_b_commit": "三分支·确定",
-    "three_b_follow_up": "三分支·追问",
+    "b3_commit": "三分支·确定",
+    "b3_follow_up": "三分支·追问",
     "whatif_expand": "假设扩展",
     # character_designer/*
     "growth_discuss": "成长讨论",
     # style_engine/*
     "sandbox_preview": "风格沙盒预览",
 }
+
+
+# Maps current prompt key → legacy key still present in some user overrides
+# after the three_b → b3 rename. Existing override JSON continues to load
+# transparently: the resolver reads the legacy entry when the new key is
+# absent, and `set_override` migrates the entry forward by writing the new
+# key and dropping the legacy key on the next save.
+_LEGACY_PROMPT_KEYS: dict[str, str] = {
+    "b3_commit": "three_b_commit",
+    "b3_follow_up": "three_b_follow_up",
+}
+
+
+def _legacy_key_for(name: str) -> Optional[str]:
+    """Legacy override key for `name`, or None if no migration applies."""
+    return _LEGACY_PROMPT_KEYS.get(name)
+
+
+def _resolve_override_entry(
+    overrides: dict[str, Any], name: str
+) -> tuple[dict[str, Any], Optional[str]]:
+    """Look up `name` in `overrides`, falling back to its legacy key if any.
+
+    Returns ``(entry, legacy_key_used)``. ``legacy_key_used`` is non-None
+    iff the entry came from the legacy slot — callers that need to migrate
+    forward (e.g. ``set_override``) use it to drop the stale entry on save.
+    """
+    entry = overrides.get(name)
+    if entry:
+        return entry, None
+    legacy = _legacy_key_for(name)
+    if legacy:
+        legacy_entry = overrides.get(legacy)
+        if legacy_entry:
+            return legacy_entry, legacy
+    return {}, None
 
 
 class PromptOverrideStore:
@@ -141,7 +177,7 @@ class PromptOverrideStore:
         result: list[dict[str, Any]] = []
         for path, category in self._iter_yaml_files():
             name = path.stem
-            override_entry = overrides.get(name) or {}
+            override_entry, _ = _resolve_override_entry(overrides, name)
             modified_at = override_entry.get("_modified_at")
             result.append({
                 "name": name,
@@ -169,7 +205,7 @@ class PromptOverrideStore:
         if base is None:
             base = self._load_yaml(name)
         overrides = self._read_overrides(project_id)
-        entry = overrides.get(name) or {}
+        entry, _ = _resolve_override_entry(overrides, name)
         # Strip metadata keys before merging
         fields = {k: v for k, v in entry.items() if not k.startswith("_")}
         return {**base, **fields}
@@ -178,7 +214,7 @@ class PromptOverrideStore:
         # Validate name exists in YAML (raises FileNotFoundError if not)
         self._load_yaml(name)
         overrides = self._read_overrides(project_id)
-        entry = overrides.get(name)
+        entry, _ = _resolve_override_entry(overrides, name)
         return entry if entry else None
 
     def _pruned_override(self, name: str, full: dict[str, Any]) -> dict[str, Any]:
@@ -203,7 +239,7 @@ class PromptOverrideStore:
         self._load_yaml(name)
 
         existing = self._read_overrides(project_id)
-        current_entry = existing.get(name) or {}
+        current_entry, legacy_used = _resolve_override_entry(existing, name)
         # Strip metadata before merging so payload doesn't clobber _modified_at
         current_fields = {k: v for k, v in current_entry.items() if not k.startswith("_")}
         merged_fields = {**current_fields, **payload}
@@ -213,6 +249,10 @@ class PromptOverrideStore:
         # "last touched at X". DELETE is the only way to drop the entry
         # entirely; if the resulting JSON has no entries at all, drop the file.
         existing[name] = pruned
+        # Migrate forward: when we read the override from a legacy key, drop
+        # the stale entry so subsequent reads only ever see the new key.
+        if legacy_used is not None:
+            existing.pop(legacy_used, None)
 
         if existing:
             self._write_overrides(project_id, existing)
@@ -225,9 +265,13 @@ class PromptOverrideStore:
 
     def delete_override(self, project_id: str, name: str) -> None:
         existing = self._read_overrides(project_id)
-        if name not in existing:
+        legacy = _legacy_key_for(name)
+        changed = name in existing or (legacy is not None and legacy in existing)
+        if not changed:
             return
-        existing.pop(name)
+        existing.pop(name, None)
+        if legacy is not None:
+            existing.pop(legacy, None)
         if existing:
             self._write_overrides(project_id, existing)
         else:
@@ -248,9 +292,9 @@ _override_store_instance: Optional["PromptOverrideStore"] = None
 def _load_yaml_prompt(name: str, prompts_dir: Path) -> dict[str, Any]:
     """Load a YAML prompt file by base name (with or without .yaml).
 
-    Accepts both bare stems (`scene_writing`, `three_b_follow_up`) and
+    Accepts both bare stems (`scene_writing`, `b3_follow_up`) and
     subdir-qualified stems (`character_designer/growth_discuss`,
-    `creative/three_b_follow_up`).
+    `creative/b3_follow_up`).
 
     Lookup order:
     1. Direct path `<prompts_dir>/<name>.yaml` — fast path for root files
@@ -271,7 +315,7 @@ def _load_yaml_prompt(name: str, prompts_dir: Path) -> dict[str, Any]:
         with open(direct, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     # Fallback: walk the tree, matching by filename (handles bare stems that
-    # only exist in a subdir, like `three_b_follow_up` -> `creative/three_b_follow_up.yaml`).
+    # only exist in a subdir, like `b3_follow_up` -> `creative/b3_follow_up.yaml`).
     stem = Path(candidate).stem
     for path in sorted(prompts_dir.rglob("*.yaml")):
         rel = path.relative_to(prompts_dir)

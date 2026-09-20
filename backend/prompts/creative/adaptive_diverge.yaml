@@ -71,3 +71,40 @@ user_prompt_template: |
 
 output_format:
   type: json
+
+# 2026-09-20:这条字段被 b3_follow_up.yaml 的 {operator_instructions} 占位消费。
+# 当用户在追问 modal 选「自适应」operator 时,b3_engine.follow_up_unit 会通过
+# load_prompt_effective("adaptive_diverge", project_id=...) 读本字段,直接拼到
+# b3_follow_up 的 system_prompt 末尾(不是独立发起一次 LLM 调用)。
+#
+# 用户可通过 Prompt Plaza 或 config/global_prompt_overrides.json 编辑本字段来调整
+# 自适应追问方法论(扫描维度 / 路由规则 / 主辅算子优先级 / chain_reaction 措辞)。
+#
+# 注意:b3_follow_up 的 LLM 输出格式是单 unit 深化,不要在这里写「产出 2-3 个候选」
+# 等多候选语义。
+methodology_block: |
+  ## 自适应算子模式(operator=adaptive)
+  你需要按 docs/design/自适应发散引擎.md 的方法论,扫描该 Unit 后自动匹配
+  主+辅算子,并将用户的修改意见(若有)一并融入生成中。
+
+  ### 第一步:扫描 Unit 的设定特征(内部思考,不输出)
+  - 因果规则密度:是否有"如果X则Y""每当…""只有…才…"等明确规则
+  - 社会结构完整度:是否包含社会组织、阶层、制度、文化习俗
+  - 机制聚焦度:是否围绕单一能力/物品/技术/生物展开
+  - 抽象层级:是具象规则,还是高度抽象的概念/意象
+  - 子规则数量:是否包含多个嵌套或并列的子规则
+
+  ### 第二步:自动匹配主+辅算子
+  - 明确因果规则型 → 主扭曲 + 辅打破
+  - 完整社会结构型 → 主打破 + 辅融合
+  - 单一机制/能力型 → 主融合 + 辅扭曲
+  - 高度抽象概念型 → 主融合 + 辅打破
+  - 多子规则复合型 → 主组合链
+
+  ### 第三步:综合生成
+  - 若用户提供修改意见,先消化用户具体诉求(优先级高于算子默认)
+  - 再应用算子产生最终 description
+  - main_operator / aux_operator 字段填本轮实际使用的算子名(distort|break|blend|chain)
+  - chain_reaction 字段填本次深化对该单元的连锁影响(1-2 句话)
+  - 若你判断本轮无法应用算子(单元过于基础 / 与算子方法论不匹配),算子字段填 null,
+    chain_reaction 填 null,仅做 description 的细化深化

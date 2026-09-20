@@ -55,16 +55,12 @@ export const EXPECTED_ORPHAN_PROMPTS: ReadonlyArray<{
 }> = [
   // —— 早期 4 步创意发散流程的残留 ——
   {
-    name: "three_b_follow_up",
-    reason: "S2 追问。Wizard (CreativeDivergenceStep) 已渲染按钮,但父组件未把 onFollowUp 传给 S2DecomposeStep;恢复时把 onFollowUp 接到 useThreeBDivergence.followUp() 即可。",
-  },
-  {
-    name: "three_b_commit",
+    name: "b3_commit",
     reason: "S4 提交。Wizard 在推进到 stage 4 时会调 commit() (CreativeDivergenceStep.tsx:168/182/234),所以用户选择保留为「其他」而非「创意发散」— 把 commit 视作 S1–S3 的下游收束,不属发散本身。",
   },
   {
     name: "trope_extraction",
-    reason: "只在旧的 /api/creative-diverge/init 路由被 fire-and-forget 触发;新 wizard 用 /api/three_b/*,前端已无人调用旧路由;Prompt Plaza 列出是因为 load_yaml_prompt 枚举 backend/prompts/。",
+    reason: "只在旧的 /api/creative-diverge/init 路由被 fire-and-forget 触发;新 wizard 用 /api/b3/*,前端已无人调用旧路由;Prompt Plaza 列出是因为 load_yaml_prompt 枚举 backend/prompts/。",
   },
   // —— 旧 CreativeOS 引擎使用的内联 prompt,引擎不再 load_yaml ——
   {
@@ -100,6 +96,10 @@ export const EXPECTED_ORPHAN_PROMPTS: ReadonlyArray<{
     name: "creative_director_path",
     reason: "CreativeDirector.evaluate_path 在 creative_diverge.py:1549 内联构造,从未 load YAML。",
   },
+  {
+    name: "adaptive_diverge",
+    reason: "2026-09-20:被 b3_follow_up.yaml 的 {operator_instructions} 占位消费的方法论源。当用户在追问 modal 选「自适应」operator 时,b3_engine.follow_up_unit 通过 load_prompt_effective 读本 YAML 的 methodology_block 字段,直接拼到 b3_follow_up 的 system_prompt 末尾(不是独立发起 LLM 调用)。Plaza 用户可编辑本 prompt 调整自适应追问方法论(扫描维度 / 路由规则 / 主辅算子优先级 / chain_reaction 措辞)。本 YAML 自己的 system_prompt 是 S3 死路径的 spec 文档(产出 2-3 个候选),不参与运行时调用;保留便于以后若重启 S3 时复用。",
+  },
 ];
 
 /** 提示词名 → 阶段 key。每个内置提示词必须命中,`other` 仅作未映射兜底。 */
@@ -107,7 +107,7 @@ export const PROMPT_NAME_TO_STAGE: Record<string, string> = {
   // 创意发散
   firstness_decompose: "divergence",
   meta_decompose: "divergence",
-  adaptive_diverge: "divergence",
+  b3_follow_up: "divergence",
   // 概念 DNA
   canvas_to_concept: "concept",
   concept_generation: "concept",

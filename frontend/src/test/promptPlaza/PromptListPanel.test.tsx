@@ -40,12 +40,12 @@ describe("PromptListPanel", () => {
   });
 
   it("renders prompts within a group in canonical usage order", () => {
-    // 用户要求:元提示词 必须排在 三分支·自适应发散 之前。
+    // 用户要求:元提示词 必须排在 自适应追问方法论 之前。
     // 这个测试用 SAMPLE 里没有的提示词扩充,验证 PROMPT_NAME_TO_STAGE
     // 数组顺序就是 DOM 顺序。
     const sample = [
       ...SAMPLE,
-      { name: "adaptive_diverge", category: "creative", label: "三分支·自适应发散", has_override: false, modified_at: null, builtin: true },
+      { name: "adaptive_diverge", category: "creative", label: "自适应追问方法论", has_override: false, modified_at: null, builtin: true },
     ];
     const { container } = render(
       <PromptListPanel prompts={sample} selectedName={null} onSelect={vi.fn()} />,
@@ -55,7 +55,7 @@ describe("PromptListPanel", () => {
     );
     const labels = allRows.map((el) => el.querySelector("span")?.textContent);
     const metaIdx = labels.indexOf("元提示词");
-    const adaptiveIdx = labels.indexOf("三分支·自适应发散");
+    const adaptiveIdx = labels.indexOf("自适应追问方法论");
     expect(metaIdx).toBeGreaterThanOrEqual(0);
     expect(adaptiveIdx).toBeGreaterThan(metaIdx);
   });
@@ -150,14 +150,20 @@ describe("PromptListPanel", () => {
     expect(screen.getByText("新颖度评分").closest('[data-testid="plaza-row"]')).toBeInTheDocument();
   });
 
-  it("divergence group contains meta_decompose, adaptive_diverge and firstness_decompose (2026-09-15: firstness_decompose no longer hidden)", () => {
+  it("divergence group contains meta_decompose and firstness_decompose (2026-09-20: adaptive_diverge moved to 其他)", () => {
     // 2026-09-15 行为变更:第一性拆解 (firstness_decompose) 从 HIDDEN_BUILTIN_PROMPTS
     // 移除,以「兜底拆解提示词」label 暴露在 Plaza UI 创意发散分组下。后端 YAML 仍
     // 是 S1→S2 流程被破坏时的兜底;Plaza 编辑会写 global/project override,流程
     // 正常时仍以 meta_decompose 生成的 per-project prompt 为准。
+    //
+    // 2026-09-20 行为变更:`adaptive_diverge` 不再属于「创意发散」主流程,落在「其他」
+    // 组(EXPECTED_ORPHAN_PROMPTS)。当前角色变更为 b3_follow_up.yaml 的
+    // {operator_instructions} 占位的方法论源(用户在追问 modal 选「自适应」operator
+    // 时,本 prompt 的 methodology_block 字段会被拼到 b3_follow_up 的 system_prompt
+    // 末尾)。Plaza 编辑本 prompt 可调整自适应追问方法论。
     const fullBuiltin = [
       { name: "meta_decompose", category: "", label: "元提示词", has_override: false, modified_at: null, builtin: true },
-      { name: "adaptive_diverge", category: "", label: "三分支·自适应发散", has_override: false, modified_at: null, builtin: true },
+      { name: "adaptive_diverge", category: "", label: "自适应追问方法论", has_override: false, modified_at: null, builtin: true },
       { name: "firstness_decompose", category: "", label: "兜底拆解提示词", has_override: false, modified_at: null, builtin: true },
     ];
     const { container } = render(
@@ -168,12 +174,15 @@ describe("PromptListPanel", () => {
         "div.font-mono.text-\\[10px\\].text-on-surface-variant",
       ),
     ).map((el) => el.textContent);
-    expect(headings).toEqual(["创意发散"]);
+    // 「创意发散」只剩两个 prompt;「自适应追问方法论」已经移到「其他」组。
+    expect(headings.sort()).toEqual(["创意发散", "其他"].sort());
     const rows = Array.from(container.querySelectorAll<HTMLElement>('[data-testid="plaza-row"]'));
-    expect(rows.map((r) => r.textContent).sort()).toEqual([
-      "三分支·自适应发散",
-      "元提示词",
-      "兜底拆解提示词",
-    ]);
+    const rowLabels = rows.map((r) => r.textContent);
+    // 用 Set 比较内容(避免 Unicode 排序把「自适」推到最前)
+    expect(new Set(rowLabels)).toEqual(
+      new Set(["自适应追问方法论", "兜底拆解提示词", "元提示词"]),
+    );
+    // DOM 顺序上,「创意发散」组(元提示词 / 兜底拆解提示词)必须先于「其他」组(自适应追问方法论)
+    expect(rowLabels.indexOf("元提示词")).toBeLessThan(rowLabels.indexOf("自适应追问方法论"));
   });
 });

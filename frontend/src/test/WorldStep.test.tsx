@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, act, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ToastProvider } from "../hooks/useToast";
 
@@ -121,7 +121,7 @@ describe("WorldStep", () => {
     expect(call[1].era_cultural_history).toBe("百家争鸣");
   });
 
-  it("renders 力量体系 stages/规则/上限 TagEditors and 世界规则 section", async () => {
+  it("renders 力量体系 stages/规则/上限 LineListEditors and 世界规则 section", async () => {
     (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
       era: "古代",
       geography: "中原",
@@ -151,7 +151,7 @@ describe("WorldStep", () => {
     fireEvent.click(screen.getByTestId("world-tab-core_rules"));
     expect(screen.getByTestId("world-tab-core-rules-subtab-physical")).toBeInTheDocument();
     expect(screen.getByTestId("world-core-rules-physical")).toBeInTheDocument();
-    // Each TagEditor renders existing items as buttons.
+    // Each LineListEditor renders existing items as <textarea> rows.
     expect(screen.getByTestId("world-power-system-0-stages").textContent).toContain("炼气");
     expect(screen.getByTestId("world-power-system-0-ceilings").textContent).toContain("最高元婴");
     expect(screen.getByTestId("world-core-rules-physical").textContent).toContain("弱肉强食");
@@ -467,7 +467,7 @@ describe("WorldStep", () => {
   // Regression: proj_ec67d3e2 — the LLM ignored the prompt's string schema
   // for `era_social_structure` and `power_system.stages` and produced nested
   // objects instead. The wizard's textareas expect strings and the
-  // TagEditor expects a string array, so the form failed to render. Both
+  // LineListEditor expects a string array, so the form failed to render. Both
   // the backend (World model field_validator) and the frontend
   // (normalizeLegacyWorld) coerce object shapes so the form renders.
   it("renders the form even when world.json has object-shaped fields (legacy data shape)", async () => {
@@ -532,7 +532,7 @@ describe("WorldStep", () => {
     // switch to the power_system panel before asserting on its card.
     fireEvent.click(screen.getByTestId("world-tab-power_system"));
     // power_system is folded into power_systems[0] and its object-shaped
-    // stages flattened — all string values appear in the TagEditor.
+    // stages flattened — all string values appear in the LineListEditor.
     const stages = screen.getByTestId("world-power-system-0-stages");
     expect(stages.textContent).toContain("养气期");
     expect(stages.textContent).toContain("贯通期");
@@ -644,5 +644,28 @@ describe("WorldStep", () => {
     expect((screen.getByTestId("world-power-system-0-name") as HTMLInputElement).value).toBe("灵力（新）");
     fireEvent.click(screen.getByTestId("world-tab-power-system-subtab-1"));
     expect((screen.getByTestId("world-power-system-1-name") as HTMLInputElement).value).toBe("武道");
+  });
+
+  it("LineListEditor +添加一条 appends an empty row and × removes", async () => {
+    (api.generateWorld as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "古代",
+      geography: "中原",
+      power_systems: [
+        { name: "灵力", description: "", stages: ["炼气"], core_rules: [], ceilings: [] },
+      ],
+      factions: [],
+      core_rules: [],
+    });
+    setup();
+    await screen.findByTestId("world-form");
+    fireEvent.click(screen.getByTestId("world-tab-power_system"));
+    const stages = screen.getByTestId("world-power-system-0-stages");
+    // 初始 1 条 + 添加一条 = 2 个 input
+    expect(stages.querySelectorAll('[data-testid^="linelist-"][data-testid$="-input"]').length).toBe(1);
+    fireEvent.click(within(stages).getByTestId("linelist-add"));
+    expect(stages.querySelectorAll('[data-testid^="linelist-"][data-testid$="-input"]').length).toBe(2);
+    // × 删除第二条 (index=1)
+    fireEvent.click(within(stages).getByTestId("linelist-1-remove"));
+    expect(stages.querySelectorAll('[data-testid^="linelist-"][data-testid$="-input"]').length).toBe(1);
   });
 });

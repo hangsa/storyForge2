@@ -3,7 +3,10 @@ import api, { PowerSystem, World } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import TagEditor from "../shared/TagEditor";
 import { RegenerateModal } from "../shared/RegenerateModal";
-import { SectionRegenerateButton } from "../shared/SectionRegenerateButton";
+import {
+  SectionRegenerateButton,
+  useSectionRegenerate,
+} from "../shared/SectionRegenerateButton";
 import { AutoTextarea } from "../shared/AutoTextarea";
 
 interface WorldStepProps {
@@ -412,39 +415,53 @@ function WorldTabs({
   onRegenerateFactions: (mods: string) => Promise<void>;
   onTabKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
 }) {
-  // 每个 tab 都内嵌一个 SectionRegenerateButton — 它自己管理 RegenerateModal
-  // + wizard footer status badge 的报告,跟原先 section header 行为一致。
-  // 之所以不用 `span role="button"` 是因为还要走 modal → confirm 流程,SectionRegenerateButton
-  // 已经封装好了。tab 按钮本身是单 <button>,SectionRegenerateButton 是它的兄弟节点
-  // (而不是子节点),保持语义化 HTML。
-  const regenFor: Record<WorldTabKey, { label: string; handler: (mods: string) => Promise<void>; testId: string }> = {
-    era: { label: "时代与地理", handler: onRegenerateEra, testId: "world-tab-era-regenerate" },
-    power_system: { label: "力量体系", handler: onRegeneratePowerSystem, testId: "world-tab-power_system-regenerate" },
-    core_rules: { label: "世界规则", handler: onRegenerateCoreRules, testId: "world-tab-core_rules-regenerate" },
-    factions: { label: "势力分布", handler: onRegenerateFactions, testId: "world-tab-factions-regenerate" },
-  };
+  // 2026-09-20: spec 要求 ↻ 是 `<button role="tab">` 的 child(用户 Q1 决定,
+  // design doc section 4 lines 88-114 + plan step 5 + design doc "风险与注意"
+  // line 289)。不能直接嵌 `<button>` 进 `<button>`(HTML nesting 规则),所以
+  // 用 `<span role="button">` 作为 inner trigger — 这是 design doc 写明的 a11y
+  // 解决方案。useSectionRegenerate 是从 SectionRegenerateButton 抽出来的 hook,
+  // 仍然负责 RegenerateModal + wizard footer status badge,只是把 trigger 元素
+  // 的所有权交还给调用者。
+  const era = useSectionRegenerate({
+    target: "时代与地理",
+    onRegenerate: onRegenerateEra,
+    disabled: regenerateDisabled,
+    testId: "world-tab-era-regenerate",
+  });
+  const power_system = useSectionRegenerate({
+    target: "力量体系",
+    onRegenerate: onRegeneratePowerSystem,
+    disabled: regenerateDisabled,
+    testId: "world-tab-power_system-regenerate",
+  });
+  const core_rules = useSectionRegenerate({
+    target: "世界规则",
+    onRegenerate: onRegenerateCoreRules,
+    disabled: regenerateDisabled,
+    testId: "world-tab-core_rules-regenerate",
+  });
+  const factions = useSectionRegenerate({
+    target: "势力分布",
+    onRegenerate: onRegenerateFactions,
+    disabled: regenerateDisabled,
+    testId: "world-tab-factions-regenerate",
+  });
+  const regenFor = { era, power_system, core_rules, factions };
 
   return (
-    <div
-      role="tablist"
-      aria-label="世界观分区"
-      data-testid="world-tabs"
-      className="sticky top-0 z-10 -mx-6 px-6 bg-surface-container-low/95 backdrop-blur-sm flex gap-1 border-b border-outline-variant overflow-x-auto"
-    >
-      {WORLD_TABS.map(({ key, label, icon }) => {
-        const isActive = activeKey === key;
-        const regen = regenFor[key];
-        return (
-          <span
-            key={key}
-            className={
-              "shrink-0 inline-flex items-center border-b-2 -mb-px " +
-              (isActive
-                ? "border-primary"
-                : "border-transparent")
-            }
-          >
+    <>
+      <div
+        role="tablist"
+        aria-label="世界观分区"
+        data-testid="world-tabs"
+        className="sticky top-0 z-10 -mx-6 px-6 bg-surface-container-low/95 backdrop-blur-sm flex gap-1 border-b border-outline-variant overflow-x-auto"
+      >
+        {WORLD_TABS.map(({ key, label, icon }) => {
+          const isActive = activeKey === key;
+          const regen = regenFor[key];
+          return (
             <button
+              key={key}
               type="button"
               role="tab"
               aria-selected={isActive}
@@ -453,10 +470,10 @@ function WorldTabs({
               onClick={() => onTabChange(key)}
               onKeyDown={onTabKeyDown}
               className={
-                "px-3 py-2 text-sm font-display font-medium flex items-center gap-2 transition-colors outline-none focus-visible:ring-2 ring-primary-container " +
+                "shrink-0 px-3 py-2 text-sm font-display font-medium inline-flex items-center border-b-2 -mb-px gap-2 transition-colors outline-none focus-visible:ring-2 ring-primary-container " +
                 (isActive
-                  ? "text-primary"
-                  : "text-on-surface-variant hover:text-primary")
+                  ? "border-primary text-primary"
+                  : "border-transparent text-on-surface-variant hover:text-primary")
               }
             >
               <span aria-hidden="true" className="material-symbols-outlined text-base leading-none">{icon}</span>
@@ -464,17 +481,35 @@ function WorldTabs({
               <span className="font-mono text-[10px] opacity-70" aria-label={`${counts[key]} 个`}>
                 {counts[key]}
               </span>
+              {/* Inner ↻ affordance — `<span role="button">` lives inside the
+                  outer `<button role="tab">`. triggerProps.onClick already
+                  calls e.stopPropagation() so it doesn't bubble to onTabChange,
+                  and Enter/Space work via the hook's onKeyDown. */}
+              <span
+                {...regen.triggerProps}
+                className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded text-system-log/50 hover:text-primary-container hover:bg-surface-container transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span
+                  className={`material-symbols-outlined text-[14px] leading-none${regen.busy ? " animate-spin text-primary-container" : ""}`}
+                  data-testid={regen.busy ? `${regen.triggerProps["data-testid"]}-spinner` : undefined}
+                  aria-hidden="true"
+                >
+                  {regen.busy ? "progress_activity" : "refresh"}
+                </span>
+              </span>
             </button>
-            <SectionRegenerateButton
-              target={regen.label}
-              onRegenerate={regen.handler}
-              disabled={regenerateDisabled}
-              testId={regen.testId}
-            />
-          </span>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+      {/* Modals live outside the tab strip so they aren't trapped inside the
+          sticky container. Each tab owns its own modal instance; only one can
+          be open at a time because clicking another tab's ↻ closes the previous
+          one via setOpen(false) on confirm/cancel. */}
+      {era.modal}
+      {power_system.modal}
+      {core_rules.modal}
+      {factions.modal}
+    </>
   );
 }
 

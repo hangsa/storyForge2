@@ -142,11 +142,16 @@ class World(BaseModel):
         if not isinstance(data, dict):
             return data
         rules = data.get("core_rules")
-        if isinstance(rules, list) and rules and isinstance(rules[0], str):
-            data["core_rules"] = [
-                {"category": CoreRuleCategory.PHYSICAL.value, "text": r}
-                for r in rules if isinstance(r, str)
-            ]
+        if isinstance(rules, list):
+            new_rules = []
+            for r in rules:
+                if isinstance(r, str):
+                    new_rules.append({"category": CoreRuleCategory.PHYSICAL.value, "text": r})
+                elif isinstance(r, dict):
+                    # Trust the dict as-is; pydantic will validate category value
+                    new_rules.append(r)
+                # else: skip non-string non-dict entries silently (defensive)
+            data["core_rules"] = new_rules
         elif rules is None:
             data["core_rules"] = []
         return data

@@ -52,6 +52,22 @@ def test_missing_core_rules_key_yields_empty_list():
     assert world.core_rules == []
 
 
+def test_mixed_legacy_and_modern_list_preserves_each_category():
+    """A partially-migrated list (some legacy strings, some new dicts)
+    must preserve each item's category — no silent rewriting."""
+    world = World.model_validate({
+        "core_rules": [
+            "legacy string",
+            {"category": "social", "text": "modern dict"},
+        ],
+    })
+    assert len(world.core_rules) == 2
+    assert world.core_rules[0].category == CoreRuleCategory.PHYSICAL
+    assert world.core_rules[0].text == "legacy string"
+    assert world.core_rules[1].category == CoreRuleCategory.SOCIAL
+    assert world.core_rules[1].text == "modern dict"
+
+
 def test_world_rules_summary_flattens_across_categories():
     """WorldRulesSummary.from_world() must continue to flatten
     core_rules text across all 4 categories."""

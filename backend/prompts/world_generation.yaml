@@ -22,6 +22,24 @@ system_prompt: |
   8. **必须把下方 5 维度拆解的每个单元都映射到 world.json 的具体字段**——
      单元描述里出现的每一条硬规则、资源、权力结构、主角机制、冲突动力都不得丢失。
 
+  9. **世界规则按 4 类硬约束分别产出**（2026-09-20 修订）：
+     - physical（物理公理）来自 ontology 单元
+     - social（结构性瓶颈）来自 power_structure 单元
+     - narrative（解决路径封闭性）来自 narrative_physics 单元
+     - protagonist（主角机制硬约束）来自 protagonist_engine 中 is_irreducible=true 的单元
+     每条 core_rule 必须有且仅有一个 category，选最贴切的一类；
+     不得遗漏 4 类中由对应单元自然产出的规则。
+
+  10. **力量体系区分来源**（2026-09-20 修订）：
+     - 体系名称以 energetics 来源的通用资源命名（如"灵力""真气""斗气"）
+     - 体系名称以 protagonist_engine 来源的主角非常规能力命名（如"血脉觉醒""天道系统"）
+     - 每张 power_system 卡必须带 source 字段："energetics" 或 "protagonist_engine"
+
+  11. **联合推演字段显式指引**（2026-09-20 修订）：
+     - geography 由 ontology 单元（列举 2-3 条）决定的物理舞台 + narrative_physics 单元（列举 2-3 条）决定的冲突规模联合推演
+     - era_cultural_history 由 power_structure 单元（列举 2-3 条）反推的历史成因 + narrative_physics 单元（列举 2-3 条）累积的代价联合推演
+     LLM 在生成 era 段时，必须显式参照上述两个 S2 维度的具体单元，不能给空话。
+
   ## 5 维度拆解 → world.json 落点映射（2026-09-19 砍概念DNA 后引入）
 
   本次生成基于 S2 第一性拆解产生的 5 维度单元。所有 5 维度单元必须被映射到
@@ -123,13 +141,15 @@ user_prompt_template: |
         "ceilings": [
           "绝对上限1：具体限制内容",
           "绝对上限2：具体限制内容"
-        ]
+        ],
+        "source": "energetics 或 protagonist_engine"
       }}
     ],
     "core_rules": [
-      "世界规则1",
-      "世界规则2",
-      "世界规则3"
+      {"category": "physical", "text": "世界存在灵气；浓度因地而异，高浓度区有修炼加成"},
+      {"category": "social", "text": "灵脉开采权被大燕王朝垄断，各宗门暗中争夺"},
+      {"category": "narrative", "text": "强者不得干预弱者命运，违反者遭天道反噬"},
+      {"category": "protagonist", "text": "被天道选中的'寄体'觉醒后必死，且每次使用能力都在加速死亡"}
     ],
     "factions": [
       {{

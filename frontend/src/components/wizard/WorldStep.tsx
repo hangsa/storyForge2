@@ -140,6 +140,16 @@ export default function WorldStep({ projectId }: WorldStepProps) {
   const [busy, setBusy] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [activeKey, setActiveKey] = useState<WorldTabKey>("era");
+  // 2026-09-20: 每顶级 tab 各自记忆 active sub-tab
+  const [subTab, setSubTab] = useState<Record<WorldTabKey, string>>({
+    era: "era",
+    power_system: "",
+    core_rules: "",
+    factions: "",
+  });
+  const updateSubTab = (key: WorldTabKey) => (subKey: string) => {
+    setSubTab((prev) => ({ ...prev, [key]: subKey }));
+  };
   // Mirror the latest `world` and `busy` so handlers registered in the
   // modal footer (with limited deps) always read fresh values, not the
   // snapshot from when the useEffect last ran.
@@ -390,23 +400,41 @@ export default function WorldStep({ projectId }: WorldStepProps) {
             onTabKeyDown={handleTabKeyDown}
           />
 
-          <EraPanel active={activeKey === "era"} world={world} setWorld={setWorld} busy={busy} />
+          <EraPanel
+            active={activeKey === "era"}
+            projectId={projectId}
+            world={world} setWorld={setWorld} busy={busy}
+            activeSubTab={subTab.era}
+            onSubTabChange={updateSubTab("era")}
+          />
           <PowerSystemsPanel
             active={activeKey === "power_system"}
+            projectId={projectId}
             world={world}
             setWorld={setWorld}
             busy={busy}
+            activeSubTab={subTab.power_system}
+            onSubTabChange={updateSubTab("power_system")}
             onAdd={addPowerSystem}
             onUpdateField={updatePowerSystem}
             onRemove={removePowerSystem}
             onRegenerateItem={(i) => handleItemRegenerate(i)}
           />
-          <CoreRulesPanel active={activeKey === "core_rules"} world={world} setWorld={setWorld} busy={busy} />
+          <CoreRulesPanel
+            active={activeKey === "core_rules"}
+            projectId={projectId}
+            world={world} setWorld={setWorld} busy={busy}
+            activeSubTab={subTab.core_rules}
+            onSubTabChange={updateSubTab("core_rules")}
+          />
           <FactionsPanel
             active={activeKey === "factions"}
+            projectId={projectId}
             world={world}
             setWorld={setWorld}
             busy={busy}
+            activeSubTab={subTab.factions}
+            onSubTabChange={updateSubTab("factions")}
             onAdd={addFaction}
             onUpdateField={updateFaction}
             onRemove={removeFaction}
@@ -557,13 +585,18 @@ function WorldTabs({
 }
 
 function EraPanel({
-  active, world, setWorld, busy,
+  active, projectId, world, setWorld, busy, activeSubTab, onSubTabChange,
 }: {
   active: boolean;
+  projectId: string;
   world: World;
   setWorld: (w: World) => void;
   busy: boolean;
+  activeSubTab: string;
+  onSubTabChange: (key: string) => void;
 }) {
+  // 临时: 把 props 接进来但暂不渲染 sub-tab,避免 TS 报错
+  void projectId; void activeSubTab; void onSubTabChange;
   return (
     <div
       role="tabpanel"
@@ -624,9 +657,11 @@ function EraPanel({
 }
 
 function PowerSystemsPanel({
-  active, world, setWorld, busy, onAdd, onUpdateField, onRemove, onRegenerateItem,
+  active, projectId, world, setWorld, busy, onAdd, onUpdateField, onRemove, onRegenerateItem,
+  activeSubTab, onSubTabChange,
 }: {
   active: boolean;
+  projectId: string;
   world: World;
   setWorld: (w: World) => void;
   busy: boolean;
@@ -634,7 +669,11 @@ function PowerSystemsPanel({
   onUpdateField: <K extends keyof PowerSystem>(index: number, key: K, value: PowerSystem[K]) => void;
   onRemove: (index: number) => void;
   onRegenerateItem: (index: number) => (mods: string) => Promise<void>;
+  activeSubTab: string;
+  onSubTabChange: (key: string) => void;
 }) {
+  // 临时: 把 props 接进来但暂不渲染 sub-tab,避免 TS 报错
+  void projectId; void activeSubTab; void onSubTabChange;
   return (
     <div
       role="tabpanel"
@@ -800,13 +839,18 @@ function CategoryGroup({
 // 切换 / 删除项不会影响其他 group 的内容。外层 `<div data-testid="world-
 // core-rules">` 保留以向后兼容老单测 (回归保护)。
 function CoreRulesPanel({
-  active, world, setWorld, busy,
+  active, projectId, world, setWorld, busy, activeSubTab, onSubTabChange,
 }: {
   active: boolean;
+  projectId: string;
   world: World;
   setWorld: (w: World) => void;
   busy: boolean;
+  activeSubTab: string;
+  onSubTabChange: (key: string) => void;
 }) {
+  // 临时: 把 props 接进来但暂不渲染 sub-tab,避免 TS 报错
+  void projectId; void activeSubTab; void onSubTabChange;
   const grouped = useMemo(() => {
     const g: Record<string, string[]> = {
       physical: [], social: [], narrative: [], protagonist: [],
@@ -854,16 +898,22 @@ function CoreRulesPanel({
 }
 
 function FactionsPanel({
-  active, world, setWorld, busy, onAdd, onUpdateField, onRemove,
+  active, projectId, world, setWorld, busy, onAdd, onUpdateField, onRemove,
+  activeSubTab, onSubTabChange,
 }: {
   active: boolean;
+  projectId: string;
   world: World;
   setWorld: (w: World) => void;
   busy: boolean;
   onAdd: () => void;
   onUpdateField: (index: number, field: FactionField, value: string) => void;
   onRemove: (index: number) => void;
+  activeSubTab: string;
+  onSubTabChange: (key: string) => void;
 }) {
+  // 临时: 把 props 接进来但暂不渲染 sub-tab,避免 TS 报错
+  void projectId; void activeSubTab; void onSubTabChange;
   return (
     <div
       role="tabpanel"

@@ -147,10 +147,10 @@ user_prompt_template: |
       }}
     ],
     "core_rules": [
-      {"category": "physical", "text": "世界存在灵气；浓度因地而异，高浓度区有修炼加成"},
-      {"category": "social", "text": "灵脉开采权被大燕王朝垄断，各宗门暗中争夺"},
-      {"category": "narrative", "text": "强者不得干预弱者命运，违反者遭天道反噬"},
-      {"category": "protagonist", "text": "被天道选中的'寄体'觉醒后必死，且每次使用能力都在加速死亡"}
+      {{"category": "physical", "text": "世界存在灵气；浓度因地而异，高浓度区有修炼加成"}},
+      {{"category": "social", "text": "灵脉开采权被大燕王朝垄断，各宗门暗中争夺"}},
+      {{"category": "narrative", "text": "强者不得干预弱者命运，违反者遭天道反噬"}},
+      {{"category": "protagonist", "text": "被天道选中的'寄体'觉醒后必死，且每次使用能力都在加速死亡"}}
     ],
     "factions": [
       {{

@@ -86,3 +86,55 @@ describe("WorldStep sub-tab state memory", () => {
     expect(screen.getByTestId("world-tab-era-subtab-geography").getAttribute("aria-selected")).toBe("true");
   });
 });
+
+describe("WorldStep EraPanel sub-tabs", () => {
+  it("renders 4 fixed sub-tabs with correct labels and testids", async () => {
+    setupWithWorld({
+      era: "",
+      geography: "",
+      era_social_structure: "",
+      era_cultural_history: "",
+      power_systems: [],
+      factions: [],
+      core_rules: [],
+    });
+    await screen.findByTestId("world-tab-era-subtab-era");
+    expect(screen.getByTestId("world-tab-era-subtab-era")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-era-subtab-geography")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-era-subtab-social-structure")).toBeInTheDocument();
+    expect(screen.getByTestId("world-tab-era-subtab-cultural-history")).toBeInTheDocument();
+  });
+
+  it("era sub-tab ↻ calls /regenerate-world-section with field", async () => {
+    setupWithWorld({
+      era: "古代",
+      geography: "中原",
+      era_social_structure: "",
+      era_cultural_history: "",
+      power_systems: [],
+      factions: [],
+      core_rules: [],
+    });
+    await screen.findByTestId("world-tab-era-subtab-era");
+
+    (api.regenerateWorldSection as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "新古代",
+      geography: "新中原",
+      era_social_structure: "",
+      era_cultural_history: "",
+      power_systems: [],
+      factions: [],
+      core_rules: [],
+    });
+
+    fireEvent.click(screen.getByTestId("world-tab-era-subtab-era-regenerate"));
+    await vi.waitFor(() => {
+      expect(api.regenerateWorldSection).toHaveBeenCalledWith(
+        expect.any(String),
+        "era",
+        "",
+        { field: "era" },
+      );
+    });
+  });
+});

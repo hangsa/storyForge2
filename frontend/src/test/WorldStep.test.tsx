@@ -74,9 +74,12 @@ describe("WorldStep", () => {
     });
     setup();
     expect(await screen.findByTestId("world-form")).toBeInTheDocument();
+    // 2026-09-20 (Task 6): era panel now has 4 sub-tabs; default = era, so
+    // navigate to the social-structure sub-tab to verify that field renders.
+    fireEvent.click(screen.getByTestId("world-tab-era-subtab-social-structure"));
     expect(screen.getByTestId("world-era-social-structure")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("world-tab-era-subtab-cultural-history"));
     expect(screen.getByTestId("world-era-cultural-history")).toBeInTheDocument();
-    expect(screen.getAllByText(/新增/).length).toBeGreaterThanOrEqual(2);
   });
 
   it("tolerates missing new fields (renders empty textareas)", async () => {
@@ -89,7 +92,10 @@ describe("WorldStep", () => {
     });
     setup();
     expect(await screen.findByTestId("world-form")).toBeInTheDocument();
+    // 2026-09-20 (Task 6): navigate to social-structure sub-tab first.
+    fireEvent.click(screen.getByTestId("world-tab-era-subtab-social-structure"));
     expect((screen.getByTestId("world-era-social-structure") as HTMLTextAreaElement).value).toBe("");
+    fireEvent.click(screen.getByTestId("world-tab-era-subtab-cultural-history"));
     expect((screen.getByTestId("world-era-cultural-history") as HTMLTextAreaElement).value).toBe("");
   });
 
@@ -445,6 +451,9 @@ describe("WorldStep", () => {
     // The form renders despite the legacy shape.
     const form = await screen.findByTestId("world-form");
     expect(form).toBeInTheDocument();
+    // 2026-09-20 (Task 6): era panel now has 4 sub-tabs; default = era, so
+    // navigate to the social-structure sub-tab before asserting on it.
+    fireEvent.click(screen.getByTestId("world-tab-era-subtab-social-structure"));
     // era_social_structure is coerced to a JSON string (contains the keys).
     const social = screen.getByTestId("world-era-social-structure") as HTMLTextAreaElement;
     expect(social.value).toContain("人类阶层");

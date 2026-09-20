@@ -584,6 +584,16 @@ function WorldTabs({
   );
 }
 
+// 2026-09-20 (Task 6): EraPanel 4 个固定 sub-tab (时代背景/地理环境/社会结构/历史文化)
+// + per-field ↻ 直接调 /regenerate-world-section?section=era&field=X
+// (sub-tab ↻ 设计意图即时生效,跳过 RegenerateModal)。
+const ERA_FIELDS = [
+  { key: "era",                  label: "时代背景", testidSuffix: "era" },
+  { key: "geography",            label: "地理环境", testidSuffix: "geography" },
+  { key: "era_social_structure", label: "社会结构", testidSuffix: "social-structure" },
+  { key: "era_cultural_history", label: "历史文化", testidSuffix: "cultural-history" },
+] as const;
+
 function EraPanel({
   active, projectId, world, setWorld, busy, activeSubTab, onSubTabChange,
 }: {
@@ -595,8 +605,16 @@ function EraPanel({
   activeSubTab: string;
   onSubTabChange: (key: string) => void;
 }) {
-  // 临时: 把 props 接进来但暂不渲染 sub-tab,避免 TS 报错
-  void projectId; void activeSubTab; void onSubTabChange;
+  // 非法 activeSubTab 回退到 "era",保证 field 永远命中 ERA_FIELDS
+  const field = activeSubTab && ERA_FIELDS.find((f) => f.key === activeSubTab)
+    ? activeSubTab
+    : "era";
+  const fieldDef = ERA_FIELDS.find((f) => f.key === field)!;
+  // TS 不知道 `field` 是 World 的 key,用 as any 走 codebase 已有模式
+  const value = (world as any)[field] ?? "";
+
+  const setValue = (v: string) => setWorld({ ...world, [field]: v });
+
   return (
     <div
       role="tabpanel"
@@ -606,51 +624,33 @@ function EraPanel({
       data-testid="world-panel-era"
       className="space-y-3"
     >
-      <div>
-        <label className="block font-mono text-primary-container mb-1 text-xs">时代背景</label>
-        <AutoTextarea
-          value={world.era}
-          onChange={(e) => setWorld({ ...world, era: e.target.value })}
-          rows={2}
-          disabled={busy}
-          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-        />
-      </div>
-      <div>
-        <label className="block font-mono text-primary-container mb-1 text-xs">地理环境</label>
-        <AutoTextarea
-          value={world.geography}
-          onChange={(e) => setWorld({ ...world, geography: e.target.value })}
-          rows={2}
-          disabled={busy}
-          className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-        />
-      </div>
-      <div>
-        <label className="block font-mono text-primary-container mb-1 text-xs">
-          社会结构 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
-        </label>
-        <AutoTextarea
-          data-testid="world-era-social-structure"
-          value={world.era_social_structure ?? ""}
-          onChange={(e) => setWorld({ ...world, era_social_structure: e.target.value })}
-          rows={2}
-          disabled={busy}
-          className="w-full bg-surface-container border border-primary-container/40 rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-        />
-      </div>
-      <div>
-        <label className="block font-mono text-primary-container mb-1 text-xs">
-          历史文化 <span className="ml-1 text-[10px] text-primary-container/70">[新增]</span>
-        </label>
-        <AutoTextarea
-          data-testid="world-era-cultural-history"
-          value={world.era_cultural_history ?? ""}
-          onChange={(e) => setWorld({ ...world, era_cultural_history: e.target.value })}
-          rows={2}
-          disabled={busy}
-          className="w-full bg-surface-container border border-primary-container/40 rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
-        />
+      <SubTabStrip
+        tabs={ERA_FIELDS.map((f) => ({ key: f.key, label: f.label, testidSuffix: f.testidSuffix }))}
+        active={field}
+        onChange={onSubTabChange}
+        onRegenerate={(k) => {
+          // 直接调 API,跳过 RegenerateModal 二次确认弹窗
+          // (sub-tab ↻ 设计意图是即时生效,与顶级 tab ↻ 走 modal 不同)
+          api.regenerateWorldSection(projectId, "era", "", { field: k as any }).then((result: any) => {
+            const next = result?.detail ?? result;
+            if (next) setWorld(normalizeLegacyWorld(next));
+          });
+        }}
+        testidPrefix="world-tab-era-subtab"
+        disabled={busy}
+      />
+      <div data-testid={`world-tab-era-subtab-panel-${field}`}>
+        <div>
+          <label className="block font-mono text-primary-container mb-1 text-xs">{fieldDef.label}</label>
+          <AutoTextarea
+            data-testid={`world-era-${fieldDef.testidSuffix}`}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            rows={2}
+            disabled={busy}
+            className="w-full bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-primary focus:outline-none focus:border-primary-container resize-y"
+          />
+        </div>
       </div>
     </div>
   );

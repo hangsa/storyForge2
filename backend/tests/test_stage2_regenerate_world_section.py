@@ -45,6 +45,7 @@ def _seed_old_world():
             "core_rules": ["旧规则"],
             "ceilings": ["旧上限"],
             "cost_system": "旧代价",
+            "source": "energetics",
         },
         "factions": [
             {"name": "旧势力A", "type": "国家", "goal": "旧目标A", "relations": "旧关系A"},

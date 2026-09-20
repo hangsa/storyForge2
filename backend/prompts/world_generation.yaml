@@ -38,7 +38,8 @@ system_prompt: |
   11. **联合推演字段显式指引**（2026-09-20 修订）：
      - geography 由 ontology 单元（列举 2-3 条）决定的物理舞台 + narrative_physics 单元（列举 2-3 条）决定的冲突规模联合推演
      - era_cultural_history 由 power_structure 单元（列举 2-3 条）反推的历史成因 + narrative_physics 单元（列举 2-3 条）累积的代价联合推演
-     LLM 在生成 era 段时，必须显式参照上述两个 S2 维度的具体单元，不能给空话。
+     LLM 在生成 geography / era_social_structure / era_cultural_history 时，
+     必须显式参照上述两个 S2 维度的具体单元，不能给空话。
 
   ## 5 维度拆解 → world.json 落点映射（2026-09-19 砍概念DNA 后引入）
 

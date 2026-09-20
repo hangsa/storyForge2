@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { CoreRule, PowerSystem, World } from "../../api/client";
 import { useWizard } from "./WizardContext";
-import TagEditor from "../shared/TagEditor";
+import LineListEditor from "../shared/LineListEditor";
 import { RegenerateModal } from "../shared/RegenerateModal";
 import {
   useSectionRegenerate,
@@ -467,7 +467,7 @@ export default function WorldStep({ projectId }: WorldStepProps) {
 // - WorldTabs    sticky 横条,4 个 tab + 各自的 SectionRegenerateButton
 // - EraPanel     时代 + 地理 + 2 个新增字段 (固定 4 个)
 // - PowerSystemsPanel  力量体系卡片数组 + 添加按钮
-// - CoreRulesPanel     世界规则 TagEditor
+// - CoreRulesPanel     世界规则 LineListEditor
 // - FactionsPanel      势力卡片数组 + 添加按钮
 // 五个组件都是 file-internal,只给 WorldStep 主组件使用。
 // ===========================================================================
@@ -828,19 +828,19 @@ function PowerSystemsPanel({
           <div>
             <label className="block font-mono text-primary-container mb-1 text-[10px]">阶段划分</label>
             <div data-testid={`world-power-system-${idx}-stages`}>
-              <TagEditor items={ps.stages ?? []} onItemsChange={(items) => onUpdateField(idx, "stages", items)} saving={busy} />
+              <LineListEditor items={ps.stages ?? []} onItemsChange={(items) => onUpdateField(idx, "stages", items)} saving={busy} />
             </div>
           </div>
           <div>
             <label className="block font-mono text-primary-container mb-1 text-[10px]">体系规则</label>
             <div data-testid={`world-power-system-${idx}-rules`}>
-              <TagEditor items={ps.core_rules ?? []} onItemsChange={(items) => onUpdateField(idx, "core_rules", items)} saving={busy} />
+              <LineListEditor items={ps.core_rules ?? []} onItemsChange={(items) => onUpdateField(idx, "core_rules", items)} saving={busy} />
             </div>
           </div>
           <div>
             <label className="block font-mono text-primary-container mb-1 text-[10px]">力量上限</label>
             <div data-testid={`world-power-system-${idx}-ceilings`}>
-              <TagEditor items={ps.ceilings ?? []} onItemsChange={(items) => onUpdateField(idx, "ceilings", items)} saving={busy} />
+              <LineListEditor items={ps.ceilings ?? []} onItemsChange={(items) => onUpdateField(idx, "ceilings", items)} saving={busy} />
             </div>
           </div>
           <div>
@@ -872,7 +872,7 @@ function PowerSystemsPanel({
 
 // 2026-09-20 (修订 F): CategoryGroup 是 CoreRulesPanel 内的可折叠 group。
 // 4 个 category group (physical / social / narrative / protagonist) 共享同一
-// 渲染模式:`<details open>` 标题行 + TagEditor 内容。每个 group 独立维护
+// 渲染模式:`<details open>` 标题行 + LineListEditor 内容。每个 group 独立维护
 // `open` state,首次渲染默认展开。testid 在外层 `<details>` 上,用于单测定位。
 function CategoryGroup({
   category, label, source, rules, onChange, saving,
@@ -909,7 +909,7 @@ function CategoryGroup({
         </span>
       </summary>
       <div className="px-3 pb-3">
-        <TagEditor items={rules} onItemsChange={onChange} saving={saving} />
+        <LineListEditor items={rules} onItemsChange={onChange} saving={saving} />
       </div>
     </details>
   );

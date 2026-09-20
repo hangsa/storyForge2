@@ -8,7 +8,6 @@ import json
 import pytest
 from unittest.mock import patch, AsyncMock
 from pathlib import Path
-from typing import Literal
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -37,10 +36,10 @@ def _seed_project(tmp_path: Path) -> None:
 
 def _seed_old_world():
     return {
-        "era": "旧时代",
-        "geography": "旧地理",
-        "era_social_structure": "旧社会",
-        "era_cultural_history": "旧历史",
+        "era": "旧古代",
+        "geography": "中原",
+        "era_social_structure": "分封制",
+        "era_cultural_history": "百家争鸣",
         "power_system": {
             "name": "旧体系",
             "description": "旧描述",
@@ -64,110 +63,77 @@ def _patch_settings(tmp_path, monkeypatch):
     yield
 
 
-def _mock_world_payload_only_geography_changed():
-    """LLM mocked to return a geography field different from existing;
-    other era fields equal existing values (so per-field diff is observable)."""
-    return {
-        "era": "旧时代",
-        "geography": "新大陆+新海洋",
-        "era_social_structure": "旧社会",
-        "era_cultural_history": "旧历史",
-        "power_systems": [
-            {
-                "name": "旧体系",
-                "description": "旧描述",
-                "stages": ["旧一阶"],
-                "core_rules": ["旧规则"],
-                "ceilings": ["旧上限"],
-                "cost_system": "旧代价",
-            }
-        ],
-        "factions": [
-            {"name": "旧势力A", "type": "国家", "goal": "旧目标A", "relations": "旧关系A"},
-        ],
-        "core_rules": ["世界规则旧"],
-    }
+# (field_name, new_value) — all 4 era fields are regenerated in turn;
+# the other 3 era fields in the LLM-returned payload are intentionally
+# *different* from the seeded values so that any handler that
+# accidentally writes a non-target field is caught by the byte-identical
+# assertion below.
+ERA_FIELD_CASES = [
+    ("era", "古代"),
+    ("geography", "新中原"),
+    ("era_social_structure", "新分封制"),
+    ("era_cultural_history", "新百家争鸣"),
+]
 
 
-def _mock_world_payload_only_era_changed():
-    """LLM mocked to return era field different from existing;
-    other era fields equal existing values."""
-    return {
-        "era": "新世纪元",
-        "geography": "旧地理",
-        "era_social_structure": "旧社会",
-        "era_cultural_history": "旧历史",
-        "power_systems": [
-            {
-                "name": "旧体系",
-                "description": "旧描述",
-                "stages": ["旧一阶"],
-                "core_rules": ["旧规则"],
-                "ceilings": ["旧上限"],
-                "cost_system": "旧代价",
-            }
-        ],
-        "factions": [
-            {"name": "旧势力A", "type": "国家", "goal": "旧目标A", "relations": "旧关系A"},
-        ],
-        "core_rules": ["世界规则旧"],
-    }
+@pytest.mark.parametrize("field_name,new_value", ERA_FIELD_CASES)
+def test_field_only_writes_target_field(tmp_path, field_name, new_value):
+    """section=era&field=<field_name> → 只改目标 era 字段,
+    其他 3 个 era 字段 byte-identical (与 seeded 旧值逐字相同)。
 
-
-def test_field_geography_only_writes_geography(tmp_path):
-    """section=era&field=geography → 只改 world.geography, 其他 3 个 era 字段 byte-identical。"""
+    若 handler 因为 ERA_BLOCK_KEYS / Literal 顺序等 off-by-one 把
+    错位的 era 字段写到 merged, 这里会立刻 fail。
+    """
     _seed_project(tmp_path)
-    _write(tmp_path, "world.json", _seed_old_world())
+    seeded = _seed_old_world()
+    _write(tmp_path, "world.json", seeded)
+
+    # Mocked LLM 故意让 4 个 era 字段全部 ≠ seeded 旧值 —
+    # 这样 handler 即使误写了非目标字段, 字节级比对也能发现。
+    other_distractors = {
+        "era": "LLM_era",
+        "geography": "LLM_geo",
+        "era_social_structure": "LLM_social",
+        "era_cultural_history": "LLM_history",
+    }
+    mocked_payload = dict(other_distractors, **{field_name: new_value})
+    mocked_payload.update({
+        "power_systems": [{
+            "name": seeded["power_system"]["name"],
+            "description": seeded["power_system"]["description"],
+            "stages": seeded["power_system"]["stages"],
+            "core_rules": seeded["power_system"]["core_rules"],
+            "ceilings": seeded["power_system"]["ceilings"],
+            "cost_system": seeded["power_system"]["cost_system"],
+        }],
+        "factions": seeded["factions"],
+        "core_rules": seeded["core_rules"],
+    })
+
     with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
         instance = MockPlanner.return_value
-        instance.generate_world = AsyncMock(return_value=(
-            _mock_world_payload_only_geography_changed(),
-            None,
-        ))
+        instance.generate_world = AsyncMock(return_value=(mocked_payload, None))
         resp = client.post(
             f"/api/stage2/regenerate-world-section?project_id={PROJ}",
-            json={"section": "era", "field": "geography"},
+            json={"section": "era", "field": field_name},
         )
     assert resp.status_code == 200
     detail = resp.json()["detail"]
-    existing = _seed_old_world()
-    # Target field changed
-    assert detail["geography"] == "新大陆+新海洋"
-    # Other 3 era fields byte-identical
-    assert detail["era"] == existing["era"]
-    assert detail["era_social_structure"] == existing["era_social_structure"]
-    assert detail["era_cultural_history"] == existing["era_cultural_history"]
-    # Other top-level keys untouched
-    assert detail["factions"] == existing["factions"]
-    assert detail["power_systems"] == [existing["power_system"]]
 
-
-def test_field_era_only_writes_era(tmp_path):
-    """section=era&field=era → 只改 world.era, 其他 3 个 era 字段 byte-identical。"""
-    _seed_project(tmp_path)
-    _write(tmp_path, "world.json", _seed_old_world())
-    with patch("backend.agents.planner.PlannerAgent") as MockPlanner:
-        instance = MockPlanner.return_value
-        instance.generate_world = AsyncMock(return_value=(
-            _mock_world_payload_only_era_changed(),
-            None,
-        ))
-        resp = client.post(
-            f"/api/stage2/regenerate-world-section?project_id={PROJ}",
-            json={"section": "era", "field": "era"},
-        )
-    assert resp.status_code == 200
-    detail = resp.json()["detail"]
-    existing = _seed_old_world()
-    # Target field changed
-    assert detail["era"] == "新世纪元"
-    # Other 3 era fields byte-identical
-    assert detail["geography"] == existing["geography"]
-    assert detail["era_social_structure"] == existing["era_social_structure"]
-    assert detail["era_cultural_history"] == existing["era_cultural_history"]
+    # Target field updated to new_value
+    assert detail[field_name] == new_value
+    # Other 3 era fields byte-identical to seeded (NOT to LLM distractor)
+    for other_field in seeded:
+        if other_field == field_name:
+            continue
+        if other_field in ERA_FIELD_CASES[0]:  # other era field
+            assert detail[other_field] == seeded[other_field], (
+                f"non-target era field {other_field!r} should be byte-identical "
+                f"to seeded value {seeded[other_field]!r}, got {detail[other_field]!r}"
+            )
     # Other top-level keys untouched
-    assert detail["factions"] == existing["factions"]
-    assert detail["power_systems"] == [existing["power_system"]]
+    assert detail["factions"] == seeded["factions"]
+    assert detail["power_systems"] == [seeded["power_system"]]
 
 
 def test_field_validator_rejects_unknown_field():

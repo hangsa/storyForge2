@@ -49,6 +49,7 @@ def _seed_two_system_world():
                 "core_rules": ["灵根为根"],
                 "ceilings": ["最高元婴"],
                 "cost_system": "寿元",
+                "source": "energetics",
             },
             {
                 "name": "武道",
@@ -57,6 +58,7 @@ def _seed_two_system_world():
                 "core_rules": ["气血枯竭则止"],
                 "ceilings": ["最高大宗师"],
                 "cost_system": None,
+                "source": "energetics",
             },
         ],
         "factions": [
@@ -74,6 +76,7 @@ def _mock_new_system():
         "core_rules": ["新规则"],
         "ceilings": ["最高武圣"],
         "cost_system": "折寿",
+        "source": "energetics",
     }
 
 

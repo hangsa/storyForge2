@@ -74,6 +74,7 @@ ERA_FIELD_CASES = [
     ("era_social_structure", "新分封制"),
     ("era_cultural_history", "新百家争鸣"),
 ]
+ERA_FIELD_NAMES = {case[0] for case in ERA_FIELD_CASES}
 
 
 @pytest.mark.parametrize("field_name,new_value", ERA_FIELD_CASES)
@@ -126,7 +127,7 @@ def test_field_only_writes_target_field(tmp_path, field_name, new_value):
     for other_field in seeded:
         if other_field == field_name:
             continue
-        if other_field in ERA_FIELD_CASES[0]:  # other era field
+        if other_field in ERA_FIELD_NAMES:  # other era field — filter to the 4 era keys
             assert detail[other_field] == seeded[other_field], (
                 f"non-target era field {other_field!r} should be byte-identical "
                 f"to seeded value {seeded[other_field]!r}, got {detail[other_field]!r}"

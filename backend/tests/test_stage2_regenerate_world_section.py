@@ -196,15 +196,18 @@ def test_regenerate_factions_rewrites_only_factions_array(mock_planner, tmp_path
     assert detail["power_systems"] == [_seed_old_world()["power_system"]]
 
 
-def test_regenerate_unknown_section_returns_400(mock_planner, tmp_path):
+def test_regenerate_unknown_section_returns_422(mock_planner, tmp_path):
+    """Unknown section values are rejected at the pydantic Literal boundary
+    (422). The manual handler-level check is kept as a defensive guard for
+    cases where FastAPI parses before pydantic runs, but pydantic catches it
+    first here."""
     _seed_project(tmp_path)
     _write(tmp_path, "world.json", _seed_old_world())
     resp = client.post(
         f"/api/stage2/regenerate-world-section?project_id={PROJ}",
         json={"section": "history", "user_modifications": ""},
     )
-    assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "VALIDATION_ERROR"
+    assert resp.status_code == 422
 
 
 def test_regenerate_agent_value_error_returns_503(tmp_path, monkeypatch):

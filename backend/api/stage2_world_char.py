@@ -1,7 +1,7 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.api._errors import http_error
 from backend.config import settings
@@ -565,7 +565,13 @@ async def regenerate_character_examples(
 
 
 class RegenerateWorldSectionPayload(BaseModel):
-    section: str
+    section: Literal["era", "power_system", "core_rules", "factions"]
+    # 2026-09-20: field 字段仅在 section="era" 时生效 —
+    # 把 4 个 era 字段(era/geography/era_social_structure/era_cultural_history)
+    # 拆成细粒度,仅替换目标字段,其他 3 个 byte-preserve。
+    # None = 旧行为(4 个 era 字段一起重生)。
+    field: Optional[Literal["era", "geography",
+                            "era_social_structure", "era_cultural_history"]] = None
     # 2026-09-20: category 字段仅在 section="core_rules" 时生效 —
     # 把"仅替换某一 category 的规则、保留其他 category" 拆成细粒度,
     # 取代旧的整组替换。Allowed: physical/social/narrative/protagonist。
@@ -577,6 +583,27 @@ class RegenerateWorldSectionPayload(BaseModel):
     # None = 旧行为(整组重生成)。
     system_source: Optional[PowerSystemSource] = None  # 仅 section="power_system" 时生效; Allowed: energetics/protagonist_engine
     user_modifications: str = Field(default="", max_length=1700)
+
+    @model_validator(mode="after")
+    def _check_dims_mutually_exclusive(self):
+        """field / category / system_source 三选一,且各自仅在对应 section 下生效。"""
+        non_null = sum(
+            1 for x in (self.field, self.category, self.system_source)
+            if x is not None
+        )
+        if non_null > 1:
+            raise ValueError(
+                "field / category / system_source 互斥, 同时只能传一个"
+            )
+        if self.field is not None and self.section != "era":
+            raise ValueError("field 参数仅在 section='era' 时生效")
+        if self.category is not None and self.section != "core_rules":
+            raise ValueError("category 参数仅在 section='core_rules' 时生效")
+        if self.system_source is not None and self.section != "power_system":
+            raise ValueError(
+                "system_source 参数仅在 section='power_system' 时生效"
+            )
+        return self
 
 
 @router.post("/regenerate-world-section")
@@ -591,6 +618,8 @@ async def regenerate_world_section(
     if not project_id:
         raise http_error(400, "VALIDATION_ERROR", "project_id 不能为空")
 
+    # Defensive guard: section Literal catches it first, but keep the check
+    # in case the model is constructed bypassing the FastAPI boundary.
     if payload.section not in ("era", "power_system", "core_rules", "factions"):
         raise http_error(
             400,
@@ -630,8 +659,15 @@ async def regenerate_world_section(
 
     merged = dict(existing)
     if payload.section == "era":
-        for key in ERA_BLOCK_KEYS:
-            merged[key] = result.get(key, existing.get(key, ""))
+        if payload.field is not None:
+            # 2026-09-20: 新行为 — 仅替换目标 era 字段,其他 3 个 era 字段 byte-preserve
+            merged[payload.field] = result.get(
+                payload.field, existing.get(payload.field, "")
+            )
+        else:
+            # 旧行为: era 整组 (4 个字段一起重生)
+            for key in ERA_BLOCK_KEYS:
+                merged[key] = result.get(key, existing.get(key, ""))
     elif payload.section == "power_system":
         # The section literal stays singular (front-end contract), but the
         # stored shape is the `power_systems` array.

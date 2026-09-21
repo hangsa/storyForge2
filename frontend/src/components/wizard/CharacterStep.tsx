@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { BehaviorExample, Character, CharacterSet } from "../../api/client";
 import { useWizard } from "./WizardContext";
-import TagEditor from "../shared/TagEditor";
+import LineListEditor from "../shared/LineListEditor";
 import CharacterRelationsEditor from "./CharacterRelationsEditor";
 import BehaviorExamplesSection from "./BehaviorExamplesSection";
 import { RegenerateModal } from "../shared/RegenerateModal";
@@ -460,7 +460,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       )}
 
       {hasCharacters && (
-        <div data-testid="character-form" className="space-y-3">
+        <div data-testid="character-form" className="space-y-2">
           <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
             已生成 {characters!.characters.length} 个角色
           </div>
@@ -653,7 +653,7 @@ function CharacterHeader({
     <div className="flex items-start justify-between gap-3">
       <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>
-          <label className="block font-mono text-primary-container mb-1 text-[10px]">姓名</label>
+          <label className="block font-mono text-primary-container mb-1 text-xs">姓名</label>
           <input
             data-testid={`character-${character.id}-name`}
             value={character.name ?? ""}
@@ -663,7 +663,7 @@ function CharacterHeader({
           />
         </div>
         <div>
-          <label className="block font-mono text-primary-container mb-1 text-[10px]">角色类型</label>
+          <label className="block font-mono text-primary-container mb-1 text-xs">角色类型</label>
           <select
             data-testid={`character-${character.id}-type`}
             value={character.character_type}
@@ -711,9 +711,8 @@ function PersonalitySection({
 }) {
   const personality = character.personality ?? { beliefs: [], desires: [], fears: [], values: [], core_traits: [] };
   return (
-    <div data-testid={`character-${character.id}-personality`} className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">人格层</div>
+    <div data-testid={`character-${character.id}-personality`} className="space-y-1">
+      <div className="flex justify-end">
         <SectionRegenerateButton
           target={`${character.name || character.id} · 人格层`}
           onRegenerate={onRegenerate}
@@ -723,8 +722,8 @@ function PersonalitySection({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {PERSONALITY_FIELDS.map(({ key, label }) => (
           <div key={key}>
-            <div className="font-mono text-primary-container/80 text-[10px] mb-1">{label}</div>
-            <TagEditor
+            <div className="font-mono text-primary-container/80 text-xs mb-1">{label}</div>
+            <LineListEditor
               items={personality[key] ?? []}
               onItemsChange={(next) => onPersonalityChange(key, next)}
               saving={busy}
@@ -750,9 +749,8 @@ function VoiceSection({
 }) {
   const voice = character.voice_signature ?? { speech_style: "", thought_patterns: "", taboos: [] };
   return (
-    <div data-testid={`character-${character.id}-voice`} className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">声音签名</div>
+    <div data-testid={`character-${character.id}-voice`} className="space-y-1">
+      <div className="flex justify-end">
         <SectionRegenerateButton
           target={`${character.name || character.id} · 声音签名`}
           onRegenerate={onRegenerate}
@@ -760,7 +758,7 @@ function VoiceSection({
         />
       </div>
       <div>
-        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">说话风格</label>
+        <label className="block font-mono text-primary-container/80 mb-1 text-xs">说话风格</label>
         <AutoTextarea
           data-testid={`character-${character.id}-speech-style`}
           value={voice.speech_style}
@@ -771,7 +769,7 @@ function VoiceSection({
         />
       </div>
       <div>
-        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">思维模式</label>
+        <label className="block font-mono text-primary-container/80 mb-1 text-xs">思维模式</label>
         <AutoTextarea
           data-testid={`character-${character.id}-thought-patterns`}
           value={voice.thought_patterns}
@@ -782,8 +780,8 @@ function VoiceSection({
         />
       </div>
       <div>
-        <div className="font-mono text-primary-container/80 mb-1 text-[10px]">行为禁忌</div>
-        <TagEditor
+        <div className="font-mono text-primary-container/80 mb-1 text-xs">行为禁忌</div>
+        <LineListEditor
           items={voice.taboos ?? []}
           onItemsChange={(next) => onVoiceFieldChange("taboos", next)}
           saving={busy}
@@ -811,9 +809,8 @@ function CurrentStateSection({
 }) {
   const state = character.current_state ?? { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] };
   return (
-    <div data-testid={`character-${character.id}-current-state`} className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">当前状态</div>
+    <div data-testid={`character-${character.id}-current-state`} className="space-y-1">
+      <div className="flex justify-end">
         <SectionRegenerateButton
           target={`${character.name || character.id} · 当前状态`}
           onRegenerate={onRegenerate}
@@ -821,7 +818,7 @@ function CurrentStateSection({
         />
       </div>
       <div>
-        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">位置</label>
+        <label className="block font-mono text-primary-container/80 mb-1 text-xs">位置</label>
         <input
           data-testid={`character-${character.id}-location`}
           value={state.location}
@@ -832,7 +829,7 @@ function CurrentStateSection({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>
-          <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">身体状况</label>
+          <label className="block font-mono text-primary-container/80 mb-1 text-xs">身体状况</label>
           <input
             data-testid={`character-${character.id}-physical-condition`}
             value={state.physical_condition}
@@ -842,7 +839,7 @@ function CurrentStateSection({
           />
         </div>
         <div>
-          <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">情绪</label>
+          <label className="block font-mono text-primary-container/80 mb-1 text-xs">情绪</label>
           <input
             data-testid={`character-${character.id}-emotional`}
             value={state.emotional}
@@ -853,8 +850,8 @@ function CurrentStateSection({
         </div>
       </div>
       <div>
-        <div className="font-mono text-primary-container/80 mb-1 text-[10px]">已知秘密</div>
-        <TagEditor
+        <div className="font-mono text-primary-container/80 mb-1 text-xs">已知秘密</div>
+        <LineListEditor
           items={state.known_secrets ?? []}
           onItemsChange={(next) => onCurrentStateChange("known_secrets", next)}
           saving={busy}
@@ -873,17 +870,16 @@ function UnknownSection({
   onRegenerate: (mods: string) => Promise<void>;
 }) {
   return (
-    <div data-testid={`character-${character.id}-unknown`} className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">角色不知道的事</div>
+    <div data-testid={`character-${character.id}-unknown`} className="space-y-1">
+      <div className="flex justify-end">
         <SectionRegenerateButton
           target={`${character.name || character.id} · 未知`}
           onRegenerate={onRegenerate}
           testId={`character-${character.id}-unknown-regenerate`}
         />
       </div>
-      <div className="font-mono text-primary-container/80 mb-1 text-[10px]">未知 (unknown_to_character)</div>
-      <TagEditor
+      <div className="font-mono text-primary-container/80 mb-1 text-xs">未知 (unknown_to_character)</div>
+      <LineListEditor
         items={character.unknown_to_character ?? []}
         onItemsChange={onUnknownChange}
         saving={busy}
@@ -902,9 +898,8 @@ function RelationsSection({
   onRegenerate: (mods: string) => Promise<void>;
 }) {
   return (
-    <div data-testid={`character-${character.id}-relations`} className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">角色关系</div>
+    <div data-testid={`character-${character.id}-relations`} className="space-y-1">
+      <div className="flex justify-end">
         <SectionRegenerateButton
           target={`${character.name || character.id} · 角色关系`}
           onRegenerate={onRegenerate}
@@ -961,7 +956,7 @@ function CharacterPanel({
       role="tabpanel"
       aria-labelledby={`character-tab-${character.id}`}
       hidden={hidden}
-      className="space-y-3 pt-3"
+      className="space-y-1 pt-2"
     >
       <CharacterHeader
         character={character}

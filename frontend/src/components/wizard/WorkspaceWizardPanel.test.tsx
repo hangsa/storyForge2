@@ -150,7 +150,54 @@ describe("WorkspaceWizardPanel", () => {
     });
     render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_f0721bdc" /></MemoryRouter>);
     await waitFor(() => {
-      expect(screen.getByTestId("wizard-sidebar-item-concept")).not.toHaveAttribute("disabled");
+      expect(screen.getByTestId("wizard-sidebar-item-divergence")).not.toHaveAttribute("disabled");
+    });
+  });
+
+  it("prefills completedSteps=[1] when selected_at is null but concept_and_dna.json exists (legacy pre-2026-08-31 / interrupted-commit projects)", async () => {
+    // 2026-09-21 regression: projects whose creative_divergence.json was
+    // written BEFORE the dual-write of selected_at was added (pre
+    // 2026-08-31 proj_f0721bdc fix) — OR whose commit partially failed
+    // (concept_and_dna.json was written but creative_divergence.json's
+    // selected_at was not) — had no selected_at to drive the step 1
+    // sidebar gate. Symptom: user on step 2 couldn't click 创意发散
+    // to navigate back. Fallback: if concept_and_dna.json has content,
+    // divergence was effectively completed — still mark step 1 done.
+    //
+    // Pre-seed sessionStorage so WizardProvider loads currentStep=2 (the
+    // user's actual state when they hit the bug); otherwise the default
+    // currentStep=1 makes step 1 trivially reachable via the `current`
+    // branch of the sidebar's reachability gate and the test wouldn't
+    // exercise the bug.
+    const KEY = (await import("./WizardContext")).getSessionKey("proj_legacy");
+    sessionStorage.setItem(KEY, JSON.stringify({
+      currentStep: 2,
+      completedSteps: [2],
+      status: "completed",
+      data: {
+        concept: null, story_dna: null, world: { era: "现代", geography: "城市", factions: [], power_systems: [] },
+        characters: null, novel_outline: null, chapter1_outline: null,
+      },
+      errorMessage: null,
+    }));
+    (api.getCreativeDivergence as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      variants: [{ id: "v1", label: "A", title: "T", description: "D", tags: [], created_at: "2026-08-01T00:00:00Z" }],
+      selected_id: null,
+      has_selection: false,
+      selected_at: null,
+    });
+    (api.getConcept as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      concept: { title: "建木之囚", genre: "爽文", premise: "P", tone: "T", theme: "T", target_audience: "A", style_template: "" },
+      story_dna: { core_contradiction: { statement: "S", side_a: "A", side_b: "B" }, value_stack: [] },
+    });
+    (api.getWorld as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      era: "现代", geography: "城市", factions: [], power_systems: [],
+    });
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_legacy" /></MemoryRouter>);
+    await waitFor(() => {
+      // After prefill, divergence sidebar item is enabled even though
+      // selected_at was null — the concept_and_dna fallback rescued it.
+      expect(screen.getByTestId("wizard-sidebar-item-divergence")).not.toHaveAttribute("disabled");
     });
   });
 });

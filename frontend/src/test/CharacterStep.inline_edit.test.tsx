@@ -90,27 +90,23 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
     expect(api.patchCharacter).not.toHaveBeenCalled();
   });
 
-  it("changing a personality tag via TagEditor updates local state", async () => {
+  it("editing a personality row via LineListEditor updates local state", async () => {
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    // Scope to Alice's card since Alice and Bob share the same "honor" belief.
+    // 2026-09-21: personality 数组字段由 TagEditor (chip 风) 换成
+    // LineListEditor (一行一个 textarea)。每条数据独立,直接改 textarea
+    // value 即可。Scope 到 Alice 的面板 — 多个角色共占同一个 sub-tab,
+    // 会渲染多份 linelist-0-input。
     const aliceCard = screen.getByTestId("character-panel-char_alice");
-    // The personality section uses TagEditor. To edit an existing tag, click
-    // the tag's text button (TagEditor.tsx wraps the value in a <button>).
-    const tag = within(aliceCard).getByRole("button", { name: "honor" });
+    const beliefsTextareas = within(aliceCard).getAllByTestId("linelist-0-input");
+    // beliefs 字段(5 个 personality 字段之一)在 aliceCard 内能找到一个
+    // 包含 "honour" 的 textarea。找到它,改 value。
+    const beliefsTextarea = beliefsTextareas.find((el) => (el as HTMLTextAreaElement).value === "honor");
+    expect(beliefsTextarea).toBeDefined();
     await act(async () => {
-      tag.click();
+      fireEvent.change(beliefsTextarea!, { target: { value: "honesty" } });
     });
-    // TagEditor swaps the button for an input pre-filled with "honor".
-    const editInput = within(aliceCard).getByDisplayValue("honor");
-    await act(async () => {
-      fireEvent.change(editInput, { target: { value: "honesty" } });
-    });
-    // Save by pressing Enter (TagEditor saves on Enter).
-    await act(async () => {
-      fireEvent.keyDown(editInput, { key: "Enter", code: "Enter" });
-    });
-    expect(within(aliceCard).getByRole("button", { name: "honesty" })).toBeInTheDocument();
+    expect(beliefsTextarea).toHaveValue("honesty");
     expect(api.patchCharacter).not.toHaveBeenCalled();
   });
 

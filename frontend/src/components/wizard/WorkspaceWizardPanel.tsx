@@ -38,10 +38,13 @@ function Inner({ projectId }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        // 2026-09-19 砍概念DNA 步骤后,prefill 不再拉 /concept-and-dna。S2 世界观
-        // 会在自身的 prefill 中按 b3_state + concept_and_dna.json 自取。
-        const [cd, canvasState, world, chars, novel, outline] = await Promise.allSettled([
+        // 2026-09-21:prefill 重新拉 /concept-and-dna 作为 divergence 完成的
+        // fallback 信号 — selected_at 在 proj_f0721bdc 之前的项目是 null,
+        // commit 中途中断的项目也可能没写入。concept_and_dna.json 存在
+        // 内容即可证明 divergence 已 commit 过。
+        const [cd, concept, canvasState, world, chars, novel, outline] = await Promise.allSettled([
           api.getCreativeDivergence(projectId),
+          api.getConcept(projectId),
           api.getCanvasV2State(projectId),
           api.getWorld(projectId),
           api.getCharacter(projectId),
@@ -52,11 +55,17 @@ function Inner({ projectId }: Props) {
         const completed: number[] = [];
         const data: Partial<WizardData> = {};
 
-        // Divergence completion: selected_at is the single
-        // source of truth (both source="canvas" and source="creative_divergence"
+        // Divergence completion: selected_at is the primary source of
+        // truth (both source="canvas" and source="creative_divergence"
         // dual-write at /commit). proj_f0721bdc 2026-08-31 regression.
+        // Fallback: if selected_at is missing (pre-dual-write project or
+        // commit partially failed) but concept_and_dna.json has content,
+        // divergence was effectively completed — still mark step 1 done.
+        // 2026-09-21 修「step 2 点击左侧创意发散无响应」。
         const cdPayload = cd.status === "fulfilled" ? cd.value : null;
-        if (cdPayload && cdPayload.selected_at) {
+        const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
+        const conceptHasContent = conceptPayload != null && hasContent(conceptPayload.concept);
+        if ((cdPayload && cdPayload.selected_at) || conceptHasContent) {
           completed.push(1);
         }
 

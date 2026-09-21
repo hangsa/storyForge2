@@ -332,12 +332,6 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
 
   const hasCharacters = !!characters && characters.characters.length > 0;
 
-  const nameById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const c of characters?.characters ?? []) m.set(c.id, c.name || c.id);
-    return m;
-  }, [characters]);
-
   // 2026-09-21: tab 派生量
   const tabList = useMemo(() => {
     return (characters?.characters ?? []).map((c, i) => {
@@ -346,19 +340,6 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
       return { id: c.id, name, typeLabel };
     });
   }, [characters]);
-
-  const activeCharacter = useMemo(() => {
-    if (!characters || !activeCharacterId) return null;
-    return characters.characters.find((c) => c.id === activeCharacterId) ?? null;
-  }, [characters, activeCharacterId]);
-
-  const activeSubTabKey: string =
-    (activeCharacterId && characterSubTab[activeCharacterId]) || "personality";
-
-  const handleSubTabChange = (key: string) => {
-    if (!activeCharacterId) return;
-    setCharacterSubTab((prev) => ({ ...prev, [activeCharacterId]: key }));
-  };
 
   // 键盘 ←/→ 切换角色 tab (复用 WorldStep 模式)
   const handleCharacterTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {

@@ -102,7 +102,11 @@ describe("CharacterStep", () => {
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     expect(screen.getByTestId("character-tabs").children).toHaveLength(6);
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
-    // Add an extra supporting character.
+    // Add an extra supporting character: open the + menu, then click the
+    // supporting option (the menu's button, NOT CharacterStep's removed button).
+    await act(async () => {
+      screen.getByTestId("character-tab-add").click();
+    });
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();
     });
@@ -250,6 +254,10 @@ describe("CharacterStep", () => {
     );
     setup();
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
+    // Open the + menu, then click the supporting option.
+    await act(async () => {
+      screen.getByTestId("character-tab-add").click();
+    });
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();
     });
@@ -308,7 +316,7 @@ describe("CharacterStep", () => {
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
     expect(screen.getByTestId("character-tabs").children).toHaveLength(6);
     for (let n = 1; n <= 6; n++) {
-      expect(screen.getByTestId(`character-c${n}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`character-panel-c${n}`)).toBeInTheDocument();
     }
   });
 
@@ -331,6 +339,10 @@ describe("CharacterStep", () => {
       const c1 = makeChar("c1", "protagonist", "林峰");
       const c7 = makeChar("c7", "supporting", "苏晓晓");
       return { characters: [c1, c7], current: null };
+    });
+    // Open the + menu, then click the supporting option.
+    await act(async () => {
+      screen.getByTestId("character-tab-add").click();
     });
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();

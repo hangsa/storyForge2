@@ -7,6 +7,8 @@ import BehaviorExamplesSection from "./BehaviorExamplesSection";
 import { RegenerateModal } from "../shared/RegenerateModal";
 import { SectionRegenerateButton } from "../shared/SectionRegenerateButton";
 import { AutoTextarea } from "../shared/AutoTextarea";
+import { SubTabStrip } from "../shared/SubTabStrip";
+import { AddCharacterMenu } from "../shared/AddCharacterMenu";
 
 interface CharacterStepProps {
   projectId: string;
@@ -74,6 +76,11 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
   // Tracked as a Set so multiple cards can be independently loading.
   const [regeneratingExamplesIds, setRegeneratingExamplesIds] = useState<Set<string>>(() => new Set());
 
+  // 2026-09-21: tab 布局新增 state
+  const [activeCharacterId, setActiveCharacterId] = useState<string | null>(null);
+  const [characterSubTab, setCharacterSubTab] = useState<Record<string, string>>({});
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+
   const handleBatchStart = async (userModifications: string = "") => {
     wizard.startStep(wizard.currentStep);
     setBusy(true);
@@ -101,15 +108,20 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     }
   };
 
+  // 2026-09-21: handleAddOne 现在关菜单 + 自动跳新角色
   const handleAddOne = async (type: Character["character_type"]) => {
+    setAddMenuOpen(false);
     setBusy(true);
     try {
       const result = await api.generateCharacter(projectId, type);
       const fresh = pickNewlyCreated(result);
       if (!fresh) throw new Error("生成结果为空");
-      const existing = characters?.characters ?? [];
-      const current = characters?.current ?? fresh;
-      setCharacters({ characters: [...existing, fresh], current });
+      setCharacters((prev) => {
+        const existing = prev?.characters ?? [];
+        const current = prev?.current ?? fresh;
+        return { characters: [...existing, fresh], current };
+      });
+      setActiveCharacterId(fresh.id);
     } catch (e) {
       wizard.setStatus("error", e instanceof Error ? e.message : "角色添加失败");
     } finally {
@@ -326,6 +338,49 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     return m;
   }, [characters]);
 
+  // 2026-09-21: tab 派生量
+  const tabList = useMemo(() => {
+    return (characters?.characters ?? []).map((c, i) => {
+      const typeLabel = CHARACTER_TYPES.find((t) => t.value === c.character_type)?.label ?? "其他";
+      const name = (c.name ?? "").trim() || `未命名 ${i + 1}`;
+      return { id: c.id, name, typeLabel };
+    });
+  }, [characters]);
+
+  const activeCharacter = useMemo(() => {
+    if (!characters || !activeCharacterId) return null;
+    return characters.characters.find((c) => c.id === activeCharacterId) ?? null;
+  }, [characters, activeCharacterId]);
+
+  const activeSubTabKey: string =
+    (activeCharacterId && characterSubTab[activeCharacterId]) || "personality";
+
+  const handleSubTabChange = (key: string) => {
+    if (!activeCharacterId) return;
+    setCharacterSubTab((prev) => ({ ...prev, [activeCharacterId]: key }));
+  };
+
+  // 键盘 ←/→ 切换角色 tab (复用 WorldStep 模式)
+  const handleCharacterTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if (!characters || characters.characters.length < 2) return;
+    e.preventDefault();
+    const list = characters.characters;
+    const currentIdx = list.findIndex((c) => c.id === activeCharacterId);
+    const nextIdx =
+      e.key === "ArrowRight"
+        ? (currentIdx + 1) % list.length
+        : (currentIdx - 1 + list.length) % list.length;
+    const nextId = list[nextIdx].id;
+    setActiveCharacterId(nextId);
+    queueMicrotask(() => {
+      const nextTab = document.querySelector<HTMLButtonElement>(
+        `[data-testid="character-tab-${nextId}"]`,
+      );
+      nextTab?.focus();
+    });
+  };
+
   // Sync local `characters` state from wizard.data whenever wizard.data changes.
   // This covers both the initial mount (wizard.data carries the prefill result
   // or a sessionStorage restore) and later changes (e.g., after the user
@@ -348,6 +403,18 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizard.data.characters]);
+
+  // 2026-09-21: activeCharacterId 回退到第一个 (初次进入 / 删角色)
+  useEffect(() => {
+    if (!characters || characters.characters.length === 0) {
+      if (activeCharacterId !== null) setActiveCharacterId(null);
+      return;
+    }
+    const stillExists = characters.characters.some((c) => c.id === activeCharacterId);
+    if (!stillExists) {
+      setActiveCharacterId(characters.characters[0].id);
+    }
+  }, [characters, activeCharacterId]);
 
   // Auto-trigger the default batch (1 protagonist + 2 antagonists + 3 supporting)
   // on mount when there are no characters yet and we're not already generating
@@ -416,261 +483,90 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
           <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">
             已生成 {characters!.characters.length} 个角色
           </div>
-          <ul data-testid="character-list" className="space-y-2">
-            {characters!.characters.map((c) => {
-              const personality = c.personality ?? { beliefs: [], desires: [], fears: [], values: [], core_traits: [] };
-              const voice = c.voice_signature ?? { speech_style: "", thought_patterns: "", taboos: [] };
-              const state = c.current_state ?? { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] };
-              return (
-                <li
-                  key={c.id}
-                  data-testid={`character-${c.id}`}
-                  className="p-3 bg-surface-container rounded-lg space-y-3"
-                >
-                  {/* 基础信息：可编辑的姓名 + 类型 + 核心角色标记 + 删除按钮 */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div>
-                        <label className="block font-mono text-primary-container mb-1 text-[10px]">姓名</label>
-                        <input
-                          data-testid={`character-${c.id}-name`}
-                          value={c.name ?? ""}
-                          onChange={(e) => updateCharacterAt(c.id, { name: e.target.value })}
-                          disabled={busy}
-                          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-mono text-primary-container mb-1 text-[10px]">角色类型</label>
-                        <select
-                          data-testid={`character-${c.id}-type`}
-                          value={c.character_type}
-                          onChange={(e) => updateCharacterAt(c.id, { character_type: e.target.value as Character["character_type"] })}
-                          disabled={busy}
-                          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
-                        >
-                          {CHARACTER_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 pt-1">
-                      <label className="flex items-center gap-1 font-body text-body-md text-[11px] text-primary whitespace-nowrap">
-                        <input
-                          type="checkbox"
-                          data-testid={`character-${c.id}-core`}
-                          checked={!!c.is_core_character}
-                          onChange={(e) => updateCharacterAt(c.id, { is_core_character: e.target.checked })}
-                          disabled={busy}
-                        />
-                        核心角色
-                      </label>
-                      <button
-                        type="button"
-                        data-testid={`character-delete-${c.id}`}
-                        onClick={() => setDeletingId(c.id)}
-                        disabled={busy}
-                        className="p-1 text-primary-container/70 hover:text-error disabled:opacity-40"
-                        aria-label="删除"
-                      >🗑️</button>
-                    </div>
-                  </div>
-
-                  {/* 人格层 — 5 个 TagEditor（与世界观的力量体系/世界规则一致） */}
-                  <div data-testid={`character-${c.id}-personality`} className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">人格层</div>
-                      <SectionRegenerateButton
-                        target={`${c.name || c.id} · 人格层`}
-                        onRegenerate={handleSectionRegenerate(c.id, "personality")}
-                        testId={`character-${c.id}-personality-regenerate`}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {PERSONALITY_FIELDS.map(({ key, label }) => (
-                        <div key={key}>
-                          <div className="font-mono text-primary-container/80 text-[10px] mb-1">{label}</div>
-                          <TagEditor
-                            items={personality[key] ?? []}
-                            onItemsChange={(next) => updatePersonality(c.id, key, next)}
-                            saving={busy}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 声音签名 */}
-                  <div data-testid={`character-${c.id}-voice`} className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">声音签名</div>
-                      <SectionRegenerateButton
-                        target={`${c.name || c.id} · 声音签名`}
-                        onRegenerate={handleSectionRegenerate(c.id, "voice_signature")}
-                        testId={`character-${c.id}-voice-regenerate`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">说话风格</label>
-                      <AutoTextarea
-                        data-testid={`character-${c.id}-speech-style`}
-                        value={voice.speech_style}
-                        onChange={(e) => updateVoiceField(c.id, "speech_style", e.target.value)}
-                        disabled={busy}
-                        rows={2}
-                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40 resize-y"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">思维模式</label>
-                      <AutoTextarea
-                        data-testid={`character-${c.id}-thought-patterns`}
-                        value={voice.thought_patterns}
-                        onChange={(e) => updateVoiceField(c.id, "thought_patterns", e.target.value)}
-                        disabled={busy}
-                        rows={2}
-                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40 resize-y"
-                      />
-                    </div>
-                    <div>
-                      <div className="font-mono text-primary-container/80 mb-1 text-[10px]">行为禁忌</div>
-                      <TagEditor
-                        items={voice.taboos ?? []}
-                        onItemsChange={(next) => updateVoiceField(c.id, "taboos", next)}
-                        saving={busy}
-                      />
-                    </div>
-                    <div className="border-t border-outline-variant pt-3">
-                      <BehaviorExamplesSection
-                        examples={voice.behavior_examples ?? []}
-                        onChange={(next) => updateVoiceBehaviorExamples(c.id, next)}
-                        onRegenerate={() => {
-                          // v1.9: open the per-card RegenerateModal so the
-                          // user can type modification guidance before the
-                          // /regenerate-examples call. Modal title uses
-                          // the character's display name; falls back to id
-                          // when name is empty.
-                          setRegenerateExamplesId(c.id);
-                          setRegenerateExamplesName(c.name || c.id);
-                        }}
-                        regenerating={regeneratingExamplesIds.has(c.id)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* 当前状态 */}
-                  <div className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">当前状态</div>
-                      <SectionRegenerateButton
-                        target={`${c.name || c.id} · 当前状态`}
-                        onRegenerate={handleSectionRegenerate(c.id, "current_state")}
-                        testId={`character-${c.id}-current-state-regenerate`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">位置</label>
-                      <input
-                        data-testid={`character-${c.id}-location`}
-                        value={state.location}
-                        onChange={(e) => updateCurrentState(c.id, "location", e.target.value)}
-                        disabled={busy}
-                        className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div>
-                        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">身体状况</label>
-                        <input
-                          data-testid={`character-${c.id}-physical-condition`}
-                          value={state.physical_condition}
-                          onChange={(e) => updateCurrentState(c.id, "physical_condition", e.target.value)}
-                          disabled={busy}
-                          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">情绪</label>
-                        <input
-                          data-testid={`character-${c.id}-emotional`}
-                          value={state.emotional}
-                          onChange={(e) => updateCurrentState(c.id, "emotional", e.target.value)}
-                          disabled={busy}
-                          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-mono text-primary-container/80 mb-1 text-[10px]">已知秘密</div>
-                      <TagEditor
-                        items={state.known_secrets ?? []}
-                        onItemsChange={(next) => updateCurrentState(c.id, "known_secrets", next)}
-                        saving={busy}
-                      />
-                    </div>
-                  </div>
-
-                  {/* 角色不知道的事 */}
-                  <div className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">角色不知道的事</div>
-                      <SectionRegenerateButton
-                        target={`${c.name || c.id} · 未知`}
-                        onRegenerate={handleSectionRegenerate(c.id, "unknown")}
-                        testId={`character-${c.id}-unknown-regenerate`}
-                      />
-                    </div>
-                    <div className="font-mono text-primary-container/80 mb-1 text-[10px]">未知 (unknown_to_character)</div>
-                    <TagEditor
-                      items={c.unknown_to_character ?? []}
-                      onItemsChange={(next) => updateUnknown(c.id, next)}
-                      saving={busy}
-                    />
-                  </div>
-
-                  {/* 角色关系 — 始终可见，添加/删除关系直接操作本地状态 */}
-                  <div data-testid={`character-${c.id}-relations`} className="space-y-2 border-t border-outline-variant pt-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">角色关系</div>
-                      <SectionRegenerateButton
-                        target={`${c.name || c.id} · 角色关系`}
-                        onRegenerate={handleSectionRegenerate(c.id, "relations")}
-                        testId={`character-${c.id}-relations-regenerate`}
-                      />
-                    </div>
-                    <CharacterRelationsEditor
-                      relations={c.relations ?? {}}
-                      allCharacters={characters?.characters ?? []}
-                      selfId={c.id}
-                      onChange={(next) => updateRelations(c.id, next)}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="border-t border-outline-variant pt-3 space-y-2">
-            <p className="font-mono text-primary-container/70 text-xs">手动添加更多角色：</p>
-            <div className="flex flex-wrap gap-2">
-              {CHARACTER_TYPES.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  data-testid={`character-add-${value}`}
-                  onClick={() => handleAddOne(value)}
-                  disabled={busy}
-                  className="px-3 py-1.5 rounded-full border border-dashed text-sm font-body text-body-md
-                             border-outline-variant text-primary-container/70
-                             hover:text-primary-container hover:border-primary-container/50
-                             transition-colors disabled:opacity-40"
-                >
-                  + {label}
-                </button>
-              ))}
+          <div className="relative">
+            <div
+              role="tablist"
+              aria-label="角色"
+              data-testid="character-tabs"
+              className="sticky top-0 z-10 -mx-6 px-6 bg-surface-container-low/95 backdrop-blur-sm flex gap-1 border-b border-outline-variant overflow-x-auto"
+            >
+              {tabList.map((t) => {
+                const isActive = t.id === activeCharacterId;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    aria-controls={`character-panel-${t.id}`}
+                    data-testid={`character-tab-${t.id}`}
+                    onClick={() => setActiveCharacterId(t.id)}
+                    onKeyDown={handleCharacterTabKeyDown}
+                    className={
+                      "shrink-0 px-3 py-2 text-sm font-display font-medium inline-flex items-center border-b-2 -mb-px gap-1 transition-colors outline-none focus-visible:ring-2 ring-primary-container " +
+                      (isActive ? "border-primary text-primary" : "border-transparent text-on-surface-variant hover:text-primary")
+                    }
+                  >
+                    <span>{t.name}</span>
+                    <span className="text-on-surface-variant/60 text-xs">-</span>
+                    <span className="text-xs">{t.typeLabel}</span>
+                  </button>
+                );
+              })}
             </div>
+            <button
+              type="button"
+              data-testid="character-tab-add"
+              onClick={() => setAddMenuOpen((v) => !v)}
+              aria-label="添加新角色"
+              className="absolute top-0 right-2 z-10 px-2 py-2 text-sm text-on-surface-variant hover:text-primary transition-colors"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-base leading-none">add</span>
+            </button>
+            {addMenuOpen && (
+              <AddCharacterMenu
+                onPick={handleAddOne}
+                onClose={() => setAddMenuOpen(false)}
+                disabled={busy}
+              />
+            )}
           </div>
+
+          {characters?.characters.map((c) => {
+            const isActive = c.id === activeCharacterId;
+            return (
+              <CharacterPanel
+                key={c.id}
+                character={c}
+                busy={busy}
+                activeSubTab={
+                  (c.id && characterSubTab[c.id]) || "personality"
+                }
+                onSubTabChange={(key) => {
+                  if (c.id !== activeCharacterId) {
+                    setActiveCharacterId(c.id);
+                  }
+                  setCharacterSubTab((prev) => ({ ...prev, [c.id]: key }));
+                }}
+                onUpdate={(patch) => updateCharacterAt(c.id, patch)}
+                onPersonalityChange={(key, next) => updatePersonality(c.id, key, next)}
+                onVoiceFieldChange={(key, value) => updateVoiceField(c.id, key, value)}
+                onVoiceBehaviorExamplesChange={(next) => updateVoiceBehaviorExamples(c.id, next)}
+                onCurrentStateChange={(key, value) => updateCurrentState(c.id, key, value)}
+                onUnknownChange={(next) => updateUnknown(c.id, next)}
+                onRelationsChange={(next) => updateRelations(c.id, next)}
+                onRegenerateSection={(section) => handleSectionRegenerate(c.id, section)}
+                onRegenerateExamples={() => {
+                  setRegenerateExamplesId(c.id);
+                  setRegenerateExamplesName(c.name || c.id);
+                }}
+                onDeleteClick={() => setDeletingId(c.id)}
+                regeneratingExamples={regeneratingExamplesIds.has(c.id)}
+                allCharacters={characters?.characters ?? []}
+                hidden={!isActive}
+              />
+            );
+          })}
 
           <p className="font-body text-body-md text-primary-container/60 text-xs">
             角色详情可在工作台的角色标签页内继续编辑。
@@ -745,6 +641,397 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
           setRegenerateExamplesName("");
         }}
       />
+    </div>
+  );
+}
+
+// ===========================================================================
+// 2026-09-21: file-internal 子组件。
+// 跟 WorldStep 的 EraPanel/PowerSystemsPanel/FactionsPanel 同构,
+// 主组件瘦身为状态机 + handlers, 子组件只负责展示 + 接收 handlers 作 props。
+// ===========================================================================
+
+const CHARACTER_SUB_TABS = [
+  { key: "personality",     label: "人格层",     testidSuffix: "personality" },
+  { key: "voice_signature", label: "声音签名",   testidSuffix: "voice" },
+  { key: "current_state",   label: "当前状态",   testidSuffix: "current-state" },
+  { key: "unknown",         label: "未知",       testidSuffix: "unknown" },
+  { key: "relations",       label: "关系",       testidSuffix: "relations" },
+] as const;
+
+function CharacterHeader({
+  character, busy, onUpdate, onDeleteClick,
+}: {
+  character: Character;
+  busy: boolean;
+  onUpdate: (patch: Partial<Character>) => void;
+  onDeleteClick: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label className="block font-mono text-primary-container mb-1 text-[10px]">姓名</label>
+          <input
+            data-testid={`character-${character.id}-name`}
+            value={character.name ?? ""}
+            onChange={(e) => onUpdate({ name: e.target.value })}
+            disabled={busy}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+          />
+        </div>
+        <div>
+          <label className="block font-mono text-primary-container mb-1 text-[10px]">角色类型</label>
+          <select
+            data-testid={`character-${character.id}-type`}
+            value={character.character_type}
+            onChange={(e) => onUpdate({ character_type: e.target.value as Character["character_type"] })}
+            disabled={busy}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+          >
+            {CHARACTER_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-2 pt-1">
+        <label className="flex items-center gap-1 font-body text-body-md text-[11px] text-primary whitespace-nowrap">
+          <input
+            type="checkbox"
+            data-testid={`character-${character.id}-core`}
+            checked={!!character.is_core_character}
+            onChange={(e) => onUpdate({ is_core_character: e.target.checked })}
+            disabled={busy}
+          />
+          核心角色
+        </label>
+        <button
+          type="button"
+          data-testid={`character-delete-${character.id}`}
+          onClick={onDeleteClick}
+          disabled={busy}
+          className="p-1 text-primary-container/70 hover:text-error disabled:opacity-40"
+          aria-label="删除"
+        >🗑️</button>
+      </div>
+    </div>
+  );
+}
+
+function PersonalitySection({
+  character, busy, onPersonalityChange, onRegenerate,
+}: {
+  character: Character;
+  busy: boolean;
+  onPersonalityChange: (key: PersonalityKey, next: string[]) => void;
+  onRegenerate: (mods: string) => Promise<void>;
+}) {
+  const personality = character.personality ?? { beliefs: [], desires: [], fears: [], values: [], core_traits: [] };
+  return (
+    <div data-testid={`character-${character.id}-personality`} className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">人格层</div>
+        <SectionRegenerateButton
+          target={`${character.name || character.id} · 人格层`}
+          onRegenerate={onRegenerate}
+          testId={`character-${character.id}-personality-regenerate`}
+        />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {PERSONALITY_FIELDS.map(({ key, label }) => (
+          <div key={key}>
+            <div className="font-mono text-primary-container/80 text-[10px] mb-1">{label}</div>
+            <TagEditor
+              items={personality[key] ?? []}
+              onItemsChange={(next) => onPersonalityChange(key, next)}
+              saving={busy}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VoiceSection({
+  character, busy, onVoiceFieldChange, onVoiceBehaviorExamplesChange,
+  onRegenerate, onRegenerateExamples, regeneratingExamples,
+}: {
+  character: Character;
+  busy: boolean;
+  onVoiceFieldChange: (key: "speech_style" | "thought_patterns" | "taboos", value: string | string[]) => void;
+  onVoiceBehaviorExamplesChange: (next: BehaviorExample[]) => void;
+  onRegenerate: (mods: string) => Promise<void>;
+  onRegenerateExamples: () => void;
+  regeneratingExamples: boolean;
+}) {
+  const voice = character.voice_signature ?? { speech_style: "", thought_patterns: "", taboos: [] };
+  return (
+    <div data-testid={`character-${character.id}-voice`} className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">声音签名</div>
+        <SectionRegenerateButton
+          target={`${character.name || character.id} · 声音签名`}
+          onRegenerate={onRegenerate}
+          testId={`character-${character.id}-voice-regenerate`}
+        />
+      </div>
+      <div>
+        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">说话风格</label>
+        <AutoTextarea
+          data-testid={`character-${character.id}-speech-style`}
+          value={voice.speech_style}
+          onChange={(e) => onVoiceFieldChange("speech_style", e.target.value)}
+          disabled={busy}
+          rows={2}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40 resize-y"
+        />
+      </div>
+      <div>
+        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">思维模式</label>
+        <AutoTextarea
+          data-testid={`character-${character.id}-thought-patterns`}
+          value={voice.thought_patterns}
+          onChange={(e) => onVoiceFieldChange("thought_patterns", e.target.value)}
+          disabled={busy}
+          rows={2}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40 resize-y"
+        />
+      </div>
+      <div>
+        <div className="font-mono text-primary-container/80 mb-1 text-[10px]">行为禁忌</div>
+        <TagEditor
+          items={voice.taboos ?? []}
+          onItemsChange={(next) => onVoiceFieldChange("taboos", next)}
+          saving={busy}
+        />
+      </div>
+      <div className="border-t border-outline-variant pt-3">
+        <BehaviorExamplesSection
+          examples={voice.behavior_examples ?? []}
+          onChange={onVoiceBehaviorExamplesChange}
+          onRegenerate={onRegenerateExamples}
+          regenerating={regeneratingExamples}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CurrentStateSection({
+  character, busy, onCurrentStateChange, onRegenerate,
+}: {
+  character: Character;
+  busy: boolean;
+  onCurrentStateChange: (key: "location" | "physical_condition" | "emotional" | "known_secrets", value: string | string[]) => void;
+  onRegenerate: (mods: string) => Promise<void>;
+}) {
+  const state = character.current_state ?? { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] };
+  return (
+    <div data-testid={`character-${character.id}-current-state`} className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">当前状态</div>
+        <SectionRegenerateButton
+          target={`${character.name || character.id} · 当前状态`}
+          onRegenerate={onRegenerate}
+          testId={`character-${character.id}-current-state-regenerate`}
+        />
+      </div>
+      <div>
+        <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">位置</label>
+        <input
+          data-testid={`character-${character.id}-location`}
+          value={state.location}
+          onChange={(e) => onCurrentStateChange("location", e.target.value)}
+          disabled={busy}
+          className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+        />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">身体状况</label>
+          <input
+            data-testid={`character-${character.id}-physical-condition`}
+            value={state.physical_condition}
+            onChange={(e) => onCurrentStateChange("physical_condition", e.target.value)}
+            disabled={busy}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+          />
+        </div>
+        <div>
+          <label className="block font-mono text-primary-container/80 mb-1 text-[10px]">情绪</label>
+          <input
+            data-testid={`character-${character.id}-emotional`}
+            value={state.emotional}
+            onChange={(e) => onCurrentStateChange("emotional", e.target.value)}
+            disabled={busy}
+            className="w-full bg-surface-container border border-outline-variant rounded px-2 py-1 text-xs text-primary focus:outline-none focus:border-primary-container disabled:opacity-40"
+          />
+        </div>
+      </div>
+      <div>
+        <div className="font-mono text-primary-container/80 mb-1 text-[10px]">已知秘密</div>
+        <TagEditor
+          items={state.known_secrets ?? []}
+          onItemsChange={(next) => onCurrentStateChange("known_secrets", next)}
+          saving={busy}
+        />
+      </div>
+    </div>
+  );
+}
+
+function UnknownSection({
+  character, busy, onUnknownChange, onRegenerate,
+}: {
+  character: Character;
+  busy: boolean;
+  onUnknownChange: (next: string[]) => void;
+  onRegenerate: (mods: string) => Promise<void>;
+}) {
+  return (
+    <div data-testid={`character-${character.id}-unknown`} className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">角色不知道的事</div>
+        <SectionRegenerateButton
+          target={`${character.name || character.id} · 未知`}
+          onRegenerate={onRegenerate}
+          testId={`character-${character.id}-unknown-regenerate`}
+        />
+      </div>
+      <div className="font-mono text-primary-container/80 mb-1 text-[10px]">未知 (unknown_to_character)</div>
+      <TagEditor
+        items={character.unknown_to_character ?? []}
+        onItemsChange={onUnknownChange}
+        saving={busy}
+      />
+    </div>
+  );
+}
+
+function RelationsSection({
+  character, busy, allCharacters, onRelationsChange, onRegenerate,
+}: {
+  character: Character;
+  busy: boolean;
+  allCharacters: Character[];
+  onRelationsChange: (next: Character["relations"]) => void;
+  onRegenerate: (mods: string) => Promise<void>;
+}) {
+  return (
+    <div data-testid={`character-${character.id}-relations`} className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-primary-container text-[10px] uppercase tracking-wider">角色关系</div>
+        <SectionRegenerateButton
+          target={`${character.name || character.id} · 角色关系`}
+          onRegenerate={onRegenerate}
+          testId={`character-${character.id}-relations-regenerate`}
+        />
+      </div>
+      <CharacterRelationsEditor
+        relations={character.relations ?? {}}
+        allCharacters={allCharacters}
+        selfId={character.id}
+        onChange={onRelationsChange}
+      />
+    </div>
+  );
+}
+
+function CharacterPanel({
+  character, busy, activeSubTab, onSubTabChange,
+  onUpdate, onPersonalityChange, onVoiceFieldChange, onVoiceBehaviorExamplesChange,
+  onCurrentStateChange, onUnknownChange, onRelationsChange,
+  onRegenerateSection, onRegenerateExamples, onDeleteClick,
+  regeneratingExamples, allCharacters, hidden,
+}: {
+  character: Character;
+  busy: boolean;
+  activeSubTab: string;
+  onSubTabChange: (key: string) => void;
+  onUpdate: (patch: Partial<Character>) => void;
+  onPersonalityChange: (key: PersonalityKey, next: string[]) => void;
+  onVoiceFieldChange: (key: "speech_style" | "thought_patterns" | "taboos", value: string | string[]) => void;
+  onVoiceBehaviorExamplesChange: (next: BehaviorExample[]) => void;
+  onCurrentStateChange: (key: "location" | "physical_condition" | "emotional" | "known_secrets", value: string | string[]) => void;
+  onUnknownChange: (next: string[]) => void;
+  onRelationsChange: (next: Character["relations"]) => void;
+  onRegenerateSection: (section: "personality" | "voice_signature" | "current_state" | "unknown" | "relations") => (mods: string) => Promise<void>;
+  onRegenerateExamples: () => void;
+  onDeleteClick: () => void;
+  regeneratingExamples: boolean;
+  allCharacters: Character[];
+  hidden?: boolean;
+}) {
+  const regenerateFor = {
+    personality: onRegenerateSection("personality"),
+    voice_signature: onRegenerateSection("voice_signature"),
+    current_state: onRegenerateSection("current_state"),
+    unknown: onRegenerateSection("unknown"),
+    relations: onRegenerateSection("relations"),
+  };
+
+  return (
+    <div data-testid={`character-panel-${character.id}`} hidden={hidden} className="space-y-3 pt-3">
+      <CharacterHeader
+        character={character}
+        busy={busy}
+        onUpdate={onUpdate}
+        onDeleteClick={onDeleteClick}
+      />
+      <SubTabStrip
+        tabs={CHARACTER_SUB_TABS.map((s) => ({ key: s.key, label: s.label, testidSuffix: s.testidSuffix }))}
+        active={activeSubTab}
+        onChange={onSubTabChange}
+        testidPrefix="character-subtab"
+      />
+      <div data-testid={`character-subtab-panel-${activeSubTab}`}>
+        <div hidden={activeSubTab !== "personality"}>
+          <PersonalitySection
+            character={character}
+            busy={busy}
+            onPersonalityChange={onPersonalityChange}
+            onRegenerate={regenerateFor.personality}
+          />
+        </div>
+        <div hidden={activeSubTab !== "voice_signature"}>
+          <VoiceSection
+            character={character}
+            busy={busy}
+            onVoiceFieldChange={onVoiceFieldChange}
+            onVoiceBehaviorExamplesChange={onVoiceBehaviorExamplesChange}
+            onRegenerate={regenerateFor.voice_signature}
+            onRegenerateExamples={onRegenerateExamples}
+            regeneratingExamples={regeneratingExamples}
+          />
+        </div>
+        <div hidden={activeSubTab !== "current_state"}>
+          <CurrentStateSection
+            character={character}
+            busy={busy}
+            onCurrentStateChange={onCurrentStateChange}
+            onRegenerate={regenerateFor.current_state}
+          />
+        </div>
+        <div hidden={activeSubTab !== "unknown"}>
+          <UnknownSection
+            character={character}
+            busy={busy}
+            onUnknownChange={onUnknownChange}
+            onRegenerate={regenerateFor.unknown}
+          />
+        </div>
+        <div hidden={activeSubTab !== "relations"}>
+          <RelationsSection
+            character={character}
+            busy={busy}
+            allCharacters={allCharacters}
+            onRelationsChange={onRelationsChange}
+            onRegenerate={regenerateFor.relations}
+          />
+        </div>
+      </div>
     </div>
   );
 }

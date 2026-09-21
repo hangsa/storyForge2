@@ -94,7 +94,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // Scope to Alice's card since Alice and Bob share the same "honor" belief.
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     // The personality section uses TagEditor. To edit an existing tag, click
     // the tag's text button (TagEditor.tsx wraps the value in a <button>).
     const tag = within(aliceCard).getByRole("button", { name: "honor" });
@@ -131,7 +131,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // Edit name + speech_style inline. Scope to Alice's card.
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     const nameInput = within(aliceCard).getByDisplayValue("Alice");
     await act(async () => {
       fireEvent.change(nameInput, { target: { value: "Alicia" } });
@@ -154,7 +154,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
     // Each card has its own relations editor; check Alice's card specifically.
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     expect(within(aliceCard).getByTestId("character-relations-editor")).toBeInTheDocument();
     expect(within(aliceCard).getByTestId("relations-add-button")).toBeInTheDocument();
   });
@@ -162,7 +162,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
   it("relations editor: adding a relation updates local state without an API call", async () => {
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     await act(async () => {
       within(aliceCard).getByTestId("relations-add-button").click();
     });

@@ -93,7 +93,7 @@ describe("CharacterStep edit + delete", () => {
       expect(api.deleteCharacter).toHaveBeenCalledWith(PROJECT, "char_bob");
     });
     await waitFor(() => {
-      expect(screen.queryByTestId("character-char_bob")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("character-panel-char_bob")).not.toBeInTheDocument();
     });
   });
 
@@ -103,7 +103,7 @@ describe("CharacterStep edit + delete", () => {
     fireEvent.click(screen.getByTestId("character-delete-char_bob"));
     fireEvent.click(screen.getByTestId("delete-cancel-button"));
     expect(api.deleteCharacter).not.toHaveBeenCalled();
-    expect(screen.getByTestId("character-char_bob")).toBeInTheDocument();
+    expect(screen.getByTestId("character-panel-char_bob")).toBeInTheDocument();
   });
 
   it("deleting alice (with inbound relation from nobody) reports 0 cascade count", () => {

@@ -87,8 +87,8 @@ describe("CharacterStep behavior examples integration", () => {
   it("renders a BehaviorExamplesSection on every character card", () => {
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    const aliceCard = screen.getByTestId("character-char_alice");
-    const bobCard = screen.getByTestId("character-char_bob");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
+    const bobCard = screen.getByTestId("character-panel-char_bob");
     expect(within(aliceCard).getByTestId("behavior-examples-section")).toBeInTheDocument();
     expect(within(bobCard).getByTestId("behavior-examples-section")).toBeInTheDocument();
   });
@@ -96,7 +96,7 @@ describe("CharacterStep behavior examples integration", () => {
   it("renders existing examples inside Alice's section", () => {
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     // 2 examples × 3 fields each = 6 textareas inside Alice's section.
     expect(within(aliceCard).getByDisplayValue("挚友被陷害")).toBeInTheDocument();
     expect(within(aliceCard).getByDisplayValue("我会让你付出代价。")).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe("CharacterStep behavior examples integration", () => {
     delete (bobNoExamples.voice_signature as { behavior_examples?: BehaviorExample[] }).behavior_examples;
     setup([aliceNoExamples, bobNoExamples]);
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     // Both cards still render the section so the user can populate it.
     expect(within(aliceCard).getByTestId("behavior-examples-section")).toBeInTheDocument();
     expect(within(aliceCard).getByTestId("behavior-example-add")).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe("CharacterStep behavior examples integration", () => {
   it("inline editing a behavior_example updates local state without an API call", async () => {
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     const situationInput = within(aliceCard).getByDisplayValue("挚友被陷害");
     await act(async () => {
       fireEvent.change(situationInput, { target: { value: "新触发" } });
@@ -133,7 +133,7 @@ describe("CharacterStep behavior examples integration", () => {
     (api.updateCharacter as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     const situationInput = within(aliceCard).getByDisplayValue("挚友被陷害");
     await act(async () => {
       fireEvent.change(situationInput, { target: { value: "情境A" } });
@@ -168,7 +168,7 @@ describe("CharacterStep behavior examples integration", () => {
 
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     // Alice has the regenerate button inside her section.
     const aliceRegenerate = within(aliceCard).getByTestId("behavior-example-regenerate");
 
@@ -199,7 +199,7 @@ describe("CharacterStep behavior examples integration", () => {
     // Old Alice data is gone.
     expect(within(aliceCard).queryByDisplayValue("挚友被陷害")).not.toBeInTheDocument();
     // Bob's card is untouched.
-    const bobCard = screen.getByTestId("character-char_bob");
+    const bobCard = screen.getByTestId("character-panel-char_bob");
     expect(within(bobCard).getByDisplayValue("发现敌人")).toBeInTheDocument();
     // Alice's name was also replaced (the API returned the full updated character).
     expect(within(aliceCard).getByTestId("character-char_alice-name")).toHaveValue("Alice 新名");
@@ -212,7 +212,7 @@ describe("CharacterStep behavior examples integration", () => {
 
     setup();
     render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
-    const aliceCard = screen.getByTestId("character-char_alice");
+    const aliceCard = screen.getByTestId("character-panel-char_alice");
     await act(async () => {
       within(aliceCard).getByTestId("behavior-example-regenerate").click();
     });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, waitFor } from "@testing-library/react";
+import { render, screen, act, waitFor, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ToastProvider } from "../hooks/useToast";
 
@@ -353,5 +353,159 @@ describe("CharacterStep", () => {
     // directly rather than the card's textContent.
     expect(screen.getByTestId("character-c1-name")).toHaveValue("林峰");
     expect(screen.getByTestId("character-c7-name")).toHaveValue("苏晓晓");
+  });
+});
+
+// Pre-populate sessionStorage with existing characters so the auto-batch
+// useEffect (which fires when wizard.data.characters is empty/null) doesn't
+// run. Mirrors the pattern in CharacterStep.edit_delete.test.tsx.
+function setupWithCharacters(chars: ReturnType<typeof makeChar>[]) {
+  sessionStorage.setItem(
+    KEY,
+    JSON.stringify({
+      currentStep: 3,
+      completedSteps: [1, 2, 3],
+      status: "idle",
+      data: {
+        concept: null, story_dna: null, world: null,
+        characters: { characters: chars, current: null },
+        novel_outline: null, chapter1_outline: null,
+      },
+      errorMessage: null,
+    }),
+  );
+  return render(
+    <ToastProvider><MemoryRouter>
+      <InitWizardModal projectId={PROJECT} onDismiss={vi.fn()} />
+    </MemoryRouter></ToastProvider>,
+  );
+}
+
+// Helper for auto-batch tests: the setup() defaults to characters:null so
+// the auto-batch effect fires on mount. Each call to generateCharacter
+// returns a single new character (callIdx starts at 1 → id c1, c2, ...).
+function setupWithAutoBatch() {
+  let callIdx = 0;
+  (api.generateCharacter as ReturnType<typeof vi.fn>).mockImplementation(
+    async (_id: string, t: string) => {
+      callIdx += 1;
+      return { characters: [makeChar(`c${callIdx}`, t)], current: null };
+    },
+  );
+  return setup();
+}
+
+describe("CharacterStep tab strip", () => {
+  it("tab label = {name}-{typeLabel}, with '未命名 N-类型' fallback when name empty", () => {
+    setupWithCharacters([
+      makeChar("c1", "protagonist", "林峰"),
+      makeChar("c2", "supporting", "苏晓晓"),
+      makeChar("c3", "mentor", ""),
+    ]);
+    expect(screen.getByTestId("character-tab-c1").textContent).toContain("林峰");
+    expect(screen.getByTestId("character-tab-c1").textContent).toContain("主角");
+    expect(screen.getByTestId("character-tab-c2").textContent).toContain("苏晓晓");
+    expect(screen.getByTestId("character-tab-c2").textContent).toContain("配角");
+    // c3 has empty name → "未命名 3" (index 2 + 1) with typeLabel "导师"
+    expect(screen.getByTestId("character-tab-c3").textContent).toContain("未命名 3");
+    expect(screen.getByTestId("character-tab-c3").textContent).toContain("导师");
+  });
+
+  it("clicking a different character tab switches the active panel", async () => {
+    setupWithCharacters([
+      makeChar("c1", "protagonist", "林峰"),
+      makeChar("c2", "supporting", "苏晓晓"),
+    ]);
+    // Wait for tabs to render (activeCharacterId is set in a useEffect).
+    await screen.findByTestId("character-tab-c1");
+    // Active panel is c1 (hidden=false); c2 is mounted but hidden=true.
+    // jsdom reflects the `hidden` attribute on the DOM property.
+    const c1Panel = screen.getByTestId("character-panel-c1");
+    const c2Panel = screen.getByTestId("character-panel-c2");
+    expect(c1Panel.hidden).toBe(false);
+    expect(c2Panel.hidden).toBe(true);
+    // Click c2 tab.
+    fireEvent.click(screen.getByTestId("character-tab-c2"));
+    await waitFor(() => {
+      expect((screen.getByTestId("character-panel-c2") as HTMLElement).hidden).toBe(false);
+    });
+    expect((screen.getByTestId("character-panel-c1") as HTMLElement).hidden).toBe(true);
+  });
+
+  it("per-character sub-tab memory: switching back to a character lands on the sub-tab you left it on", async () => {
+    setupWithCharacters([
+      makeChar("c1", "protagonist", "林峰"),
+      makeChar("c2", "supporting", "苏晓晓"),
+    ]);
+    await screen.findByTestId("character-tab-c1");
+    // Switch to c2, then to its voice_signature sub-tab. Each panel has its
+    // own SubTabStrip with identical testids — scope queries to the c2 panel.
+    fireEvent.click(screen.getByTestId("character-tab-c2"));
+    await waitFor(() => {
+      expect((screen.getByTestId("character-panel-c2") as HTMLElement).hidden).toBe(false);
+    });
+    const c2Panel = () => screen.getByTestId("character-panel-c2");
+    fireEvent.click(within(c2Panel()).getByTestId("character-subtab-voice"));
+    await waitFor(() => {
+      expect(within(c2Panel()).getByTestId("character-c2-voice")).toBeInTheDocument();
+    });
+    // Switch to c1 → defaults to personality.
+    fireEvent.click(screen.getByTestId("character-tab-c1"));
+    await waitFor(() => {
+      expect((screen.getByTestId("character-panel-c1") as HTMLElement).hidden).toBe(false);
+    });
+    const c1Panel = () => screen.getByTestId("character-panel-c1");
+    expect(within(c1Panel()).getByTestId("character-c1-personality")).toBeInTheDocument();
+    // Back to c2 → still on voice (per-character sub-tab memory).
+    fireEvent.click(screen.getByTestId("character-tab-c2"));
+    await waitFor(() => {
+      expect((screen.getByTestId("character-panel-c2") as HTMLElement).hidden).toBe(false);
+    });
+    expect(within(c2Panel()).getByTestId("character-c2-voice")).toBeInTheDocument();
+  });
+
+  it("+ button opens AddCharacterMenu; clicking an option generates + auto-jumps to the new tab", async () => {
+    setupWithAutoBatch();
+    // Wait for the default 6-char batch.
+    await screen.findByTestId("character-tabs");
+    await waitFor(() => expect(screen.getByTestId("character-tabs").children).toHaveLength(6));
+    // The first batch-generated character has id "c1" and is initially active.
+    expect(screen.getByTestId("character-panel-c1")).toBeInTheDocument();
+    // Open the + menu.
+    fireEvent.click(screen.getByTestId("character-tab-add"));
+    expect(screen.getByTestId("character-add-menu")).toBeInTheDocument();
+    // The next generateCharacter call returns only the new character.
+    (api.generateCharacter as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      characters: [makeChar("c_new", "antagonist", "新反派")],
+      current: null,
+    });
+    fireEvent.click(screen.getByTestId("character-add-antagonist"));
+    // Wait for the new tab + auto-jump.
+    await waitFor(() => {
+      expect(screen.getByTestId("character-tab-c_new")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      const panel = screen.getByTestId("character-panel-c_new") as HTMLElement;
+      expect(panel.hidden).toBe(false);
+    });
+    // Total tabs grew by 1 (the + button is not inside character-tabs).
+    expect(screen.getByTestId("character-tabs").children).toHaveLength(7);
+  });
+
+  it("pressing Escape on AddCharacterMenu closes the menu without generating", async () => {
+    setupWithAutoBatch();
+    await screen.findByTestId("character-tabs");
+    await waitFor(() => expect(screen.getByTestId("character-tabs").children).toHaveLength(6));
+    const callsBefore = (api.generateCharacter as ReturnType<typeof vi.fn>).mock.calls.length;
+    // Open the + menu.
+    fireEvent.click(screen.getByTestId("character-tab-add"));
+    expect(screen.getByTestId("character-add-menu")).toBeInTheDocument();
+    // Press Escape on window — AddCharacterMenu listens on window keydown.
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByTestId("character-add-menu")).not.toBeInTheDocument();
+    });
+    // No new generateCharacter calls — still the original 6 from auto-batch.
+    expect((api.generateCharacter as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore);
   });
 });

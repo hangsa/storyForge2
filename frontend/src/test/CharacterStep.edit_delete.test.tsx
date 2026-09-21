@@ -147,4 +147,47 @@ describe("CharacterStep edit + delete", () => {
     fireEvent.click(screen.getByTestId("regenerate-modal-cancel"));
     expect(api.generateCharacter).not.toHaveBeenCalled();
   });
+
+  it("deleting the active character falls back to the first remaining character", async () => {
+    const c1 = {
+      id: "char_c1",
+      name: "林峰",
+      personality: { beliefs: [], desires: [], fears: [], values: [], core_traits: [] },
+      voice_signature: { speech_style: "", thought_patterns: "", taboos: [] },
+      current_state: { location: "", physical_condition: "normal", emotional: "neutral", known_secrets: [] },
+      unknown_to_character: [],
+      is_core_character: true,
+      character_type: "protagonist",
+      relations: {},
+    };
+    const c2 = { ...c1, id: "char_c2", name: "苏晓晓", character_type: "supporting", is_core_character: false };
+    const c3 = { ...c1, id: "char_c3", name: "师父", character_type: "mentor", is_core_character: false };
+    (api.deleteCharacter as ReturnType<typeof vi.fn>).mockResolvedValue({ deleted_id: "char_c1" });
+    setup([c1, c2, c3]);
+    render(<ToastProvider><MemoryRouter><InitWizardModal projectId={PROJECT} onDismiss={() => {}} /></MemoryRouter></ToastProvider>);
+    await screen.findByTestId("character-panel-char_c1");
+    // Active = c1. Delete it.
+    fireEvent.click(screen.getByTestId("character-delete-char_c1"));
+    fireEvent.click(screen.getByTestId("delete-confirm-button"));
+    // The API was called with the deleted character id.
+    await waitFor(() => {
+      expect(api.deleteCharacter).toHaveBeenCalledWith(PROJECT, "char_c1");
+    });
+    // After deletion, the active character's panel is gone (the wizard advances
+    // to step 4 immediately because handleDeleteConfirm calls saveStep, so the
+    // post-delete character list isn't observable in the step-3 tree). The
+    // meaningful check: the persisted sessionStorage shows the remaining chars
+    // with current = c2 (the first remaining). The useEffect fallback at
+    // CharacterStep.tsx:415 sets activeCharacterId to characters[0].id which
+    // becomes the persisted `current`.
+    await waitFor(() => {
+      const raw = sessionStorage.getItem(KEY);
+      expect(raw).toBeTruthy();
+      const parsed = JSON.parse(raw!);
+      const persisted = parsed.data?.characters;
+      expect(persisted?.characters?.map((c: { id: string }) => c.id).sort()).toEqual(["char_c2", "char_c3"]);
+      // current falls back to the first remaining character (c2).
+      expect(persisted?.current?.id).toBe("char_c2");
+    });
+  });
 });

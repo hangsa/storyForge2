@@ -7,6 +7,7 @@ import {
   useSectionRegenerate,
 } from "../shared/SectionRegenerateButton";
 import { AutoTextarea } from "../shared/AutoTextarea";
+import { SubTabStrip } from "../shared/SubTabStrip";
 
 interface WorldStepProps {
   projectId: string;
@@ -1250,59 +1251,6 @@ function FactionsPanel({
     </div>
   );
 }
-
-// 2026-09-20 调整: ↻ 从 strip 上每个 tab label 后面的小图标,改成在
-// sub-panel 内容顶部右侧。strip 只负责切换,不带 trigger;调用方
-// (EraPanel/CoreRulesPanel/PowerSystemsPanel/FactionsPanel) 在自己的
-// sub-panel 头部右侧画 ↻,testid 用 `{prefix}-panel-{suffix}-regenerate`。
-function SubTabStrip({
-  tabs,
-  active,
-  onChange,
-  testidPrefix,
-}: {
-  tabs: { key: string; label: string; testidSuffix?: string }[];
-  active: string;
-  onChange: (key: string) => void;
-  testidPrefix: string;
-}) {
-  return (
-    <div
-      role="tablist"
-      data-testid={`${testidPrefix}-strip`}
-      className="sticky top-[40px] z-[5] -mx-1 px-1 bg-surface-container-low/95 backdrop-blur-sm flex gap-1 border-b border-outline-variant overflow-x-auto"
-    >
-      {tabs.map((t) => {
-        const isActive = t.key === active;
-        const tid = `${testidPrefix}-${t.testidSuffix ?? t.key}`;
-        return (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            aria-controls={`${testidPrefix}-panel-${t.key}`}
-            data-testid={tid}
-            onClick={() => onChange(t.key)}
-            className={
-              "shrink-0 px-2 py-1 text-sm font-display font-medium border-b-2 -mb-px inline-flex items-center gap-1 whitespace-nowrap transition-colors outline-none focus-visible:ring-2 ring-primary-container " +
-              (isActive
-                ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-primary")
-            }
-          >
-            <span>{t.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// 内部测试钩子 — 仅 *.test.tsx 引用,生产代码不要 import 这个 namespace。
-export const __testing__ = {
-  SubTabStrip,
-};
 
 // 2026-09-20 调整: sub-panel 顶部右侧的 ↻ 按钮 (instant API call, 走
 // wizard.setStatus 报错误, 不开 RegenerateModal — 与 strip 上旧位置行为一致)。

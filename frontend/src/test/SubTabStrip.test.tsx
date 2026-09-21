@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { __testing__ } from "../components/wizard/WorldStep";
+import { SubTabStrip } from "../components/shared/SubTabStrip";
 
 describe("SubTabStrip", () => {
   it("renders one tab button per tabs[] entry", () => {
     render(
-      <__testing__.SubTabStrip
+      <SubTabStrip
         tabs={[
           { key: "a", label: "Tab A" },
           { key: "b", label: "Tab B" },
@@ -27,7 +27,7 @@ describe("SubTabStrip", () => {
   it("calls onChange with the tab key on click", () => {
     const onChange = vi.fn();
     render(
-      <__testing__.SubTabStrip
+      <SubTabStrip
         tabs={[{ key: "x", label: "X" }, { key: "y", label: "Y" }]}
         active="x"
         onChange={onChange}
@@ -42,7 +42,7 @@ describe("SubTabStrip", () => {
   // 顶部右侧。SubTabStrip 自身不再 render ↻ 也不接收 onRegenerate。
   it("does not render ↻ inside any tab (moved to sub-panel header)", () => {
     render(
-      <__testing__.SubTabStrip
+      <SubTabStrip
         tabs={[
           { key: "1", label: "Item 1" },
           { key: "2", label: "Item 2" },
@@ -58,7 +58,7 @@ describe("SubTabStrip", () => {
 
   it("uses testidSuffix when provided", () => {
     render(
-      <__testing__.SubTabStrip
+      <SubTabStrip
         tabs={[{ key: "era_social_structure", label: "社会结构", testidSuffix: "social-structure" }]}
         active="era_social_structure"
         onChange={() => {}}

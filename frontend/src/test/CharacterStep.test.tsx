@@ -87,7 +87,7 @@ describe("CharacterStep", () => {
     expect(types.filter((t) => t === "protagonist")).toHaveLength(1);
     expect(types.filter((t) => t === "antagonist")).toHaveLength(2);
     expect(types.filter((t) => t === "supporting")).toHaveLength(3);
-    expect(screen.getByTestId("character-list").children).toHaveLength(6);
+    expect(screen.getByTestId("character-tabs").children).toHaveLength(6);
     expect(screen.getByText("已生成 6 个角色")).toBeInTheDocument();
   });
 
@@ -100,13 +100,13 @@ describe("CharacterStep", () => {
     setup();
     // The 6-character batch auto-triggers on mount.
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
-    expect(screen.getByTestId("character-list").children).toHaveLength(6);
+    expect(screen.getByTestId("character-tabs").children).toHaveLength(6);
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
     // Add an extra supporting character.
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();
     });
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(7));
+    await waitFor(() => expect(screen.getByTestId("character-tabs").children).toHaveLength(7));
     expect(api.generateCharacter).toHaveBeenCalledTimes(7);
     expect(api.generateCharacter).toHaveBeenLastCalledWith("proj_x", "supporting");
   });
@@ -118,7 +118,7 @@ describe("CharacterStep", () => {
       return { characters: [makeChar(`c${callIdx}`, t)], current: null };
     });
     setup();
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(6));
+    await waitFor(() => expect(screen.getByTestId("character-tabs").children).toHaveLength(6));
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
     // v1.9: click regenerate — opens the full-character RegenerateModal
     // (replaces the v1.8 destructive-confirm dialog). Confirm it to start
@@ -131,7 +131,7 @@ describe("CharacterStep", () => {
       screen.getByTestId("regenerate-modal-confirm").click();
     });
     await waitFor(() => expect(api.generateCharacter).toHaveBeenCalledTimes(12));
-    expect(screen.getByTestId("character-list").children).toHaveLength(6);
+    expect(screen.getByTestId("character-tabs").children).toHaveLength(6);
   });
 
   it("'确认修改并继续' in modal footer calls updateCharacter with the merged list", async () => {
@@ -253,7 +253,7 @@ describe("CharacterStep", () => {
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();
     });
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(7));
+    await waitFor(() => expect(screen.getByTestId("character-tabs").children).toHaveLength(7));
     // c1's relations now resolve c2 → 苏晓晓, and the status select shows "ally".
     const c1Relations = screen.getByTestId("character-c1-relations");
     expect(c1Relations.textContent).toContain("苏晓晓");
@@ -306,7 +306,7 @@ describe("CharacterStep", () => {
     setup();
     await waitFor(() => expect(screen.getByTestId("character-form")).toBeInTheDocument());
     expect(api.generateCharacter).toHaveBeenCalledTimes(6);
-    expect(screen.getByTestId("character-list").children).toHaveLength(6);
+    expect(screen.getByTestId("character-tabs").children).toHaveLength(6);
     for (let n = 1; n <= 6; n++) {
       expect(screen.getByTestId(`character-c${n}`)).toBeInTheDocument();
     }
@@ -322,7 +322,7 @@ describe("CharacterStep", () => {
       return { characters: [...cumulative], current: null };
     });
     setup();
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(6));
+    await waitFor(() => expect(screen.getByTestId("character-tabs").children).toHaveLength(6));
     // Manual add: backend returns cumulative list with a fresh id for the
     // newly-created character. The wizard must pick the last entry (the new
     // one) and append it; the existing c1=林峰 must be preserved (not replaced
@@ -335,7 +335,7 @@ describe("CharacterStep", () => {
     await act(async () => {
       screen.getByTestId("character-add-supporting").click();
     });
-    await waitFor(() => expect(screen.getByTestId("character-list").children).toHaveLength(7));
+    await waitFor(() => expect(screen.getByTestId("character-tabs").children).toHaveLength(7));
     // c1 (the existing 林峰) is preserved; c7 is the new 苏晓晓 appended via manual add.
     // Names live inside <input> values in inline-edit mode, so check the input
     // directly rather than the card's textContent.

@@ -247,7 +247,7 @@ describe("CharacterStep inline-edit (no edit-mode toggle)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("character-form")).toBeInTheDocument();
     });
-    const list = screen.getByTestId("character-list");
+    const list = screen.getByTestId("character-tabs");
     expect(list.children).toHaveLength(15);
     expect(screen.getByTestId("character-char_shi_jian-name")).toHaveValue("石坚");
     expect(screen.getByTestId("character-char_lin_fengjiao-name")).toHaveValue("林凤娇");

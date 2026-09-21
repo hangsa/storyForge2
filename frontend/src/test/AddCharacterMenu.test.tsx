@@ -28,10 +28,8 @@ describe("AddCharacterMenu", () => {
 
   it("clicking the backdrop fires onClose", () => {
     const onClose = vi.fn();
-    const { container } = render(<AddCharacterMenu onPick={vi.fn()} onClose={onClose} />);
-    // Backdrop is the first child div (fixed inset-0 z-40).
-    const backdrop = container.querySelector('[aria-hidden="true"]') as HTMLElement;
-    fireEvent.click(backdrop);
+    render(<AddCharacterMenu onPick={vi.fn()} onClose={onClose} />);
+    fireEvent.click(screen.getByTestId("character-add-backdrop"));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

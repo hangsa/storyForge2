@@ -14,7 +14,10 @@ import type { Character } from "../../api/client";
 export interface AddCharacterMenuProps {
   /** 用户选了某类型。父组件负责关闭菜单 + 调 API。 */
   onPick: (type: Character["character_type"]) => void;
-  /** 任何关闭路径 (backdrop / ESC / 选项点击后的二次关闭) 都走这里。 */
+  /**
+   * 任何关闭路径 (backdrop / ESC) 都走这里。
+   * 多次触发是预期的 — 调用方须自行保证幂等 (e.g. setOpen(false) 即可)。
+   */
   onClose: () => void;
   /** 父组件 busy 时禁用所有选项。 */
   disabled?: boolean;

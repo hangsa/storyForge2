@@ -499,6 +499,7 @@ export default function CharacterStep({ projectId }: CharacterStepProps) {
                     role="tab"
                     aria-selected={isActive}
                     aria-controls={`character-panel-${t.id}`}
+                    id={`character-tab-${t.id}`}
                     data-testid={`character-tab-${t.id}`}
                     onClick={() => setActiveCharacterId(t.id)}
                     onKeyDown={handleCharacterTabKeyDown}
@@ -973,7 +974,14 @@ function CharacterPanel({
   };
 
   return (
-    <div data-testid={`character-panel-${character.id}`} hidden={hidden} className="space-y-3 pt-3">
+    <div
+      data-testid={`character-panel-${character.id}`}
+      id={`character-panel-${character.id}`}
+      role="tabpanel"
+      aria-labelledby={`character-tab-${character.id}`}
+      hidden={hidden}
+      className="space-y-3 pt-3"
+    >
       <CharacterHeader
         character={character}
         busy={busy}

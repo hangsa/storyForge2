@@ -136,7 +136,7 @@ function Inner({ projectId }: Props) {
             )}
             {wizard.currentStep === 2 && <WorldStep projectId={projectId} />}
             {wizard.currentStep === 3 && <CharacterStep projectId={projectId} />}
-            {wizard.currentStep === 4 && <MapStep />}
+            {wizard.currentStep === 4 && <MapStep projectId={projectId} />}
             {wizard.currentStep === 5 && <PlotCanvasMountPoint projectId={projectId} />}
             {wizard.currentStep === 6 && <OutlineStep projectId={projectId} />}
             {wizard.currentStep === 7 && (

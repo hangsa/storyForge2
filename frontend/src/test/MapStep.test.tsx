@@ -1,55 +1,66 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
-import { WizardProvider, useWizard } from "../components/wizard/WizardContext";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { WizardProvider } from "../components/wizard/WizardContext";
 import MapStep from "../components/wizard/MapStep";
+import api from "../api/client";
+
+vi.mock("../api/client", () => ({
+  default: {
+    getMap: vi.fn().mockResolvedValue({}),
+    generateMap: vi.fn().mockResolvedValue({}),
+    updateMap: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 beforeEach(() => {
   sessionStorage.clear();
+  vi.clearAllMocks();
 });
 
-describe("MapStep", () => {
-  it("renders placeholder copy and only '跳过' is enabled", () => {
+describe("MapStep empty state (no map generated yet)", () => {
+  it("renders empty-state with material icon and generate button when no map", () => {
     render(
       <WizardProvider projectId="proj_x">
-        <MapStep />
-      </WizardProvider>
+        <MapStep projectId="proj_x" />
+      </WizardProvider>,
     );
-    expect(screen.getByTestId("map-step")).toBeInTheDocument();
-    expect(screen.getByText(/地图系统.*即将推出|功能即将推出/)).toBeInTheDocument();
-    expect(screen.getByTestId("map-skip")).toBeInTheDocument();
-    expect(screen.queryByTestId("map-start")).not.toBeInTheDocument();
+    expect(screen.getByTestId("map-step-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("map-generate")).toBeInTheDocument();
+    // Old placeholder copy is gone — replaced by the new design.
+    expect(screen.queryByText(/即将推出/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("map-skip")).not.toBeInTheDocument();
   });
 
-  it("clicking '跳过' marks the current step as skipped and advances", () => {
-    function Harness() {
-      const wizard = useWizard();
-      return (
-        <>
-          <MapStep />
-          <span data-testid="cur">{wizard.currentStep}</span>
-          <span data-testid="done">{wizard.completedSteps.join(",")}</span>
-        </>
-      );
-    }
-    // v2.x: MapStep is step 5 in the 7-step wizard (legacy 6-step had it on
-    // step 4). Pre-seed sessionStorage so the modal lands on step 5.
-    sessionStorage.setItem(
-      "storyforge.wizard.state.proj_x",
-      JSON.stringify({
-        currentStep: 5,
-        completedSteps: [1, 2, 3, 4],
-        status: "idle",
-        data: {},
-        errorMessage: null,
-      }),
-    );
+  it("calls api.generateMap when the generate button is pressed", async () => {
+    (api.generateMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      detail: {
+        schema_version: "1.0",
+        project_id: "proj_x",
+        regions: [],
+        locations: [],
+        routes: [],
+        pois: [],
+        location_states: [],
+        snapshots: [],
+        footprints: [],
+        assertions: [],
+        settings: {
+          mode: "allow_alias_new",
+          scope_enabled: false,
+          allowed_region_ids: [],
+          chapter_new_location_cap: 3,
+          reuse_rate_target: 0.6,
+          strict_geo: false,
+        },
+      },
+    });
     render(
       <WizardProvider projectId="proj_x">
-        <Harness />
-      </WizardProvider>
+        <MapStep projectId="proj_x" />
+      </WizardProvider>,
     );
-    act(() => screen.getByTestId("map-skip").click());
-    expect(screen.getByTestId("cur").textContent).toBe("6");
-    expect(screen.getByTestId("done").textContent).toBe("1,2,3,4,5");
+    screen.getByTestId("map-generate").click();
+    await Promise.resolve();
+    expect(api.generateMap).toHaveBeenCalledWith("proj_x", "");
   });
 });

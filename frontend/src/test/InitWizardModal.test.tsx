@@ -638,7 +638,10 @@ describe("InitWizardModal footer 保存修改 button", () => {
   it("does NOT render 保存修改 on step 4 (MapStep — no data to save)", () => {
     seedStep(4, [1, 2, 3]);
     renderModal();
-    expect(screen.getByTestId("map-step")).toBeInTheDocument();
+    // MapStep empty-state (no map generated yet) renders `map-step-empty`; the
+    // post-generation `map-step` view is hidden until a map exists.
+    expect(screen.getByTestId("map-step-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("map-step")).not.toBeInTheDocument();
     expect(screen.queryByTestId("wizard-save")).not.toBeInTheDocument();
     expect(screen.queryByTestId("wizard-regenerate")).not.toBeInTheDocument();
     expect(screen.queryByTestId("wizard-next")).not.toBeInTheDocument();

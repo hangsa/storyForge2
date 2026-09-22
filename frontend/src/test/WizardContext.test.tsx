@@ -23,6 +23,7 @@ function makeData(overrides: Partial<WizardData> = {}): WizardData {
     novel_outline: null,
     chapter1_outline: null,
     chapter_outline_progress: null,
+    map: null,
     ...overrides,
   };
 }

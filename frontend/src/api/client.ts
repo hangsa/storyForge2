@@ -1312,6 +1312,27 @@ export const api = {
   updateMap: (projectId: string, mapData: MapPayload): Promise<void> =>
     request<void>("PUT", `/stage2/map?project_id=${encodeURIComponent(projectId)}`, { map: mapData }),
 
+  // 2026-09-22:T9 stubs — T14 替换为真实现,届时删除此处。
+  patchMapLocation: (
+    projectId: string,
+    locationId: string,
+    patch: Partial<MapLocation>,
+  ): Promise<MapLocation> =>
+    request<MapLocation>(
+      "PATCH",
+      `/stage2/map/location/${encodeURIComponent(locationId)}?project_id=${encodeURIComponent(projectId)}`,
+      patch,
+    ),
+
+  deleteMapLocation: (
+    projectId: string,
+    locationId: string,
+  ): Promise<{ deleted_id: string; cascaded_route_removals?: number }> =>
+    request<{ deleted_id: string; cascaded_route_removals?: number }>(
+      "DELETE",
+      `/stage2/map/location/${encodeURIComponent(locationId)}?project_id=${encodeURIComponent(projectId)}`,
+    ),
+
   updateCharacter: (projectId: string, characterData: CharacterSet) =>
     request<void>("PUT", "/stage2/character", { project_id: projectId, characters: characterData.characters }),
 

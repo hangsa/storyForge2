@@ -1,20 +1,73 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { WizardProvider } from "../components/wizard/WizardContext";
 import MapStep from "../components/wizard/MapStep";
 import api from "../api/client";
+
+const SAMPLE_MAP = {
+  schema_version: "1.0" as const,
+  project_id: "proj_test",
+  regions: [],
+  locations: [
+    {
+      id: "loc_a",
+      name: "黑水镇北门",
+      aliases: [],
+      type: "city" as const,
+      region_id: null,
+      pos_hint: "黑水镇北侧城墙豁口",
+      tags: [],
+      factions: [],
+      enter_conditions: [],
+      secrets: [],
+      dramatic_role: {
+        wanted_by: ["faction_漕帮"],
+        decisions_unlocked: ["加入漕帮"],
+        departure_cost: "暴露行踪",
+      },
+      space_type: "world" as const,
+      display_pos: null,
+    },
+  ],
+  routes: [],
+  pois: [],
+  location_states: [],
+  snapshots: [],
+  footprints: [],
+  assertions: [],
+  change_log: [],
+  display: { positions: {} },
+  settings: {
+    mode: "allow_alias_new" as const,
+    scope_enabled: false,
+    allowed_region_ids: [],
+    chapter_new_location_cap: 5,
+    reuse_rate_target: 0.6,
+    strict_geo: false,
+  },
+};
 
 vi.mock("../api/client", () => ({
   default: {
     getMap: vi.fn().mockResolvedValue({}),
     generateMap: vi.fn().mockResolvedValue({}),
     updateMap: vi.fn().mockResolvedValue(undefined),
+    patchMapLocation: vi.fn().mockImplementation(async (_p, _id, patch) => ({
+      ...SAMPLE_MAP.locations[0],
+      ...patch,
+    })),
+    deleteMapLocation: vi.fn().mockResolvedValue({ deleted_id: "loc_a" }),
   },
 }));
 
 beforeEach(() => {
   sessionStorage.clear();
   vi.clearAllMocks();
+  // Default factory mocks (cleared by clearAllMocks above) — empty-state tests
+  // rely on the factory default `{}`. locations-tab tests override per-test below.
+  (api.getMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
+  (api.generateMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
+  (api.updateMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 });
 
 describe("MapStep empty state (no map generated yet)", () => {
@@ -62,5 +115,37 @@ describe("MapStep empty state (no map generated yet)", () => {
     screen.getByTestId("map-generate").click();
     await Promise.resolve();
     expect(api.generateMap).toHaveBeenCalledWith("proj_x", "");
+  });
+});
+
+describe("MapStep locations tab", () => {
+  function renderMapStep() {
+    (api.getMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(SAMPLE_MAP);
+    return render(
+      <WizardProvider projectId="proj_test">
+        <MapStep projectId="proj_test" />
+      </WizardProvider>,
+    );
+  }
+
+  it("renders location cards with dramatic role", async () => {
+    renderMapStep();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("location-row-黑水镇北门")).toBeInTheDocument();
+    expect(screen.getByText("加入漕帮")).toBeInTheDocument();
+  });
+
+  it("supports deleting a location via trash icon", async () => {
+    renderMapStep();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    const delBtn = screen.getByTestId("location-delete-loc_a");
+    fireEvent.click(delBtn);
+    await waitFor(() => {
+      expect(screen.queryByTestId("location-row-黑水镇北门")).not.toBeInTheDocument();
+    });
   });
 });

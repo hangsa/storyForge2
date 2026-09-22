@@ -123,7 +123,9 @@ export default function MapStep({ projectId }: MapStepProps) {
       </div>
 
       <div data-testid={`map-panel-${activeKey}`} className="min-h-[400px]">
-        {activeKey === "locations" && <LocationsPanel mapData={mapData} />}
+        {activeKey === "locations" && (
+          <LocationsPanel mapData={mapData} setMapData={setMapData} />
+        )}
         {activeKey === "regions" && <RegionsPanel mapData={mapData} />}
         {activeKey === "routes" && <RoutesPanel mapData={mapData} />}
         {activeKey === "pois" && <PoisPanel mapData={mapData} />}
@@ -135,32 +137,79 @@ export default function MapStep({ projectId }: MapStepProps) {
 
 // --- Tab panels(本 task 给出 locations 最小可渲染版,其余在后续 task 补全) ---
 
-function LocationsPanel({ mapData }: { mapData: MapPayload }) {
+function LocationsPanel({
+  mapData,
+  setMapData,
+}: {
+  mapData: MapPayload;
+  setMapData: (m: MapPayload) => void;
+}) {
+  const handleDelete = async (id: string) => {
+    try {
+      await api.deleteMapLocation(mapData.project_id, id);
+    } catch (e) {
+      // 422 LOCATION_REFERENCED_BY_ROUTES — 前端显示 modal(本 task 简化:
+      // 让后端错误冒泡,后续 task 加 modal)
+      throw e;
+    }
+    setMapData({
+      ...mapData,
+      locations: mapData.locations.filter(l => l.id !== id),
+    });
+  };
+
+  const handlePatch = async (id: string, patch: Partial<MapLocation>) => {
+    const updated = await api.patchMapLocation(mapData.project_id, id, patch);
+    setMapData({
+      ...mapData,
+      locations: mapData.locations.map(l => (l.id === id ? updated : l)),
+    });
+  };
+
   return (
     <ul data-testid="locations-list" className="space-y-2">
-      {mapData.locations.map((loc: MapLocation) => (
+      {mapData.locations.map((loc) => (
         <li
           key={loc.id}
           data-testid={`location-row-${loc.name}`}
-          className="p-3 border border-outline-variant rounded"
+          className="p-3 border border-outline-variant rounded space-y-2"
         >
           <div className="flex items-center justify-between">
             <div>
-              <span className="font-medium">{loc.name}</span>
+              <input
+                data-testid={`location-name-${loc.id}`}
+                defaultValue={loc.name}
+                onBlur={(e) => {
+                  if (e.target.value !== loc.name) {
+                    handlePatch(loc.id, { name: e.target.value });
+                  }
+                }}
+                className="font-medium bg-transparent border-b border-transparent hover:border-outline-variant focus:border-primary"
+              />
               <span className="ml-2 text-xs text-on-surface-variant">
                 {loc.type} · {loc.region_id ?? "无区域"}
               </span>
             </div>
+            <button
+              data-testid={`location-delete-${loc.id}`}
+              onClick={() => handleDelete(loc.id)}
+              className="text-error text-sm hover:underline"
+            >
+              删除
+            </button>
           </div>
           {loc.pos_hint && (
-            <p className="text-xs text-on-surface-variant mt-1">{loc.pos_hint}</p>
+            <p className="text-xs text-on-surface-variant">{loc.pos_hint}</p>
           )}
-          <p className="text-xs mt-1">
+          <p className="text-xs">
             <span className="font-semibold">想来的：</span>
-            {loc.dramatic_role.wanted_by.join("、") || "（无）"}
+            <span>{loc.dramatic_role.wanted_by.join("、") || "（无）"}</span>
             {" · "}
             <span className="font-semibold">离开代价：</span>
-            {loc.dramatic_role.departure_cost || "（无）"}
+            <span>{loc.dramatic_role.departure_cost || "（无）"}</span>
+            {" · "}
+            <span className="font-semibold">解锁决策：</span>
+            <span>{loc.dramatic_role.decisions_unlocked.join("、") || "（无）"}</span>
           </p>
         </li>
       ))}

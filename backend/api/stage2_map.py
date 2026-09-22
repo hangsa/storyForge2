@@ -364,3 +364,283 @@ async def delete_location(
     save_map(project_id, validated)
     return {"error": False, "code": "OK", "message": "location 已删除",
             "detail": {"deleted_id": location_id, "cascaded_poi_removals": cascaded_pois}}
+
+
+@router.post("/map/route")
+async def add_route(project_id: str = Query(...), payload: dict = None):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id) or {"schema_version": "1.0", "project_id": project_id}
+    routes = list(data.get("routes", []))
+    existing_ids = {r["id"] for r in routes}
+    new_route = dict(payload or {})
+    if not new_route.get("id") or new_route["id"] in existing_ids:
+        import secrets
+        new_route["id"] = "route_" + secrets.token_hex(4)
+    routes.append(new_route)
+    data["routes"] = routes
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "route 已新增",
+            "detail": next(r for r in validated.routes if r.id == new_route["id"]).model_dump(by_alias=True)}
+
+
+@router.patch("/map/route/{route_id}")
+async def patch_route(
+    route_id: str,
+    project_id: str = Query(...),
+    payload: dict = None,
+):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在", "detail": {}},
+        )
+    routes = list(data.get("routes", []))
+    idx = next((i for i, r in enumerate(routes) if r.get("id") == route_id), None)
+    if idx is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "ROUTE_NOT_FOUND",
+                    "message": f"route {route_id} 不存在", "detail": {}},
+        )
+    routes[idx] = {**routes[idx], **(payload or {})}
+    data["routes"] = routes
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "route 已更新",
+            "detail": next(r for r in validated.routes if r.id == route_id).model_dump(by_alias=True)}
+
+
+@router.delete("/map/route/{route_id}")
+async def delete_route(
+    route_id: str,
+    project_id: str = Query(...),
+):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在", "detail": {}},
+        )
+    data["routes"] = [r for r in data.get("routes", []) if r.get("id") != route_id]
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "route 已删除",
+            "detail": {"deleted_id": route_id}}
+
+
+@router.post("/map/region")
+async def add_region(project_id: str = Query(...), payload: dict = None):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id) or {"schema_version": "1.0", "project_id": project_id}
+    regions = list(data.get("regions", []))
+    existing_ids = {r["id"] for r in regions}
+    new_region = dict(payload or {})
+    if not new_region.get("id") or new_region["id"] in existing_ids:
+        import secrets
+        new_region["id"] = "region_" + secrets.token_hex(4)
+    regions.append(new_region)
+    data["regions"] = regions
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "region 已新增",
+            "detail": next(r for r in validated.regions if r.id == new_region["id"]).model_dump(by_alias=True)}
+
+
+@router.patch("/map/region/{region_id}")
+async def patch_region(
+    region_id: str,
+    project_id: str = Query(...),
+    payload: dict = None,
+):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在", "detail": {}},
+        )
+    regions = list(data.get("regions", []))
+    idx = next((i for i, r in enumerate(regions) if r.get("id") == region_id), None)
+    if idx is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "REGION_NOT_FOUND",
+                    "message": f"region {region_id} 不存在", "detail": {}},
+        )
+    regions[idx] = {**regions[idx], **(payload or {})}
+    data["regions"] = regions
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "region 已更新",
+            "detail": next(r for r in validated.regions if r.id == region_id).model_dump(by_alias=True)}
+
+
+@router.post("/map/poi")
+async def add_poi(project_id: str = Query(...), payload: dict = None):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id) or {"schema_version": "1.0", "project_id": project_id}
+    pois = list(data.get("pois", []))
+    existing_ids = {p["id"] for p in pois}
+    new_poi = dict(payload or {})
+    if not new_poi.get("id") or new_poi["id"] in existing_ids:
+        import secrets
+        new_poi["id"] = "poi_" + secrets.token_hex(4)
+    pois.append(new_poi)
+    data["pois"] = pois
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "poi 已新增",
+            "detail": next(p for p in validated.pois if p.id == new_poi["id"]).model_dump(by_alias=True)}
+
+
+@router.patch("/map/poi/{poi_id}")
+async def patch_poi(
+    poi_id: str,
+    project_id: str = Query(...),
+    payload: dict = None,
+):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在", "detail": {}},
+        )
+    pois = list(data.get("pois", []))
+    idx = next((i for i, p in enumerate(pois) if p.get("id") == poi_id), None)
+    if idx is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "POI_NOT_FOUND",
+                    "message": f"poi {poi_id} 不存在", "detail": {}},
+        )
+    pois[idx] = {**pois[idx], **(payload or {})}
+    data["pois"] = pois
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "poi 已更新",
+            "detail": next(p for p in validated.pois if p.id == poi_id).model_dump(by_alias=True)}
+
+
+@router.delete("/map/poi/{poi_id}")
+async def delete_poi(
+    poi_id: str,
+    project_id: str = Query(...),
+):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在", "detail": {}},
+        )
+    data["pois"] = [p for p in data.get("pois", []) if p.get("id") != poi_id]
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "poi 已删除",
+            "detail": {"deleted_id": poi_id}}

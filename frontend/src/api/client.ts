@@ -1337,6 +1337,92 @@ export const api = {
       `/stage2/map/location/${encodeURIComponent(locationId)}?project_id=${encodeURIComponent(projectId)}`,
     ),
 
+  // 2026-09-22:T15 — routes/regions/POIs 行内编辑 + regenerate-map-section 绑定
+  addMapLocation: (projectId: string, loc: Partial<MapLocation>): Promise<MapLocation> =>
+    request<MapLocation>(
+      "POST",
+      `/stage2/map/location?project_id=${encodeURIComponent(projectId)}`,
+      loc,
+    ),
+
+  patchMapRoute: (
+    projectId: string,
+    routeId: string,
+    patch: Partial<MapRoute>,
+  ): Promise<MapRoute> =>
+    request<MapRoute>(
+      "PATCH",
+      `/stage2/map/route/${encodeURIComponent(routeId)}?project_id=${encodeURIComponent(projectId)}`,
+      patch,
+    ),
+
+  addMapRoute: (projectId: string, route: Partial<MapRoute>): Promise<MapRoute> =>
+    request<MapRoute>(
+      "POST",
+      `/stage2/map/route?project_id=${encodeURIComponent(projectId)}`,
+      route,
+    ),
+
+  deleteMapRoute: (projectId: string, routeId: string): Promise<{ deleted_id: string }> =>
+    request<{ deleted_id: string }>(
+      "DELETE",
+      `/stage2/map/route/${encodeURIComponent(routeId)}?project_id=${encodeURIComponent(projectId)}`,
+    ),
+
+  patchMapRegion: (
+    projectId: string,
+    regionId: string,
+    patch: Partial<MapRegion>,
+  ): Promise<MapRegion> =>
+    request<MapRegion>(
+      "PATCH",
+      `/stage2/map/region/${encodeURIComponent(regionId)}?project_id=${encodeURIComponent(projectId)}`,
+      patch,
+    ),
+
+  addMapRegion: (projectId: string, region: Partial<MapRegion>): Promise<MapRegion> =>
+    request<MapRegion>(
+      "POST",
+      `/stage2/map/region?project_id=${encodeURIComponent(projectId)}`,
+      region,
+    ),
+
+  patchMapPoi: (
+    projectId: string,
+    poiId: string,
+    patch: Partial<MapPOI>,
+  ): Promise<MapPOI> =>
+    request<MapPOI>(
+      "PATCH",
+      `/stage2/map/poi/${encodeURIComponent(poiId)}?project_id=${encodeURIComponent(projectId)}`,
+      patch,
+    ),
+
+  addMapPoi: (projectId: string, poi: Partial<MapPOI>): Promise<MapPOI> =>
+    request<MapPOI>(
+      "POST",
+      `/stage2/map/poi?project_id=${encodeURIComponent(projectId)}`,
+      poi,
+    ),
+
+  deleteMapPoi: (projectId: string, poiId: string): Promise<{ deleted_id: string }> =>
+    request<{ deleted_id: string }>(
+      "DELETE",
+      `/stage2/map/poi/${encodeURIComponent(poiId)}?project_id=${encodeURIComponent(projectId)}`,
+    ),
+
+  regenerateMapSection: (
+    projectId: string,
+    section: "regions" | "locations" | "routes" | "pois" | "all",
+    index?: number,
+    userModifications: string = "",
+  ): Promise<MapPayload> =>
+    request<MapPayload>(
+      "POST",
+      `/stage2/regenerate-map-section?project_id=${encodeURIComponent(projectId)}`,
+      { section, index, user_modifications: userModifications },
+    ),
+
   updateCharacter: (projectId: string, characterData: CharacterSet) =>
     request<void>("PUT", "/stage2/character", { project_id: projectId, characters: characterData.characters }),
 

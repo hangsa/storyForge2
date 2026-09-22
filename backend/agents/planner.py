@@ -635,6 +635,47 @@ class PlannerAgent(BaseAgent):
         )
 
         from backend.agents._injection_helpers import _build_user_modifications_block
+        # Plan 2 M4 Task 0: scene_plan[].location 决策依据 — 把 Map 的反向索引
+        # (name/alias → canonical id) 渲染成 LLM 可见的文字表格,让 LLM 在
+        # 生成 scene_plan 时知道哪些 location_id 是合法的。Legacy 项目
+        # (map.json 缺失) 退化为空字符串,LLM 会 scene_plan.location 全部
+        # 设为 null — 后处理会放过它们并附加 warning。
+        map_name_index_text = ""
+        try:
+            from backend.map_system.storage import build_name_index, load_map
+            map_dict = load_map(self.project_id)
+            if map_dict:
+                name_to_id = build_name_index(self.project_id)
+                if name_to_id:
+                    lines = []
+                    for canon_id, _alias_or_name in {
+                        v: k for k, v in name_to_id.items()
+                    }.items():
+                        # 找这个 canon_id 对应的 location/region/poi 名字 + 类型
+                        kind = ""
+                        pretty_name = canon_id
+                        for region in map_dict.get("regions", []):
+                            if region.get("id") == canon_id:
+                                kind = f"region/{region.get('level', '')}"
+                                pretty_name = region.get("name", canon_id)
+                                break
+                        else:
+                            for loc in map_dict.get("locations", []):
+                                if loc.get("id") == canon_id:
+                                    kind = f"location/{loc.get('type', '')}"
+                                    pretty_name = loc.get("name", canon_id)
+                                    break
+                            else:
+                                for poi in map_dict.get("pois", []):
+                                    if poi.get("id") == canon_id:
+                                        kind = "poi"
+                                        pretty_name = poi.get("name", canon_id)
+                                        break
+                        lines.append(f"- {canon_id} ({pretty_name}, {kind})")
+                    map_name_index_text = "\n".join(lines)
+        except Exception:
+            map_name_index_text = ""
+
         result, response = await self.generate_from_template(
             "outline_generation",
             concept_context=concept_context,
@@ -646,12 +687,58 @@ class PlannerAgent(BaseAgent):
             novel_outline_context=novel_outline_context,
             recent_chapters_context=recent_chapters_context,
             character_growth_context=character_growth_context,
+            map_name_index=map_name_index_text,
             genre_beat_patterns=_resolve_genre_beat_patterns(genre, outline_text),
             genre_focus_vocabulary=_resolve_genre_focus_vocabulary(),
             genre_pacing=_resolve_genre_pacing(genre),
             user_modifications=_build_user_modifications_block(user_modifications),
         )
         self.log_usage("outline_generation", response)
+
+        # Plan 2 M4 Task 0: 后处理校验 scene.location 对齐 Map.name_to_id。
+        # legacy 项目 (load_map 抛 FileNotFoundError) 或非 dict scene_plan
+        # 静默放过,只回退 None + warning。
+        try:
+            from backend.map_system.storage import build_name_index, load_map
+            map_dict = load_map(self.project_id)
+        except Exception:
+            map_dict = None
+
+        if map_dict:
+            name_index: dict[str, str] = build_name_index(self.project_id)
+            valid_ids: set[str] = {
+                r.get("id") for r in map_dict.get("regions", []) if r.get("id")
+            } | {
+                l.get("id") for l in map_dict.get("locations", []) if l.get("id")
+            } | {
+                p.get("id") for p in map_dict.get("pois", []) if p.get("id")
+            }
+        else:
+            name_index = {}
+            valid_ids = set()
+
+        warnings: list = result.setdefault("warnings", [])
+        for scene in result.get("scene_plan", []) or []:
+            if not isinstance(scene, dict):
+                continue
+            loc = scene.get("location")
+            if not loc:
+                scene["location"] = None
+                continue
+            # 直接 id 命中
+            if loc in valid_ids:
+                continue
+            # alias 命中 → 反查 canonical id
+            canonical = name_index.get(loc)
+            if canonical and canonical in valid_ids:
+                scene["location"] = canonical
+                continue
+            # 解析失败 → 回退 None + warning
+            warnings.append(
+                f"scene {scene.get('scene_number', '?')}: location '{loc}' 不在 Map.name_to_id,回退为 null。"
+            )
+            scene["location"] = None
+
         return result, response
 
     async def generate_novel_outline(

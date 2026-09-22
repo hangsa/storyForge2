@@ -64,6 +64,11 @@ user_prompt_template: |
 
   {recent_chapters_context}
 
+  ## 地图(location_id 决策依据)
+  以下是该项目已注册的所有地点 ID + 名称 + 类型 + dramatic_role,scene_plan[].location **必须** 从中选取一个 ID;若语义上找不到匹配,设为 null 并在 scene_plan.location_reasoning 中说明。
+
+  {map_name_index}
+
   目标章节：第 {chapter_number} 章
   最低字数：{min_words} 字
 
@@ -90,6 +95,8 @@ user_prompt_template: |
         "emotional_arc": "情绪弧线（如：平静→紧张→爆发）",
         "narrative_role": "setup",
         "beat_type": "setup",
+        "location": "loc_<canonical_id>",
+        "location_reasoning": "为什么这个场景发生在这里(1 句话)",
         "required_logs": [
           "character_location_change",
           "conflict_escalate"

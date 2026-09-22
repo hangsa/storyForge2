@@ -73,12 +73,27 @@ async def fact_guard(data: dict):
         override_store=project_override_store(),
         global_override_store=global_override_store(),
     )
+    # Plan 2 M5: pass map_snapshot_hash (empty string when no map.json)
+    # so Plan 3's geo checks can read it. compute_map_hash returns a
+    # sha256 hex; "" means "no map constraint" — safe to pass through.
+    map_snapshot_hash = ""
+    try:
+        from backend.map_system.storage import load_map
+        from backend.map_system.snapshots import compute_map_hash
+        from backend.map_system.models import Map
+        data = load_map(project_id)
+        if data:
+            map_snapshot_hash = compute_map_hash(Map.model_validate(data))
+    except Exception:
+        map_snapshot_hash = ""
+
     fg_result = reviewer.run_fact_guard(
         draft_text=draft_text,
         characters=ctx["characters"],
         world_rules=ctx["world"],
         scene_plan=scene_plan,
         precheck_result=precheck_result,
+        map_snapshot_hash=map_snapshot_hash,
     )
 
     checks_payload = [

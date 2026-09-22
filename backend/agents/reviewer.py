@@ -103,6 +103,7 @@ class ReviewerAgent(BaseAgent):
         scene_plan: dict,
         storyos_state: Optional[dict] = None,
         precheck_result=None,
+        map_snapshot_hash: str = "",  # Plan 2 M5 pre-wire (Plan 3 M5 will use)
     ) -> FactGuardResult:
         if storyos_state is None:
             storyos_state = {}

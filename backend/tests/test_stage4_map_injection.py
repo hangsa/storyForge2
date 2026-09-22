@@ -258,3 +258,55 @@ async def test_write_scene_chapter_invokes_mention_extraction(_projects_dir, mon
         fp.get("location_id") == "loc_heishui" and fp.get("chapter") == 1
         for fp in fps
     ), f"expected mention footprint in {fps}"
+
+
+def test_fact_guard_endpoint_passes_map_snapshot_hash_to_reviewer(_projects_dir, monkeypatch):
+    """POST /api/stage4/fact-guard 调用 reviewer.run_fact_guard 时带 map_snapshot_hash kwarg。
+    Plan 3 会在 reviewer.run_fact_guard 里读这个 kwarg;Plan 2 只需保证透传,不验证 reviewer 端。"""
+    proj_dir = _projects_dir / "proj_fg"
+    _seed_minimum_project(proj_dir, "proj_fg")
+
+    from fastapi.testclient import TestClient
+    from backend.main import app
+    from backend.api import stage4_writing
+    from backend.api import stage4_fact_guard
+    from backend.agents import reviewer as reviewer_mod
+    from backend.agents.reviewer import FactGuardResult
+
+    captured: dict = {}
+
+    class _FakeReviewer:
+        def __init__(self, *a, **kw):
+            pass
+
+        def run_fact_guard(self, **kwargs):
+            captured.update(kwargs)
+            return FactGuardResult(all_passed=True, checks=[], coherence_score=100)
+
+    class _FakeWriter:
+        def __init__(self, *a, **kw):
+            pass
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(stage4_writing, "WriterAgent", _FakeWriter)
+    mp.setattr(stage4_writing, "ReviewerAgent", _FakeReviewer)
+    mp.setattr(stage4_fact_guard, "ReviewerAgent", _FakeReviewer)
+    mp.setattr(reviewer_mod, "ReviewerAgent", _FakeReviewer)
+    try:
+        client = TestClient(app)
+        r = client.post(
+            "/api/stage4/fact-guard",
+            json={
+                "project_id": "proj_fg",
+                "chapter_number": 1,
+                "scene_number": 1,
+                "draft_text": "林峰在黑水镇北门。",
+            },
+        )
+    finally:
+        mp.undo()
+
+    assert r.status_code == 200
+    assert "map_snapshot_hash" in captured
+    # 当 map.json 不存在 → 空串;Plan 1 接入后这里会变成 hash
+    assert captured["map_snapshot_hash"] == "" or len(captured["map_snapshot_hash"]) >= 4

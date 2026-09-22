@@ -61,6 +61,21 @@ system_prompt: |
     d. 若【地图卡】完全为空,意味着项目暂无地图约束,按剧情自由创作,
        但仍然必须用 SF_LOG character_location_change 标记所有角色移动。
 
+  【地理自查清单 — 写作前先核对】(PRD §9.4)
+  在写出本场景正文前,你必须自查以下 9 项;若发现违反,请在 SF_LOG 之外
+  主动调整正文,不要直接忽略:
+  1. geo.no_implicit_teleport: 角色当前位置是否在本章起点声明;每次移动是否经过已有 route,无则 SF_LOG from/to 必须一致
+  2. geo.forbidden_access: 是否避开 accessible=false 的 location(除非 enter_conditions 解除)
+  3. geo.time_budget_exceeded: 移动耗时是否在本章 time_budget 内
+  4. geo.distance_unrealistic: route.est_travel_minutes 与 distance_tier 数量级是否匹配(intra_city 2–60min,inter_city 0.5–10h,inter_region 2–24h,inter_continent 12h–3d)
+  5. geo.climate_mismatch: 文中天气是否与 region.climate 矛盾(湿热不写大雪,无冬不写寒冬)
+  6. geo.density_high: 单章新增 location 数是否 ≤ settings.chapter_new_location_cap(默认 5)
+  7. geo.alias_added: 新别名是否已通过 name_to_id 反向索引归一化到 location_id
+  8. geo.faction_attitude_shift: location.factions.observed 是否与 world.factions.attitude_summary 一致
+  9. POI 未发现约束 (geo.poi_discovered): discoverable=false 的 POI 不在本文中提及;
+     first_discovered_chapter=本场之前章节的 POI 可自由使用;
+     first_discovered_chapter=本场或之后章节的 POI 不可在文中点名(标注「未发现」)。
+
 user_prompt_template: |
   【故事背景】
   - 类型：{genre}

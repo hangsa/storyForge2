@@ -455,6 +455,46 @@ class StoryOSAgent:
                 report.character_state_updates.setdefault(char, {})
                 report.character_state_updates[char]["physical_change"] = change
 
+    def list_discoverable_pois_for_card(self) -> list[dict]:
+        """返回 map_card 「已发现 POI」段需要的所有 POI 列表。
+
+        PRD §3.2.4 + §9.4 POI 不可见约束:
+          - discoverable=false → 不返回(不进 map_card、不进 Writer prompt)
+          - discoverable=true + first_discovered_chapter=None → status="待发现"
+          - discoverable=true + first_discovered_chapter=N → status="已发现"
+
+        Returns: list of {"poi_id", "name", "parent_location_id",
+                           "first_discovered_chapter", "status", "tags"}
+                 空 list — 老项目无 map.json 或 map.json 无 POI 字段。
+
+        Plan 2 的 build_map_card() 调用此方法拼装「已发现 POI」段(独立字符串)。
+        """
+        map_path = self._project_dir / "map.json"
+        if not map_path.exists():
+            return []
+        try:
+            with open(map_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("list_discoverable_pois_for_card: failed to read %s: %s",
+                           map_path, e)
+            return []
+
+        out: list[dict] = []
+        for poi in data.get("pois", []) or []:
+            if not poi.get("discoverable", False):
+                continue
+            first_ch = poi.get("first_discovered_chapter")
+            out.append({
+                "poi_id": poi.get("id", ""),
+                "name": poi.get("name", ""),
+                "parent_location_id": poi.get("parent_location_id", ""),
+                "first_discovered_chapter": first_ch,
+                "status": "已发现" if first_ch is not None else "待发现",
+                "tags": poi.get("tags", []) or [],
+            })
+        return out
+
     def _ensure_registry_dir(self) -> None:
         self._registries_dir.mkdir(parents=True, exist_ok=True)
 

@@ -127,12 +127,12 @@ describe("WorkspaceWizardPanel", () => {
     });
     render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
     await waitFor(() => {
-      // Concept (position 2) should NOT be disabled once step 1 surfaces
+      // World (position 2 in v2.x) should NOT be disabled once step 1 surfaces
       // are completed via prefill (OR-semantic — divergence done here).
-      expect(screen.getByTestId("wizard-sidebar-item-concept")).not.toHaveAttribute("disabled");
-      // World (position 3) is still disabled because we didn't mock a
-      // world.json here.
-      expect(screen.getByTestId("wizard-sidebar-item-world")).toHaveAttribute("disabled");
+      expect(screen.getByTestId("wizard-sidebar-item-world")).not.toHaveAttribute("disabled");
+      // Character (position 3) is still disabled because we didn't mock a
+      // characters.json here.
+      expect(screen.getByTestId("wizard-sidebar-item-character")).toHaveAttribute("disabled");
     });
   });
 
@@ -235,7 +235,7 @@ describe("WorkspaceWizardPanel (post-integration)", () => {
     });
     render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
     await waitFor(() => {
-      // Step 6 (剧情画布) is now completed in completedSteps, so its
+      // Step 5 (剧情画布) is now completed in completedSteps, so its
       // sidebar item renders data-state="completed".
       expect(screen.getByTestId("wizard-sidebar-item-plot").getAttribute("data-state")).toBe("completed");
       // And step 1 (创意发散) is also completed — divergence and canvas
@@ -244,17 +244,18 @@ describe("WorkspaceWizardPanel (post-integration)", () => {
     });
   });
 
-  it("renders PlotCanvasMountPoint when currentStep=6", async () => {
-    // Hydrate the wizard at currentStep=6 (剧情画布) via sessionStorage so
+  it("renders PlotCanvasMountPoint when currentStep=5", async () => {
+    // 2026-09-19: 砍「概念 DNA」后剧情画布从 step 6 移到 step 5。
+    // Hydrate the wizard at currentStep=5 (剧情画布) via sessionStorage so
     // the panel renders PlotCanvasMountPoint on mount. This bypasses the
     // sidebar's "next-step reachable" gating, which would otherwise require
-    // either completing step 5 first or stepping through every prior step
+    // either completing step 4 first or stepping through every prior step
     // — neither of which is the unit under test.
     sessionStorage.setItem(
       "storyforge.wizard.state.proj_test",
       JSON.stringify({
-        currentStep: 6,
-        completedSteps: [1, 2, 3, 4, 5],
+        currentStep: 5,
+        completedSteps: [1, 2, 3, 4],
         status: "idle",
         data: {},
         errorMessage: null,

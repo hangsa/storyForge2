@@ -1057,3 +1057,86 @@ describe("commit success → wizard step 2 jump", () => {
     });
   });
 });
+
+// 2026-09-22 proj_47738f64 regression:用户已 commit 完 divergence,在 step 3
+// 通过左侧 sidebar 点「创意发散」回看 step 1 时,CreativeDivergenceStep 会
+// remount 并通过 HYDRATE 把磁盘里的 committed_at 加载进 state.committedAt。
+// 之前 effect 把这次 HYDRATE 误判为"刚 commit"立即跳 step 2,用户回看失败。
+// 修复:用 state.inflightStage 区分 HYDRATE(disk load,inflightStage 始终 null)
+// 与用户主动 commit(COMMIT_START → inflightStage="2" → COMMIT_SUCCESS → null)。
+// HYDRATE 不应触发 jumpToStep。
+describe("HYDRATE with already-committed divergence must NOT auto-jump", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockApi.postB3MetaDecompose.mockResolvedValue({
+      generated_prompt: "## META ##",
+      written_to_override: true,
+    });
+    mockApi.getPlazaPrompt.mockResolvedValue({ effective: null });
+    mockApi.putPlazaPrompt.mockResolvedValue({
+      name: "firstness_decompose", override: null, modified_at: null,
+    });
+    mockApi.postB3Decompose.mockResolvedValue({
+      dimensions: [], causal_map: "", top_level_summary: "",
+    });
+    mockApi.postB3Commit.mockResolvedValue(commitResponse);
+  });
+
+  it("does not call jumpToStep(2) when HYDRATE loads a state with committed_at set (proj_47738f64 case)", async () => {
+    // 用户已在 step 3,左侧点「创意发散」回跳 → mount CreativeDivergenceStep,
+    // useB3Divergence HYDRATE 把磁盘里 committed_at 加载进来。
+    mockApi.getB3State.mockResolvedValue({
+      schema_version: 3,
+      project_id: "p1",
+      raw_intent: { prompt: "x", genre_primary: "xuanyi", tone: "悬疑", style: "单线" },
+      decompose_started_at: "2026-09-11T14:02:25Z",
+      decompose_completed_at: "2026-09-11T14:12:26Z",
+      causal_map: "",
+      top_level_summary: "",
+      dimensions: [],
+      committed_at: "2026-09-20T03:44:23.298035+00:00",
+    });
+
+    const ctx = {
+      setNextHandler: vi.fn(),
+      setPrevHandler: vi.fn(),
+      setRegenerateHandler: vi.fn(),
+      setSaveHandler: vi.fn(),
+      setNextLoadingClickHandler: vi.fn(),
+      setRegenerateBusy: vi.fn(),
+      setRegenerateSuccess: vi.fn(),
+      setRegenerateFailure: vi.fn(),
+      data: {},
+      status: "idle",
+      currentStep: 1,
+      completedSteps: [],
+      regenerateState: { kind: "idle" as const },
+      regenerateHandler: null,
+      regenerateDisabled: false,
+      saveHandler: null,
+      saveDisabled: false,
+      nextHandler: null,
+      nextDisabled: false,
+      nextLabel: null,
+      nextLoadingLabel: null,
+      nextLoadingClickHandler: null,
+      prevHandler: null,
+      jumpToStep: vi.fn(),
+      markStepGenerated: vi.fn(),
+      reset: vi.fn(),
+    };
+    render(
+      <WizardContext.Provider value={ctx as any}>
+        <CreativeDivergenceStep projectId="p1" />
+      </WizardContext.Provider>,
+    );
+
+    // 等 HYDRATE 解析完、state.committedAt 写入磁盘值。
+    // 旧实现下 jumpToStep(2) 会在这个时刻被错误调用;
+    // 修复后不应被调用。
+    await new Promise((r) => setTimeout(r, 100));
+    expect(mockApi.getB3State).toHaveBeenCalled();
+    expect(ctx.jumpToStep).not.toHaveBeenCalled();
+    expect(ctx.markStepGenerated).not.toHaveBeenCalled();
+  });
+});

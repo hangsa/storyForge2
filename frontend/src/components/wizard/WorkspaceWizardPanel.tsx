@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import api, { World, CharacterSet, NovelOutline, Outline } from "../../api/client";
 import { WizardProvider, useWizard, type WizardData } from "./WizardContext";
 import WizardSidebar from "./WizardSidebar";
@@ -33,6 +33,11 @@ export default function WorkspaceWizardPanel({ projectId }: Props) {
 
 function Inner({ projectId }: Props) {
   const wizard = useWizard();
+  // 2026-09-22: divergence 实际完成(cdPayload.selected_at || conceptHasContent)
+  // 但 wizard.completedSteps 不含 1 时(旧 sessionStorage 持久化空数组),
+  // sidebar 仍允许跳回 Step 1 查看 divergence 内容。forceReachableSteps
+  // 是 WizardSidebar 接受的位置数组,语义"额外强制可达"。
+  const [forceReachableSteps, setForceReachableSteps] = useState<number[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,18 +70,19 @@ function Inner({ projectId }: Props) {
         const cdPayload = cd.status === "fulfilled" ? cd.value : null;
         const conceptPayload = concept.status === "fulfilled" ? concept.value : null;
         const conceptHasContent = conceptPayload != null && hasContent(conceptPayload.concept);
-        if ((cdPayload && cdPayload.selected_at) || conceptHasContent) {
+        const divergenceDone = (cdPayload && cdPayload.selected_at) || conceptHasContent;
+        if (divergenceDone) {
           completed.push(1);
         }
 
         // Plot canvas completion: committed is the semantic signal;
         // committed_at !== null is a defensive backstop ensuring both
         // flags agree on read (the backend stamps both atomically today,
-        // but defense-in-depth for disk-derived signals). Marks step 6
+        // but defense-in-depth for disk-derived signals). Marks step 5
         // (剧情画布) as completed; divergence and canvas are independent steps.
         const canvasPayload = canvasState.status === "fulfilled" ? canvasState.value : null;
         if (canvasPayload?.committed === true && canvasPayload.committed_at !== null) {
-          completed.push(6);
+          completed.push(5);
         }
 
         // 2026-09-19 步骤编号统一 -1(world 3→2 / chars 4→3 / novel 7→6 /
@@ -92,6 +98,11 @@ function Inner({ projectId }: Props) {
         } else {
           wizard.markPrefillComplete();
         }
+        // divergenceDone 时把 Step 1 标为额外可达,即使 completedSteps
+        // 不含 1(旧 sessionStorage 持久化空数组)也让 sidebar 可点击。
+        if (divergenceDone) {
+          setForceReachableSteps((prev) => (prev.includes(1) ? prev : [...prev, 1]));
+        }
       } catch {
         if (!cancelled) wizard.markPrefillComplete();
       }
@@ -105,6 +116,7 @@ function Inner({ projectId }: Props) {
       <WizardSidebar
         currentStep={wizard.currentStep}
         completedSteps={wizard.completedSteps}
+        forceReachableSteps={forceReachableSteps}
         onJump={(item) => {
           wizard.jumpToStep(item.position);
         }}

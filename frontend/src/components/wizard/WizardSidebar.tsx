@@ -26,12 +26,17 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
 interface WizardSidebarProps {
   currentStep: number;
   completedSteps: number[];
+  // 2026-09-22:额外强制可达的位置数组。当 wizard.completedSteps 没记录
+  // 某 step(例如旧 sessionStorage 持久化的空数组 + prefill 已确认 divergence
+  // 实际完成),这些位置仍允许 sidebar 点击 — 让用户能从后续 step 回看。
+  forceReachableSteps?: number[];
   onJump: (item: SidebarItem) => void;
 }
 
 export default function WizardSidebar({
   currentStep,
   completedSteps,
+  forceReachableSteps = [],
   onJump,
 }: WizardSidebarProps) {
   return (
@@ -41,11 +46,15 @@ export default function WizardSidebar({
         {SIDEBAR_ITEMS.map((item) => {
           const completed = completedSteps.includes(item.position);
           const current = currentStep === item.position;
+          const forced = forceReachableSteps.includes(item.position);
           // Step N is reachable when completed, current, or (N is the
-          // next step and the previous step is completed).
+          // next step and the previous step is completed). `forced` 是
+          // 外层(WorkspaceWizardPanel)在 completedSteps 缺失时补的
+          // 可达信号 — 例如 divergence 实际完成但旧 session 没记。
           const reachable =
             completed ||
             current ||
+            forced ||
             (item.position === currentStep + 1 && completedSteps.includes(currentStep));
           const baseCls = "flex items-center justify-start gap-2 px-3 py-2 rounded-lg transition-colors w-[160px]";
           const stateCls = current

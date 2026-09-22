@@ -62,15 +62,31 @@ export default function CreativeDivergenceStep({
   // 2026-09-19:commit 成功后,parent 收到 committedAt 跳到 wizard step 2。
   // 这里把 wizard.markStepGenerated(1, {}) + wizard.jumpToStep(2) 集成到
   // 一个监听 effect — commit SUCCESS → state.committedAt 更新 → 触发跳转。
+  //
+  // 2026-09-22 修 proj_47738f64 案例:用户已在 step 3,左侧点「创意发散」
+  // 回跳 step 1 时,CreativeDivergenceStep 会重新 mount,useB3Divergence
+  // HYDRATE 把磁盘里已存的 committed_at(2026-09-20T03:44:23...)加载进
+  // state.committedAt,旧实现把这次磁盘加载误判为"刚 commit"立即跳回 step 2。
+  // 修复:用 nextClickedRef 区分两种来源 ——
+  //   • HYDRATE:disk 加载,用户没点 Next → nextClickedRef=false → 不动
+  //   • 用户点 Next → commit() → COMMIT_SUCCESS → 跳 step 2
+  // 早先用 state.inflightStage 区分但不可靠:COMMIT_START 与 COMMIT_SUCCESS
+  // 在 commit() 同一个 microtask 里 dispatch,React 18 会批处理,effect 只能
+  // 看到最终态。
   const lastCommittedAtRef = useRef<string | null>(null);
+  const nextClickedRef = useRef(false);
   useEffect(() => {
-    if (state.committedAt && state.committedAt !== lastCommittedAtRef.current) {
+    if (
+      state.committedAt &&
+      state.committedAt !== lastCommittedAtRef.current
+    ) {
       lastCommittedAtRef.current = state.committedAt;
-      if (wizard) {
+      if (nextClickedRef.current && wizard) {
+        nextClickedRef.current = false;
         wizard.markStepGenerated(1, {});
         wizard.jumpToStep(2);
+        onAdvanceSuccess?.();
       }
-      onAdvanceSuccess?.();
     }
   }, [state.committedAt, wizard, onAdvanceSuccess]);
 
@@ -136,7 +152,13 @@ export default function CreativeDivergenceStep({
     } else if (sub === "2") {
       const disabled = state.loading || state.paused;
       setNext(
-        () => { void commit(); },
+        () => {
+          // 2026-09-22 proj_47738f64:在 commit() 之前同步置位 nextClickedRef,
+          // 上面的 committedAt effect 看到 true 才会跳 step 2。否则 HYDRATE
+          // 把磁盘里已有的 committed_at 加载进来时也会触发同样的 effect。
+          nextClickedRef.current = true;
+          void commit();
+        },
         disabled,
         "下一步:进入世界观 →",
         loadingLabel,

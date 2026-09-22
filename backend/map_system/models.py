@@ -191,4 +191,9 @@ class Map(BaseModel):
                 raise ValueError(
                     f"LocationState references unknown location {ls.location_id}"
                 )
+        for r in self.regions:
+            if r.parent_id is not None and r.parent_id not in region_ids:
+                raise ValueError(
+                    f"Region {r.id} parent_id references unknown region {r.parent_id}"
+                )
         return self

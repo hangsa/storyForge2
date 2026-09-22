@@ -59,3 +59,57 @@ def test_route_alias_serialization_roundtrip():
     assert dumped["from"] == "loc_a"
     assert dumped["to"] == "loc_b"
     assert "from_id" not in dumped
+
+
+def test_route_to_unknown_location_raises_references_error():
+    """Map._validate_references 必须捕获 route 引用未知 location。"""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="Route references unknown location"):
+        Map.model_validate({
+            "schema_version": "1.0",
+            "project_id": "p",
+            "regions": [],
+            "locations": [{"id": "loc_a", "name": "A", "type": "town",
+                           "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""}}],
+            "routes": [{"id": "route_x", "from": "loc_missing", "to": "loc_a", "est_travel_minutes": 10}],
+        })
+
+
+def test_location_referencing_unknown_region_raises():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="references unknown region"):
+        Map.model_validate({
+            "schema_version": "1.0",
+            "project_id": "p",
+            "regions": [{"id": "region_a", "name": "A", "level": "state"}],
+            "locations": [{"id": "loc_a", "name": "A", "type": "town",
+                           "region_id": "region_missing",
+                           "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""}}],
+        })
+
+
+def test_poi_referencing_unknown_location_raises():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="references unknown location"):
+        Map.model_validate({
+            "schema_version": "1.0",
+            "project_id": "p",
+            "regions": [],
+            "locations": [{"id": "loc_a", "name": "A", "type": "town",
+                           "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""}}],
+            "pois": [{"id": "poi_x", "name": "X", "parent_location_id": "loc_missing"}],
+        })
+
+
+def test_region_parent_id_references_unknown_region_raises():
+    """Region.parent_id 必须交叉校验到 region_ids(否则 region 之间悬挂)。"""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="Region.*parent_id.*unknown"):
+        Map.model_validate({
+            "schema_version": "1.0",
+            "project_id": "p",
+            "regions": [
+                {"id": "region_a", "name": "A", "level": "state"},
+                {"id": "region_b", "name": "B", "level": "state", "parent_id": "region_missing"},
+            ],
+        })

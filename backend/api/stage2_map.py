@@ -230,3 +230,137 @@ async def regenerate_map_section(
         "message": f"map.{payload.section} 已重新生成",
         "detail": validated.model_dump(by_alias=True),
     }
+
+
+@router.post("/map/location")
+async def add_location(project_id: str = Query(...), payload: dict = None):
+    """新增 location。id 由后端生成(避免前端造重)。"""
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id) or {"schema_version": "1.0", "project_id": project_id}
+    locations = list(data.get("locations", []))
+    existing_ids = {l["id"] for l in locations}
+
+    # id: 前端可传,但必须唯一;否则后端生成
+    new_loc = dict(payload or {})
+    if not new_loc.get("id") or new_loc["id"] in existing_ids:
+        import secrets
+        new_loc["id"] = "loc_" + secrets.token_hex(4)
+    locations.append(new_loc)
+
+    data["locations"] = locations
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    new_id = new_loc["id"]
+    return {"error": False, "code": "OK", "message": "location 已新增",
+            "detail": next(l for l in validated.locations if l.id == new_id).model_dump(by_alias=True)}
+
+
+@router.patch("/map/location/{location_id}")
+async def patch_location(
+    location_id: str,
+    project_id: str = Query(...),
+    payload: dict = None,
+):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在", "detail": {}},
+        )
+    locations = list(data.get("locations", []))
+    target_idx = next(
+        (i for i, l in enumerate(locations) if l.get("id") == location_id),
+        None,
+    )
+    if target_idx is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "LOCATION_NOT_FOUND",
+                    "message": f"location {location_id} 不存在", "detail": {}},
+        )
+
+    merged_loc = {**locations[target_idx], **(payload or {})}
+    locations[target_idx] = merged_loc
+    data["locations"] = locations
+
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    updated = next(l for l in validated.locations if l.id == location_id)
+    return {"error": False, "code": "OK", "message": "location 已更新",
+            "detail": updated.model_dump(by_alias=True)}
+
+
+@router.delete("/map/location/{location_id}")
+async def delete_location(
+    location_id: str,
+    project_id: str = Query(...),
+):
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在", "detail": {}},
+        )
+
+    # 检查 route 引用
+    routes = data.get("routes", [])
+    referenced_by = [r["id"] for r in routes if r.get("from") == location_id or r.get("to") == location_id]
+    if referenced_by:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "LOCATION_REFERENCED_BY_ROUTES",
+                    "message": f"location {location_id} 被 {len(referenced_by)} 条 route 引用, 请先删除相关路线",
+                    "detail": {"referencing_route_ids": referenced_by}},
+        )
+
+    locations = [l for l in data.get("locations", []) if l.get("id") != location_id]
+    data["locations"] = locations
+    # 同步删 POI
+    cascaded_pois = [p["id"] for p in data.get("pois", []) if p.get("parent_location_id") == location_id]
+    if cascaded_pois:
+        data["pois"] = [p for p in data.get("pois", []) if p.get("parent_location_id") != location_id]
+
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "location 已删除",
+            "detail": {"deleted_id": location_id, "cascaded_poi_removals": cascaded_pois}}

@@ -82,6 +82,72 @@ def test_generate_map_returns_400_when_no_world():
     assert r.status_code in (400, 422)
 
 
+def test_patch_location_updates_field():
+    """PATCH /map/location/{id} 只更新传入字段,其他 byte-preserve。"""
+    from backend.config import settings as s
+    import json as _json
+    proj_dir = s.projects_dir / PROJ
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "map.json").write_text(_json.dumps({
+        "schema_version": "1.0",
+        "project_id": PROJ,
+        "regions": [],
+        "locations": [{
+            "id": "loc_a", "name": "A", "type": "city",
+            "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+        }],
+        "routes": [], "pois": [], "location_states": [],
+        "snapshots": [], "footprints": [], "assertions": [], "change_log": [],
+        "display": {"positions": {}},
+        "settings": {"mode": "allow_alias_new", "scope_enabled": False,
+                     "allowed_region_ids": [], "chapter_new_location_cap": 5,
+                     "reuse_rate_target": 0.6, "strict_geo": False},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    r = client.patch(
+        f"/api/stage2/map/location/loc_a?project_id={PROJ}",
+        json={"name": "新名字"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["detail"]["name"] == "新名字"
+    assert body["detail"]["type"] == "city"  # 未传字段 byte-preserve
+
+
+def test_delete_location_referenced_by_route_returns_422():
+    """删除被 route 引用的 location → 422 LOCATION_REFERENCED_BY_ROUTES。"""
+    from backend.config import settings as s
+    import json as _json
+    proj_dir = s.projects_dir / PROJ
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "map.json").write_text(_json.dumps({
+        "schema_version": "1.0",
+        "project_id": PROJ,
+        "regions": [],
+        "locations": [{
+            "id": "loc_a", "name": "A", "type": "city",
+            "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+        }],
+        "routes": [{
+            "id": "route_x", "from": "loc_a", "to": "loc_b",
+            "est_travel_minutes": 30, "distance_tier": "inter_city",
+        }],
+        "pois": [], "location_states": [],
+        "snapshots": [], "footprints": [], "assertions": [], "change_log": [],
+        "display": {"positions": {}},
+        "settings": {"mode": "allow_alias_new", "scope_enabled": False,
+                     "allowed_region_ids": [], "chapter_new_location_cap": 5,
+                     "reuse_rate_target": 0.6, "strict_geo": False},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    r = client.delete(
+        f"/api/stage2/map/location/loc_a?project_id={PROJ}",
+    )
+    assert r.status_code == 422
+    body = r.json()
+    assert body["detail"]["code"] == "LOCATION_REFERENCED_BY_ROUTES"
+
+
 def test_generate_map_invokes_planner_and_saves():
     """happy path: world.json exists + PlannerAgent mock returns → /generate-map writes map.json."""
     from backend.config import settings as s

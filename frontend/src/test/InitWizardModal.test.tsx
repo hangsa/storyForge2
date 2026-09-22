@@ -23,6 +23,7 @@ vi.mock("../api/client", () => ({
     getConcept: vi.fn(),
     getWorld: vi.fn(),
     getCharacter: vi.fn(),
+    getMap: vi.fn(),
     getNovelOutline: vi.fn(),
     getOutline: vi.fn(),
     // 2026-09-19:CreativeDivergenceStep 引入了 B3 系列端点。
@@ -90,6 +91,7 @@ beforeEach(() => {
   (api.getConcept as ReturnType<typeof vi.fn>).mockReset();
   (api.getWorld as ReturnType<typeof vi.fn>).mockReset();
   (api.getCharacter as ReturnType<typeof vi.fn>).mockReset();
+  (api.getMap as ReturnType<typeof vi.fn>).mockReset();
   (api.getNovelOutline as ReturnType<typeof vi.fn>).mockReset();
   (api.getOutline as ReturnType<typeof vi.fn>).mockReset();
   (api.regenerateConceptSection as ReturnType<typeof vi.fn>).mockReset();

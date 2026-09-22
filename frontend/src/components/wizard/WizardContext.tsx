@@ -76,8 +76,9 @@ const EMPTY_DATA: WizardData = {
   chapter_outline_progress: null,
 };
 
-// Maps each wizard data key to the step that owns it. step 5 (Map) owns no
-// data. Used by the STEP_COMPLETED reducer to clear downstream keys on resave.
+// Maps each wizard data key to the step that owns it. step 5 (行为示例 /
+// behavior examples) owns no data. Used by the STEP_COMPLETED reducer to clear
+// downstream keys on resave.
 //
 // 2026-09-19 砍掉概念DNA 步骤(原 step 2)— concept / story_dna 字段被移除,
 // 下游步骤编号统一 -1:

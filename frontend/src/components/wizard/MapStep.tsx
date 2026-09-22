@@ -27,6 +27,7 @@ export default function MapStep({ projectId }: MapStepProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showMermaid, setShowMermaid] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (mapData) return;
@@ -107,6 +108,13 @@ export default function MapStep({ projectId }: MapStepProps) {
         <PanelCard padding="sm">
           <div className="flex gap-2">
             <button
+              data-testid="map-settings"
+              onClick={() => setShowSettings(true)}
+              className="px-3 py-1 text-sm rounded border border-outline-variant hover:border-primary"
+            >
+              设定
+            </button>
+            <button
               data-testid="map-view-graph"
               onClick={() => setShowMermaid(true)}
               className="px-3 py-1 text-sm rounded border border-outline-variant hover:border-primary"
@@ -140,6 +148,13 @@ export default function MapStep({ projectId }: MapStepProps) {
         onClose={() => setShowMermaid(false)}
         mapData={mapData}
       />
+      {showSettings && (
+        <SettingsPanel
+          mapData={mapData}
+          setMapData={setMapData}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 }
@@ -404,5 +419,100 @@ function SnapshotsPanel({ mapData }: { mapData: MapPayload }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function SettingsPanel({
+  mapData,
+  setMapData,
+  onClose,
+}: {
+  mapData: MapPayload;
+  setMapData: (m: MapPayload) => void;
+  onClose: () => void;
+}) {
+  const [strictGeo, setStrictGeo] = useState(mapData.settings.strict_geo);
+  const [cap, setCap] = useState(mapData.settings.chapter_new_location_cap);
+  const [mode, setMode] = useState(mapData.settings.mode);
+
+  const handleSave = async () => {
+    const updated = await api.patchMapSettings(mapData.project_id, {
+      strict_geo: strictGeo,
+      chapter_new_location_cap: cap,
+      mode,
+    });
+    setMapData({
+      ...mapData,
+      settings: { ...mapData.settings, ...updated },
+    });
+    onClose();
+  };
+
+  return (
+    <div
+      data-testid="settings-backdrop"
+      onClick={onClose}
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    >
+      <div
+        data-testid="settings-modal"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-surface-container rounded-lg shadow-xl p-6 max-w-md w-full"
+      >
+        <h2 className="text-lg font-medium mb-4">地图设定</h2>
+        <div className="space-y-4">
+          <label className="flex items-center gap-2">
+            <input
+              data-testid="settings-strict-geo"
+              type="checkbox"
+              checked={strictGeo}
+              onChange={(e) => setStrictGeo(e.target.checked)}
+            />
+            <span className="text-sm">strict_geo 模式(Stage 4 启动时 map 缺失则硬阻断)</span>
+          </label>
+          <label className="block">
+            <span className="text-sm">每章新增地点上限</span>
+            <input
+              data-testid="settings-cap"
+              type="number"
+              min={1}
+              max={20}
+              value={cap}
+              onChange={(e) => setCap(parseInt(e.target.value, 10) || 5)}
+              className="ml-2 w-20 border rounded px-2 py-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm">新地点处理模式</span>
+            <select
+              data-testid="settings-mode"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as typeof mode)}
+              className="ml-2 border rounded px-2 py-1"
+            >
+              <option value="strict_geo">strict_geo</option>
+              <option value="allow_alias_new">allow_alias_new</option>
+              <option value="freeze_locations">freeze_locations</option>
+            </select>
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            data-testid="settings-cancel"
+            onClick={onClose}
+            className="px-3 py-1 text-sm border border-outline-variant rounded"
+          >
+            取消
+          </button>
+          <button
+            data-testid="settings-save"
+            onClick={handleSave}
+            className="px-3 py-1 text-sm bg-primary text-on-primary rounded"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

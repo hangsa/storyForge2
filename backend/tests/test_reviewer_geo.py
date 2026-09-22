@@ -43,3 +43,82 @@ def test_existing_six_checks_can_be_invoked_without_kind_kwarg():
     r6 = agent.check_6_semantic_precheck_review(precheck_result=None)
     for r in [r1, r2, r3, r4, r5, r6]:
         assert r.kind == "info"
+
+def test_check_7_geo_no_implicit_teleport_returns_blocker_when_no_route():
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    map_data = {
+        "schema_version": "1.0",
+        "project_id": "proj_x",
+        "locations": [
+            {"id": "loc_a", "name": "A", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [], "factions": []},
+            {"id": "loc_b", "name": "B", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [], "factions": []},
+        ],
+        "routes": [],
+    }
+    scene_ctx = {"routes": [{"from": "loc_a", "to": "loc_b"}]}
+    r = agent.check_7_geo_no_implicit_teleport(map_data, scene_ctx)
+    assert r.check_id == 7
+    assert r.kind == "blocker"
+    assert r.passed is False
+    assert "geo.no_implicit_teleport" in r.detail or "geo.no_implicit_teleport" in r.name
+
+
+def test_check_7_geo_no_implicit_teleport_returns_info_when_map_ctx_empty():
+    """map_ctx={} 时,9 条 check 全部 passed=True + kind=对应值(向后兼容)。"""
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    # map_data 是必要的(avoid TypeError),scene_ctx={} → 跳过
+    map_data = {"schema_version": "1.0", "project_id": "x",
+                "locations": [], "routes": [], "location_states": []}
+    r = agent.check_7_geo_no_implicit_teleport(map_data, {})
+    assert r.passed is True
+    assert r.kind == "blocker"   # 即使通过也保留 kind="blocker" 元信息
+
+
+def test_all_nine_check_7_geo_methods_exist():
+    """ReviewerAgent 必须有 check_7_geo_* 全部 9 个方法。"""
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    expected = [
+        "check_7_geo_no_implicit_teleport",
+        "check_7_geo_forbidden_access",
+        "check_7_geo_time_budget_exceeded",
+        "check_7_geo_distance_unrealistic",
+        "check_7_geo_climate_mismatch",
+        "check_7_geo_density_high",
+        "check_7_geo_alias_added",
+        "check_7_geo_faction_attitude_shift",
+        "check_7_geo_poi_discovered",
+    ]
+    for name in expected:
+        assert hasattr(agent, name), f"Missing method: {name}"
+
+
+def test_each_check_7_method_returns_checkresult_with_kind():
+    """9 个方法在 empty map_ctx={} 时都返回 CheckResult(kind=对应值, passed=True)。"""
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    map_data = {"schema_version": "1.0", "project_id": "x",
+                "locations": [], "routes": [], "location_states": [],
+                "regions": [], "settings": {}}
+    pairs = [
+        ("check_7_geo_no_implicit_teleport", "blocker"),
+        ("check_7_geo_forbidden_access", "blocker"),
+        ("check_7_geo_time_budget_exceeded", "blocker"),
+        ("check_7_geo_distance_unrealistic", "warning"),
+        ("check_7_geo_climate_mismatch", "warning"),
+        ("check_7_geo_density_high", "warning"),
+        ("check_7_geo_alias_added", "info"),
+        ("check_7_geo_faction_attitude_shift", "info"),
+        ("check_7_geo_poi_discovered", "info"),
+    ]
+    for method_name, expected_kind in pairs:
+        method = getattr(agent, method_name)
+        r = method(map_data, {})
+        assert r.kind == expected_kind, f"{method_name}: expected kind={expected_kind}, got {r.kind}"
+        assert r.passed is True

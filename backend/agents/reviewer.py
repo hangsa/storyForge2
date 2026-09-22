@@ -713,3 +713,67 @@ class ReviewerAgent(BaseAgent):
             hints.append(f"[{c.name}] {c.detail}")
 
         return "请修复以下问题后重写：\n" + "\n".join(f"  - {h}" for h in hints)
+
+
+# --- v2.x Plan 3 M5: Map 9-rule check wrappers ---
+
+from backend.map_system.assertions import (  # noqa: E402
+    assert_route_exists,
+    assert_accessible,
+    assert_chapter_time_budget,
+    assert_distance_consistent,
+    assert_climate_matches,
+    assert_density_ok,
+    assert_alias_discovered,
+    assert_faction_stance_change,
+    assert_poi_discovered,
+    run_geo_checks,
+)
+
+
+def _make_check_7_method(name: str, kind: str, filter_code: str):
+    """生成 check_7_geo_* 方法的闭包。
+
+    这些方法读 scene_context 中预过滤的字段,直接调用对应 assert_*。
+    """
+    def _method(self, map_data: dict, scene_context: dict) -> CheckResult:
+        if not scene_context:
+            return CheckResult(
+                check_id=7, name=name, passed=True, detail="", kind=kind,
+            )
+        # 委托给 run_geo_checks() 然后过滤
+        all_results = run_geo_checks(map_data, scene_context)
+        matched = [r for r in all_results if r.code == filter_code]
+        if not matched:
+            return CheckResult(
+                check_id=7, name=name, passed=True, detail="", kind=kind,
+            )
+        detail = f"[{filter_code}] " + "; ".join(r.message for r in matched)
+        return CheckResult(
+            check_id=7, name=name, passed=False, detail=detail, kind=kind,
+        )
+    _method.__name__ = name
+    return _method
+
+
+def _attach_geo_check_methods():
+    """把 9 个 check_7_geo_* 方法绑到 ReviewerAgent 类。"""
+    pairs = [
+        ("check_7_geo_no_implicit_teleport", "blocker", "geo.no_implicit_teleport"),
+        ("check_7_geo_forbidden_access", "blocker", "geo.forbidden_access"),
+        ("check_7_geo_time_budget_exceeded", "blocker", "geo.time_budget_exceeded"),
+        ("check_7_geo_distance_unrealistic", "warning", "geo.distance_unrealistic"),
+        ("check_7_geo_climate_mismatch", "warning", "geo.climate_mismatch"),
+        ("check_7_geo_density_high", "warning", "geo.density_high"),
+        ("check_7_geo_alias_added", "info", "geo.alias_added"),
+        ("check_7_geo_faction_attitude_shift", "info", "geo.faction_attitude_shift"),
+        ("check_7_geo_poi_discovered", "info", "geo.poi_discovered"),
+    ]
+    for method_name, kind, code in pairs:
+        method = _make_check_7_method(method_name, kind, code)
+        setattr(ReviewerAgent, method_name, method)
+
+
+# 绑定到已经定义好的 ReviewerAgent 类
+_attach_geo_check_methods()
+del _attach_geo_check_methods

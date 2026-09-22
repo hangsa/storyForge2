@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A typical session walks three pages:
 
 1. **`/`** — `HomePage` (`frontend/src/pages/HomePage.tsx`). Project entry. Layout: `StatsSidebar` (left rail with stats + refresh + Prompt Plaza / AI Console / More Actions triggers) + `CreateProjectCard` + `BookShelf` (sortable/filterable **table** of all projects, with bulk-delete). Replaces the older `InitPage` route.
-2. **`/project/:id/wizard`** — `WizardDeepLinkPage`. Deep-linkable init wizard (concept → world → characters → outline → behavior examples → enter workspace). Each step is a component under `frontend/src/components/wizard/` (`InitWizardModal`, `ConceptStep`, `WorldStep`, `CharacterStep`, `OutlineStep`, `MapStep`, `BehaviorExamplesSection`, `ChapterOutlineStep`, `WizardContext`, `WizardSteps`).
+2. **`/project/:id/wizard`** — `WizardDeepLinkPage`. Deep-linkable init wizard (concept → world → characters → **map** → outline → behavior examples → enter workspace). Each step is a component under `frontend/src/components/wizard/` (`InitWizardModal`, `ConceptStep`, `WorldStep`, `CharacterStep`, `OutlineStep`, `MapStep`, `BehaviorExamplesSection`, `ChapterOutlineStep`, `WizardContext`, `WizardSteps`).
 3. **`/project/:id/workspace`** — `WorkspacePage`. The project's day-to-day cockpit. Layout: `WorkspaceTopBar` + `WorkspaceLayout` with `ChapterTreePanel` (left), `WritingArea` (center, switches between `ManualStartModal`/`AutopilotMiddlePanel`/`ChapterStreamPanel`), `ContextPanel` (right), `ModeSwitchConfirmModal` (manual ↔ managed switch). Top-level route, **NOT** wrapped in `MainLayout` (its own chrome).
 
 After the wizard finishes (step 6), the user lands in the workspace at the appropriate mode — usually **managed** (autopilot) for hands-off writing, or **manual** for one-off chapter editing.
@@ -76,6 +76,7 @@ The autopilot SSE channel is the **same broadcaster** that `/chapter-stream` sub
 - **Outline Context** — `backend/outline_context/`: `builder.py`, `volumes.py`. Splits the full outline into per-volume chunks for context assembly.
 - **Services** — `backend/services/`: `agent_prompt_stores.py`, `global_prompt_override_store.py`, `llm_config.py`, `llm_usage_log.py`, `prompt_override_store.py`.
 - **Cross-cutting LLM infra** — `backend/llm/openai_compatible_provider.py`, `mock_provider.py` added; providers can also be added dynamically via the env-var prefix (above).
+- **Map System** — `backend/map_system/`(M1+M2+M3+M6,M4/M5 见后续 plan):9 类地理实体 (Map/Region/Location/Route/POI/LocationState/Footprint/Assertion/ChangeLog),单文件 `map.json` + `map_snapshots/chapter_NNN.json` 章节快照/回滚。Wizard Step 4(`MapStep.tsx`)暴露 5 Tab(区域/地点/路线/POI/快照)+ Mermaid 拓扑 modal。`PlannerAgent.generate_map()` 经 Tier-1 prompt(`map_generation.yaml`)生成初始 5-15 region + 20-40 location。`POST /map/snapshot/{chapter}` + `POST /map/rollback/{chapter}` 提供不可逆回滚。`strict_geo: false` 默认 OFF,老项目无 map.json 不报错。
 
 ## Key Design: SF_LOG Tags
 

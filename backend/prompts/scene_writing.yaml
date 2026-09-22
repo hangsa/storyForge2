@@ -50,6 +50,17 @@ system_prompt: |
      不得以"符合网文惯例"为由忽略。【用户修改意见】为空时，按上述核心要求与
      写作风格默认生成。
 
+  §9.4 地图一致性自查(Plan 2 M4):
+    a. 用户的「地图卡」段若提供了【当前】行,该行就是你必须站定的地点;
+       不要写角色瞬移到地图上不存在的地点。
+    b. 【可移动】行列出了从当前位置可到达的地点;若角色本场要移动,只能
+       选择其中之一(或在「地图卡」为空时按剧情需要自由虚构,但需在文中
+       嵌入 SF_LOG character_location_change 标签)。
+    c. 【一致性提醒】行告诉你本场已确认角色-地点映射;SF_LOG
+       character_location_change 的 from/to 必须与此一致。
+    d. 若【地图卡】完全为空,意味着项目暂无地图约束,按剧情自由创作,
+       但仍然必须用 SF_LOG character_location_change 标记所有角色移动。
+
 user_prompt_template: |
   【故事背景】
   - 类型：{genre}
@@ -106,6 +117,9 @@ user_prompt_template: |
 
   【本场节奏约束】
   {genre_pacing_scene}
+
+  【地图卡 (Plan 2 M4)】
+  {map_card}
 
   {user_modifications}
 

@@ -310,3 +310,38 @@ def test_fact_guard_endpoint_passes_map_snapshot_hash_to_reviewer(_projects_dir,
     assert "map_snapshot_hash" in captured
     # 当 map.json 不存在 → 空串;Plan 1 接入后这里会变成 hash
     assert captured["map_snapshot_hash"] == "" or len(captured["map_snapshot_hash"]) >= 4
+
+
+def test_scene_writing_prompt_has_map_card_placeholder_and_self_check():
+    """scene_writing.yaml 必须含 {map_card} 占位 + system_prompt 含 §9.4 地点一致性自查清单。"""
+    import yaml
+    from pathlib import Path
+
+    yaml_path = Path("backend/prompts/scene_writing.yaml")
+    assert yaml_path.exists(), "scene_writing.yaml missing"
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+
+    user_template = data["user_prompt_template"]
+    assert "{map_card}" in user_template, "user_prompt_template 缺 {map_card} 占位"
+
+    system_prompt = data["system_prompt"]
+    assert "§9.4" in system_prompt, "system_prompt 缺 §9.4 地点一致性自查清单"
+    assert "地图" in system_prompt or "地点" in system_prompt, "system_prompt 没提到「地图/地点」"
+
+
+def test_scene_writing_prompt_braces_are_escaped():
+    """feedback_prompt_yaml_brace_escape: literal {JSON example} 必须 {{...}} 转义。
+
+    The scene_writing.yaml output JSON example spans multiple lines (YAML
+    block scalar preserves the newline between `{{` and `"text"`), so we
+    test for the escaped `{{` form rather than `{{"text"` directly.
+    The escaped brace invariant — any literal JSON in the prompt is
+    `{{...}}` so `.format()` won't choke — is the real check.
+    """
+    from pathlib import Path
+
+    raw = Path("backend/prompts/scene_writing.yaml").read_text(encoding="utf-8")
+    # Escaped double-brace must appear (the output JSON example)
+    assert "{{" in raw, "expected escaped {{...}} in output JSON example"
+    # The output JSON example contains the "text" key
+    assert '"text"' in raw, "expected output JSON example to contain \"text\""

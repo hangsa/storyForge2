@@ -61,12 +61,22 @@ class MemoryCoordinator:
         scene_conflict: str = "",
         character_names: Optional[list[str]] = None,
         chapter_number: int = 1,
+        scene_location: Optional[str] = None,
+        character_id: Optional[str] = None,
     ) -> MemoryContext:
         """
         Assemble full memory context for a scene write request.
 
         Returns MemoryContext with all tier strings populated.
         Each tier failure is caught independently.
+
+        Optional kwargs (backward-compatible — call sites may omit):
+          - scene_location: canonical location name; if present and the
+            project has a map.json, a 地图卡 (map card) is appended to
+            l2_context for the Writer to see. Failure to build is
+            non-fatal.
+          - character_id: optional character scope, passed through to
+            the map card for footprint row.
         """
         ctx = MemoryContext()
         character_names = character_names or []
@@ -94,6 +104,26 @@ class MemoryCoordinator:
 
         # Growth stage hint
         ctx.growth_stage_hint = self._compute_growth_stage(chapter_number)
+
+        # Map card — appended at end of l2_context so Writer sees it last
+        # (closest to the prose section in the rendered prompt). Only
+        # fires when caller passes scene_location AND the project has a
+        # map.json. Failure to build the card is non-fatal (caller still
+        # gets the rest of the memory tiers).
+        if scene_location:
+            try:
+                from backend.map_system.map_card import build_map_card
+                card = build_map_card(
+                    self.project_id,
+                    scene_location,
+                    chapter_number=chapter_number,
+                    character_id=character_id,
+                )
+                if card:
+                    prefix = ctx.l2_context.rstrip()
+                    ctx.l2_context = (prefix + "\n\n## 地图卡\n" + card) if prefix else ("## 地图卡\n" + card)
+            except Exception as e:
+                logger.warning("build_map_card failed (non-blocking): %s", e)
 
         return ctx
 

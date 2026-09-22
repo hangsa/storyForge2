@@ -57,6 +57,12 @@ vi.mock("../api/client", () => ({
       ...patch,
     })),
     deleteMapLocation: vi.fn().mockResolvedValue({ deleted_id: "loc_a" }),
+    getMapSnapshots: vi.fn().mockResolvedValue([]),
+    rollbackMap: vi.fn().mockResolvedValue({
+      chapter: 3,
+      restored_locations: 12,
+      restored_routes: 5,
+    }),
   },
 }));
 
@@ -68,6 +74,12 @@ beforeEach(() => {
   (api.getMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
   (api.generateMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
   (api.updateMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  (api.getMapSnapshots as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+  (api.rollbackMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    chapter: 3,
+    restored_locations: 12,
+    restored_routes: 5,
+  });
 });
 
 describe("MapStep empty state (no map generated yet)", () => {
@@ -247,6 +259,89 @@ describe("MapStep multi-tab coverage", () => {
     );
     const snapshotsTab = screen.getByText("快照");
     fireEvent.click(snapshotsTab);
-    expect(screen.getByTestId("snapshots-list")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.getMapSnapshots).toHaveBeenCalled(),
+    );
+    // Empty list shows the "暂无快照" copy instead of <ul>:
+    expect(screen.queryByTestId("snapshots-list")).not.toBeInTheDocument();
+    expect(screen.getByText("暂无快照")).toBeInTheDocument();
+  });
+});
+
+describe("MapStep snapshots tab", () => {
+  function renderMapStep() {
+    (api.getMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(SAMPLE_MAP);
+    return render(
+      <WizardProvider projectId="proj_test">
+        <MapStep projectId="proj_test" />
+      </WizardProvider>,
+    );
+  }
+
+  it("lists snapshots with rollback buttons per row", async () => {
+    (api.getMapSnapshots as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      {
+        chapter: 3,
+        created_at: "2026-09-20T10:00:00Z",
+        snapshot_hash: "abc1234567ab",
+        locations_count: 12,
+        routes_count: 5,
+      },
+      {
+        chapter: 7,
+        created_at: "2026-09-21T15:00:00Z",
+        snapshot_hash: "def4567890cd",
+        locations_count: 14,
+        routes_count: 6,
+      },
+    ]);
+
+    renderMapStep();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    const snapshotsTab = screen.getByText("快照");
+    fireEvent.click(snapshotsTab);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("snapshots-list")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("snapshot-row-3")).toBeInTheDocument();
+    expect(screen.getByTestId("snapshot-row-7")).toBeInTheDocument();
+    expect(screen.getByText("12 地 / 5 路")).toBeInTheDocument();
+    expect(screen.getByText("14 地 / 6 路")).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^rollback-\d+$/)).toHaveLength(2);
+  });
+
+  it("opens rollback confirm modal and calls api.rollbackMap on confirm", async () => {
+    (api.getMapSnapshots as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      {
+        chapter: 3,
+        created_at: "2026-09-20T10:00:00Z",
+        snapshot_hash: "abc1234567ab",
+        locations_count: 12,
+        routes_count: 5,
+      },
+    ]);
+
+    renderMapStep();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByText("快照"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("snapshot-row-3")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("rollback-3"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("rollback-confirm-modal")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("rollback-confirm"));
+
+    await waitFor(() =>
+      expect(api.rollbackMap).toHaveBeenCalledWith("proj_test", 3),
+    );
   });
 });

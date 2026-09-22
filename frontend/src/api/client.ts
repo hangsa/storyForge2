@@ -374,6 +374,15 @@ export interface MapSnapshotIndex {
   snapshot_path: string;
 }
 
+// 2026-09-22:T23 — list_snapshots() return shape
+export interface ApiMapSnapshot {
+  chapter: number;
+  created_at: string;
+  snapshot_hash: string;
+  locations_count: number;
+  routes_count: number;
+}
+
 export interface MapPayload {
   schema_version: "1.0";
   project_id: string;
@@ -1431,6 +1440,28 @@ export const api = {
       "POST",
       `/stage2/regenerate-map-section?project_id=${encodeURIComponent(projectId)}`,
       { section, index, user_modifications: userModifications },
+    ),
+
+  // 2026-09-22:T23 — snapshots list / snapshot create / rollback
+  getMapSnapshots: (projectId: string): Promise<ApiMapSnapshot[]> =>
+    request<ApiMapSnapshot[]>("GET", `/stage2/map/snapshots?project_id=${encodeURIComponent(projectId)}`),
+
+  snapshotMap: (
+    projectId: string,
+    chapter: number,
+  ): Promise<{ chapter: number; snapshot_path: string; snapshot_hash: string }> =>
+    request<{ chapter: number; snapshot_path: string; snapshot_hash: string }>(
+      "POST",
+      `/stage2/map/snapshot/${chapter}?project_id=${encodeURIComponent(projectId)}`,
+    ),
+
+  rollbackMap: (
+    projectId: string,
+    chapter: number,
+  ): Promise<{ chapter: number; restored_locations: number; restored_routes: number }> =>
+    request<{ chapter: number; restored_locations: number; restored_routes: number }>(
+      "POST",
+      `/stage2/map/rollback/${chapter}?project_id=${encodeURIComponent(projectId)}`,
     ),
 
   updateCharacter: (projectId: string, characterData: CharacterSet) =>

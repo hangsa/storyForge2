@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api, { MapPayload, MapLocation, MapRegion, MapRoute, MapPOI } from "../../api/client";
+import api, { MapPayload, MapLocation, MapRegion, MapRoute, MapPOI, ApiMapSnapshot } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import { PanelCard } from "../ds";
 import { SubTabStrip } from "../shared/SubTabStrip";
@@ -140,7 +140,13 @@ export default function MapStep({ projectId }: MapStepProps) {
         {activeKey === "regions" && <RegionsPanel mapData={mapData} setMapData={setMapData} />}
         {activeKey === "routes" && <RoutesPanel mapData={mapData} setMapData={setMapData} />}
         {activeKey === "pois" && <PoisPanel mapData={mapData} setMapData={setMapData} />}
-        {activeKey === "snapshots" && <SnapshotsPanel mapData={mapData} />}
+        {activeKey === "snapshots" && (
+          <SnapshotsPanel
+            mapData={mapData}
+            setMapData={setMapData}
+            setError={setError}
+          />
+        )}
       </div>
 
       <MermaidMapModal
@@ -407,18 +413,130 @@ function PoisPanel({
   );
 }
 
-function SnapshotsPanel({ mapData }: { mapData: MapPayload }) {
+function SnapshotsPanel({
+  mapData,
+  setMapData,
+  setError,
+}: {
+  mapData: MapPayload;
+  setMapData: (m: MapPayload) => void;
+  setError: (e: string | null) => void;
+}) {
+  const [snapshots, setSnapshots] = useState<ApiMapSnapshot[]>([]);
+  const [rollbackTarget, setRollbackTarget] = useState<ApiMapSnapshot | null>(null);
+  const [rolling, setRolling] = useState(false);
+
+  const fetchSnapshots = async () => {
+    try {
+      const items = await api.getMapSnapshots(mapData.project_id);
+      setSnapshots(items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "加载快照失败");
+    }
+  };
+
+  useEffect(() => {
+    fetchSnapshots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapData.project_id]);
+
+  const handleRollbackConfirm = async () => {
+    if (!rollbackTarget) return;
+    setRolling(true);
+    try {
+      await api.rollbackMap(mapData.project_id, rollbackTarget.chapter);
+      setRollbackTarget(null);
+      // Refetch current map.json so changes propagate
+      const fresh = await api.getMap(mapData.project_id);
+      if (fresh && Object.keys(fresh).length > 0) {
+        setMapData(fresh as MapPayload);
+      }
+      await fetchSnapshots();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "回滚失败");
+    } finally {
+      setRolling(false);
+    }
+  };
+
   return (
-    <ul data-testid="snapshots-list" className="space-y-2">
-      {mapData.snapshots.length === 0 && (
-        <li className="text-sm text-on-surface-variant">暂无快照</li>
+    <div data-testid="snapshots-panel" className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium">章节快照</h3>
+        <button
+          data-testid="snapshots-refresh"
+          onClick={fetchSnapshots}
+          className="px-3 py-1 text-sm border border-outline-variant rounded"
+        >
+          刷新
+        </button>
+      </div>
+      {snapshots.length === 0 ? (
+        <p className="text-sm text-on-surface-variant">暂无快照</p>
+      ) : (
+        <ul data-testid="snapshots-list" className="space-y-2">
+          {snapshots.map((s) => (
+            <li
+              key={s.chapter}
+              data-testid={`snapshot-row-${s.chapter}`}
+              className="p-3 border border-outline-variant rounded flex items-center gap-3"
+            >
+              <span className="font-mono text-sm">第 {s.chapter} 章</span>
+              <span className="text-xs text-on-surface-variant">{s.snapshot_hash}</span>
+              <span className="text-xs">
+                {s.locations_count} 地 / {s.routes_count} 路
+              </span>
+              <span className="text-xs text-on-surface-variant ml-auto">
+                {s.created_at}
+              </span>
+              <button
+                data-testid={`rollback-${s.chapter}`}
+                onClick={() => setRollbackTarget(s)}
+                className="px-3 py-1 text-sm text-error hover:underline"
+              >
+                回滚
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
-      {mapData.snapshots.map(s => (
-        <li key={s.chapter} className="p-3 border border-outline-variant rounded">
-          第 {s.chapter} 章 · hash={s.map_hash.slice(0, 12)}…
-        </li>
-      ))}
-    </ul>
+      {rollbackTarget && (
+        <div
+          data-testid="rollback-confirm-backdrop"
+          onClick={() => !rolling && setRollbackTarget(null)}
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+        >
+          <div
+            data-testid="rollback-confirm-modal"
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container rounded-lg shadow-xl p-6 max-w-md w-full space-y-3"
+          >
+            <h4 className="font-medium">确认回滚到第 {rollbackTarget.chapter} 章?</h4>
+            <p className="text-sm text-on-surface-variant">
+              当前 map.json 将被覆盖。原版仍保留在 map_snapshots/chapter_{rollbackTarget.chapter}.json。
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                data-testid="rollback-cancel"
+                onClick={() => setRollbackTarget(null)}
+                disabled={rolling}
+                className="px-3 py-1 text-sm border border-outline-variant rounded disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                data-testid="rollback-confirm"
+                onClick={handleRollbackConfirm}
+                disabled={rolling}
+                className="px-3 py-1 text-sm bg-primary text-on-primary rounded disabled:opacity-50"
+              >
+                {rolling ? "回滚中…" : "确认回滚"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

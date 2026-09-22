@@ -161,3 +161,77 @@ def build_recent_chapters_context(
                     entry += f"（{beat}）"
         lines.append(entry)
     return "\n".join(lines)
+
+
+def build_chapter_outline_context(
+    project_id: str,
+    chapter_number: int,
+    scene_location: Optional[str] = None,
+    character_id: Optional[str] = None,
+) -> str:
+    """Render the chapter-outline context for the chapter-planning prompt.
+
+    Composes (in order):
+      1. Volume context  (current + adjacent volumes + plot points)
+      2. Recent-chapters context (last 3 in same volume)
+      3. Current chapter title / theme / scene sequence
+      4. Map card (if project has a map.json AND scene_location resolves)
+
+    Returns "" on missing project / missing novel_outline.json.
+    """
+    from backend.config import settings
+    from backend.map_system.map_card import build_map_card
+
+    project_dir = settings.projects_dir / project_id
+    outline_path = project_dir / "novel_outline.json"
+    if not outline_path.exists():
+        return ""
+
+    novel_outline = json.loads(outline_path.read_text(encoding="utf-8"))
+
+    volumes = parse_volumes(novel_outline)
+    current_volume = locate_volume(chapter_number, volumes)
+
+    sections: list[str] = []
+    sections.append(build_volume_context(novel_outline, chapter_number))
+    sections.append(build_recent_chapters_context(novel_outline, chapter_number, current_volume))
+
+    raw = (novel_outline.get("chapters") or []) if isinstance(novel_outline, dict) else []
+    this_chapter = next(
+        (c for c in raw
+         if isinstance(c, dict) and c.get("chapter_number") == chapter_number),
+        None,
+    )
+    if this_chapter:
+        title = str(this_chapter.get("title") or "").strip()
+        theme = str(this_chapter.get("theme") or "").strip()
+        scenes = this_chapter.get("scene_plan") or []
+        lines = ["## 当前章节"]
+        if title:
+            lines.append(f"- 标题: {title}")
+        if theme:
+            lines.append(f"- 主题: {theme}")
+        if scenes:
+            lines.append(f"- 场景数: {len(scenes)}")
+        sections.append("\n".join(lines))
+
+    if scene_location:
+        card = build_map_card(
+            project_id,
+            scene_location,
+            chapter_number=chapter_number,
+            character_id=character_id,
+        )
+        if card:
+            sections.append("## 地图卡\n" + card)
+
+    out = "\n\n".join(s for s in sections if s)
+    return out.strip()
+
+
+__all__ = [
+    "build_volume_context",
+    "build_recent_chapters_context",
+    "build_chapter_outline_context",
+    "RECENT_CHAPTERS_WINDOW",
+]

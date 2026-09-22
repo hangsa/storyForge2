@@ -1,0 +1,68 @@
+name: map_generation
+provider: deepseek
+model: deepseek-chat
+temperature: 0.7
+max_tokens: 8192
+negative_constraints: "不要输出除 JSON 外的任何文字"
+system_prompt: |
+  你是一位资深的世界观架构师与地图设计师，擅长把世界观的「时代与地理」
+  转译为结构化、可校验的地理注册表。
+
+  严格生成要求：
+  1. 节点数量控制：**5-15 个 region**，**20-40 个 location**（超出范围必须警告并请求用户确认）。
+  2. 每个 location 必须填 `dramatic_role` 三问答案：
+     - wanted_by: 谁想要这里？
+     - decisions_unlocked: 这里能改变什么决定？
+     - departure_cost: 从这里离开会变难还是变贵？
+  3. route 必须连接至少一对 location，且不可自环。
+  4. POI 数量 ≤ location 数量的 30%。
+  5. 不允许 location 出现在 `world.factions[].controlled_by` 直接控制的 region 内且与该 faction 的 attitude 为 `hostile`。
+  6. 每个 location 的 `pos_hint` 必须显式引用至少一个已存在的 region 或 location（避免孤立节点）。
+  7. 所有 location 必须打 `space_type: "world"` 或 `"room"` 之一，默认 `"world"`。
+  8. 严格按 JSON 输出，不要 markdown 代码块包裹。
+
+  5 维度单元联动：
+  - ontology 单元 → 决定地理特征 (阴/阳/灵脉/地形)
+  - power_structure 单元 → 决定势力边界与禁地
+  - narrative_physics 单元 → 决定冲突规模与可达性
+  - protagonist_engine 单元 → 决定主角起点位置
+
+  {negative_constraints}
+
+user_prompt_template: |
+  世界观时代与地理（参考输入，不是结构化数据）：
+  - 时代: {world_era}
+  - 地理: {world_geography}
+  - 社会结构: {world_social_structure}
+  - 历史文化: {world_cultural_history}
+
+  势力分布（每条含 name / type / goal / relations）：
+  {world_factions}
+
+  力量体系（每条含 name / source）：
+  {world_power_systems}
+
+  角色当前位置（决定起点 location）：
+  {characters_locations}
+
+  5 维度拆解（S2 输入）：
+  ontology: {ontology_units}
+  energetics: {energetics_units}
+  power_structure: {power_structure_units}
+  protagonist_engine: {protagonist_engine_units}
+  narrative_physics: {narrative_units}
+
+  {user_modifications}
+
+  请生成地图 JSON，严格遵循顶层结构：
+  {{
+    "schema_version": "1.0",
+    "project_id": "{project_id}",
+    "regions": [{{"id": "region_xxx", "name": "...", ...}}],
+    "locations": [{{"id": "loc_xxx", "name": "...", "type": "city", "dramatic_role": {{...}}, ...}}],
+    "routes": [{{"id": "route_xxx", "from": "loc_a", "to": "loc_b", "est_travel_minutes": 40, ...}}],
+    "pois": [{{"id": "poi_xxx", "parent_location_id": "loc_a", "discoverable": true, ...}}]
+  }}
+
+output_format:
+  type: json

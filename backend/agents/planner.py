@@ -390,6 +390,67 @@ class PlannerAgent(BaseAgent):
         self.log_usage("world_generation", response)
         return result, response
 
+    async def generate_map(
+        self,
+        world: dict,
+        characters: list[dict],
+        user_modifications: str = "",
+    ) -> tuple[dict, LLMResponse]:
+        """Generate world via the existing 'map_generation' prompt.
+        Carries world.erz + factions + characters' starting locations as context.
+
+        Returns (map_payload, llm_response_meta).
+        """
+        from backend.agents._injection_helpers import _build_user_modifications_block
+        from backend.outline_context.builder import build_recent_chapters_context
+        from backend.outline_context.volumes import parse_volumes, locate_volume
+
+        # 5 维度单元从 world 元数据读（若可用）。b3_state 已在 _load_decompose_data
+        # 抽取，本方法只读 world 字段，decompose_data 由调用方注入（后续 plan 接）。
+        # 暂走空字符串占位，LLM 用 world 自身信息生成。
+        decompose_data = {}
+
+        # 角色起点位置 — bare string name
+        chars_locations = [
+            f"- {c.get('name', '?')}: {c.get('current_state', {}).get('location', '')}"
+            for c in characters
+            if c.get('name')
+        ]
+        characters_locations = "\n".join(chars_locations) or "（无）"
+
+        # 势力 fulltext
+        factions_json = json.dumps(
+            world.get("factions", []), ensure_ascii=False, indent=2,
+        )
+        # 力量体系 name + source
+        power_systems_json = json.dumps(
+            [
+                {"name": ps.get("name", ""), "source": ps.get("source", "energetics")}
+                for ps in iter_power_systems(world)
+            ],
+            ensure_ascii=False, indent=2,
+        )
+
+        result, response = await self.generate_from_template(
+            "map_generation",
+            project_id=self.project_id,
+            world_era=world.get("era", ""),
+            world_geography=world.get("geography", ""),
+            world_social_structure=world.get("era_social_structure", "") or "",
+            world_cultural_history=world.get("era_cultural_history", "") or "",
+            world_factions=factions_json,
+            world_power_systems=power_systems_json,
+            characters_locations=characters_locations,
+            user_modifications=_build_user_modifications_block(user_modifications),
+            ontology_units="（无）",
+            energetics_units="（无）",
+            power_structure_units="（无）",
+            protagonist_engine_units="（无）",
+            narrative_units="（无）",
+        )
+        self.log_usage("map_generation", response)
+        return result, response
+
     async def regenerate_power_system(
         self,
         concept: dict,

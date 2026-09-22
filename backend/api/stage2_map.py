@@ -3,15 +3,22 @@
 挂在 stage2 router,与其他 app 端点共用 prefix /api/stage2。Map 端点
 本身不需要 STAGE2 precondition(MapStep 可后向补做,见 PRD §0.5)。
 """
+import json
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel
 
 from backend.config import settings
 from backend.agents.planner import PlannerAgent
 from backend.map_system.models import Map as MapModel
-from backend.map_system.storage import load_map, save_map
+from backend.map_system.snapshots import (
+    list_snapshots,
+    rollback_map_to_chapter,
+    snapshot_map_at_chapter,
+)
+from backend.map_system.storage import _project_dir, load_map, save_map
 from backend.services.agent_prompt_stores import (
     global_override_store,
     project_override_store,
@@ -676,3 +683,60 @@ async def patch_settings(project_id: str = Query(...), payload: dict = None):
     save_map(project_id, validated)
     return {"error": False, "code": "OK", "message": "settings 已更新",
             "detail": validated.settings.model_dump()}
+
+
+@router.post("/map/snapshot/{chapter}")
+def api_map_snapshot(
+    chapter: int = Path(...),
+    project_id: str = Query(...),
+):
+    """章节级快照落盘(map_snapshots/chapter_NNN.json)。"""
+    try:
+        path = snapshot_map_at_chapter(project_id, chapter)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在,请先生成地图", "detail": {}},
+        )
+    body = json.loads(path.read_text(encoding="utf-8"))
+    return {"error": False, "code": "OK", "message": "snapshot 已落盘",
+            "detail": {
+                "chapter": chapter,
+                "snapshot_path": str(path),
+                "snapshot_hash": body["snapshot_hash"],
+            }}
+
+
+@router.get("/map/snapshots")
+def api_map_snapshots(project_id: str = Query(...)):
+    return {"error": False, "code": "OK", "message": "OK",
+            "detail": list_snapshots(project_id)}
+
+
+@router.post("/map/rollback/{chapter}")
+def api_map_rollback(
+    chapter: int = Path(...),
+    project_id: str = Query(...),
+):
+    """把 map.json 回滚到章节快照;同时写一份 rollback_log.json 到 map_snapshots/。"""
+    try:
+        restored = rollback_map_to_chapter(project_id, chapter)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "SNAPSHOT_NOT_FOUND",
+                    "message": f"chapter {chapter} 无快照", "detail": {}},
+        )
+    log_path = _project_dir(project_id) / "map_snapshots" / "rollback_log.json"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(json.dumps(
+        {"chapter": chapter, "rolled_back_at": datetime.now(timezone.utc).isoformat()},
+        ensure_ascii=False, indent=2,
+    ), encoding="utf-8")
+    return {"error": False, "code": "OK", "message": "rollback 完成",
+            "detail": {
+                "chapter": chapter,
+                "restored_locations": len(restored.locations),
+                "restored_routes": len(restored.routes),
+            }}

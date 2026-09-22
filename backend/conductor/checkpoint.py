@@ -27,6 +27,18 @@ class CheckpointManager:
         registry_snapshots: Optional[dict[str, list[dict]]] = None,
         character_states: Optional[list[dict]] = None,
     ) -> dict:
+        # map 快照 hash(只读,无 map.json 时保持空字符串)
+        map_snapshot_hash = ""
+        try:
+            from backend.map_system.snapshots import compute_map_hash
+            from backend.map_system.storage import load_map
+            raw_map = load_map(self.project_id)
+            if raw_map is not None:
+                from backend.map_system.models import Map
+                map_snapshot_hash = compute_map_hash(Map.model_validate(raw_map))[:12]
+        except Exception:
+            map_snapshot_hash = ""
+
         checkpoint = {
             "project_id": self.project_id,
             "pipeline_stage": pipeline_stage,
@@ -35,6 +47,7 @@ class CheckpointManager:
             "l0_snapshot": l0_snapshot or {},
             "registry_snapshots": registry_snapshots or {},
             "character_states": character_states or [],
+            "map_snapshot_hash": map_snapshot_hash,
             "timestamp": datetime.utcnow().isoformat(),
         }
 

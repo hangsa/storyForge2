@@ -435,6 +435,7 @@ class WriterAgent(BaseAgent):
         character_growth_context: str = "",
         custom_style_config_desc: str = "",
         outline_chapter: dict | None = None,
+        map_card: str = "",
     ) -> dict:
         core_contradiction = concept.get("story_dna", {}).get(
             "core_contradiction", {}
@@ -501,6 +502,7 @@ class WriterAgent(BaseAgent):
             "growth_stage_hint": growth_stage_hint,
             "character_growth_context": character_growth_context,
             "custom_style_config_desc": custom_style_config_desc,
+            "map_card": map_card,
         }
 
     async def write_scene(
@@ -524,6 +526,7 @@ class WriterAgent(BaseAgent):
         custom_style_config=None,
         outline_chapter: Optional[dict] = None,
         user_modifications: str = "",
+        map_card: str = "",
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         from backend.agents._injection_helpers import _build_user_modifications_block
@@ -534,6 +537,7 @@ class WriterAgent(BaseAgent):
             character_growth_context,
             custom_style_config_desc=_build_custom_style_desc(custom_style_config),
             outline_chapter=outline_chapter,
+            map_card=map_card,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["genre_pacing_scene"] = _resolve_genre_scene_pacing(genre)
@@ -564,6 +568,7 @@ class WriterAgent(BaseAgent):
         reader_os_warnings: str = "",
         custom_style_config=None,
         outline_chapter: Optional[dict] = None,
+        map_card: str = "",
         **kwargs,
     ) -> AsyncIterator[StreamChunk]:
         """Stream version of write_scene().
@@ -579,6 +584,7 @@ class WriterAgent(BaseAgent):
             character_growth_context,
             custom_style_config_desc=_build_custom_style_desc(custom_style_config),
             outline_chapter=outline_chapter,
+            map_card=map_card,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["genre_pacing_scene"] = _resolve_genre_scene_pacing(genre)
@@ -607,6 +613,7 @@ class WriterAgent(BaseAgent):
         reader_os_warnings: str = "",
         custom_style_config=None,
         outline_chapter: Optional[dict] = None,
+        map_card: str = "",
         **kwargs,
     ) -> tuple[dict, LLMResponse]:
         template_vars = self._build_base_vars(
@@ -616,6 +623,7 @@ class WriterAgent(BaseAgent):
             character_growth_context,
             custom_style_config_desc=_build_custom_style_desc(custom_style_config),
             outline_chapter=outline_chapter,
+            map_card=map_card,
         )
         template_vars["reader_os_warnings"] = reader_os_warnings
         template_vars["retry_hints"] = retry_hints

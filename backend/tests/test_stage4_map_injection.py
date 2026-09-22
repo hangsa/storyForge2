@@ -345,3 +345,45 @@ def test_scene_writing_prompt_braces_are_escaped():
     assert "{{" in raw, "expected escaped {{...}} in output JSON example"
     # The output JSON example contains the "text" key
     assert '"text"' in raw, "expected output JSON example to contain \"text\""
+
+
+@pytest.mark.asyncio
+async def test_writer_write_scene_accepts_map_card_kwarg(_projects_dir):
+    """Writer.write_scene 接收 map_card kwarg 且在 user_prompt 模板中渲染。"""
+    import yaml
+    from pathlib import Path
+
+    yaml_path = Path("backend/prompts/scene_writing.yaml")
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+
+    # Confirm template renders correctly
+    rendered = data["user_prompt_template"].format(
+        genre="玄幻",
+        core_contradiction="凡人修仙",
+        premise="测试",
+        power_system_name="灵力",
+        power_system_description="练气",
+        core_rules="",
+        ceilings="",
+        chapter_outline_context="",
+        characters_context="",
+        scene_goal="林峰抵达北门",
+        scene_conflict="",
+        scene_emotional_arc="",
+        scene_narrative_role="",
+        required_logs_list="",
+        l0_context="",
+        l1_context="",
+        l2_context="",
+        l3_context="",
+        l4_context="",
+        growth_stage_hint="",
+        character_growth_context="",
+        reader_os_warnings="",
+        custom_style_config_desc="",
+        genre_pacing_scene="",
+        user_modifications="",
+        map_card="## 地图卡\n当前: 黑水镇北门",
+    )
+    assert "## 地图卡" in rendered
+    assert "当前: 黑水镇北门" in rendered

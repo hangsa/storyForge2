@@ -799,6 +799,16 @@ async def _write_scene_chapter(
         character_id=char_id or None,
     )
 
+    # Plan 2 M4: extract the rendered map card from l2_context (we appended
+    # it there in Task 5). Slice off the section so writer sees it as a
+    # distinct kwarg AND doesn't get a duplicate when the template renders.
+    map_card = ""
+    if "## 地图卡" in ctx_mem.l2_context:
+        marker = "## 地图卡"
+        idx = ctx_mem.l2_context.find(marker)
+        map_card = ctx_mem.l2_context[idx:].strip()
+        ctx_mem.l2_context = ctx_mem.l2_context[:idx].rstrip()
+
     l0 = L0Runtime()
     l0.set_scene_context(scene_number, scene_plan.get("goal", ""))
 
@@ -866,6 +876,7 @@ async def _write_scene_chapter(
                 custom_style_config=custom_style_config,
                 outline_chapter=outline_chapter,
                 user_modifications=user_modifications,
+                map_card=map_card,
             )
         except ValueError as e:
             raise HTTPException(
@@ -1234,6 +1245,17 @@ async def _write_scene_chapter_stream(
         scene_location=scene_location or None,
         character_id=char_id or None,
     )
+
+    # Plan 2 M4: extract the rendered map card from l2_context (we appended
+    # it there in Task 5). Slice off the section so writer sees it as a
+    # distinct kwarg AND doesn't get a duplicate when the template renders.
+    map_card = ""
+    if "## 地图卡" in ctx_mem.l2_context:
+        marker = "## 地图卡"
+        idx = ctx_mem.l2_context.find(marker)
+        map_card = ctx_mem.l2_context[idx:].strip()
+        ctx_mem.l2_context = ctx_mem.l2_context[:idx].rstrip()
+
     l0 = L0Runtime()
     l0.set_scene_context(scene_number, scene_plan.get("goal", ""))
 
@@ -1325,6 +1347,7 @@ async def _write_scene_chapter_stream(
             reader_os_warnings=reader_warnings_str,
             custom_style_config=custom_style_config,
             outline_chapter=outline_chapter,
+            map_card=map_card,
         ):
             buffer += stream_chunk.text
             force = stream_chunk.finish_reason is not None

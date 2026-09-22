@@ -387,3 +387,60 @@ async def test_writer_write_scene_accepts_map_card_kwarg(_projects_dir):
     )
     assert "## 地图卡" in rendered
     assert "当前: 黑水镇北门" in rendered
+
+
+@pytest.mark.asyncio
+async def test_write_scene_chapter_passes_map_card_kwarg_to_writer(_projects_dir):
+    """_write_scene_chapter → writer.write_scene(..., map_card='## 地图卡\\n当前: 黑水镇')。"""
+    proj_dir = _projects_dir / "proj_wri_card"
+    _seed_minimum_project(proj_dir, "proj_wri_card")
+
+    captured: dict = {}
+
+    class _FakeWriter:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def write_scene(self, **kwargs):
+            captured.update(kwargs)
+            return ({"text": "<draft>scene 1</draft>"}, None)
+
+        async def write_scene_stream(self, *a, **kw):
+            raise RuntimeError
+
+        async def rewrite_scene(self, **kwargs):
+            return ({"text": "rewrite"}, None)
+
+        def log_usage(self, *a, **kw):
+            pass
+
+    class _FakeReviewer:
+        def __init__(self, *a, **kw):
+            pass
+
+        def run_fact_guard(self, **kwargs):
+            from backend.agents.reviewer import FactGuardResult
+            return FactGuardResult(all_passed=True, checks=[], coherence_score=100)
+
+        async def run_style_guard(self, **kwargs):
+            return []
+
+    from backend.api import stage4_writing
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(stage4_writing, "WriterAgent", _FakeWriter)
+    mp.setattr(stage4_writing, "ReviewerAgent", _FakeReviewer)
+    try:
+        # NOTE: no draft_factory → _write_scene_chapter actually calls writer.write_scene
+        await stage4_writing._write_scene_chapter(
+            project_id="proj_wri_card",
+            chapter_number=1,
+            scene_number=1,
+            breaker_result_override="passed",
+        )
+    finally:
+        mp.undo()
+
+    assert "map_card" in captured
+    assert "## 地图卡" in captured["map_card"]
+    assert "当前: 黑水镇" in captured["map_card"]

@@ -149,3 +149,53 @@ describe("MapStep locations tab", () => {
     });
   });
 });
+
+describe("MapStep main flow (reloaded mock)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("shows generate button when no map exists", async () => {
+    vi.doMock("../api/client", () => ({
+      default: {
+        getMap: vi.fn().mockResolvedValue({}),
+        generateMap: vi.fn().mockResolvedValue({ detail: SAMPLE_MAP }),
+        updateMap: vi.fn(),
+      },
+    }));
+    const { default: MapStepFresh } = await import("../components/wizard/MapStep");
+    const { WizardProvider: WizardProviderFresh } = await import(
+      "../components/wizard/WizardContext"
+    );
+    render(
+      <WizardProviderFresh projectId="proj_empty">
+        <MapStepFresh projectId="proj_empty" />
+      </WizardProviderFresh>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("map-generate")).toBeInTheDocument(),
+    );
+  });
+
+  it("switches tabs after generation", async () => {
+    vi.doMock("../api/client", () => ({
+      default: {
+        getMap: vi.fn().mockResolvedValue(SAMPLE_MAP),
+        updateMap: vi.fn(),
+      },
+    }));
+    const { default: MapStepFresh } = await import("../components/wizard/MapStep");
+    const { WizardProvider: WizardProviderFresh } = await import(
+      "../components/wizard/WizardContext"
+    );
+    render(
+      <WizardProviderFresh projectId="proj_x">
+        <MapStepFresh projectId="proj_x" />
+      </WizardProviderFresh>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("map-panel-locations")).toBeInTheDocument();
+  });
+});

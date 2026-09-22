@@ -42,3 +42,40 @@ def test_save_creates_map_snapshots_dir(tmp_path):
     m = Map.model_validate({"schema_version": "1.0", "project_id": PROJ})
     save_map(PROJ, m)
     assert (tmp_path / PROJ / "map_snapshots").exists()
+
+
+def test_build_name_index_returns_aliases_and_names():
+    from backend.map_system.storage import build_name_index, save_map
+    from backend.map_system.models import Map, Location, Region, POI
+    m = Map.model_validate({
+        "schema_version": "1.0",
+        "project_id": PROJ,
+        "regions": [
+            {"id": "region_south", "name": "南泽", "aliases": ["南渊"]},
+        ],
+        "locations": [
+            {
+                "id": "loc_qingfeng_inn", "name": "青峰客栈",
+                "aliases": ["山脚客栈"], "type": "inn",
+                "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+            },
+        ],
+        "pois": [
+            {
+                "id": "poi_cellar", "name": "青峰客栈地窖",
+                "parent_location_id": "loc_qingfeng_inn",
+            },
+        ],
+    })
+    save_map(PROJ, m)
+    idx = build_name_index(PROJ)
+    assert idx["青峰客栈"] == "loc_qingfeng_inn"
+    assert idx["山脚客栈"] == "loc_qingfeng_inn"
+    assert idx["南泽"] == "region_south"
+    assert idx["南渊"] == "region_south"
+    assert idx["青峰客栈地窖"] == "poi_cellar"
+
+
+def test_build_name_index_returns_empty_when_no_map():
+    from backend.map_system.storage import build_name_index
+    assert build_name_index("proj_nonexistent") == {}

@@ -1,0 +1,31 @@
+name: location_mention_extraction
+provider: deepseek
+model: deepseek-chat
+temperature: 0.3
+max_tokens: 1024
+system_prompt: |
+  你是一个严谨的网文地名解析器。
+  你的任务:阅读中文场景文本,识别所有提到地名/位置的 mention(包括绰号、
+  指代、隐喻、模糊表述),并把它们解析为给定的 canonical id。
+  规则:
+    1. 只解析 prompt 中 catalog 列出的 canonical id;不要创造新 id。
+    2. 如果一个 mention 在 catalog 中找不到对应,跳过它(不要输出)。
+    3. 输出严格 JSON,不要包含任何额外文字或 markdown 围栏。
+user_prompt_template: |
+  请阅读以下中文场景文本,提取其中提到的地名 mentions(可包含绰号、
+  指代、隐喻),并把每个 mention 解析到下列 canonical id 之一。
+
+  ## 已知地点 catalog:
+  {{catalog}}
+
+  ## 场景文本:
+  {{text}}
+
+  输出 JSON 格式(仅输出 JSON,不要任何其他文字):
+  {{
+    "mentions": {{
+      "<alias>": "<canonical_id>"
+    }}
+  }}
+output_format:
+  type: json

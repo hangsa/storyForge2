@@ -40,6 +40,9 @@ agent_mapping:
     map_system:
       tier: tier_1
       model: default
+    location_mention_extraction:
+      tier: tier_1
+      model: default
     character_generation:
       tier: tier_1
       model: default

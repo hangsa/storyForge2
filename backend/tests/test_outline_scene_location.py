@@ -83,12 +83,9 @@ def test_generate_outline_validates_scene_location_id(_seed_project):
     result, _ = asyncio.run(agent.generate_outline(
         concept={}, story_dna={}, world={}, characters=[], chapter_number=1,
     ))
-    # loc_does_not_exist 回退为 None
+    # 坏 id 回退为 None
     assert result["scene_plan"][0]["location"] is None
-    # 黑水镇 没在 Map.name_to_id 里也会落进 warning。
-    # (该 name 是 Map.locations 的 name,build_name_index 会登记 → 应该 alias 命中,
-    # 不是 None。所以这里期待 alias 命中、保持原值或规范化)
-    # 直接 id 命中:loc_blackwater
+    # 直接 id 命中:loc_blackwater 保留
     assert result["scene_plan"][1]["location"] == "loc_blackwater"
     # alias 命中:中文名 黑水镇 → loc_blackwater
     assert result["scene_plan"][2]["location"] == "loc_blackwater"

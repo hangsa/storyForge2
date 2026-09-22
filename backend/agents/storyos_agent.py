@@ -36,6 +36,40 @@ class RegistryUpdateReport:
     character_state_updates: dict = field(default_factory=dict)
     unregistered_new: list[str] = field(default_factory=list)
     cascade_executed: list[str] = field(default_factory=list)
+    footprint_events: list[dict] = field(default_factory=list)
+
+    def write_footprints_to_map(self, project_id: str, chapter: int) -> list:
+        """Materialize stashed footprint_events into Map.footprints rows.
+
+        StoryOSAgent itself doesn't know the current chapter — the caller
+        (stage4_writing) supplies it here. Each event is a dict with keys
+        ``character_id``, ``to_location``, ``from_location``. Missing map.json
+        or storage failures are non-fatal; we log + continue.
+        """
+        from backend.map_system.footprints import record_footprint_from_sf_log
+
+        written = []
+        for ev in self.footprint_events:
+            char_id = ev.get("character_id", "")
+            to_loc = ev.get("to_location", "")
+            if not char_id or not to_loc:
+                continue
+            try:
+                fp = record_footprint_from_sf_log(
+                    project_id=project_id,
+                    chapter=chapter,
+                    character_id=char_id,
+                    to_location=to_loc,
+                    via=ev.get("from_location", "") or "",
+                )
+                if fp is not None:
+                    written.append(fp)
+            except Exception as e:  # noqa: BLE001 — never fail registry update
+                logger.warning(
+                    "[map] footprint write failed proj=%s char=%s to=%s err=%s",
+                    project_id, char_id, to_loc, e,
+                )
+        return written
 
 
 class StoryOSAgent:
@@ -385,9 +419,24 @@ class StoryOSAgent:
         elif log.type == "character_location_change":
             char = log.params.get("char", "")
             to_loc = log.params.get("to", "")
+            from_loc = log.params.get("from", "")
             if char:
                 report.character_state_updates.setdefault(char, {})
                 report.character_state_updates[char]["location"] = to_loc
+
+            # Plan 2 M4: SF_LOG character_location_change → Map.footprint row.
+            # StoryOSAgent itself does NOT know the current chapter; we
+            # stash the raw event on the report and let the caller
+            # (stage4_writing) drive the actual disk write via
+            # report.write_footprints_to_map(project_id, chapter). This
+            # keeps StoryOSAgent purely deterministic and lets the caller
+            # batch-merge events from multiple scenes before flushing.
+            if char and to_loc:
+                report.footprint_events.append({
+                    "character_id": char,
+                    "to_location": to_loc,
+                    "from_location": from_loc,
+                })
 
         elif log.type == "character_relation_change":
             char_a = log.params.get("char_a", "")

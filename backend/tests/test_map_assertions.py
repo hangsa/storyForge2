@@ -172,3 +172,97 @@ def test_time_budget_blocks_when_exceeded():
     assert results[0].code == "geo.time_budget_exceeded"
     assert results[0].evidence["total_minutes"] == 240
     assert results[0].evidence["budget_minutes"] == 180
+
+
+from backend.map_system.assertions import (
+    assert_distance_consistent,
+    assert_climate_matches,
+    assert_density_ok,
+)
+
+
+def test_distance_consistent_warns_when_inter_region_under_5_min():
+    """distance_tier=inter_region 的 route 不应只有 5 分钟 — 显然漏写。"""
+    m = _make_map(locations=[], routes=[])
+    results = assert_distance_consistent(
+        m, distance_tier="inter_region", est_travel_minutes=5
+    )
+    assert len(results) == 1
+    assert results[0].kind == "warning"
+    assert results[0].code == "geo.distance_unrealistic"
+    assert results[0].evidence["distance_tier"] == "inter_region"
+
+
+def test_distance_consistent_passes_for_normal_inter_region():
+    m = _make_map(locations=[], routes=[])
+    results = assert_distance_consistent(
+        m, distance_tier="inter_region", est_travel_minutes=240
+    )
+    assert results == []
+
+
+def test_distance_consistent_warns_intra_city_over_60_min():
+    """distance_tier=intra_city 的 route > 60 分钟 — 显然夸大数据。"""
+    m = _make_map(locations=[], routes=[])
+    results = assert_distance_consistent(
+        m, distance_tier="intra_city", est_travel_minutes=120
+    )
+    assert len(results) == 1
+    assert results[0].kind == "warning"
+
+
+def test_climate_matches_passes_for_consistent_weather():
+    m = {
+        "regions": [
+            {"id": "region_x", "name": "X", "climate": "湿热, 雨季六月至九月",
+             "aliases": [], "tags": []},
+        ],
+    }
+    # writer 描述「小雨」与湿热气候不矛盾
+    results = assert_climate_matches(m, region_id="region_x", scene_weather="小雨")
+    assert results == []
+
+
+def test_climate_matches_warns_for_contradiction():
+    """湿热 region 不应描写「大雪纷飞」。"""
+    m = {
+        "regions": [
+            {"id": "region_x", "name": "X", "climate": "湿热, 全年无冬",
+             "aliases": [], "tags": []},
+        ],
+    }
+    results = assert_climate_matches(m, region_id="region_x", scene_weather="大雪纷飞")
+    assert len(results) == 1
+    assert results[0].kind == "warning"
+    assert results[0].code == "geo.climate_mismatch"
+
+
+def test_density_ok_warns_when_chapter_adds_too_many():
+    m = _make_map(
+        locations=[], routes=[],
+        settings={
+            "chapter_new_location_cap": 5,
+            "reuse_rate_target": 0.6,
+            "strict_geo": False,
+        },
+    )
+    # 单章新增 8 个 location(超过 cap=5)
+    results = assert_density_ok(m, chapter_new_locations_count=8)
+    assert len(results) == 1
+    assert results[0].kind == "warning"
+    assert results[0].code == "geo.density_high"
+    assert results[0].evidence["cap"] == 5
+    assert results[0].evidence["actual"] == 8
+
+
+def test_density_ok_passes_at_or_below_cap():
+    m = _make_map(
+        locations=[], routes=[],
+        settings={
+            "chapter_new_location_cap": 5,
+            "reuse_rate_target": 0.6,
+            "strict_geo": False,
+        },
+    )
+    assert assert_density_ok(m, chapter_new_locations_count=5) == []
+    assert assert_density_ok(m, chapter_new_locations_count=3) == []

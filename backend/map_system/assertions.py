@@ -84,7 +84,6 @@ def assert_route_exists(
     available = [
         r for r in routes
         if r.get("from") == from_id or r.get("to") == from_id
-        or r.get("bidirectional", True)
     ]
     return [
         RuleResult(
@@ -158,6 +157,128 @@ def assert_chapter_time_budget(
                 "total_minutes": total,
                 "budget_minutes": chapter_time_budget_minutes,
                 "route_minutes_list": list(route_minutes_list),
+            },
+        )
+    ]
+
+
+# PRD §9.2: distance_tier 与 est_travel_minutes 数量级 sanity 范围。
+# 阈值是「显然违反直觉」的 catch — 不是精确度量。
+_DISTANCE_TIER_MINUTES = {
+    "intra_city": (2, 60),
+    "inter_city": (30, 600),       # 0.5h–10h
+    "inter_region": (120, 1440),   # 2h–24h
+    "inter_continent": (720, 4320),  # 12h–3 天
+}
+
+
+def assert_distance_consistent(
+    map_data: dict,
+    distance_tier: str,
+    est_travel_minutes: int,
+) -> list[RuleResult]:
+    """Warning 1: est_travel_minutes 与 distance_tier 数量级不匹配。
+
+    Args:
+        map_data: load_map() 返回的 dict(本函数不使用,保留签名)
+        distance_tier: Route.distance_tier 取值之一
+        est_travel_minutes: 同一 route 的 est_travel_minutes
+    """
+    bounds = _DISTANCE_TIER_MINUTES.get(distance_tier)
+    if bounds is None:
+        return []
+    lo, hi = bounds
+    if lo <= est_travel_minutes <= hi:
+        return []
+    return [
+        RuleResult(
+            kind="warning",
+            code="geo.distance_unrealistic",
+            message=(
+                f"distance_tier={distance_tier} 的 route 标 {est_travel_minutes} 分钟,"
+                f"预期 {lo}–{hi} 分钟范围"
+            ),
+            evidence={
+                "distance_tier": distance_tier,
+                "est_travel_minutes": est_travel_minutes,
+                "expected_min": lo,
+                "expected_max": hi,
+            },
+        )
+    ]
+
+
+# PRD §9.2 / §9.3: 简单的关键词匹配,中文小说常用天气词 vs region.climate 描述。
+_CLIMATE_CONTRADICTION_KEYWORDS = {
+    # climate 子串 → writer 不应出现的天气关键词集合
+    "无冬": ["大雪", "暴风雪", "冰封", "寒冬"],
+    "严寒": ["烈日", "酷暑"],
+    "湿热": ["大雪纷飞", "冰天雪地", "严寒"],
+}
+
+
+def assert_climate_matches(
+    map_data: dict,
+    region_id: str,
+    scene_weather: str,
+) -> list[RuleResult]:
+    """Warning 2: writer 描述的天气与 region.climate 矛盾。
+
+    Args:
+        map_data: load_map() 返回的 dict
+        region_id: 当前场景所在 region
+        scene_weather: 从 SF_LOG / 文本抽取的天气关键词(如「小雨」「大雪纷飞」)
+    """
+    region = next(
+        (r for r in map_data.get("regions", []) if r.get("id") == region_id),
+        None,
+    )
+    if region is None:
+        return []
+    climate = region.get("climate", "")
+    for keyword, bad_weathers in _CLIMATE_CONTRADICTION_KEYWORDS.items():
+        if keyword in climate:
+            for bad in bad_weathers:
+                if bad in scene_weather:
+                    return [
+                        RuleResult(
+                            kind="warning",
+                            code="geo.climate_mismatch",
+                            message=(
+                                f"region {region_id}({climate}) 与文中天气"
+                                f"「{scene_weather}」矛盾(关键词「{bad}」)"
+                            ),
+                            evidence={
+                                "region_id": region_id,
+                                "region_climate": climate,
+                                "scene_weather": scene_weather,
+                                "matched_keyword": bad,
+                            },
+                        )
+                    ]
+    return []
+
+
+def assert_density_ok(
+    map_data: dict,
+    chapter_new_locations_count: int,
+) -> list[RuleResult]:
+    """Warning 3: 单章新增 location 数 > settings.chapter_new_location_cap。"""
+    settings = map_data.get("settings", {})
+    cap = settings.get("chapter_new_location_cap", 5)
+    if chapter_new_locations_count <= cap:
+        return []
+    return [
+        RuleResult(
+            kind="warning",
+            code="geo.density_high",
+            message=(
+                f"本章新增 {chapter_new_locations_count} 个,"
+                f"超过 settings.chapter_new_location_cap={cap}"
+            ),
+            evidence={
+                "cap": cap,
+                "actual": chapter_new_locations_count,
             },
         )
     ]

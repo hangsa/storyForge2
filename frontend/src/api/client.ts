@@ -292,6 +292,106 @@ export interface World {
   core_rules: CoreRule[];
 }
 
+export interface DisplayPos { x: number; y: number; }
+
+export interface DramaticRole {
+  wanted_by: string[];
+  decisions_unlocked: string[];
+  departure_cost: string;
+}
+
+export interface FactionStance {
+  faction_id: string;
+  attitude: "friendly" | "hostile" | "neutral" | "wary";
+}
+
+export interface MapLocation {
+  id: string;
+  name: string;
+  aliases: string[];
+  type: "city" | "town" | "village" | "inn" | "temple" | "sect" | "wilds" | "room" | "starport" | "secret_realm";
+  region_id?: string | null;
+  pos_hint: string;
+  tags: string[];
+  factions: FactionStance[];
+  enter_conditions: string[];
+  secrets: string[];
+  dramatic_role: DramaticRole;
+  space_type: "world" | "room";
+  display_pos?: DisplayPos | null;
+}
+
+export interface MapRegion {
+  id: string;
+  name: string;
+  aliases: string[];
+  level: "continent" | "state" | "sea" | "star_sector";
+  parent_id?: string | null;
+  climate: string;
+  tags: string[];
+  controlled_by: string[];
+  adjacent_region_ids: string[];
+  display_pos?: DisplayPos | null;
+}
+
+export interface MapRoute {
+  id: string;
+  from: string;
+  to: string;
+  bidirectional: boolean;
+  kind: "road" | "waterway" | "tunnel" | "portal" | "starlane" | "secret_path";
+  distance_tier: "intra_city" | "inter_city" | "inter_region" | "inter_continent";
+  est_travel_minutes: number;
+  risk: "low" | "mid" | "high";
+  conditions: string[];
+  encounters: string[];
+  accessible: boolean;
+}
+
+export interface MapPOI {
+  id: string;
+  name: string;
+  parent_location_id: string;
+  kind: "shrine" | "cache" | "crime_scene" | "resource" | "view" | "trap";
+  description: string;
+  discoverable: boolean;
+  first_discovered_chapter: number | null;
+  tags: string[];
+}
+
+export interface MapSettings {
+  mode: "strict_geo" | "allow_alias_new" | "freeze_locations";
+  scope_enabled: boolean;
+  allowed_region_ids: string[];
+  chapter_new_location_cap: number;
+  reuse_rate_target: number;
+  strict_geo: boolean;
+}
+
+export interface MapSnapshotIndex {
+  chapter: number;
+  map_hash: string;
+  snapshot_path: string;
+}
+
+export interface MapPayload {
+  schema_version: "1.0";
+  project_id: string;
+  generated_at?: string;
+  generated_from?: Record<string, string>;
+  regions: MapRegion[];
+  locations: MapLocation[];
+  routes: MapRoute[];
+  pois: MapPOI[];
+  location_states: unknown[];
+  snapshots: MapSnapshotIndex[];
+  footprints: unknown[];
+  assertions: unknown[];
+  change_log: unknown[];
+  display: { positions: Record<string, DisplayPos> };
+  settings: MapSettings;
+}
+
 export type GrowthEventType =
   | "betrayal_experienced"
   | "death_of_loved_one"
@@ -1201,6 +1301,12 @@ export const api = {
 
   updateWorld: (projectId: string, world: World) =>
     request<void>("PUT", "/stage2/world", { project_id: projectId, world }),
+
+  getMap: (projectId: string): Promise<MapPayload | Record<string, never>> =>
+    request<MapPayload | Record<string, never>>("GET", `/stage2/map?project_id=${encodeURIComponent(projectId)}`),
+
+  updateMap: (projectId: string, mapData: MapPayload): Promise<void> =>
+    request<void>("PUT", `/stage2/map?project_id=${encodeURIComponent(projectId)}`, { map: mapData }),
 
   updateCharacter: (projectId: string, characterData: CharacterSet) =>
     request<void>("PUT", "/stage2/character", { project_id: projectId, characters: characterData.characters }),

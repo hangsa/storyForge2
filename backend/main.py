@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 
 from backend.api import (
-    project, stage1_concept, stage2_world_char, stage3_outline, stage4_writing,
+    project, stage1_concept, stage2_world_char, stage2_map, stage3_outline, stage4_writing,
     stage5_diagnosis, stage6_export, style_extractor, conductor, storyos,
     settings_api, creative_diverge, growth_workshop, style_sandbox, autopilot,
     stage4_fact_guard, prompt_plaza, prompt_defaults,
@@ -104,6 +104,7 @@ app.include_router(project.router)
 app.include_router(conductor.router)
 app.include_router(stage1_concept.router)
 app.include_router(stage2_world_char.router)
+app.include_router(stage2_map.router)
 app.include_router(stage3_outline.router)
 app.include_router(stage4_writing.router)
 app.include_router(stage4_fact_guard.router)

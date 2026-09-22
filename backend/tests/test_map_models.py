@@ -113,3 +113,32 @@ def test_region_parent_id_references_unknown_region_raises():
                 {"id": "region_b", "name": "B", "level": "state", "parent_id": "region_missing"},
             ],
         })
+
+
+def test_strict_geo_defaults_false_for_backward_compat():
+    """PRD §0.5 向后兼容:老项目无 map.json + strict_geo=false → 不阻断 Stage 3/4。"""
+    m = Map.model_validate({
+        "schema_version": "1.0",
+        "project_id": "proj_legacy",
+    })
+    assert m.settings.strict_geo is False
+    assert m.settings.mode == "allow_alias_new"
+    assert m.settings.chapter_new_location_cap == 5
+
+
+def test_location_state_no_record_means_accessible():
+    """PRD §3.2.5:某 location 在 location_states[] 中无记录 → 默认 accessible=true。"""
+    m = Map.model_validate({
+        "schema_version": "1.0",
+        "project_id": "proj_x",
+        "locations": [
+            {
+                "id": "loc_a", "name": "A", "type": "city",
+                "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+            },
+        ],
+    })
+    # 查询:loc_a 在 location_states 中无记录 → 默认 accessible
+    assert all(ls.location_id != "loc_a" for ls in m.location_states)
+    # 外部查询函数(后续 task 5 添加)会返回 True,这里只断言数据层默认值
+    assert len(m.location_states) == 0

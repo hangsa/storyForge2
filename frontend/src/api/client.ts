@@ -1411,6 +1411,16 @@ export const api = {
       `/stage2/map/poi/${encodeURIComponent(poiId)}?project_id=${encodeURIComponent(projectId)}`,
     ),
 
+  patchMapSettings: (
+    projectId: string,
+    patch: Partial<MapSettings>,
+  ): Promise<MapSettings> =>
+    request<MapSettings>(
+      "PATCH",
+      `/stage2/map/settings?project_id=${encodeURIComponent(projectId)}`,
+      patch,
+    ),
+
   regenerateMapSection: (
     projectId: string,
     section: "regions" | "locations" | "routes" | "pois" | "all",

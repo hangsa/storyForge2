@@ -644,3 +644,35 @@ async def delete_poi(
     save_map(project_id, validated)
     return {"error": False, "code": "OK", "message": "poi 已删除",
             "detail": {"deleted_id": poi_id}}
+
+
+@router.patch("/map/settings")
+async def patch_settings(project_id: str = Query(...), payload: dict = None):
+    """更新 map.settings(mode / scope / chapter_new_location_cap /
+    reuse_rate_target / strict_geo)。"""
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": True, "code": "VALIDATION_ERROR",
+                    "message": "project_id 不能为空", "detail": {}},
+        )
+    data = load_map(project_id)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": True, "code": "MAP_NOT_FOUND",
+                    "message": "map.json 不存在", "detail": {}},
+        )
+    merged_settings = {**(data.get("settings") or {}), **(payload or {})}
+    data["settings"] = merged_settings
+    try:
+        validated = MapModel.model_validate(data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": True, "code": "MAP_VALIDATION_FAILED",
+                    "message": str(e), "detail": {}},
+        )
+    save_map(project_id, validated)
+    return {"error": False, "code": "OK", "message": "settings 已更新",
+            "detail": validated.settings.model_dump()}

@@ -13,6 +13,7 @@ vi.mock("../api/client", () => ({
     getConcept: vi.fn(),
     getWorld: vi.fn(),
     getCharacter: vi.fn(),
+    getMap: vi.fn(),
     getNovelOutline: vi.fn(),
     getOutline: vi.fn(),
   },
@@ -63,6 +64,7 @@ beforeEach(() => {
   (api.deleteCharacter as ReturnType<typeof vi.fn>).mockReset();
   (api.advance as ReturnType<typeof vi.fn>).mockReset();
   (api.advance as ReturnType<typeof vi.fn>).mockResolvedValue({ current_stage: "STAGE3" });
+  (api.getMap as ReturnType<typeof vi.fn>).mockReset();
   sessionStorage.clear();
 });
 

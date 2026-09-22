@@ -121,16 +121,29 @@ async def extract_mentions_with_llm(
         model_router = get_model_router()
 
     try:
-        response = await model_router.route(
-            agent="planner",
-            prompt_name="location_mention_extraction",  # 独立 key,Q3 决策;与 generate_map 不共享配额
-            user_prompt=user_prompt,
+        # Production ModelRouter uses execute(agent_name, task_name, messages,
+        # ...). Test mocks pass an object exposing execute() returning
+        # `{"content": str, ...}`. The previous `route()` call shape was a
+        # legacy alias that no longer exists on ModelRouter.
+        response = await model_router.execute(
+            agent_name="planner",
+            task_name="location_mention_extraction",  # 独立 key,Q3 决策;与 generate_map 不共享配额
+            messages=[
+                {"role": "system", "content": "你是一个中文地名 mentions 解析助手。"},
+                {"role": "user", "content": user_prompt},
+            ],
+            json_mode=True,
         )
     except Exception as e:
         logger.warning("[map] mention extraction LLM call failed: %s", e)
         return {}
 
-    raw = getattr(response, "text", "") or ""
+    # Production returns dict {"content": ...}; tests may return either a
+    # dict or an object with `.text`. Tolerate both.
+    if isinstance(response, dict):
+        raw = response.get("content", "") or ""
+    else:
+        raw = getattr(response, "text", "") or ""
     parsed = _parse_mentions_json(raw)
     if parsed is None:
         return {}

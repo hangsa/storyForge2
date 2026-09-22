@@ -980,6 +980,46 @@ async def _write_scene_chapter(
     registry_report = storyos.update_registries(parsed_logs)
     l0.update_from_logs(registry_report.character_state_updates)
 
+    # Plan 2 M4: deterministic footprint writes from SF_LOG
+    # character_location_change events. Reuse the events the agent
+    # collected onto registry_report (see storyos_agent
+    # RegistryUpdateReport.footprint_events). One row per event.
+    if registry_report.footprint_events:
+        try:
+            from backend.map_system.footprints import record_footprint_from_sf_log
+            for ev in registry_report.footprint_events:
+                record_footprint_from_sf_log(
+                    project_id=project_id,
+                    chapter=chapter_number,
+                    character_id=ev.get("character_id", ""),
+                    to_location=ev.get("to_location", ""),
+                    via=ev.get("from_location", ""),
+                )
+        except Exception as e:
+            logger.warning("footprint_from_sf_log failed (non-blocking): %s", e)
+
+    # Plan 2 M4: LLM mention extraction (tier-1) — best-effort, non-blocking.
+    # Per character in the scene, ask the LLM to resolve ambiguous mentions.
+    try:
+        from backend.map_system.extraction import extract_mentions_with_llm
+        from backend.map_system.footprints import record_footprint_from_mention
+        for char_name in char_names:
+            mentions = await extract_mentions_with_llm(
+                project_id=project_id,
+                chapter=chapter_number,
+                text=current_draft,
+            )
+            for alias, canonical_id in mentions.items():
+                record_footprint_from_mention(
+                    project_id=project_id,
+                    chapter=chapter_number,
+                    character_id=char_name,
+                    alias=alias,
+                    canonical_id=canonical_id,
+                )
+    except Exception as e:
+        logger.warning("mention_extraction failed (non-blocking): %s", e)
+
     style_violations = []
     try:
         from backend.style_engine.genre_template import GenreTemplate
@@ -1368,6 +1408,44 @@ async def _write_scene_chapter_stream(
         parsed_logs = storyos.parse_sf_logs(assembled_text)
         registry_report = storyos.update_registries(parsed_logs)
         l0.update_from_logs(registry_report.character_state_updates)
+
+        # Plan 2 M4: deterministic footprint writes from SF_LOG
+        # character_location_change events. Same logic as the sync path;
+        # assembled_text takes the place of current_draft.
+        if registry_report.footprint_events:
+            try:
+                from backend.map_system.footprints import record_footprint_from_sf_log
+                for ev in registry_report.footprint_events:
+                    record_footprint_from_sf_log(
+                        project_id=project_id,
+                        chapter=chapter_number,
+                        character_id=ev.get("character_id", ""),
+                        to_location=ev.get("to_location", ""),
+                        via=ev.get("from_location", ""),
+                    )
+            except Exception as e:
+                logger.warning("footprint_from_sf_log failed (non-blocking): %s", e)
+
+        # Plan 2 M4: LLM mention extraction (tier-1) — best-effort, non-blocking.
+        try:
+            from backend.map_system.extraction import extract_mentions_with_llm
+            from backend.map_system.footprints import record_footprint_from_mention
+            for char_name in character_names:
+                mentions = await extract_mentions_with_llm(
+                    project_id=project_id,
+                    chapter=chapter_number,
+                    text=assembled_text,
+                )
+                for alias, canonical_id in mentions.items():
+                    record_footprint_from_mention(
+                        project_id=project_id,
+                        chapter=chapter_number,
+                        character_id=char_name,
+                        alias=alias,
+                        canonical_id=canonical_id,
+                    )
+        except Exception as e:
+            logger.warning("mention_extraction failed (non-blocking): %s", e)
 
         # ---- Style Guard (best-effort, non-blocking) --------------------
         try:

@@ -176,3 +176,85 @@ async def test_write_scene_chapter_passes_map_card_to_writer(_projects_dir, monk
     assert captured["kwargs"]["scene_location"] == "黑水镇"
     # character_id 也透传(目前是空字符串 → None)
     assert captured["kwargs"].get("character_id") in (None, "")
+
+
+@pytest.mark.asyncio
+async def test_write_scene_chapter_invokes_mention_extraction(_projects_dir, monkeypatch):
+    """_write_scene_chapter 完成 → 调用 extract_mentions_with_llm 把 mention 写 footprint。"""
+    proj_dir = _projects_dir / "proj_wri_me_a"
+    _seed_minimum_project(proj_dir, "proj_wri_me_a")
+
+    from backend.map_system import extraction as extraction_mod
+    from backend.map_system.storage import load_map
+
+    call_log: list = []
+
+    async def fake_extract(project_id, chapter, text, model_router=None):
+        call_log.append({"project_id": project_id, "chapter": chapter, "text_len": len(text)})
+        return {"北门": "loc_heishui"}
+
+    async def fake_record(project_id, chapter, character_id, alias, canonical_id):
+        from backend.map_system.footprints import record_footprint_from_mention
+        return record_footprint_from_mention(
+            project_id=project_id,
+            chapter=chapter,
+            character_id=character_id,
+            alias=alias,
+            canonical_id=canonical_id,
+        )
+
+    monkeypatch.setattr(extraction_mod, "extract_mentions_with_llm", fake_extract)
+
+    from backend.api import stage4_writing
+
+    class _FakeWriter:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def write_scene(self, **kwargs):
+            return ({"text": "林峰踏进黑水镇北门,夜色已深。北门外又传来马蹄声。"}, None)
+
+        async def write_scene_stream(self, *a, **kw):
+            raise RuntimeError
+
+        async def rewrite_scene(self, **kwargs):
+            return ({"text": "rewrite"}, None)
+
+        def log_usage(self, *a, **kw):
+            pass
+
+    class _FakeReviewer:
+        def __init__(self, *a, **kw):
+            pass
+
+        def run_fact_guard(self, **kwargs):
+            from backend.agents.reviewer import FactGuardResult
+            return FactGuardResult(all_passed=True, checks=[], coherence_score=100)
+
+        async def run_style_guard(self, **kwargs):
+            return []
+
+    writer_mp = pytest.MonkeyPatch()
+    writer_mp.setattr(stage4_writing, "WriterAgent", _FakeWriter)
+    writer_mp.setattr(stage4_writing, "ReviewerAgent", _FakeReviewer)
+    try:
+        await stage4_writing._write_scene_chapter(
+            project_id="proj_wri_me_a",
+            chapter_number=1,
+            scene_number=1,
+            draft_factory=lambda c, s: "林峰踏进黑水镇北门,夜色已深。北门外又传来马蹄声。",
+            breaker_result_override="passed",
+        )
+    finally:
+        writer_mp.undo()
+
+    assert len(call_log) == 1
+    assert call_log[0]["project_id"] == "proj_wri_me_a"
+
+    data = load_map("proj_wri_me_a")
+    # map.footprints 应该有 mention extraction 写入的一行
+    fps = data.get("footprints", [])
+    assert any(
+        fp.get("location_id") == "loc_heishui" and fp.get("chapter") == 1
+        for fp in fps
+    ), f"expected mention footprint in {fps}"

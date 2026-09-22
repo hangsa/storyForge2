@@ -279,12 +279,64 @@ class AsyncStage4Executor:
             chapter_number=item.chapter_number,
             scene_number=scene,
         )
+        # NOTE: _write_scene_chapter() handles SF_LOG footprint writes and
+        # LLM mention extraction inline (Plan 2 M4, P2-T9), so the executor
+        # does NOT call _extract_and_record_mentions() here — doing so would
+        # produce duplicate Footprint rows. The helper below is provided as a
+        # utility for future paths that invoke mention extraction outside the
+        # full _write_scene_chapter pipeline (e.g., retry-from-disk recovery).
         mgr = self._mgr_for(project_id)
         _maybe_enqueue_archival(mgr, self._projects_dir, project_id,
                                item.chapter_number)
         return {"status": "ok", "scene_status": _canonical_scene_status(
             result["detail"]["status"]
         )}
+
+    async def _extract_and_record_mentions(
+        self,
+        project_id: str,
+        chapter: int,
+        scene: int,
+        text: str,
+        char_names: list,
+    ) -> None:
+        """Plan 2 M4: best-effort LLM mention extraction → Map.footprints rows.
+
+        Centralizes the mention-extraction step for the async executor so
+        future call sites (e.g., recovery / retry paths) can invoke it
+        without duplicating the LLM-call-then-record logic.
+
+        IMPORTANT: not called from _write_scene / _write_scene_stream today —
+        the underlying _write_scene_chapter / _write_scene_chapter_stream
+        already run mention extraction inline (P2-T9), so calling this from
+        the executor would double-write Footprint rows. Kept as a utility for
+        forward-compat (e.g., a retry path that bypasses the full pipeline
+        and just needs the footprint side effect).
+        """
+        if not text or not char_names:
+            return
+        try:
+            from backend.map_system.extraction import extract_mentions_with_llm
+            from backend.map_system.footprints import record_footprint_from_mention
+            mentions = await extract_mentions_with_llm(
+                project_id=project_id,
+                chapter=chapter,
+                text=text,
+            )
+            for char_name in char_names:
+                for alias, canonical_id in mentions.items():
+                    record_footprint_from_mention(
+                        project_id=project_id,
+                        chapter=chapter,
+                        character_id=char_name,
+                        alias=alias,
+                        canonical_id=canonical_id,
+                    )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "executor mention_extraction failed (non-blocking): %s", e
+            )
 
     async def _write_scene_stream(self, item: QueueItem, project_id: str) -> dict:
         """Per-task streaming writer. Constructs a SceneChunkStore, fires

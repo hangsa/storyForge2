@@ -85,17 +85,16 @@ async def test_extract_mentions_with_llm_uses_mock_router(_projects_dir):
 
     from backend.map_system.extraction import extract_mentions_with_llm
 
-    # Mock router that returns a canned LLMResponse
-    class _MockResponse:
-        text = '{"mentions": {"那座北门的城": "loc_north_gate", "黑水": "loc_heishui"}}'
-        tokens_in = 0
-        tokens_out = 0
-        model = "mock"
-        provider = "mock"
-
+    # Mock router that returns a canned dict (matching ModelRouter.execute shape).
     class _MockRouter:
-        async def route(self, agent: str, prompt_name: str, user_prompt: str, **kw):
-            return _MockResponse()
+        async def execute(self, agent_name: str, task_name: str, messages, **kw):
+            return {
+                "content": '{"mentions": {"那座北门的城": "loc_north_gate", "黑水": "loc_heishui"}}',
+                "usage": {"input": 0, "output": 0},
+                "model": "mock",
+                "tier": "tier_1",
+                "cost": 0.0,
+            }
 
     mentions = await extract_mentions_with_llm(
         "proj_ext_b", 3, "林峰望见那座北门的城,暮色四合。黑水在远处静默。",
@@ -113,16 +112,15 @@ async def test_extract_mentions_with_llm_filters_canonical_ids_not_in_map(_proje
 
     from backend.map_system.extraction import extract_mentions_with_llm
 
-    class _MockResponse:
-        text = '{"mentions": {"某处": "loc_doesnt_exist", "北门": "loc_north_gate"}}'
-        tokens_in = 0
-        tokens_out = 0
-        model = "mock"
-        provider = "mock"
-
     class _MockRouter:
-        async def route(self, agent: str, prompt_name: str, user_prompt: str, **kw):
-            return _MockResponse()
+        async def execute(self, agent_name: str, task_name: str, messages, **kw):
+            return {
+                "content": '{"mentions": {"某处": "loc_doesnt_exist", "北门": "loc_north_gate"}}',
+                "usage": {"input": 0, "output": 0},
+                "model": "mock",
+                "tier": "tier_1",
+                "cost": 0.0,
+            }
 
     mentions = await extract_mentions_with_llm(
         "proj_ext_c", 3, "某处 北门", model_router=_MockRouter(),

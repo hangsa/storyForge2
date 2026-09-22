@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api, { MapPayload, MapLocation } from "../../api/client";
+import api, { MapPayload, MapLocation, MapRegion, MapRoute, MapPOI } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import { PanelCard } from "../ds";
 import { SubTabStrip } from "../shared/SubTabStrip";
@@ -129,9 +129,9 @@ export default function MapStep({ projectId }: MapStepProps) {
         {activeKey === "locations" && (
           <LocationsPanel mapData={mapData} setMapData={setMapData} />
         )}
-        {activeKey === "regions" && <RegionsPanel mapData={mapData} />}
-        {activeKey === "routes" && <RoutesPanel mapData={mapData} />}
-        {activeKey === "pois" && <PoisPanel mapData={mapData} />}
+        {activeKey === "regions" && <RegionsPanel mapData={mapData} setMapData={setMapData} />}
+        {activeKey === "routes" && <RoutesPanel mapData={mapData} setMapData={setMapData} />}
+        {activeKey === "pois" && <PoisPanel mapData={mapData} setMapData={setMapData} />}
         {activeKey === "snapshots" && <SnapshotsPanel mapData={mapData} />}
       </div>
 
@@ -226,49 +226,169 @@ function LocationsPanel({
   );
 }
 
-function RegionsPanel({ mapData }: { mapData: MapPayload }) {
+function RegionsPanel({
+  mapData,
+  setMapData,
+}: {
+  mapData: MapPayload;
+  setMapData: (m: MapPayload) => void;
+}) {
+  const handleAdd = async () => {
+    const name = prompt("新区域名:") ?? "";
+    if (!name) return;
+    const created = await api.addMapRegion(mapData.project_id, { name });
+    setMapData({ ...mapData, regions: [...mapData.regions, created] });
+  };
+  const handlePatch = async (id: string, patch: Partial<MapRegion>) => {
+    const updated = await api.patchMapRegion(mapData.project_id, id, patch);
+    setMapData({
+      ...mapData,
+      regions: mapData.regions.map(r => (r.id === id ? updated : r)),
+    });
+  };
   return (
-    <ul data-testid="regions-list" className="space-y-2">
-      {mapData.regions.map(r => (
-        <li key={r.id} className="p-3 border border-outline-variant rounded">
-          <span className="font-medium">{r.name}</span>
-          <span className="ml-2 text-xs text-on-surface-variant">{r.level}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      <button
+        data-testid="region-add"
+        onClick={handleAdd}
+        className="px-3 py-1 text-sm bg-primary text-on-primary rounded"
+      >
+        + 添加区域
+      </button>
+      <ul data-testid="regions-list" className="space-y-2">
+        {mapData.regions.map((r) => (
+          <li key={r.id} className="p-3 border border-outline-variant rounded">
+            <input
+              defaultValue={r.name}
+              onBlur={(e) => {
+                if (e.target.value !== r.name) handlePatch(r.id, { name: e.target.value });
+              }}
+              className="font-medium bg-transparent border-b border-transparent hover:border-outline-variant"
+            />
+            <span className="ml-2 text-xs text-on-surface-variant">{r.level}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-function RoutesPanel({ mapData }: { mapData: MapPayload }) {
+function RoutesPanel({
+  mapData,
+  setMapData,
+}: {
+  mapData: MapPayload;
+  setMapData: (m: MapPayload) => void;
+}) {
+  const handleAdd = async () => {
+    if (mapData.locations.length < 2) {
+      alert("至少需要 2 个 location 才能新增 route");
+      return;
+    }
+    const from = prompt(`起点 location id (${mapData.locations.map(l => l.id).join(", ")})`) ?? "";
+    const to = prompt(`终点 location id`) ?? "";
+    if (!from || !to) return;
+    const minutes = parseInt(prompt("耗时 (分钟):") ?? "30", 10);
+    const created = await api.addMapRoute(mapData.project_id, {
+      from,
+      to,
+      est_travel_minutes: minutes,
+    });
+    setMapData({ ...mapData, routes: [...mapData.routes, created] });
+  };
+  const handleDelete = async (id: string) => {
+    await api.deleteMapRoute(mapData.project_id, id);
+    setMapData({
+      ...mapData,
+      routes: mapData.routes.filter(r => r.id !== id),
+    });
+  };
   return (
-    <ul data-testid="routes-list" className="space-y-2">
-      {mapData.routes.map(rt => (
-        <li key={rt.id} className="p-3 border border-outline-variant rounded">
-          <span className="font-mono text-sm">
-            {rt.from} → {rt.to}
-          </span>
-          <span className="ml-2 text-xs text-on-surface-variant">
-            {rt.est_travel_minutes}min · {rt.risk}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      <button
+        data-testid="route-add"
+        onClick={handleAdd}
+        className="px-3 py-1 text-sm bg-primary text-on-primary rounded"
+      >
+        + 添加路线
+      </button>
+      <ul data-testid="routes-list" className="space-y-2">
+        {mapData.routes.map((rt) => (
+          <li key={rt.id} className="p-3 border border-outline-variant rounded flex justify-between">
+            <span className="font-mono text-sm">
+              {rt.from} → {rt.to}
+            </span>
+            <span className="ml-2 text-xs text-on-surface-variant">
+              {rt.est_travel_minutes}min · {rt.risk}
+            </span>
+            <button
+              data-testid={`route-delete-${rt.id}`}
+              onClick={() => handleDelete(rt.id)}
+              className="text-error text-sm hover:underline"
+            >
+              删除
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-function PoisPanel({ mapData }: { mapData: MapPayload }) {
+function PoisPanel({
+  mapData,
+  setMapData,
+}: {
+  mapData: MapPayload;
+  setMapData: (m: MapPayload) => void;
+}) {
+  const handleAdd = async () => {
+    if (mapData.locations.length === 0) {
+      alert("至少需要 1 个 location 才能新增 POI");
+      return;
+    }
+    const name = prompt("POI 名:") ?? "";
+    const parentId = prompt(`父 location id (${mapData.locations.map(l => l.id).join(", ")})`) ?? "";
+    if (!name || !parentId) return;
+    const created = await api.addMapPoi(mapData.project_id, {
+      name,
+      parent_location_id: parentId,
+    });
+    setMapData({ ...mapData, pois: [...mapData.pois, created] });
+  };
+  const handleDelete = async (id: string) => {
+    await api.deleteMapPoi(mapData.project_id, id);
+    setMapData({
+      ...mapData,
+      pois: mapData.pois.filter(p => p.id !== id),
+    });
+  };
   return (
-    <ul data-testid="pois-list" className="space-y-2">
-      {mapData.pois.map(p => (
-        <li key={p.id} className="p-3 border border-outline-variant rounded">
-          <span className="font-medium">{p.name}</span>
-          <span className="ml-2 text-xs text-on-surface-variant">{p.kind}</span>
-          {!p.discoverable && (
-            <span className="ml-2 text-xs text-error">[未发现]</span>
-          )}
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      <button
+        data-testid="poi-add"
+        onClick={handleAdd}
+        className="px-3 py-1 text-sm bg-primary text-on-primary rounded"
+      >
+        + 添加 POI
+      </button>
+      <ul data-testid="pois-list" className="space-y-2">
+        {mapData.pois.map((p) => (
+          <li key={p.id} className="p-3 border border-outline-variant rounded flex justify-between">
+            <span className="font-medium">{p.name}</span>
+            <span className="ml-2 text-xs text-on-surface-variant">{p.kind}</span>
+            {!p.discoverable && <span className="ml-2 text-xs text-error">[未发现]</span>}
+            <button
+              data-testid={`poi-delete-${p.id}`}
+              onClick={() => handleDelete(p.id)}
+              className="text-error text-sm hover:underline"
+            >
+              删除
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

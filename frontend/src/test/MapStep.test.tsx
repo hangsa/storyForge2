@@ -199,3 +199,54 @@ describe("MapStep main flow (reloaded mock)", () => {
     expect(screen.getByTestId("map-panel-locations")).toBeInTheDocument();
   });
 });
+
+describe("MapStep multi-tab coverage", () => {
+  function renderMapStep() {
+    (api.getMap as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(SAMPLE_MAP);
+    return render(
+      <WizardProvider projectId="proj_test">
+        <MapStep projectId="proj_test" />
+      </WizardProvider>,
+    );
+  }
+
+  it("renders regions tab when activated", async () => {
+    renderMapStep();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    const regionsTab = screen.getByText("区域");
+    fireEvent.click(regionsTab);
+    expect(screen.getByTestId("regions-list")).toBeInTheDocument();
+  });
+
+  it("renders routes tab when activated", async () => {
+    renderMapStep();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    const routesTab = screen.getByText("路线");
+    fireEvent.click(routesTab);
+    expect(screen.getByTestId("routes-list")).toBeInTheDocument();
+  });
+
+  it("renders POIs tab when activated", async () => {
+    renderMapStep();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    const poisTab = screen.getByText("POI");
+    fireEvent.click(poisTab);
+    expect(screen.getByTestId("pois-list")).toBeInTheDocument();
+  });
+
+  it("renders snapshots tab when activated", async () => {
+    renderMapStep();
+    await waitFor(() =>
+      expect(screen.getByTestId("map-step")).toBeInTheDocument(),
+    );
+    const snapshotsTab = screen.getByText("快照");
+    fireEvent.click(snapshotsTab);
+    expect(screen.getByTestId("snapshots-list")).toBeInTheDocument();
+  });
+});

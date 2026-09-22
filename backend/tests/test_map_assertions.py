@@ -266,3 +266,86 @@ def test_density_ok_passes_at_or_below_cap():
     )
     assert assert_density_ok(m, chapter_new_locations_count=5) == []
     assert assert_density_ok(m, chapter_new_locations_count=3) == []
+
+
+from backend.map_system.assertions import (
+    assert_alias_discovered,
+    assert_faction_stance_change,
+    assert_poi_discovered,
+)
+
+
+def test_alias_discovered_emits_info():
+    """mention extraction 新增 alias 映射到 canonical → Info 通知。"""
+    m = _make_map(locations=[], routes=[])
+    results = assert_alias_discovered(
+        m,
+        alias="山脚客栈",
+        canonical_id="loc_qingfeng_inn",
+    )
+    assert len(results) == 1
+    assert results[0].kind == "info"
+    assert results[0].code == "geo.alias_added"
+    assert results[0].evidence["alias"] == "山脚客栈"
+    assert results[0].evidence["canonical_id"] == "loc_qingfeng_inn"
+
+
+def test_alias_discovered_no_canonical_returns_no_info():
+    """alias 没归一化到 canonical — 不应触发(留给 mention extractor 决策)。"""
+    m = _make_map(locations=[], routes=[])
+    results = assert_alias_discovered(m, alias="??", canonical_id="")
+    assert results == []
+
+
+def test_faction_stance_change_emits_info_on_shift():
+    """location.factions 列出 friendly,但 world.factions 描述为 hostile → 立场转变 Info。"""
+    m = {
+        "locations": [
+            {"id": "loc_a", "name": "A", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [],
+             "factions": [{"faction_id": "faction_x", "attitude": "friendly"}]},
+        ],
+        "world_factions": [
+            {"id": "faction_x", "name": "X宗", "attitude_summary": "与主角宗门敌对"},
+        ],
+    }
+    results = assert_faction_stance_change(
+        m, faction_id="faction_x", observed_attitude="friendly"
+    )
+    assert len(results) == 1
+    assert results[0].kind == "info"
+    assert results[0].code == "geo.faction_attitude_shift"
+
+
+def test_faction_stance_change_no_info_when_consistent():
+    m = {
+        "world_factions": [
+            {"id": "faction_x", "name": "X宗", "attitude_summary": "友好同盟"},
+        ],
+    }
+    results = assert_faction_stance_change(
+        m, faction_id="faction_x", observed_attitude="friendly"
+    )
+    assert results == []
+
+
+def test_poi_discovered_emits_info_when_first_chapter_null():
+    """POI discoverable=true 但 first_discovered_chapter=null → 「待发现」。"""
+    m = _make_map(locations=[], routes=[])
+    results = assert_poi_discovered(
+        m, poi_id="poi_cellar", first_discovered_chapter=None,
+    )
+    assert len(results) == 1
+    assert results[0].kind == "info"
+    assert results[0].code == "geo.poi_discovered"
+    assert results[0].evidence["poi_id"] == "poi_cellar"
+    assert results[0].evidence["status"] == "待发现"
+
+
+def test_poi_discovered_no_info_when_first_chapter_present():
+    m = _make_map(locations=[], routes=[])
+    results = assert_poi_discovered(
+        m, poi_id="poi_cellar", first_discovered_chapter=12,
+    )
+    assert results == []

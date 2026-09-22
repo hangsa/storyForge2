@@ -282,3 +282,111 @@ def assert_density_ok(
             },
         )
     ]
+
+
+def assert_alias_discovered(
+    map_data: dict,
+    alias: str,
+    canonical_id: str,
+) -> list[RuleResult]:
+    """Info 1: mention extraction 新增 alias 映射到 canonical location。
+
+    Args:
+        map_data: load_map() 返回的 dict(本函数不使用)
+        alias: 新发现的别名(裸字符串)
+        canonical_id: name_to_id 反向索引归一化结果,空字符串表示未命中
+    """
+    if not alias or not canonical_id:
+        return []
+    return [
+        RuleResult(
+            kind="info",
+            code="geo.alias_added",
+            message=f"新 alias「{alias}」映射到 canonical id {canonical_id}",
+            evidence={
+                "alias": alias,
+                "canonical_id": canonical_id,
+            },
+        )
+    ]
+
+
+def assert_faction_stance_change(
+    map_data: dict,
+    faction_id: str,
+    observed_attitude: str,
+) -> list[RuleResult]:
+    """Info 2: location.factions.observed 与 world.factions.attitude_summary 不一致。
+
+    MVP 启发式:在 world_factions.attitude_summary 中查找 observed_attitude
+    是否出现。若 observed 不在 summary 的关键词集合(友好 / 敌对 / 中立 / 警惕)中,
+    视为立场转变 Info。
+
+    Args:
+        map_data: dict(含 world_factions 字段,可能从 characters / world 读取)
+        faction_id: faction id
+        observed_attitude: 本场观察到的态度(friendly/hostile/neutral/wary)
+    """
+    factions = map_data.get("world_factions", []) or []
+    faction = next(
+        (f for f in factions if f.get("id") == faction_id), None
+    )
+    if faction is None:
+        return []
+    summary = faction.get("attitude_summary", "")
+    # 简单关键词对照:observed_attitude 中文词在 summary 中出现 → 一致
+    keywords = {
+        "friendly": ["友好", "同盟", "亲近"],
+        "hostile": ["敌对", "仇视", "对立"],
+        "neutral": ["中立", "不偏"],
+        "wary": ["警惕", "戒备"],
+    }
+    expected = keywords.get(observed_attitude, [])
+    if any(kw in summary for kw in expected):
+        return []
+    return [
+        RuleResult(
+            kind="info",
+            code="geo.faction_attitude_shift",
+            message=(
+                f"faction {faction_id} 在文中表现为 {observed_attitude},"
+                f"但 world.factions.attitude_summary=「{summary}」"
+            ),
+            evidence={
+                "faction_id": faction_id,
+                "observed_attitude": observed_attitude,
+                "world_summary": summary,
+            },
+        )
+    ]
+
+
+def assert_poi_discovered(
+    map_data: dict,
+    poi_id: str,
+    first_discovered_chapter: int | None,
+) -> list[RuleResult]:
+    """Info 3: POI 文本中提到但 first_discovered_chapter 仍为 null → 「待发现」提醒。
+
+    Args:
+        map_data: load_map() 返回的 dict(本函数不使用)
+        poi_id: POI id
+        first_discovered_chapter: POI.first_discovered_chapter 当前值,
+                                   None 表示尚未发现
+    """
+    if first_discovered_chapter is not None:
+        return []
+    return [
+        RuleResult(
+            kind="info",
+            code="geo.poi_discovered",
+            message=(
+                f"POI {poi_id} 在文本中被提及,"
+                f"但 first_discovered_chapter 仍为 null(待发现)"
+            ),
+            evidence={
+                "poi_id": poi_id,
+                "status": "待发现",
+            },
+        )
+    ]

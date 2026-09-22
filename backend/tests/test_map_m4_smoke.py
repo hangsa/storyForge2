@@ -7,7 +7,6 @@ import pytest
 @pytest.fixture
 def _projects_dir(tmp_path, monkeypatch):
     from backend.config import settings
-    from backend.api import stage2_map  # noqa
     from backend.api import stage4_writing
 
     monkeypatch.setattr(settings, "projects_dir", tmp_path)
@@ -193,5 +192,8 @@ async def test_m4_end_to_end_injects_card_and_writes_footprint(_projects_dir, mo
     assert len(fps) >= 2, f"expected ≥2 footprints, got {fps}"
     sf_log_fp = next((f for f in fps if f["character_id"] == "林峰" and f["location_id"] == "loc_heishui"), None)
     assert sf_log_fp is not None, f"expected SF_LOG footprint for 林峰→黑水镇, got {fps}"
-    mention_fp = next((f for f in fps if f["location_id"] == "loc_north_gate"), None)
-    assert mention_fp is not None, f"expected mention footprint for 北门→北门 location, got {fps}"
+    mention_fp = next(
+        (f for f in fps if f["location_id"] == "loc_north_gate" and f["character_id"] == "林峰"),
+        None,
+    )
+    assert mention_fp is not None, f"expected mention footprint for 林峰→北门 (loc_north_gate), got {fps}"

@@ -390,3 +390,122 @@ def assert_poi_discovered(
             },
         )
     ]
+
+
+def run_geo_checks(
+    map_data: dict,
+    scene_context: dict | None,
+) -> list[RuleResult]:
+    """聚合 9 条规则的入口 — 把 scene_context 拆解后调用各自 assert_*。
+
+    scene_context 字段契约(Plan 2 注入,Plan 3 容忍 None/{}):
+        routes: list[{"from": str, "to": str}] — 本场 SF_LOG 出现的 route 对
+        character_location_enters: list[{"char_id": str, "location_id": str}]
+                                                  — 角色进入的目标 location
+        route_minutes: list[int] — 本章 route.est_travel_minutes 累计列表
+        chapter_time_budget_minutes: int — outline 该章 time_budget
+        new_locations_count: int — 本章新增 location 数
+        new_aliases: list[{"alias": str, "canonical_id": str}]
+        faction_observed: list[{"faction_id": str, "observed_attitude": str}]
+        world_factions: list[dict] — 从 world.json 读出的议员配置
+        discovered_pois: list[{"poi_id": str, "first_discovered_chapter": int|None}]
+
+    Returns: list[RuleResult] — 全部失败的规则,空列表表示全部通过。
+    当 scene_context 为 None 或 {} 时,直接返回 [] (向后兼容 — Plan 1 caller 传空 dict)。
+    """
+    if not scene_context:
+        return []
+
+    results: list[RuleResult] = []
+
+    # Blocker 1: 路由可达性
+    for route_pair in scene_context.get("routes", []) or []:
+        from_id = route_pair.get("from", "")
+        to_id = route_pair.get("to", "")
+        if not from_id or not to_id:
+            continue
+        results.extend(assert_route_exists(map_data, from_id=from_id, to_id=to_id))
+
+    # Blocker 2: 禁入
+    for enter in scene_context.get("character_location_enters", []) or []:
+        char_id = enter.get("char_id", "")
+        loc_id = enter.get("location_id", "")
+        if not char_id or not loc_id:
+            continue
+        results.extend(
+            assert_accessible(map_data, location_id=loc_id, char_id=char_id)
+        )
+
+    # Blocker 3: 时间预算
+    route_minutes = scene_context.get("route_minutes", []) or []
+    budget = scene_context.get("chapter_time_budget_minutes", 0)
+    if route_minutes and budget > 0:
+        results.extend(
+            assert_chapter_time_budget(
+                map_data,
+                route_minutes_list=route_minutes,
+                chapter_time_budget_minutes=budget,
+            )
+        )
+
+    # Warning 1: 距离一致性(per-route)— 需要从 scene_context 取距离档位
+    for rc in scene_context.get("route_consistency", []) or []:
+        results.extend(
+            assert_distance_consistent(
+                map_data,
+                distance_tier=rc.get("distance_tier", ""),
+                est_travel_minutes=int(rc.get("est_travel_minutes", 0)),
+            )
+        )
+
+    # Warning 2: 气候匹配
+    for cm in scene_context.get("climate", []) or []:
+        results.extend(
+            assert_climate_matches(
+                map_data,
+                region_id=cm.get("region_id", ""),
+                scene_weather=cm.get("scene_weather", ""),
+            )
+        )
+
+    # Warning 3: density
+    new_count = scene_context.get("new_locations_count", 0)
+    if new_count:
+        results.extend(
+            assert_density_ok(map_data, chapter_new_locations_count=int(new_count))
+        )
+
+    # Info 1: alias
+    for alias_pair in scene_context.get("new_aliases", []) or []:
+        results.extend(
+            assert_alias_discovered(
+                map_data,
+                alias=alias_pair.get("alias", ""),
+                canonical_id=alias_pair.get("canonical_id", ""),
+            )
+        )
+
+    # Info 2: faction
+    for fa in scene_context.get("faction_observed", []) or []:
+        # 给 map_data 补 world_factions 字段(由 stage4 注入)
+        ctx_with_factions = {**map_data,
+                              "world_factions": scene_context.get("world_factions", [])}
+        results.extend(
+            assert_faction_stance_change(
+                ctx_with_factions,
+                faction_id=fa.get("faction_id", ""),
+                observed_attitude=fa.get("observed_attitude", ""),
+            )
+        )
+
+    # Info 3: POI discoverable
+    for poi in scene_context.get("discovered_pois", []) or []:
+        results.extend(
+            assert_poi_discovered(
+                map_data,
+                poi_id=poi.get("poi_id", ""),
+                first_discovered_chapter=poi.get("first_discovered_chapter"),
+            )
+        )
+
+    return results

@@ -349,3 +349,85 @@ def test_poi_discovered_no_info_when_first_chapter_present():
         m, poi_id="poi_cellar", first_discovered_chapter=12,
     )
     assert results == []
+
+
+from backend.map_system.assertions import run_geo_checks
+
+
+def test_run_geo_checks_with_empty_context_returns_empty():
+    """map_context={} 或 None → 跳过全部规则,返回空列表(向后兼容 Plan 1 caller)。"""
+    m = _make_map(locations=[], routes=[])
+    assert run_geo_checks(m, scene_context=None) == []
+    assert run_geo_checks(m, scene_context={}) == []
+
+
+def test_run_geo_checks_routes_only_checks_routes():
+    """scene_context.routes 包含 from→to 列表,run_geo_checks 调用 assert_route_exists 每对。"""
+    m = _make_map(
+        locations=[
+            {"id": "loc_a", "name": "A", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [], "factions": []},
+            {"id": "loc_b", "name": "B", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [], "factions": []},
+        ],
+        routes=[],
+    )
+    # 1 对 route,从 A→B 但 routes 表为空 → 1 个 Blocker
+    ctx = {
+        "routes": [{"from": "loc_a", "to": "loc_b"}],
+    }
+    results = run_geo_checks(m, scene_context=ctx)
+    assert len(results) == 1
+    assert results[0].code == "geo.no_implicit_teleport"
+
+
+def test_run_geo_checks_aggregates_density_warning():
+    """scene_context.new_locations_count=10 → 1 个 Warning。"""
+    m = _make_map(
+        locations=[], routes=[],
+        settings={
+            "chapter_new_location_cap": 5,
+            "reuse_rate_target": 0.6,
+            "strict_geo": False,
+        },
+    )
+    ctx = {"new_locations_count": 10}
+    results = run_geo_checks(m, scene_context=ctx)
+    codes = [r.code for r in results]
+    assert "geo.density_high" in codes
+
+
+def test_run_geo_checks_blocker_priority_over_warning():
+    """同时存在 Blocker 和 Warning 时,两者都在结果列表里(不做过滤)。
+
+    ReviewerAgent 拿到 list 后自己按 kind 区分;assertions.py 只负责生成。
+    """
+    m = _make_map(
+        locations=[
+            {"id": "loc_a", "name": "A", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [], "factions": []},
+            {"id": "loc_b", "name": "B", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [], "factions": []},
+        ],
+        routes=[],
+        settings={
+            "chapter_new_location_cap": 5,
+            "reuse_rate_target": 0.6,
+            "strict_geo": False,
+        },
+    )
+    ctx = {
+        "routes": [{"from": "loc_a", "to": "loc_b"}],
+        "new_locations_count": 10,
+    }
+    results = run_geo_checks(m, scene_context=ctx)
+    codes = [r.code for r in results]
+    kinds = {r.kind for r in results}
+    assert "geo.no_implicit_teleport" in codes
+    assert "geo.density_high" in codes
+    assert "blocker" in kinds
+    assert "warning" in kinds

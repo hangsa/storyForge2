@@ -1305,9 +1305,13 @@ export const api = {
   getMap: (projectId: string): Promise<MapPayload | Record<string, never>> =>
     request<MapPayload | Record<string, never>>("GET", `/stage2/map?project_id=${encodeURIComponent(projectId)}`),
 
-  // 2026-09-22:T8 stub — T13 加真实现,届时删除此处。
-  generateMap: (projectId: string, _mods: string = "") =>
-    request<unknown>("POST", `/stage2/generate-map?project_id=${encodeURIComponent(projectId)}`, { project_id: projectId }),
+  // 2026-09-22:T13 — real /generate-map endpoint (replaces T8 stub).
+  generateMap: (projectId: string, userModifications: string = "") =>
+    request<MapPayload>(
+      "POST",
+      `/stage2/generate-map?project_id=${encodeURIComponent(projectId)}`,
+      { project_id: projectId, user_modifications: userModifications },
+    ),
 
   updateMap: (projectId: string, mapData: MapPayload): Promise<void> =>
     request<void>("PUT", `/stage2/map?project_id=${encodeURIComponent(projectId)}`, { map: mapData }),

@@ -26,6 +26,7 @@ class CheckResult:
     name: str
     passed: bool
     detail: str = ""
+    kind: str = "info"   # v2.x Plan 3: blocker | warning | info — 默认 "info" 向后兼容
 
 
 @dataclass

@@ -122,3 +122,112 @@ def test_each_check_7_method_returns_checkresult_with_kind():
         r = method(map_data, {})
         assert r.kind == expected_kind, f"{method_name}: expected kind={expected_kind}, got {r.kind}"
         assert r.passed is True
+
+
+def test_run_fact_guard_accepts_map_context_kwarg():
+    """Plan 3:run_fact_guard 新增 map_context=None 关键字参数(默认向后兼容)。"""
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    result = agent.run_fact_guard(
+        draft_text="",
+        characters=[],
+        world_rules={},
+        scene_plan={},
+        map_context=None,
+    )
+    # 默认 None → 9 条 geo check 不运行,checks 列表只含现有 6 条
+    assert len(result.checks) == 6
+
+
+def test_run_fact_guard_empty_map_context_dict_runs_geo_checks():
+    """map_context={} 也视为「跳过 geo checks」(向后兼容 Plan 1 caller)。"""
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    result = agent.run_fact_guard(
+        draft_text="",
+        characters=[],
+        world_rules={},
+        scene_plan={},
+        map_context={},
+    )
+    assert len(result.checks) == 6
+
+
+def test_run_fact_guard_with_map_context_appends_nine_geo_checks():
+    """map_context 包含 map_data + scene_context → checks 列表扩到 6+9=15。"""
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    map_data = {
+        "schema_version": "1.0", "project_id": "proj_x",
+        "locations": [
+            {"id": "loc_a", "name": "A", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [], "factions": []},
+            {"id": "loc_b", "name": "B", "type": "inn",
+             "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+             "enter_conditions": [], "factions": []},
+        ],
+        "routes": [],
+        "regions": [], "settings": {}, "location_states": [],
+    }
+    scene_ctx = {"routes": [{"from": "loc_a", "to": "loc_b"}]}
+    result = agent.run_fact_guard(
+        draft_text="",
+        characters=[],
+        world_rules={},
+        scene_plan={},
+        map_context={"map_data": map_data, "scene_context": scene_ctx},
+    )
+    assert len(result.checks) == 15
+    # 6 existing checks all kind="info" (default)
+    for c in result.checks[:6]:
+        assert c.kind == "info"
+    # 9 new checks: at least one is blocker
+    geo_checks = result.checks[6:]
+    kinds = {c.kind for c in geo_checks}
+    assert "blocker" in kinds
+    # all_passed should be False because blocker failed
+    assert result.all_passed is False
+
+
+def test_run_fact_guard_blocker_only_marks_all_passed_false():
+    """Warning / Info 失败不阻断 all_passed;只有 Blocker 失败才阻断。"""
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    map_data = {
+        "schema_version": "1.0", "project_id": "proj_x",
+        "locations": [], "routes": [],
+        "regions": [
+            {"id": "region_x", "name": "X", "climate": "严寒, 长冬",
+             "aliases": [], "tags": []},
+        ],
+        "settings": {
+            "chapter_new_location_cap": 5,
+            "reuse_rate_target": 0.6, "strict_geo": False,
+        },
+        "location_states": [],
+    }
+    # 只有 climate warning(无 blocker)
+    scene_ctx = {"climate": [{"region_id": "region_x", "scene_weather": "烈日"}]}
+    result = agent.run_fact_guard(
+        draft_text="",
+        characters=[],
+        world_rules={},
+        scene_plan={},
+        map_context={"map_data": map_data, "scene_context": scene_ctx},
+    )
+    # all_passed stays True (Warning 不阻断 circuit breaker)
+    assert result.all_passed is True
+
+
+def test_run_fact_guard_legacy_signature_without_map_context_still_works():
+    """现有 caller(stage4_writing.py 等)不传 map_context 时也跑通。"""
+    from backend.agents.reviewer import ReviewerAgent
+    agent = ReviewerAgent(project_id="proj_x")
+    result = agent.run_fact_guard(
+        draft_text="一些文本",
+        characters=[{"name": "X"}],
+        world_rules={},
+        scene_plan={"required_logs": []},
+    )
+    assert len(result.checks) == 6

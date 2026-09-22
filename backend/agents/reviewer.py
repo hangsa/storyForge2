@@ -104,8 +104,15 @@ class ReviewerAgent(BaseAgent):
         scene_plan: dict,
         storyos_state: Optional[dict] = None,
         precheck_result=None,
+        map_context: Optional[dict] = None,
         map_snapshot_hash: str = "",  # Plan 2 M5 pre-wire (Plan 3 M5 will use)
     ) -> FactGuardResult:
+        """v2.x Plan 3:map_context 形参。
+
+        map_context=None 或 {} → 不运行 9 条 geo check(向后兼容所有现有 caller)。
+        map_context={"map_data": dict, "scene_context": dict} →
+            末尾追加 9 条 geo check;任一 Blocker 失败 → all_passed=False。
+        """
         if storyos_state is None:
             storyos_state = {}
 
@@ -152,7 +159,39 @@ class ReviewerAgent(BaseAgent):
             self.check_6_semantic_precheck_review(precheck_result=precheck_result),
         ]
 
-        all_passed = all(c.passed for c in checks)
+        # --- v2.x Plan 3: 9 条 geo check 聚合 ---
+        geo_blocker_failed = False
+        if map_context:
+            map_data = map_context.get("map_data") or {}
+            scene_context = map_context.get("scene_context") or {}
+            # 调用 9 个 check_7_geo_* 包装方法,每个返回 CheckResult(passed/kind)
+            # — 无论通过/失败都附加到 checks 列表,以便上游看到完整审计
+            # 注:wrapper 方法对所有失败(包括 warning/info)都设 passed=False,
+            # 这里覆写为 passed=True 让 plan 公式
+            # all(c.passed for c in checks) and not geo_blocker_failed
+            # 满足「Warning/Info 不阻断 circuit breaker」的契约。
+            geo_methods = [
+                self.check_7_geo_no_implicit_teleport,
+                self.check_7_geo_forbidden_access,
+                self.check_7_geo_time_budget_exceeded,
+                self.check_7_geo_distance_unrealistic,
+                self.check_7_geo_climate_mismatch,
+                self.check_7_geo_density_high,
+                self.check_7_geo_alias_added,
+                self.check_7_geo_faction_attitude_shift,
+                self.check_7_geo_poi_discovered,
+            ]
+            for method in geo_methods:
+                cr = method(map_data, scene_context)
+                # 非 blocker 失败 → passed=True(允许 circuit breaker 通过);
+                # blocker 失败 → passed=False(配合 geo_blocker_failed 阻断)
+                if cr.kind != "blocker":
+                    cr.passed = True
+                checks.append(cr)
+                if cr.kind == "blocker" and not cr.passed:
+                    geo_blocker_failed = True
+
+        all_passed = all(c.passed for c in checks) and not geo_blocker_failed
         score = self.compute_coherence_score(checks)
         hints = self._generate_retry_hints(checks)
 

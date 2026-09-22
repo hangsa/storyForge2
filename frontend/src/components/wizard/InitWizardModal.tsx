@@ -9,7 +9,7 @@
 
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { World, CharacterSet, NovelOutline, Outline } from "../../api/client";
+import api, { World, CharacterSet, MapPayload, NovelOutline, Outline } from "../../api/client";
 import { useWizard, WizardProvider, type WizardData } from "./WizardContext";
 import WizardSteps from "./WizardSteps";
 import WorldStep from "./WorldStep";
@@ -90,9 +90,10 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
     let cancelled = false;
     (async () => {
       try {
-        const [world, chars, novel, outline] = await Promise.allSettled([
+        const [world, chars, map, novel, outline] = await Promise.allSettled([
           api.getWorld(projectId),
           api.getCharacter(projectId),
+          api.getMap(projectId),
           api.getNovelOutline(projectId),
           api.getOutline(projectId),
         ]);
@@ -107,9 +108,11 @@ function InitWizardModalInner({ projectId, onDismiss, resume }: InitWizardModalP
           completed.push(3);
           data.characters = chars.value as CharacterSet;
         }
-        // Step mappings — must stay in sync with STEP_TITLES above:
-        //   5 = novel_outline.json (全书大纲)
-        //   6 = outline.json     (章节大纲 / chapter1_outline)
+        // Step 4 = map.json(地图系统,默认向后兼容 — 老项目无 map 也 OK)
+        if (map.status === "fulfilled" && hasContent(map.value)) {
+          completed.push(4);
+          data.map = map.value as MapPayload;
+        }
         if (novel.status === "fulfilled" && hasContent(novel.value)) {
           completed.push(5);
           data.novel_outline = novel.value as NovelOutline;

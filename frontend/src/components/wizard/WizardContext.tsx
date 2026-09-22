@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect, useRef, ReactNode } from "react";
-import type { World, CharacterSet, NovelOutline, Outline } from "../../api/client";
+import type { World, CharacterSet, NovelOutline, Outline, MapPayload } from "../../api/client";
 
 export function getSessionKey(projectId: string): string {
   return `storyforge.wizard.state.${projectId}`;
@@ -43,6 +43,7 @@ export interface WizardData {
   } | null;
   world: World | null;
   characters: CharacterSet | null;
+  map: MapPayload | null;
   novel_outline: NovelOutline | null;
   chapter1_outline: Outline | null;
   /**
@@ -69,6 +70,7 @@ const EMPTY_DATA: WizardData = {
   creative_divergence: null,
   world: null,
   characters: null,
+  map: null,
   novel_outline: null,
   chapter1_outline: null,
   chapter_outline_progress: null,
@@ -88,6 +90,7 @@ const STEP_DATA_KEY_TO_STEP: Partial<Record<keyof WizardData, number>> = {
   creative_divergence: 1,
   world: 2,
   characters: 3,
+  map: 4,
   novel_outline: 6,
   chapter1_outline: 7,
   // Mid-batch progress for step 7's chapter-outline generation. Lives in

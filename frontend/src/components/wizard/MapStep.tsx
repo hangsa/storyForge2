@@ -3,6 +3,7 @@ import api, { MapPayload, MapLocation } from "../../api/client";
 import { useWizard } from "./WizardContext";
 import { PanelCard } from "../ds";
 import { SubTabStrip } from "../shared/SubTabStrip";
+import { MermaidMapModal } from "./MermaidMapModal";
 
 interface MapStepProps {
   projectId: string;
@@ -25,6 +26,7 @@ export default function MapStep({ projectId }: MapStepProps) {
   const [activeKey, setActiveKey] = useState<MapTabKey>("locations");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showMermaid, setShowMermaid] = useState(false);
 
   useEffect(() => {
     if (mapData) return;
@@ -106,6 +108,7 @@ export default function MapStep({ projectId }: MapStepProps) {
           <div className="flex gap-2">
             <button
               data-testid="map-view-graph"
+              onClick={() => setShowMermaid(true)}
               className="px-3 py-1 text-sm rounded border border-outline-variant hover:border-primary"
             >
               查看地图
@@ -131,6 +134,12 @@ export default function MapStep({ projectId }: MapStepProps) {
         {activeKey === "pois" && <PoisPanel mapData={mapData} />}
         {activeKey === "snapshots" && <SnapshotsPanel mapData={mapData} />}
       </div>
+
+      <MermaidMapModal
+        open={showMermaid}
+        onClose={() => setShowMermaid(false)}
+        mapData={mapData}
+      />
     </div>
   );
 }

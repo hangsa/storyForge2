@@ -194,3 +194,82 @@ def test_build_map_card_resolves_by_alias(_projects_dir):
 
     card = build_map_card("proj_d", "北门")
     assert card.startswith("当前: 黑水镇北门")
+
+
+def test_build_map_card_emits_full_4_rows_when_routes_footprints_present(_projects_dir):
+    """完整 4 行: 当前 / 可移动(routes) / 到达钩子(encounters)/ 一致性提醒(latest footprint)。"""
+    proj_dir = _projects_dir / "proj_e"
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "project_id": "proj_e",
+                "regions": [],
+                "locations": [
+                    {
+                        "id": "loc_north_gate",
+                        "name": "黑水镇北门",
+                        "type": "city",
+                        "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+                    },
+                    {
+                        "id": "loc_road",
+                        "name": "城门外官道",
+                        "type": "wilds",
+                        "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+                    },
+                ],
+                "routes": [
+                    {
+                        "id": "route_1",
+                        "from": "loc_north_gate",
+                        "to": "loc_road",
+                        "kind": "road",
+                        "distance_tier": "inter_city",
+                        "est_travel_minutes": 30,
+                        "risk": "low",
+                        "conditions": [],
+                        "encounters": ["商队夜间歇脚", "巡城武僧"],
+                        "accessible": True,
+                    }
+                ],
+                "pois": [],
+                "location_states": [],
+                "snapshots": [],
+                "footprints": [
+                    {
+                        "chapter": 3,
+                        "character_id": "char_linfeng",
+                        "location_id": "loc_north_gate",
+                        "arrived_via": "loc_road",
+                        "departed_to": None,
+                        "companions": [],
+                        "time_of_day": "亥时",
+                        "weather": "",
+                    }
+                ],
+                "assertions": [],
+                "change_log": [],
+                "display": {"positions": {}},
+                "settings": {"strict_geo": False, "mode": "allow_alias_new", "chapter_new_location_cap": 5, "reuse_rate_target": 0.6, "scope_enabled": False, "allowed_region_ids": []},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    from backend.map_system.map_card import build_map_card
+
+    card = build_map_card("proj_e", "黑水镇北门", chapter_number=3, character_id="char_linfeng")
+    lines = card.splitlines()
+    assert lines[0].startswith("当前: 黑水镇北门")
+    assert any(l.startswith("可移动:") and "城门外官道" in l for l in lines)
+    assert any(l.startswith("到达钩子:") and "商队夜间歇脚" in l for l in lines)
+    # NOTE: 一致性提醒 uses character_id + location_id (not display names) —
+    # map_card is a deterministic, character-data-free summary. Writer pipeline
+    # resolves IDs → names via L2 character memory. See Task 3 spec deviation.
+    assert any(
+        l.startswith("一致性提醒:") and "char_linfeng" in l and "loc_north_gate" in l
+        for l in lines
+    )

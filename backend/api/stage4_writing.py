@@ -779,12 +779,24 @@ async def _write_scene_chapter(
 
     mc = MemoryCoordinator(project_id, settings.projects_dir)
     character_names = [c.get("name", "") for c in ctx["characters"]]
+    # scene_location comes from the scene_plan's `location` field if present,
+    # else None (which means build_map_card will return "" and skip injection).
+    # Planner sets scene["location"] to the canonical location name (or None
+    # when unresolvable) in post-processing — see planner.generate_outline.
+    scene_location = (
+        scene_plan.get("location")
+        or scene_plan.get("scene_location")
+        or ""
+    )
+    char_id = scene_plan.get("character_id", "")
     ctx_mem = mc.assemble_for_scene(
         scene_number=scene_number,
         scene_goal=scene_plan.get("goal", ""),
         scene_conflict=scene_plan.get("conflict", ""),
         character_names=character_names,
         chapter_number=chapter_number,
+        scene_location=scene_location or None,
+        character_id=char_id or None,
     )
 
     l0 = L0Runtime()
@@ -1165,12 +1177,22 @@ async def _write_scene_chapter_stream(
 
     mc = MemoryCoordinator(project_id, settings.projects_dir)
     character_names = [c.get("name", "") for c in ctx["characters"]]
+    # Mirror _write_scene_chapter: pass scene_location so map_card is appended
+    # to l2_context. See comment in that function for the planner contract.
+    scene_location = (
+        scene_plan.get("location")
+        or scene_plan.get("scene_location")
+        or ""
+    )
+    char_id = scene_plan.get("character_id", "")
     ctx_mem = mc.assemble_for_scene(
         scene_number=scene_number,
         scene_goal=scene_plan.get("goal", ""),
         scene_conflict=scene_plan.get("conflict", ""),
         character_names=character_names,
         chapter_number=chapter_number,
+        scene_location=scene_location or None,
+        character_id=char_id or None,
     )
     l0 = L0Runtime()
     l0.set_scene_context(scene_number, scene_plan.get("goal", ""))

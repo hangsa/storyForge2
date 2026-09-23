@@ -27,6 +27,7 @@ system_prompt: |
      - 宗门总部/祠堂/主神殿 映射 `temple` 或 `sect`
      - 城镇整体映射 `city`/`town`/`village`
      - 不允许的 type 会触发校验失败 → 422 报错
+     - 必须小写（City/Temple/Room 这种首字母大写会被拒）
   9. 严格按 JSON 输出，不要 markdown 代码块包裹。
 
   5 维度单元联动：

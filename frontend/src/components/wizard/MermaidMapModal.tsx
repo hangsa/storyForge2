@@ -8,7 +8,7 @@ interface MermaidMapModalProps {
   mapData: MapPayload;
 }
 
-function buildMermaidSyntax(mapData: MapPayload): string {
+export function buildMermaidSyntax(mapData: MapPayload): string {
   const lines: string[] = ["graph TD"];
   // subgraphs
   const regionMap = new Map<string, string[]>();
@@ -18,12 +18,15 @@ function buildMermaidSyntax(mapData: MapPayload): string {
     regionMap.get(regionId)!.push(loc.id);
   }
   for (const [regionId, locIds] of regionMap) {
-    const regionName =
-      mapData.regions.find(r => r.id === regionId)?.name ?? "无区域";
-    lines.push(`  subgraph ${regionName}`);
+    const region = mapData.regions.find(r => r.id === regionId);
+    const regionName = region?.name ?? "无区域";
+    // region.id is regex-safe (^region_[a-z0-9_]+$) — use as Mermaid ID.
+    // region.name may contain CJK + special chars (e.g. · U+00B7) — pass as display label.
+    const safeRegionName = regionName.replace(/"/g, '\\"').replace(/\]/g, '\\]');
+    lines.push(`  subgraph ${regionId}["${safeRegionName}"]`);
     for (const locId of locIds) {
       const loc = mapData.locations.find(l => l.id === locId)!;
-      const safeName = loc.name.replace(/"/g, '\\"');
+      const safeName = loc.name.replace(/"/g, '\\"').replace(/\]/g, '\\]');
       lines.push(`    ${loc.id}["${safeName}"]`);
     }
     lines.push("  end");

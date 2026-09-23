@@ -185,4 +185,25 @@ describe("buildMermaidSyntax", () => {
     expect(syntax).toContain('loc_gate["黑水镇北门"]');
     expect(syntax).toContain('loc_old_west["西门巷口"]');
   });
+
+  it("test_build_syntax_escapes_close_bracket_in_location_name", () => {
+    // Symmetric to the region-name escape: a `]` in loc.name would close
+    // the bracket prematurely and break Mermaid lexing.
+    const mapWithBracket: MapPayload = {
+      ...RICH_MAP,
+      locations: [
+        {
+          id: "loc_bracket", name: "机房[北翼]", aliases: [], type: "room",
+          region_id: "region_south", pos_hint: "", tags: [], factions: [],
+          enter_conditions: [], secrets: [],
+          dramatic_role: { wanted_by: [], decisions_unlocked: [], departure_cost: "" },
+          space_type: "world", display_pos: null,
+        },
+      ],
+    };
+    const syntax = buildMermaidSyntax(mapWithBracket);
+    expect(syntax).toContain('loc_bracket["机房[北翼\\]"]');
+    // raw unescaped bracket must NOT appear
+    expect(syntax).not.toContain('loc_bracket["机房[北翼]"]');
+  });
 });

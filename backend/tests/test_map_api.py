@@ -403,3 +403,76 @@ def test_generate_map_endpoint_succeeds_with_dirty_llm_output():
         assert body["detail"]["locations"][0]["dramatic_role"]["decisions_unlocked"] == ["决定苏迟是否把窗帘缝起来"]
         # departure_cost untouched
         assert body["detail"]["locations"][0]["dramatic_role"]["departure_cost"] == "leaving is costly"
+
+
+def test_regenerate_map_section_coerces_dirty_llm_output():
+    """End-to-end: /regenerate-map-section must also coerce LLM drift before
+    validating the merged map. Otherwise the same proj_47738f64 422 recurs."""
+    from backend.config import settings as s
+
+    proj_dir = s.projects_dir / PROJ
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    (proj_dir / "project.json").write_text(
+        json.dumps({"project_id": PROJ, "genre": "cool_novel"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (proj_dir / "world.json").write_text(
+        json.dumps({
+            "era": "新元", "geography": "新地",
+            "era_social_structure": "", "era_cultural_history": "",
+            "power_systems": [], "factions": [], "core_rules": [],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    # Seed an existing map so regenerate has something to merge with.
+    (proj_dir / "map.json").write_text(
+        json.dumps({
+            "schema_version": "1.0",
+            "project_id": PROJ,
+            "regions": [],
+            "locations": [{
+                "id": "loc_seed", "name": "seed", "type": "city",
+                "dramatic_role": {"wanted_by": [], "decisions_unlocked": [], "departure_cost": ""},
+            }],
+            "routes": [], "pois": [],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    dirty_locations = [{
+        "id": "loc_dirty", "name": "dirty", "type": "classroom",
+        "dramatic_role": {
+            "wanted_by": "alice, bob",
+            "decisions_unlocked": "decide X",
+            "departure_cost": "high",
+        },
+    }]
+
+    with patch("backend.api.stage2_map.PlannerAgent") as MockPlanner:
+        instance = MockPlanner.return_value
+
+        async def fake_generate_map(world, characters, user_modifications=""):
+            return {
+                "schema_version": "1.0",
+                "project_id": PROJ,
+                "regions": [],
+                "locations": dirty_locations,
+                "routes": [],
+                "pois": [],
+            }, None
+
+        instance.generate_map = fake_generate_map
+        r = client.post(
+            f"/api/stage2/regenerate-map-section?project_id={PROJ}",
+            json={"section": "locations", "user_modifications": ""},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["error"] is False
+        # /regenerate-map-section replaces the chosen section with LLM output;
+        # the dirty entry must be coerced (room + split lists)
+        types_by_id = {loc["id"]: loc["type"] for loc in body["detail"]["locations"]}
+        assert types_by_id["loc_dirty"] == "room"
+        dirty = next(l for l in body["detail"]["locations"] if l["id"] == "loc_dirty")
+        assert dirty["dramatic_role"]["wanted_by"] == ["alice", "bob"]
+        assert dirty["dramatic_role"]["decisions_unlocked"] == ["decide X"]

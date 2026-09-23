@@ -279,6 +279,9 @@ async def regenerate_map_section(
     else:
         merged[payload.section] = result.get(payload.section, existing.get(payload.section, []))
 
+    # Coerce LLM drift before validating; same fix as /generate-map.
+    merged = _coerce_map_payload(merged)
+
     try:
         validated = MapModel.model_validate(merged)
     except Exception as e:

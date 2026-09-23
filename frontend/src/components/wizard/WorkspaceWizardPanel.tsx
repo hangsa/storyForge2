@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api, { World, CharacterSet, NovelOutline, Outline } from "../../api/client";
+import api, { World, CharacterSet, NovelOutline, Outline, MapPayload } from "../../api/client";
 import { WizardProvider, useWizard, type WizardData } from "./WizardContext";
 import WizardSidebar from "./WizardSidebar";
 import WorldStep from "./WorldStep";
@@ -47,12 +47,13 @@ function Inner({ projectId }: Props) {
         // fallback 信号 — selected_at 在 proj_f0721bdc 之前的项目是 null,
         // commit 中途中断的项目也可能没写入。concept_and_dna.json 存在
         // 内容即可证明 divergence 已 commit 过。
-        const [cd, concept, canvasState, world, chars, novel, outline] = await Promise.allSettled([
+        const [cd, concept, canvasState, world, chars, map, novel, outline] = await Promise.allSettled([
           api.getCreativeDivergence(projectId),
           api.getConcept(projectId),
           api.getCanvasV2State(projectId),
           api.getWorld(projectId),
           api.getCharacter(projectId),
+          api.getMap(projectId),
           api.getNovelOutline(projectId),
           api.getOutline(projectId),
         ]);
@@ -86,10 +87,18 @@ function Inner({ projectId }: Props) {
         }
 
         // 2026-09-19 步骤编号统一 -1(world 3→2 / chars 4→3 / novel 7→6 /
-        // outline 8→7),与 WizardSidebar SIDEBAR_ITEMS 同步。Step 5 仍是 MapStep
-        // 占位(无数据)。
+        // outline 8→7),与 WizardSidebar SIDEBAR_ITEMS 同步。Step 4 = map(地图系统);
+        // Step 5 = 剧情画布(plot canvas)。
         if (world.status === "fulfilled" && hasContent(world.value)) { completed.push(2); data.world = world.value as World; }
         if (chars.status === "fulfilled" && hasContent(chars.value)) { completed.push(3); data.characters = chars.value as CharacterSet; }
+        // Step 4 = map.json(地图系统,默认向后兼容 — 老项目无 map 也 OK)。
+        // Workspace wizard prefill 此前漏掉这一步,导致生成 map 后导航离开再回来,
+        // 侧边栏没有 ✅。InitWizardModal.tsx 已有正确处理(第 96 / 111-115 行)。
+        // proj_47738f64 2026-09-23。
+        if (map.status === "fulfilled" && hasContent(map.value)) {
+          completed.push(4);
+          data.map = map.value as MapPayload;
+        }
         if (novel.status === "fulfilled" && hasContent(novel.value)) { completed.push(6); data.novel_outline = novel.value as NovelOutline; }
         if (outline.status === "fulfilled" && hasContent(outline.value)) { completed.push(7); data.chapter1_outline = outline.value as Outline; }
 

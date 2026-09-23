@@ -47,6 +47,10 @@ vi.mock("../../api/client", () => ({
     getCharacter: vi.fn().mockRejectedValue(new Error("404")),
     getNovelOutline: vi.fn().mockRejectedValue(new Error("404")),
     getOutline: vi.fn().mockRejectedValue(new Error("404")),
+    // Workspace wizard prefill should fetch map.json (step 4 = 地图系统).
+    // Default to missing-map back-compat (`{}`) so existing tests aren't
+    // affected unless they explicitly mock this.
+    getMap: vi.fn().mockResolvedValue({}),
     // 3B divergence (Plan 2026-09-05): useB3Divergence fires
     // getB3State on mount. Mock empty-state so the hook's HYDRATE
     // runs without throwing.
@@ -112,6 +116,49 @@ describe("WorkspaceWizardPanel", () => {
       expect(api.getOutline).toHaveBeenCalled();
       expect(api.getCanvasV2State).toHaveBeenCalled();
     });
+  });
+
+  it("prefills completedSteps=[...,4] when map.json has content (workspace wizard step 4 indicator)", async () => {
+    // WorkspaceWizardPanel's prefill previously fetched world / canvas /
+    // novel / outline but skipped api.getMap. After generating a map,
+    // navigating away and back lost the sidebar ✅ even though map.json
+    // was on disk. InitWizardModal.tsx had this correctly. (proj_47738f64
+    // 2026-09-23)
+    (api.getMap as ReturnType<typeof vi.fn>).mockResolvedValue({
+      schema_version: "1.0",
+      project_id: "proj_test",
+      regions: [{ id: "region_x", name: "X" }],
+      locations: [{ id: "loc_x", name: "X", region_id: "region_x", type: "room" }],
+      routes: [],
+      pois: [],
+      location_states: [],
+      snapshots: [],
+      footprints: [],
+      assertions: [],
+      change_log: [],
+      display: { positions: {} },
+      settings: { mode: "allow_alias_new", scope_enabled: false, allowed_region_ids: [], chapter_new_location_cap: 5, reuse_rate_target: 0.6, strict_geo: false },
+    });
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_test" /></MemoryRouter>);
+    await waitFor(() => {
+      // Step 4 (地图系统) must render data-state="completed" so the sidebar
+      // shows ✅ even when the user only entered step 4 (no other steps).
+      expect(screen.getByTestId("wizard-sidebar-item-map").getAttribute("data-state")).toBe("completed");
+      expect(api.getMap).toHaveBeenCalledWith("proj_test");
+    });
+  });
+
+  it("prefills completedSteps does NOT include 4 when map.json is missing (back-compat for pre-map-system projects)", async () => {
+    // 老项目(无 map.json)应当不显示 ✅,避免误报 completed。
+    (api.getMap as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    render(<MemoryRouter><WorkspaceWizardPanel projectId="proj_legacy_no_map" /></MemoryRouter>);
+    await waitFor(() => {
+      expect(api.getMap).toHaveBeenCalledWith("proj_legacy_no_map");
+    });
+    // After prefill, map sidebar item must NOT be in "completed" state.
+    // Other items may be in various states; we only assert the negative on map.
+    const mapItem = screen.getByTestId("wizard-sidebar-item-map");
+    expect(mapItem.getAttribute("data-state")).not.toBe("completed");
   });
 
   it("prefills completedSteps=[1] when creative_divergence.json has selected_at (Path B variant select)", async () => {

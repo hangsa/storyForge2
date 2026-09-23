@@ -34,6 +34,61 @@ def _file_manager() -> FileManager:
     return FileManager(settings.projects_dir)
 
 
+# Defensive coerce constants — backstop for LLM shape drift.
+# proj_47738f64 (2026-09-22): DeepSeek fallback returned 32 locations with
+# type values outside LocationType Literal (classroom/media_room/apartment/...)
+# AND dramatic_role.wanted_by / decisions_unlocked as Chinese free-text strings
+# instead of list[str]. Coerce known shapes so MapModel.model_validate has a
+# chance to pass. See T1 (prompt fix) for primary mitigation.
+ALLOWED_LOCATION_TYPES = {
+    "city", "town", "village", "inn", "temple", "sect",
+    "wilds", "room", "starport", "secret_realm",
+}
+DEFAULT_LOCATION_TYPE = "room"
+
+
+def _coerce_map_payload(payload: dict) -> dict:
+    """Defensive coercion before MapModel.model_validate.
+
+    1. location.type: lowercase; if not in ALLOWED_LOCATION_TYPES, default to 'room'.
+    2. dramatic_role.wanted_by / decisions_unlocked: if string, split on '、', ',', ';', '；'
+       (after normalizing all separators to ','), trim whitespace, drop empty items.
+
+    Returns a NEW dict (does not mutate input).
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    out = dict(payload)
+
+    for loc in out.get("locations") or []:
+        if not isinstance(loc, dict):
+            continue
+        # type coercion
+        t = loc.get("type")
+        if isinstance(t, str):
+            t_norm = t.strip().lower()
+            if t_norm not in ALLOWED_LOCATION_TYPES:
+                loc["type"] = DEFAULT_LOCATION_TYPE
+            elif t_norm != t:
+                loc["type"] = t_norm
+        elif t is None:
+            loc["type"] = DEFAULT_LOCATION_TYPE
+
+        # dramatic_role coercion
+        dr = loc.get("dramatic_role")
+        if isinstance(dr, dict):
+            for k in ("wanted_by", "decisions_unlocked"):
+                v = dr.get(k)
+                if isinstance(v, str):
+                    parts = v.replace("、", ",").replace(";", ",").replace("；", ",").split(",")
+                    dr[k] = [p.strip() for p in parts if p.strip()]
+                elif v is None:
+                    dr[k] = []
+
+    return out
+
+
 @router.get("/map")
 async def get_map(project_id: str = Query(...)):
     if not project_id:
@@ -133,9 +188,12 @@ async def generate_map(data: dict):
                     "message": str(e), "detail": {}},
         )
 
-    # Validate + coerce so on-disk map.json always matches Map schema.
+    # Defensive coerce: LLM occasionally invents location.type values
+    # not in the LocationType Literal, or returns dramatic_role arrays as
+    # strings. Coerce known shapes so MapModel.model_validate has a chance.
     try:
-        validated = MapModel.model_validate(result)
+        coerced = _coerce_map_payload(result)
+        validated = MapModel.model_validate(coerced)
     except Exception as e:
         raise HTTPException(
             status_code=422,

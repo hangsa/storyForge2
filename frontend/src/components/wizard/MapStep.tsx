@@ -18,6 +18,59 @@ const MAP_TABS = [
 ] as const;
 type MapTabKey = (typeof MAP_TABS)[number]["key"];
 
+// Chinese label maps for enum fields. Keep in sync with backend Literal types
+// (backend/map_system/models.py:6-12). Update both sides together.
+const ROUTE_KIND_LABELS: Record<MapRoute["kind"], string> = {
+  road: "陆路",
+  waterway: "水路",
+  tunnel: "隧道",
+  portal: "传送门",
+  starlane: "星路",
+  secret_path: "密道",
+};
+
+const DISTANCE_TIER_LABELS: Record<MapRoute["distance_tier"], string> = {
+  intra_city: "城内",
+  inter_city: "城际",
+  inter_region: "跨区域",
+  inter_continent: "跨大陆",
+};
+
+const RISK_LABELS: Record<MapRoute["risk"], string> = {
+  low: "低风险",
+  mid: "中风险",
+  high: "高风险",
+};
+
+const LOCATION_TYPE_LABELS: Record<MapLocation["type"], string> = {
+  city: "城镇",
+  town: "市镇",
+  village: "村庄",
+  inn: "客栈",
+  temple: "神殿",
+  sect: "宗门",
+  wilds: "野外",
+  room: "室内",
+  starport: "星港",
+  secret_realm: "秘境",
+};
+
+const REGION_LEVEL_LABELS: Record<MapRegion["level"], string> = {
+  continent: "大陆",
+  state: "州/省",
+  sea: "海域",
+  star_sector: "星区",
+};
+
+const POI_KIND_LABELS: Record<MapPOI["kind"], string> = {
+  shrine: "神龛",
+  cache: "藏匿点",
+  crime_scene: "案发现场",
+  resource: "资源点",
+  view: "观景点",
+  trap: "机关",
+};
+
 export default function MapStep({ projectId }: MapStepProps) {
   const wizard = useWizard();
   const [mapData, setMapData] = useState<MapPayload | null>(
@@ -217,7 +270,10 @@ function LocationsPanel({
                 className="font-medium bg-transparent border-b border-transparent hover:border-outline-variant focus:border-primary"
               />
               <span className="ml-2 text-xs text-on-surface-variant">
-                {loc.type} · {loc.region_id ?? "无区域"}
+                {LOCATION_TYPE_LABELS[loc.type]} ·{" "}
+                {loc.region_id
+                  ? mapData.regions.find(r => r.id === loc.region_id)?.name ?? "未知区域"
+                  : "无区域"}
               </span>
             </div>
             <button
@@ -286,7 +342,7 @@ function RegionsPanel({
               }}
               className="font-medium bg-transparent border-b border-transparent hover:border-outline-variant"
             />
-            <span className="ml-2 text-xs text-on-surface-variant">{r.level}</span>
+            <span className="ml-2 text-xs text-on-surface-variant">{REGION_LEVEL_LABELS[r.level]}</span>
           </li>
         ))}
       </ul>
@@ -334,23 +390,41 @@ function RoutesPanel({
         + 添加路线
       </button>
       <ul data-testid="routes-list" className="space-y-2">
-        {mapData.routes.map((rt) => (
-          <li key={rt.id} className="p-3 border border-outline-variant rounded flex justify-between">
-            <span className="font-mono text-sm">
-              {rt.from} → {rt.to}
-            </span>
-            <span className="ml-2 text-xs text-on-surface-variant">
-              {rt.est_travel_minutes}min · {rt.risk}
-            </span>
-            <button
-              data-testid={`route-delete-${rt.id}`}
-              onClick={() => handleDelete(rt.id)}
-              className="text-error text-sm hover:underline"
+        {mapData.routes.map((rt) => {
+          const fromName = mapData.locations.find(l => l.id === rt.from)?.name ?? rt.from;
+          const toName = mapData.locations.find(l => l.id === rt.to)?.name ?? rt.to;
+          const arrow = rt.bidirectional ? "⇄" : "→";
+          return (
+            <li
+              key={rt.id}
+              data-testid={`route-row-${rt.id}`}
+              className="p-3 border border-outline-variant rounded space-y-1"
             >
-              删除
-            </button>
-          </li>
-        ))}
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-sm">
+                  {fromName} {arrow} {toName}
+                </span>
+                <button
+                  data-testid={`route-delete-${rt.id}`}
+                  onClick={() => handleDelete(rt.id)}
+                  className="text-error text-sm hover:underline"
+                >
+                  删除
+                </button>
+              </div>
+              <div className="text-xs text-on-surface-variant space-x-2">
+                <span>类型：{ROUTE_KIND_LABELS[rt.kind]}</span>
+                <span>·</span>
+                <span>距离：{DISTANCE_TIER_LABELS[rt.distance_tier]}</span>
+                <span>·</span>
+                <span>耗时：{rt.est_travel_minutes} 分钟</span>
+                <span>·</span>
+                <span>风险：{RISK_LABELS[rt.risk]}</span>
+                {!rt.accessible && <span className="text-error">· 暂不可通行</span>}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -395,9 +469,13 @@ function PoisPanel({
       </button>
       <ul data-testid="pois-list" className="space-y-2">
         {mapData.pois.map((p) => (
-          <li key={p.id} className="p-3 border border-outline-variant rounded flex justify-between">
+          <li
+            key={p.id}
+            data-testid={`poi-row-${p.id}`}
+            className="p-3 border border-outline-variant rounded flex justify-between"
+          >
             <span className="font-medium">{p.name}</span>
-            <span className="ml-2 text-xs text-on-surface-variant">{p.kind}</span>
+            <span className="ml-2 text-xs text-on-surface-variant">{POI_KIND_LABELS[p.kind]}</span>
             {!p.discoverable && <span className="ml-2 text-xs text-error">[未发现]</span>}
             <button
               data-testid={`poi-delete-${p.id}`}
